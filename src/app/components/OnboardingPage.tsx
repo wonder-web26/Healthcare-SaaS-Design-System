@@ -13,6 +13,9 @@ import {
   Loader2,
   ArrowLeft,
   FileSignature,
+  FileText,
+  ShieldAlert,
+  Lock,
 } from "lucide-react";
 import {
   StepAngehoeriger,
@@ -25,11 +28,24 @@ import {
   type PatientFormData,
 } from "./StepPatient";
 import { VertragsunterzeichnungPhase } from "./VertragsunterzeichnungPhase";
+import { SpezialbewilligungDialog } from "./SpezialbewilligungDialog";
 
 /* ══════════════════════════════════════════
    STEP DEFINITIONS
    ══════════════════════════════════════════ */
-const wizardSteps = [
+interface WizardStep {
+  id: number;
+  key: string;
+  label: string;
+  shortLabel: string;
+  icon: React.ElementType;
+  description: string;
+  sections: string[];
+  blocked?: boolean;
+  danger?: boolean;
+}
+
+const baseSteps: WizardStep[] = [
   {
     id: 1,
     key: "angehoeriger",
@@ -76,6 +92,26 @@ const wizardSteps = [
   },
 ];
 
+function buildSteps(requiresB: boolean, bewilligungEingereicht: boolean): WizardStep[] {
+  if (!requiresB) return baseSteps;
+  const eingereicht = bewilligungEingereicht;
+  return [
+    baseSteps[0],
+    {
+      id: 2,
+      key: "spezialbewilligung",
+      label: "Spezialbewilligung B",
+      shortLabel: "Bewilligung B",
+      icon: eingereicht ? CheckCircle2 : ShieldAlert,
+      description: "Erwerbstätigkeitsbewilligung beim Migrationsamt",
+      sections: ["Antragstellung"],
+      danger: !eingereicht,
+    },
+    { ...baseSteps[1], id: 3 },
+    { ...baseSteps[2], id: 4, icon: eingereicht ? FileSignature : Lock, blocked: !eingereicht },
+  ];
+}
+
 /* ══════════════════════════════════════════
    CASE LOOKUP (mock) — maps caseId to patient context
    ══════════════════════════════════════════ */
@@ -117,7 +153,15 @@ export function OnboardingPage() {
   /* ── Step 3 (Vertrag) validity ───── */
   const [step3Valid, setStep3Valid] = useState(false);
 
-  /* ── Sync step 1 validity with completedSteps ── */
+  /* ── Spezialbewilligung dialog ───── */
+  const [showSpezialbewilligung, setShowSpezialbewilligung] = useState(false);
+
+  /* ── Dynamic steps based on Aufenthaltsstatus B ── */
+  const requiresB = angehoerigerData.aufenthaltsstatus === "B";
+  const bewilligungEingereicht = angehoerigerData.spezialbewilligungStatus === "eingereicht";
+  const wizardSteps = buildSteps(requiresB, bewilligungEingereicht);
+
+  /* ── Sync step validity with completedSteps ── */
   useEffect(() => {
     setCompletedSteps((prev) => {
       const next = new Set(prev);
@@ -127,28 +171,42 @@ export function OnboardingPage() {
     });
   }, [step1Valid]);
 
-  /* ── Sync step 2 validity with completedSteps ── */
   useEffect(() => {
-    setCompletedSteps((prev) => {
-      const next = new Set(prev);
-      if (step2Valid) next.add(2);
-      else next.delete(2);
-      return next;
-    });
-  }, [step2Valid]);
+    if (requiresB) {
+      setCompletedSteps((prev) => {
+        const next = new Set(prev);
+        if (bewilligungEingereicht) next.add(2);
+        else next.delete(2);
+        return next;
+      });
+    }
+  }, [requiresB, bewilligungEingereicht]);
 
-  /* ── Sync step 3 validity with completedSteps ── */
   useEffect(() => {
     setCompletedSteps((prev) => {
       const next = new Set(prev);
-      if (step3Valid) next.add(3);
-      else next.delete(3);
+      const patientStepId = requiresB ? 3 : 2;
+      if (step2Valid) next.add(patientStepId);
+      else next.delete(patientStepId);
       return next;
     });
-  }, [step3Valid]);
+  }, [step2Valid, requiresB]);
+
+  useEffect(() => {
+    setCompletedSteps((prev) => {
+      const next = new Set(prev);
+      const vertragStepId = requiresB ? 4 : 3;
+      if (step3Valid && !requiresB) next.add(vertragStepId);
+      else next.delete(vertragStepId);
+      return next;
+    });
+  }, [step3Valid, requiresB]);
 
   /* ── Progress calculation ──────────────── */
-  const progressPercent = Math.round((completedSteps.size / wizardSteps.length) * 100);
+  const nonBlockedSteps = wizardSteps.filter((s) => !s.blocked);
+  const progressPercent = nonBlockedSteps.length > 0
+    ? Math.round((completedSteps.size / nonBlockedSteps.length) * 100)
+    : 0;
 
   /* ── Navigation ────────────────────────── */
   const goToStep = useCallback(
@@ -158,7 +216,7 @@ export function OnboardingPage() {
         setVisitedSteps((prev) => new Set([...prev, step]));
       }
     },
-    []
+    [wizardSteps.length]
   );
 
   const goNext = () => {
@@ -189,7 +247,17 @@ export function OnboardingPage() {
     }, 1200);
   }, []);
 
-  const activeStepData = wizardSteps.find((s) => s.id === currentStep)!;
+  useEffect(() => {
+    if (currentStep > wizardSteps.length) {
+      setCurrentStep(wizardSteps.length);
+    }
+    const currentKey = wizardSteps.find((s) => s.id === currentStep)?.key;
+    if (currentKey === "spezialbewilligung" && !requiresB) {
+      setCurrentStep(1);
+    }
+  }, [requiresB, wizardSteps.length]);
+
+  const activeStepData = wizardSteps.find((s) => s.id === currentStep) ?? wizardSteps[0];
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -302,36 +370,81 @@ export function OnboardingPage() {
                 <nav className="space-y-1">
                   {wizardSteps.map((step, idx) => {
                     const Icon = step.icon;
-                    const isActive = currentStep === step.id;
+                    const isSelected = currentStep === step.id;
                     const isCompleted = completedSteps.has(step.id);
-                    const isVisited = visitedSteps.has(step.id);
+                    const isDanger = !!step.danger;
+                    const isBlocked = !!step.blocked;
+
+                    // Lifecycle determines icon circle + status text color
+                    type Lifecycle = "blocked" | "danger" | "completed" | "in_progress" | "pending";
+                    const lifecycle: Lifecycle = isBlocked
+                      ? "blocked"
+                      : isDanger
+                      ? "danger"
+                      : isCompleted
+                      ? "completed"
+                      : visitedSteps.has(step.id) && step.id !== currentStep
+                      ? "pending"
+                      : visitedSteps.has(step.id)
+                      ? "in_progress"
+                      : "pending";
+
+                    const iconCircleClass: Record<Lifecycle, string> = {
+                      blocked: "bg-error-light text-error",
+                      danger: "bg-error text-white",
+                      completed: "bg-success text-white",
+                      in_progress: "bg-primary text-primary-foreground",
+                      pending: "bg-muted text-muted-foreground",
+                    };
+
+                    const labelColorClass: Record<Lifecycle, string> = {
+                      blocked: "text-muted-foreground",
+                      danger: "text-error-foreground",
+                      completed: "text-foreground",
+                      in_progress: "text-foreground",
+                      pending: "text-foreground",
+                    };
+
+                    const statusColorClass: Record<Lifecycle, string> = {
+                      blocked: "text-error",
+                      danger: "text-error",
+                      completed: "text-success-foreground",
+                      in_progress: "text-primary",
+                      pending: "text-muted-foreground",
+                    };
+
+                    // Build status text
+                    let statusText = "Ausstehend";
+                    if (lifecycle === "blocked") {
+                      statusText = "Blockiert";
+                    } else if (lifecycle === "danger") {
+                      statusText = "Pflicht · ausstehend";
+                    } else if (lifecycle === "completed") {
+                      if (step.key === "spezialbewilligung" && angehoerigerData.spezialbewilligungEinreichungsDatum) {
+                        const [y, m, d] = angehoerigerData.spezialbewilligungEinreichungsDatum.split("-");
+                        statusText = `Eingereicht am ${d}.${m}.${y}`;
+                      } else {
+                        statusText = "Abgeschlossen";
+                      }
+                    } else if (lifecycle === "in_progress") {
+                      statusText = "In Bearbeitung";
+                    }
 
                     return (
-                      <div key={step.id} className="contents">
+                      <div key={step.key} className="contents">
                         <button
-                          onClick={() => goToStep(step.id)}
+                          onClick={() => !isBlocked && goToStep(step.id)}
+                          disabled={isBlocked}
                           className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl text-left transition-all group ${
-                            isActive
-                              ? "bg-primary-light ring-1 ring-primary/20"
-                              : isCompleted
-                              ? "hover:bg-success-light/60"
-                              : isVisited
-                              ? "hover:bg-muted/50"
-                              : "hover:bg-muted/30 opacity-70"
+                            isBlocked
+                              ? "opacity-60 cursor-not-allowed"
+                              : isSelected
+                              ? "bg-secondary/60"
+                              : "hover:bg-muted/40"
                           }`}
                         >
-                          {/* Step icon/number */}
-                          <div
-                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${
-                              isActive
-                                ? "bg-primary text-primary-foreground shadow-sm"
-                                : isCompleted
-                                ? "bg-success text-white"
-                                : isVisited
-                                ? "bg-muted text-muted-foreground"
-                                : "bg-muted/60 text-muted-foreground/50"
-                            }`}
-                          >
+                          {/* Icon circle — lifecycle only */}
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${iconCircleClass[lifecycle]}`}>
                             {isCompleted ? (
                               <Check className="w-4 h-4" />
                             ) : (
@@ -339,42 +452,25 @@ export function OnboardingPage() {
                             )}
                           </div>
 
-                          {/* Step label & description */}
+                          {/* Label & status text */}
                           <div className="flex-1 min-w-0 pt-0.5">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`text-[13px] truncate ${
-                                  isActive
-                                    ? "text-primary"
-                                    : isCompleted
-                                    ? "text-success-foreground"
-                                    : "text-foreground"
-                                }`}
-                                style={{ fontWeight: isActive ? 600 : 500 }}
-                              >
-                                {step.label}
-                              </span>
-                            </div>
                             <span
-                              className={`text-[11px] mt-0.5 block truncate ${
-                                isActive
-                                  ? "text-primary/70"
-                                  : "text-muted-foreground"
-                              }`}
+                              className={`text-[13px] truncate block ${labelColorClass[lifecycle]}`}
+                              style={{ fontWeight: isSelected ? 600 : 500 }}
                             >
-                              {isCompleted
-                                ? "Abgeschlossen"
-                                : isActive
-                                ? "In Bearbeitung"
-                                : isVisited
-                                ? "Besucht"
-                                : "Ausstehend"}
+                              {step.label}
+                            </span>
+                            <span
+                              className={`text-[11px] mt-0.5 block truncate ${statusColorClass[lifecycle]}`}
+                              style={{ fontWeight: lifecycle === "danger" || lifecycle === "blocked" ? 500 : undefined }}
+                            >
+                              {statusText}
                             </span>
                           </div>
 
-                          {/* Chevron for active */}
-                          {isActive && (
-                            <ChevronRight className="w-4 h-4 text-primary shrink-0 mt-1" />
+                          {/* Chevron — selection only */}
+                          {isSelected && !isBlocked && (
+                            <ChevronRight className="w-4 h-4 shrink-0 mt-1 text-muted-foreground" />
                           )}
                         </button>
 
@@ -383,7 +479,7 @@ export function OnboardingPage() {
                           <div className="flex justify-start pl-[26px] py-0">
                             <div
                               className={`w-[2px] h-3 rounded-full transition-colors ${
-                                isCompleted ? "bg-success" : "bg-border"
+                                isCompleted ? "bg-success" : isDanger ? "bg-error/30" : "bg-border"
                               }`}
                             />
                           </div>
@@ -405,7 +501,9 @@ export function OnboardingPage() {
                     <span className="text-[11px] text-muted-foreground">Status</span>
                     <span
                       className={`inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full ${
-                        progressPercent === 100
+                        requiresB && !bewilligungEingereicht
+                          ? "bg-error-light text-error-foreground"
+                          : progressPercent === 100
                           ? "bg-success-light text-success-foreground"
                           : progressPercent > 0
                           ? "bg-primary-light text-primary"
@@ -415,14 +513,18 @@ export function OnboardingPage() {
                     >
                       <span
                         className={`w-[5px] h-[5px] rounded-full ${
-                          progressPercent === 100
+                          requiresB && !bewilligungEingereicht
+                            ? "bg-error"
+                            : progressPercent === 100
                             ? "bg-success"
                             : progressPercent > 0
                             ? "bg-primary"
                             : "bg-muted-foreground"
                         }`}
                       />
-                      {progressPercent === 100
+                      {requiresB && !bewilligungEingereicht
+                        ? "Blockiert"
+                        : progressPercent === 100
                         ? "Bereit"
                         : progressPercent > 0
                         ? "In Bearbeitung"
@@ -439,19 +541,81 @@ export function OnboardingPage() {
              ───────────────────────────────────── */}
           <div className="flex-1 flex flex-col min-h-0 min-w-0">
             <div className="flex-1 overflow-y-auto pb-4">
-              {currentStep === 1 ? (
+              {activeStepData.key === "angehoeriger" && (
                 <StepAngehoeriger
                   data={angehoerigerData}
                   onChange={setAngehoerigerData}
                   onValidityChange={setStep1Valid}
+                  onOpenSpezialbewilligung={() => setShowSpezialbewilligung(true)}
                 />
-              ) : currentStep === 2 ? (
+              )}
+              {activeStepData.key === "spezialbewilligung" && !bewilligungEingereicht && (
+                <div className="bg-card rounded-2xl border-2 border-error p-6">
+                  <div className="flex items-start gap-3">
+                    <ShieldAlert className="w-6 h-6 text-error shrink-0" />
+                    <div>
+                      <h3 className="text-error-foreground">Spezialbewilligung B</h3>
+                      <p className="text-[13px] text-muted-foreground mt-2 leading-relaxed">
+                        Für diese Person muss eine Erwerbstätigkeitsbewilligung beim Migrationsamt
+                        beantragt werden. Die Vertragsunterzeichnung ist blockiert, bis die Bewilligung
+                        vorliegt.
+                      </p>
+                      <button
+                        onClick={() => setShowSpezialbewilligung(true)}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-[6px] text-[12px] rounded-xl bg-error text-white hover:bg-error/90 transition-colors cursor-pointer"
+                        style={{ fontWeight: 500 }}
+                      >
+                        Spezialbewilligung jetzt ausfüllen
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {activeStepData.key === "spezialbewilligung" && bewilligungEingereicht && (
+                <div className="bg-card rounded-2xl border border-success/30 p-6">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="w-6 h-6 text-success shrink-0" />
+                    <div>
+                      <h3 className="text-foreground">Spezialbewilligung B</h3>
+                      <p className="text-[13px] text-muted-foreground mt-2 leading-relaxed">
+                        Einreichungs-Bestätigung vom{" "}
+                        {angehoerigerData.spezialbewilligungEinreichungsDatum
+                          ? (() => { const [y, m, d] = angehoerigerData.spezialbewilligungEinreichungsDatum.split("-"); return `${d}.${m}.${y}`; })()
+                          : "–"}{" "}
+                        liegt vor. Die Vertragsunterzeichnung ist freigegeben.
+                      </p>
+                      {angehoerigerData.spezialbewilligungDokument && (
+                        <div className="mt-3 flex items-center gap-3 px-3 py-2.5 rounded-xl bg-success-light border border-success/15">
+                          <FileText className="w-4 h-4 text-success shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[12px] text-foreground truncate" style={{ fontWeight: 500 }}>
+                              {angehoerigerData.spezialbewilligungDokument.name}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {angehoerigerData.spezialbewilligungDokument.size}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setShowSpezialbewilligung(true)}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-[6px] text-[12px] rounded-xl border border-success/30 text-success-foreground hover:bg-success-light transition-colors cursor-pointer"
+                        style={{ fontWeight: 500 }}
+                      >
+                        Dokument ansehen
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {activeStepData.key === "patient" && (
                 <StepPatient
                   data={patientData}
                   onChange={setPatientData}
                   onValidityChange={setStep2Valid}
                 />
-              ) : (
+              )}
+              {activeStepData.key === "vertrag" && (
                 <VertragsunterzeichnungPhase
                   onValidityChange={setStep3Valid}
                   onComplete={() => setStep3Valid(true)}
@@ -550,6 +714,17 @@ export function OnboardingPage() {
           </div>
         </div>
       </div>
+
+      {/* ═══════════════════════════════════════
+         SPEZIALBEWILLIGUNG DIALOG
+         ═══════════════════════════════════════ */}
+      {showSpezialbewilligung && (
+        <SpezialbewilligungDialog
+          data={angehoerigerData}
+          onChange={setAngehoerigerData}
+          onClose={() => setShowSpezialbewilligung(false)}
+        />
+      )}
 
       {/* ═══════════════════════════════════════
          SAVE TOAST

@@ -1,40 +1,13 @@
-import React from "react";
 import { useNavigate } from "react-router";
-import {
-  Users,
-  ArrowRight,
-  CalendarDays,
-  Plus,
-  ClipboardCheck,
-  GraduationCap,
-  CheckCircle2,
-  AlertTriangle,
-  ExternalLink,
-  UserPlus,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { patients } from "./patientData";
+import { DashboardHero } from "./DashboardHero";
+import { OnboardingPipelineTile } from "./OnboardingPipelineTile";
+import { ComplianceRisikoSection } from "./ComplianceRisikoSection";
 
 /* ══════════════════════════════════════════
    MOCK DATA
    ══════════════════════════════════════════ */
-
-const klientenBreakdown = [
-  { label: "Leicht", count: 52, dot: "bg-success" },
-  { label: "Mittel", count: 48, dot: "bg-warning" },
-  { label: "Schwer", count: 28, dot: "bg-error" },
-];
-
-const onboardingCount = 6;
-const onboardingBreakdown = [
-  { label: "Dokumentation ausstehend", count: 3 },
-  { label: "Vertrag in Prüfung", count: 2 },
-  { label: "Erstgespräch geplant", count: 1 },
-];
-
-const complianceData = {
-  srkAnmeldungen: 3,
-  reAssessments: 4,
-};
 
 interface FaelligeAufgabe {
   id: string;
@@ -65,148 +38,27 @@ export function DashboardPage() {
 
   return (
     <>
-      {/* ── Page Header ── */}
-      <div className="px-4 md:px-8 pt-7 pb-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-3">
-              <h2 className="text-foreground">Operations-Cockpit</h2>
-              <span className="text-[11px] px-2 py-[3px] rounded-lg bg-primary-light text-primary" style={{ fontWeight: 500 }}>
-                Live
-              </span>
-            </div>
-            <p className="text-[13px] text-muted-foreground mt-0.5">
-              Dienstag, 3. März 2026 · Operative Steuerungsübersicht
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors cursor-pointer" style={{ fontWeight: 500 }}>
-              <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
-              März 2026
-            </button>
-            <button
-              onClick={() => navigate("/onboarding")}
-              className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors cursor-pointer"
-              style={{ fontWeight: 500 }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Neuer Klient
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* ── Hero: Fokus + Team-Pulse ── */}
+      <section className="px-4 md:px-8 pt-7">
+        <DashboardHero />
+      </section>
 
-      {/* ══════════════════════════════════════
-          ROW 1 – KPI TILES
-          ══════════════════════════════════════ */}
-      <div className="px-4 md:px-8 pt-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+      {/* ── Onboarding Pipeline ── */}
+      <section className="px-4 md:px-8 pt-4">
+        <OnboardingPipelineTile />
+      </section>
 
-          {/* ── SECTION 1: Aktive Klienten ── */}
-          <div
-            className="bg-card rounded-2xl border border-border p-5 hover:shadow-sm transition-all cursor-pointer group md:col-span-2"
-            onClick={() => navigate("/patienten")}
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center">
-                <Users className="w-5 h-5 text-primary" />
-              </div>
-              <button className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors opacity-0 group-hover:opacity-100 cursor-pointer" style={{ fontWeight: 500 }}>
-                Details
-                <ExternalLink className="w-3 h-3" />
-              </button>
-            </div>
-            <div className="text-[40px] text-foreground tracking-tight leading-none" style={{ fontWeight: 700 }}>
-              128
-            </div>
-            <div className="text-[13px] text-muted-foreground mt-1" style={{ fontWeight: 500 }}>
-              Aktive Klienten
-            </div>
-            <div className="mt-4 flex items-center gap-5">
-              {klientenBreakdown.map((item) => (
-                <div key={item.label} className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${item.dot}`} />
-                  <span className="text-[12px] text-muted-foreground">
-                    {item.label}
-                  </span>
-                  <span className="text-[13px] text-foreground tabular-nums" style={{ fontWeight: 600 }}>
-                    {item.count}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* ── Compliance & Risiko ── */}
+      <section id="compliance-section" className="px-4 md:px-8 pt-8">
+        <ComplianceRisikoSection />
+      </section>
 
-          {/* ── SECTION 2: Onboarding ── */}
-          <div
-            className="bg-card rounded-2xl border border-border p-5 hover:shadow-sm transition-all cursor-pointer group md:col-span-2 xl:col-span-2"
-            onClick={() => navigate("/onboarding")}
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-10 h-10 rounded-xl bg-info-light flex items-center justify-center">
-                <UserPlus className="w-5 h-5 text-info" />
-              </div>
-              <button className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors opacity-0 group-hover:opacity-100 cursor-pointer" style={{ fontWeight: 500 }}>
-                Onboarding öffnen
-                <ExternalLink className="w-3 h-3" />
-              </button>
-            </div>
-            <div className="text-[40px] text-foreground tracking-tight leading-none" style={{ fontWeight: 700 }}>
-              {onboardingCount}
-            </div>
-            <div className="text-[13px] text-muted-foreground mt-1" style={{ fontWeight: 500 }}>
-              Klienten im Onboarding
-            </div>
-            <div className="mt-4 space-y-1.5">
-              {onboardingBreakdown.map((item) => (
-                <div key={item.label} className="flex items-center justify-between">
-                  <span className="text-[12px] text-muted-foreground">{item.label}</span>
-                  <span className="text-[12px] text-foreground tabular-nums" style={{ fontWeight: 600 }}>{item.count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ══════════════════════════════════════
-          ROW 2 – COMPLIANCE & RISIKO
-          ══════════════════════════════════════ */}
-      <div className="px-4 md:px-8 pt-4">
-        <div className="flex items-center gap-2 mb-3">
-          <h4 className="text-foreground">Compliance & Risiko</h4>
-          <span className="text-[11px] text-muted-foreground">Handlungsbedarf</span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-
-          {/* SRK Anmeldungen */}
-          <ComplianceTile
-            icon={GraduationCap}
-            label="Ungeplante SRK-Anmeldungen"
-            value={complianceData.srkAnmeldungen}
-            description={complianceData.srkAnmeldungen > 0 ? `${complianceData.srkAnmeldungen} Angehörige ohne gültige Kursanmeldung` : "Alle Anmeldungen aktuell"}
-            onClick={() => navigate("/angehoerige")}
-          />
-
-          {/* Re-Assessments */}
-          <ComplianceTile
-            icon={ClipboardCheck}
-            label="Re-Assessments fällig"
-            value={complianceData.reAssessments}
-            description={complianceData.reAssessments > 0 ? `Innerhalb der nächsten 30 Tage` : "Keine Re-Assessments fällig"}
-            onClick={() => navigate("/patienten")}
-          />
-        </div>
-      </div>
-
-      {/* ══════════════════════════════════════
-          ROW 3 – FÄLLIGE AUFGABEN
-          ══════════════════════════════════════ */}
-      <div className="px-4 md:px-8 pt-6 pb-10">
+      {/* ── Fällige Aufgaben ── */}
+      <section className="px-4 md:px-8 pt-8 pb-10">
         <div className="bg-card rounded-2xl border border-border overflow-hidden">
           <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
             <div>
-              <h5 className="text-foreground">Fällige Aufgaben</h5>
+              <h2 className="text-[14px] text-foreground" style={{ fontWeight: 600 }}>Fällige Aufgaben</h2>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {faelligeAufgaben.filter(a => a.overdue).length > 0 && (
                   <span className="text-error" style={{ fontWeight: 500 }}>
@@ -227,7 +79,6 @@ export function DashboardPage() {
             </button>
           </div>
 
-          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -282,75 +133,7 @@ export function DashboardPage() {
             </table>
           </div>
         </div>
-      </div>
+      </section>
     </>
-  );
-}
-
-/* ══════════════════════════════════════════
-   COMPLIANCE TILE COMPONENT
-   ══════════════════════════════════════════ */
-function ComplianceTile({
-  icon: Icon,
-  label,
-  value,
-  description,
-  onClick,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: number;
-  description: string;
-  onClick: () => void;
-}) {
-  const hasIssue = value > 0;
-  const statusBg = hasIssue ? "bg-warning-light" : "bg-success-light";
-  const statusIconBg = hasIssue ? "bg-warning/10 border-warning/15" : "bg-success/10 border-success/15";
-  const statusIconColor = hasIssue ? "text-warning" : "text-success";
-  const valueDot = hasIssue ? "bg-warning" : "bg-success";
-  const valueColor = hasIssue ? "text-warning-foreground" : "text-success-foreground";
-
-  return (
-    <button
-      onClick={onClick}
-      className={`relative overflow-hidden rounded-2xl border p-5 text-left transition-all group cursor-pointer hover:shadow-sm ${
-        hasIssue ? "border-warning/20 bg-gradient-to-br from-warning-light to-warning-medium/20" : "border-success/20 bg-gradient-to-br from-success-light to-success-medium/20"
-      }`}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div className={`w-10 h-10 rounded-xl ${statusIconBg} border flex items-center justify-center`}>
-          <Icon className={`w-5 h-5 ${statusIconColor}`} />
-        </div>
-        {hasIssue ? (
-          <span className="inline-flex items-center gap-1.5 px-2 py-[2px] rounded-full text-[10px] bg-warning/10 text-warning-foreground" style={{ fontWeight: 600 }}>
-            <AlertTriangle className="w-3 h-3" />
-            HANDLUNG
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 px-2 py-[2px] rounded-full text-[10px] bg-success/10 text-success-foreground" style={{ fontWeight: 600 }}>
-            <CheckCircle2 className="w-3 h-3" />
-            OK
-          </span>
-        )}
-      </div>
-      <div className="flex items-baseline gap-2">
-        <span className={`w-2 h-2 rounded-full ${valueDot} mt-1`} />
-        <div>
-          <div className={`text-[28px] tracking-tight leading-none ${valueColor}`} style={{ fontWeight: 700 }}>
-            {value}
-          </div>
-          <div className={`text-[13px] mt-1 ${valueColor}`} style={{ fontWeight: 600 }}>
-            {label}
-          </div>
-        </div>
-      </div>
-      <p className={`text-[11px] mt-2 ${hasIssue ? "text-warning-foreground/70" : "text-success-foreground/70"}`}>
-        {description}
-      </p>
-      <div className="mt-3 inline-flex items-center gap-1 text-[11px] opacity-0 group-hover:opacity-100 transition-opacity" style={{ fontWeight: 500 }}>
-        <span className={hasIssue ? "text-warning-foreground" : "text-success-foreground"}>Details anzeigen</span>
-        <ArrowRight className={`w-3 h-3 ${hasIssue ? "text-warning-foreground" : "text-success-foreground"}`} />
-      </div>
-    </button>
   );
 }

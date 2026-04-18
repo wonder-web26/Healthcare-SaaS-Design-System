@@ -25,6 +25,7 @@ export const router = createBrowserRouter([
       { path: "onboarding/:caseId", Component: OnboardingPage },
       { path: "zuteilung", Component: ZuteilungPage },
       { path: "servicedesk", Component: ServiceDeskPage },
+      { path: "servicedesk/:ticketId", Component: ServiceDeskPage },
       { path: "vorlagen", Component: PlaceholderPage },
       { path: "*", Component: PlaceholderPage },
     ],

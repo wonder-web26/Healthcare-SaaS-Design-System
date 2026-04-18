@@ -63,6 +63,9 @@ export interface AngehoerigerFormData {
   nationalitaet: string;
   heimatort: string;
   aufenthaltsstatus: string;
+  spezialbewilligungStatus: "nicht_erforderlich" | "ausstehend" | "eingereicht" | "bewilligt";
+  spezialbewilligungDokument: { name: string; size: string } | null;
+  spezialbewilligungEinreichungsDatum: string;
   spezielleGenehmigung: string;
   zivilstand: string;
   zivilstandSeit: string;
@@ -186,6 +189,9 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   nationalitaet: "",
   heimatort: "",
   aufenthaltsstatus: "",
+  spezialbewilligungStatus: "nicht_erforderlich",
+  spezialbewilligungDokument: null,
+  spezialbewilligungEinreichungsDatum: "",
   spezielleGenehmigung: "",
   zivilstand: "ledig",
   zivilstandSeit: "",
@@ -239,6 +245,11 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
 /* ══════════════════════════════════════════
    VALIDATION HELPERS
    ══════════════════════════════════════════ */
+function formatDateDisplay(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+
 function filled(v: string | undefined | null): boolean {
   return typeof v === "string" && v.trim().length > 0;
 }
@@ -433,6 +444,7 @@ interface StepAngehoerigerProps {
   data: AngehoerigerFormData;
   onChange: (data: AngehoerigerFormData) => void;
   onValidityChange?: (isValid: boolean) => void;
+  onOpenSpezialbewilligung?: () => void;
 }
 
 /* ══════��═══════════════════════════════════
@@ -442,6 +454,7 @@ export function StepAngehoeriger({
   data,
   onChange,
   onValidityChange,
+  onOpenSpezialbewilligung,
 }: StepAngehoerigerProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -597,12 +610,12 @@ export function StepAngehoeriger({
          ═══════════════════════════════════════ */}
       <div className="bg-card rounded-b-2xl border-x border-b border-border">
         <div className="p-5 lg:p-6">
-          {activeTab === 0 && <PersonalienForm data={data} onChange={onChange} />}
+          {activeTab === 0 && <PersonalienForm data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />}
           {activeTab === 1 && <SteuerForm data={data} onChange={onChange} />}
           {activeTab === 2 && <PartnerForm data={data} onChange={onChange} />}
           {activeTab === 3 && <KinderForm data={data} onChange={onChange} />}
           {activeTab === 4 && <AnstellungForm data={data} onChange={onChange} />}
-          {activeTab === 5 && <DokumenteForm data={data} onChange={onChange} />}
+          {activeTab === 5 && <DokumenteForm data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />}
         </div>
       </div>
 
@@ -788,9 +801,11 @@ function PayrollField({
 function PersonalienForm({
   data,
   onChange,
+  onOpenSpezialbewilligung,
 }: {
   data: AngehoerigerFormData;
   onChange: (d: AngehoerigerFormData) => void;
+  onOpenSpezialbewilligung?: () => void;
 }) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const touch = (field: string) =>
@@ -941,9 +956,18 @@ function PersonalienForm({
             >
               <Select
                 value={data.aufenthaltsstatus}
-                onValueChange={(v) => { set("aufenthaltsstatus", v); touch("aufenthaltsstatus"); }}
+                onValueChange={(v) => {
+                  onChange({
+                    ...data,
+                    aufenthaltsstatus: v,
+                    spezialbewilligungStatus: v === "B" ? "ausstehend" : "nicht_erforderlich",
+                    spezialbewilligungDokument: v === "B" ? data.spezialbewilligungDokument : null,
+                    spezialbewilligungEinreichungsDatum: v === "B" ? data.spezialbewilligungEinreichungsDatum : "",
+                  });
+                  touch("aufenthaltsstatus");
+                }}
               >
-                <SelectTrigger className={!filled(data.aufenthaltsstatus) ? "text-muted-foreground" : ""}>
+                <SelectTrigger className={`${!filled(data.aufenthaltsstatus) ? "text-muted-foreground" : ""} ${data.aufenthaltsstatus === "B" && data.spezialbewilligungStatus !== "eingereicht" ? "!border-error !border-2 !ring-error/20" : ""}`}>
                   <SelectValue placeholder="Status wählen" />
                 </SelectTrigger>
                 <SelectContent>
@@ -960,6 +984,60 @@ function PersonalienForm({
                 </SelectContent>
               </Select>
             </FormField>
+          )}
+
+          {data.aufenthaltsstatus === "B" && data.spezialbewilligungStatus === "ausstehend" && (
+            <div className="rounded-xl border-2 border-error bg-error-light p-4">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="w-5 h-5 text-error shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] text-error-foreground" style={{ fontWeight: 600 }}>
+                    Spezialbewilligung B erforderlich
+                  </div>
+                  <p className="text-[12px] text-error-foreground/80 mt-1 leading-relaxed">
+                    Für Personen mit Aufenthaltsstatus B muss eine Erwerbstätigkeitsbewilligung beim
+                    Migrationsamt beantragt werden, bevor ein Arbeitsvertrag ausgestellt werden darf.
+                    Das Onboarding ist an der Vertragsphase blockiert, bis dieser Schritt erledigt ist.
+                  </p>
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={onOpenSpezialbewilligung}
+                      className="inline-flex items-center gap-1.5 px-3 py-[6px] text-[12px] rounded-xl bg-error text-white hover:bg-error/90 transition-colors cursor-pointer"
+                      style={{ fontWeight: 500 }}
+                    >
+                      Spezialbewilligung jetzt ausfüllen
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {data.aufenthaltsstatus === "B" && data.spezialbewilligungStatus === "eingereicht" && (
+            <div className="rounded-xl border border-success/30 bg-success-light p-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-success shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] text-success-foreground" style={{ fontWeight: 600 }}>
+                    Spezialbewilligung B
+                  </div>
+                  <p className="text-[12px] text-success-foreground/80 mt-1 leading-relaxed">
+                    Einreichungs-Bestätigung vom {data.spezialbewilligungEinreichungsDatum ? formatDateDisplay(data.spezialbewilligungEinreichungsDatum) : "–"} liegt vor. Die Vertragsunterzeichnung ist freigegeben.
+                  </p>
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={onOpenSpezialbewilligung}
+                      className="inline-flex items-center gap-1.5 px-3 py-[6px] text-[12px] rounded-xl border border-success/30 text-success-foreground hover:bg-success-medium transition-colors cursor-pointer"
+                      style={{ fontWeight: 500 }}
+                    >
+                      Dokument ansehen
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {["F", "N", "S"].includes(data.aufenthaltsstatus) && (
@@ -2525,6 +2603,14 @@ const SCAN_ITEMS: ScanItemDef[] = [
     mandatory: true,
   },
   {
+    key: "spezialbewilligung_b",
+    label: "Einreichungs-Bestätigung Spezialbewilligung B",
+    description: "Bestätigung vom Migrationsamt, dass die Erwerbstätigkeits-Bewilligung beantragt wurde. Gibt die Vertragsphase frei.",
+    icon: ShieldAlert,
+    mandatory: true,
+    condition: (d) => d.aufenthaltsstatus === "B",
+  },
+  {
     key: "krankenkassenkarte",
     label: "Krankenkassenkarte Angehöriger",
     description: "Versichertenkarte mit Kartennummer und Versicherungsnummer",
@@ -2915,9 +3001,11 @@ function useFileUpload(
 function DokumenteForm({
   data,
   onChange,
+  onOpenSpezialbewilligung,
 }: {
   data: AngehoerigerFormData;
   onChange: (d: AngehoerigerFormData) => void;
+  onOpenSpezialbewilligung?: () => void;
 }) {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraDocKey, setCameraDocKey] = useState("");
@@ -2925,9 +3013,56 @@ function DokumenteForm({
   const [sharePointToasts, setSharePointToasts] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState<string | null>(null);
 
-  const visibleItems = getVisibleScanItems(data);
-  const requiredKeys = getRequiredScanKeys(data);
-  const uploadedRequired = requiredKeys.filter((k) => !!data.scans[k]).length;
+  // Sync: if dialog already uploaded the document, reflect it in scans
+  const syncedData = { ...data };
+  if (data.aufenthaltsstatus === "B" && data.spezialbewilligungStatus === "eingereicht" && data.spezialbewilligungDokument && !data.scans.spezialbewilligung_b) {
+    syncedData.scans = {
+      ...data.scans,
+      spezialbewilligung_b: {
+        name: data.spezialbewilligungDokument.name,
+        type: "application/pdf",
+        size: data.spezialbewilligungDokument.size,
+        timestamp: formatDateDisplay(data.spezialbewilligungEinreichungsDatum),
+        previewUrl: null,
+      },
+    };
+  }
+
+  const handleChange = (updated: AngehoerigerFormData) => {
+    const oldScan = data.scans.spezialbewilligung_b;
+    const newScan = updated.scans.spezialbewilligung_b;
+
+    if (!oldScan && newScan) {
+      const today = "2026-03-03";
+      const todayDisplay = formatDateDisplay(today);
+      const ext = newScan.name.split(".").pop() || "pdf";
+      const structuredName = `Einreichungs-Bestätigung Spezialbewilligung B – ${todayDisplay}.${ext}`;
+      onChange({
+        ...updated,
+        spezialbewilligungStatus: "eingereicht",
+        spezialbewilligungDokument: { name: structuredName, size: newScan.size },
+        spezialbewilligungEinreichungsDatum: today,
+        scans: { ...updated.scans, spezialbewilligung_b: { ...newScan, name: structuredName } },
+      });
+      return;
+    }
+
+    if (oldScan && !newScan) {
+      onChange({
+        ...updated,
+        spezialbewilligungStatus: "ausstehend",
+        spezialbewilligungDokument: null,
+        spezialbewilligungEinreichungsDatum: "",
+      });
+      return;
+    }
+
+    onChange(updated);
+  };
+
+  const visibleItems = getVisibleScanItems(syncedData);
+  const requiredKeys = getRequiredScanKeys(syncedData);
+  const uploadedRequired = requiredKeys.filter((k) => !!syncedData.scans[k]).length;
   const totalRequired = requiredKeys.length;
   const allComplete = uploadedRequired === totalRequired && totalRequired > 0;
 
@@ -2938,9 +3073,9 @@ function DokumenteForm({
   };
 
   const handleCameraCapture = (file: ScanFile) => {
-    onChange({
-      ...data,
-      scans: { ...data.scans, [cameraDocKey]: file },
+    handleChange({
+      ...syncedData,
+      scans: { ...syncedData.scans, [cameraDocKey]: file },
     });
     setCameraOpen(false);
     // Show SharePoint toast
@@ -2954,11 +3089,27 @@ function DokumenteForm({
     }, 4000);
   };
 
+  const [confirmRemoveKey, setConfirmRemoveKey] = useState<string | null>(null);
+
   const removeScan = (key: string) => {
-    onChange({
-      ...data,
-      scans: { ...data.scans, [key]: null },
+    if (key === "spezialbewilligung_b") {
+      setConfirmRemoveKey(key);
+      return;
+    }
+    handleChange({
+      ...syncedData,
+      scans: { ...syncedData.scans, [key]: null },
     });
+  };
+
+  const confirmRemove = () => {
+    if (confirmRemoveKey) {
+      handleChange({
+        ...syncedData,
+        scans: { ...syncedData.scans, [confirmRemoveKey]: null },
+      });
+      setConfirmRemoveKey(null);
+    }
   };
 
   return (
@@ -3027,7 +3178,7 @@ function DokumenteForm({
       {/* Scan items list */}
       <div className="space-y-2.5">
         {visibleItems.map((item) => {
-          const scan = data.scans[item.key] ?? null;
+          const scan = syncedData.scans[item.key] ?? null;
           const isUploaded = !!scan;
           const isRequired = requiredKeys.includes(item.key);
           const showToast = sharePointToasts.has(item.key);
@@ -3103,7 +3254,12 @@ function DokumenteForm({
                       }`}
                       style={{ fontWeight: 600 }}
                     >
-                      {isUploaded ? (
+                      {isUploaded && item.key === "spezialbewilligung_b" && data.spezialbewilligungEinreichungsDatum ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3" />
+                          Eingereicht am {formatDateDisplay(data.spezialbewilligungEinreichungsDatum)}
+                        </>
+                      ) : isUploaded ? (
                         <>
                           <CheckCircle2 className="w-3 h-3" />
                           Hochgeladen
@@ -3192,10 +3348,21 @@ function DokumenteForm({
                       <ScanUploadButton
                         scanKey={item.key}
                         docLabel={item.label}
-                        data={data}
-                        onChange={onChange}
+                        data={syncedData}
+                        onChange={handleChange}
                         onCameraOpen={() => openCamera(item.key, item.label)}
                       />
+                      {item.key === "spezialbewilligung_b" && onOpenSpezialbewilligung && (
+                        <button
+                          type="button"
+                          onClick={onOpenSpezialbewilligung}
+                          className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline cursor-pointer"
+                          style={{ fontWeight: 500 }}
+                        >
+                          <Info className="w-3 h-3" />
+                          Mehr zum Bewilligungs-Prozess →
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3264,6 +3431,36 @@ function DokumenteForm({
         onCapture={handleCameraCapture}
         onClose={() => setCameraOpen(false)}
       />
+
+      {/* Spezialbewilligung remove confirmation */}
+      {confirmRemoveKey === "spezialbewilligung_b" && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-foreground/20 backdrop-blur-[1px]" onClick={() => setConfirmRemoveKey(null)} />
+          <div className="relative bg-card rounded-xl border border-border shadow-xl p-5 max-w-[360px]">
+            <h5 className="text-foreground">Einreichung entfernen?</h5>
+            <p className="text-[12px] text-muted-foreground mt-1.5 leading-relaxed">
+              Die Einreichungs-Bestätigung wird entfernt und der Status auf "ausstehend" zurückgesetzt.
+              Die Vertragsphase wird erneut blockiert.
+            </p>
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button
+                onClick={() => setConfirmRemoveKey(null)}
+                className="px-3 py-[6px] rounded-xl text-[12px] text-foreground hover:bg-secondary transition-colors cursor-pointer"
+                style={{ fontWeight: 500 }}
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={confirmRemove}
+                className="px-3 py-[6px] rounded-xl text-[12px] bg-error text-white hover:bg-error/90 transition-colors cursor-pointer"
+                style={{ fontWeight: 500 }}
+              >
+                Entfernen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3442,7 +3639,7 @@ function SubStepContent({
       {/* ── Content area ───────────────────── */}
       <div className="px-5 py-5 lg:px-6 lg:py-6">
         {stepKey === "personalien" && (
-          <PersonalienForm data={data} onChange={onChange} />
+          <PersonalienForm data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />
         )}
         {stepKey === "steuer" && (
           <SteuerForm data={data} onChange={onChange} />
@@ -3457,7 +3654,7 @@ function SubStepContent({
           <AnstellungForm data={data} onChange={onChange} />
         )}
         {stepKey === "dokumente" && (
-          <DokumenteForm data={data} onChange={onChange} />
+          <DokumenteForm data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />
         )}
         {!isRealForm && hint.fields.length > 0 && (
           <>
