@@ -112,11 +112,19 @@ export function DashboardHero() {
         </div>
         <button
           onClick={() => navigate("/onboarding/neu")}
-          className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors cursor-pointer shrink-0"
+          className="hidden sm:inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors cursor-pointer shrink-0"
           style={{ fontWeight: 500 }}
         >
           <Plus className="w-3.5 h-3.5" />
           Neuer Klient
+        </button>
+        {/* Mobile FAB */}
+        <button
+          onClick={() => navigate("/onboarding/neu")}
+          className="sm:hidden fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary-hover flex items-center justify-center cursor-pointer"
+          aria-label="Neuer Klient"
+        >
+          <Plus className="w-6 h-6" />
         </button>
       </div>
 

@@ -92,9 +92,9 @@ export function OnboardingPipelineTile() {
         </div>
       </div>
 
-      {/* Steps grid */}
-      <div className="px-4 pb-3">
-        <div className="flex gap-[3px]">
+      {/* Steps grid — horizontally scrollable on small screens */}
+      <div className="px-4 pb-3 overflow-x-auto">
+        <div className="flex gap-[3px]" style={{ minWidth: 600 }}>
           {steps.map((step) => {
             const isEmpty = step.count === 0;
             const isOverdue = step.overdue > 0;

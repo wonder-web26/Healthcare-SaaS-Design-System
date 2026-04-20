@@ -246,4 +246,33 @@
     font-weight: 400;
     line-height: 1.5;
   }
+
+  /* Mobile: slightly larger base font for readability */
+  @media (max-width: 639px) {
+    html {
+      font-size: 15px;
+    }
+    h1 {
+      font-size: 1.5rem;
+    }
+    h2 {
+      font-size: 1.25rem;
+    }
+    /* Prevent iOS zoom on input focus */
+    input, textarea, select {
+      font-size: 16px;
+    }
+  }
+}
+
+/* Touch-friendly tap targets */
+@media (pointer: coarse) {
+  button, [role="link"], [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* Momentum scrolling for inner scroll containers */
+  .overflow-y-auto, .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
 }

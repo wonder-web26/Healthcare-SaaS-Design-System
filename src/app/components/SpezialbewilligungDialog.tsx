@@ -117,9 +117,9 @@ export function SpezialbewilligungDialog({ data, onChange, onClose }: Spezialbew
   const showUploadZone = (!isEingereicht && uploadPhase !== "uploading") || isReplacing;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4">
       <div className="absolute inset-0 bg-foreground/20 backdrop-blur-[2px]" onClick={uploadPhase === "uploading" ? undefined : onClose} />
-      <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-[580px] max-h-[90vh] flex flex-col">
+      <div className="relative bg-card sm:rounded-2xl rounded-t-2xl shadow-2xl border border-border w-full sm:max-w-[580px] max-h-[95vh] sm:max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between px-6 py-5 border-b border-border-light shrink-0">
           <div className="flex items-start gap-3">
@@ -287,15 +287,15 @@ export function SpezialbewilligungDialog({ data, onChange, onClose }: Spezialbew
                   >
                     <Upload className="w-5 h-5 text-muted-foreground" />
                     <div className="text-center">
-                      <span className="text-[12px] text-muted-foreground">
+                      <span className="hidden sm:inline text-[12px] text-muted-foreground">
                         Datei hierher ziehen oder{" "}
                       </span>
                       <button
                         onClick={() => { setValidationError(null); fileInputRef.current?.click(); }}
-                        className="text-[12px] text-primary hover:underline cursor-pointer"
+                        className="text-[12px] text-primary hover:underline cursor-pointer sm:inline"
                         style={{ fontWeight: 500 }}
                       >
-                        durchsuchen
+                        Datei wählen
                       </button>
                     </div>
                     <span className="text-[10px] text-muted-foreground/60">

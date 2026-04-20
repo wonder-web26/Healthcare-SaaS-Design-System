@@ -353,14 +353,47 @@ export function OnboardingPage() {
       </div>
 
       {/* ═══════════════════════════════════════
+         MOBILE STEPPER — visible below lg
+         ═══════════════════════════════════════ */}
+      <div className="lg:hidden shrink-0 px-4 pb-3">
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {wizardSteps.map((step, idx) => {
+            const isSelected = currentStep === step.id;
+            const isCompleted = completedSteps.has(step.id);
+            const isDanger = !!step.danger;
+            const isBlocked = !!step.blocked;
+            return (
+              <button
+                key={step.key}
+                onClick={() => !isBlocked && goToStep(step.id)}
+                disabled={isBlocked}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                  isBlocked ? "opacity-50 cursor-not-allowed" :
+                  isSelected ? "bg-primary-light text-primary" :
+                  isCompleted ? "bg-success-light text-success-foreground" :
+                  isDanger ? "bg-error-light text-error-foreground" :
+                  "text-muted-foreground hover:bg-muted/40"
+                }`}
+                style={{ fontWeight: isSelected ? 600 : 500 }}
+              >
+                {isCompleted ? <Check className="w-3 h-3" /> : <step.icon className="w-3 h-3" />}
+                <span className="hidden sm:inline">{step.shortLabel}</span>
+                <span className="sm:hidden">{idx + 1}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════
          MAIN SPLIT LAYOUT
          ═══════════════════════════════════════ */}
-      <div className="flex-1 flex min-h-0 px-5 lg:px-8 pb-0">
+      <div className="flex-1 flex min-h-0 px-3 sm:px-5 lg:px-8 pb-0">
         <div className="flex gap-5 lg:gap-6 w-full min-h-0">
           {/* ─────────────────────────────────────
-             LEFT PANEL — Step Navigation
+             LEFT PANEL — Step Navigation (desktop only)
              ───────────────────────────────────── */}
-          <div className="w-[260px] lg:w-[280px] shrink-0 flex flex-col min-h-0">
+          <div className="hidden lg:flex w-[260px] lg:w-[280px] shrink-0 flex-col min-h-0">
             <div className="flex-1 overflow-y-auto pr-1">
               <div className="bg-card rounded-2xl border border-border p-4 lg:p-5">
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4" style={{ fontWeight: 500 }}>

@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Check,
   Upload,
+  ArrowLeft,
 } from "lucide-react";
 import {
   unifiedEntries,
@@ -179,9 +180,9 @@ export function ServiceDeskPage() {
   }
 
   return (
-    <div className="flex" style={{ height: "calc(100vh - 64px)" }}>
-      {/* ── LEFT: Views rail ── */}
-      <div className="w-[220px] shrink-0 border-r border-border-light bg-[#FAFBFC] overflow-y-auto" style={{ padding: "20px 14px" }}>
+    <div className="flex flex-col lg:flex-row h-full">
+      {/* ── LEFT: Views rail (desktop) / horizontal tabs (mobile) ── */}
+      <div className="hidden lg:block w-[220px] shrink-0 border-r border-border-light bg-[#FAFBFC] overflow-y-auto" style={{ padding: "20px 14px" }}>
         <div className="text-[10.5px] text-muted-foreground uppercase tracking-wider px-2 pb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>
           Ansichten
         </div>
@@ -205,10 +206,32 @@ export function ServiceDeskPage() {
         })}
       </div>
 
+      {/* Mobile views tabs */}
+      <div className="lg:hidden flex items-center gap-1 px-3 py-2 border-b border-border-light bg-[#FAFBFC] overflow-x-auto shrink-0">
+        {views.map(v => {
+          const Icon = v.icon;
+          const isActive = view === v.id;
+          return (
+            <button
+              key={v.id}
+              onClick={() => setParam({ view: v.id === "mir" ? null : v.id, id: null })}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                isActive ? "bg-primary-light text-primary" : "text-muted-foreground hover:bg-muted/40"
+              }`}
+              style={{ fontWeight: isActive ? 500 : 400 }}
+            >
+              <Icon className="w-[14px] h-[14px]" />
+              {v.label}
+              <span className="text-[10px] opacity-70">{v.count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── MIDDLE: List ── */}
-      <div className="flex-1 min-w-0 flex flex-col border-r border-border-light">
+      <div className="flex-1 min-w-0 flex flex-col lg:border-r border-border-light">
         {/* Page header */}
-        <div className="border-b border-border-light" style={{ padding: "20px 24px 14px" }}>
+        <div className="border-b border-border-light" style={{ padding: "14px 16px 10px" }}>
           <div className="flex items-start justify-between gap-4 mb-3">
             <div>
               <h1 className="text-foreground" style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.015em" }}>
@@ -372,7 +395,7 @@ export function ServiceDeskPage() {
       </div>
 
       {/* ── RIGHT: Detail pane ── */}
-      <div className="w-[540px] shrink-0 bg-[#FAFBFC] overflow-y-auto">
+      <div className="hidden lg:block w-[540px] shrink-0 bg-[#FAFBFC] overflow-y-auto">
         {selected ? (
           <div style={{ padding: "20px 22px 28px" }} className="flex flex-col gap-[16px]">
             {/* Header */}
@@ -529,6 +552,167 @@ export function ServiceDeskPage() {
           </div>
         )}
       </div>
+
+      {/* ── MOBILE: Full-screen detail ── */}
+      {selected && (
+        <div className="fixed inset-0 z-50 bg-background flex flex-col lg:hidden">
+          {/* Mobile detail header */}
+          <div className="flex items-center gap-3 px-3 py-3 border-b border-border shrink-0">
+            <button
+              onClick={() => setParam({ id: null })}
+              className="p-2 -ml-1 rounded-xl hover:bg-secondary transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-muted-foreground" />
+            </button>
+            <div className="flex-1 min-w-0 text-center">
+              <span className="text-[13px] text-foreground truncate block" style={{ fontWeight: 600 }}>
+                {entryTitle(selected)}
+              </span>
+            </div>
+            <button className="p-2 -mr-1 rounded-xl hover:bg-secondary transition-colors">
+              <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
+            </button>
+          </div>
+
+          {/* Mobile detail body */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4 flex flex-col gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`inline-flex items-center rounded-md text-[11px] ${selected.quelle === "workflow" ? "bg-primary-light text-primary" : "bg-info-light text-info-foreground"}`} style={{ padding: "2px 7px", fontWeight: 500 }}>
+                    {selected.typLabel}
+                  </span>
+                  <span className="text-[10.5px] text-muted-foreground font-mono">{selected.id}</span>
+                </div>
+                <h2 style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.3 }} className="text-foreground">
+                  {entryTitle(selected)}
+                </h2>
+                <p className="text-[13px] text-muted-foreground mt-1.5" style={{ lineHeight: 1.5 }}>{selected.kontext}</p>
+                {selected.beschreibung && (
+                  <div className="text-[13px] text-foreground/80 mt-3" style={{ lineHeight: 1.55 }}>
+                    {selected.beschreibung}
+                  </div>
+                )}
+              </div>
+
+              {(() => {
+                const b = faelligBucket(selected.faellig);
+                const d = daysFromToday(selected.faellig);
+                if (b === "ueberfaellig") return (
+                  <div className="flex items-center gap-2 rounded-[10px] bg-error-light" style={{ padding: "9px 12px" }}>
+                    <AlertTriangle className="w-[14px] h-[14px] text-error" />
+                    <span className="text-[12px] text-error-foreground" style={{ fontWeight: 500 }}>{Math.abs(d!)} {Math.abs(d!) === 1 ? "Tag" : "Tage"} überfällig</span>
+                  </div>
+                );
+                if (b === "heute") return (
+                  <div className="flex items-center gap-2 rounded-[10px] bg-warning-light" style={{ padding: "9px 12px" }}>
+                    <AlertTriangle className="w-[14px] h-[14px] text-warning" />
+                    <span className="text-[12px] text-warning-foreground" style={{ fontWeight: 500 }}>heute fällig</span>
+                  </div>
+                );
+                return null;
+              })()}
+
+              <div className="bg-card border border-border-light rounded-[10px]" style={{ padding: 14 }}>
+                <div className="grid grid-cols-2" style={{ rowGap: 14, columnGap: 16 }}>
+                  <MetaCell label="Status">
+                    {(() => { const s = statusCfg[selected.status]; return (
+                      <span className={`inline-flex items-center gap-1.5 rounded-full text-[11px] ${s.bg} ${s.text}`} style={{ padding: "2px 8px", fontWeight: 500 }}>
+                        <span className={`w-[5px] h-[5px] rounded-full ${s.dot}`} /> {s.label}
+                      </span>
+                    ); })()}
+                  </MetaCell>
+                  <MetaCell label="Priorität">
+                    <span className={`inline-flex items-center gap-1.5 text-[12.5px] ${prioCfg[selected.prioritaet].textColor}`} style={{ fontWeight: 500 }}>
+                      <span className={`w-[6px] h-[6px] rounded-full ${prioCfg[selected.prioritaet].color}`} />
+                      {prioCfg[selected.prioritaet].label}
+                    </span>
+                  </MetaCell>
+                  {selected.person && (
+                    <MetaCell label="Betroffene Person">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Avatar person={selected.person} size={18} />
+                        <span className="text-[12.5px]" style={{ fontWeight: 500 }}>{selected.person.name}</span>
+                      </span>
+                    </MetaCell>
+                  )}
+                  <MetaCell label="Verantwortlich">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Avatar person={selected.verantwortlich} size={18} />
+                      <span className="text-[12.5px]" style={{ fontWeight: 500 }}>{selected.verantwortlich.name}</span>
+                    </span>
+                  </MetaCell>
+                  <MetaCell label="Fällig">
+                    {selected.faellig ? (
+                      <span className="text-[12px] text-muted-foreground">{formatDate(selected.faellig)}</span>
+                    ) : <span className="text-[12px] text-muted-foreground">—</span>}
+                  </MetaCell>
+                  <MetaCell label="Erstellt">
+                    <span className="text-[12px] text-muted-foreground">{formatDate(selected.erstellt)}</span>
+                  </MetaCell>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[11px] text-muted-foreground uppercase mb-2.5" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>Verlauf</div>
+                <div className="flex flex-col gap-2.5">
+                  {[...(comments[selected.id] || [])].reverse().map((c, i) => (
+                    <VerlaufEvent key={`c-${i}`} dotColor="bg-primary" actor={c.by} text={`kommentiert: "${c.text}"`} date={c.at} />
+                  ))}
+                  {selected.status === "in_bearbeitung" && (
+                    <VerlaufEvent dotColor="bg-warning" actor={selected.verantwortlich.name} text="Status auf ‚In Bearbeitung' gesetzt" date={formatDate(selected.erstellt)} />
+                  )}
+                  <VerlaufEvent dotColor="bg-muted-foreground" actor={selected.verantwortlich.name} text="Eintrag erstellt" date={formatDate(selected.erstellt)} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile detail footer — sticky actions */}
+          <div className="shrink-0 border-t border-border bg-card p-3 space-y-2">
+            <textarea
+              value={draftComment}
+              onChange={(e) => setDraftComment(e.target.value)}
+              placeholder="Kommentar hinzufügen…"
+              className="w-full rounded-lg border border-border text-[14px] text-foreground outline-none resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary/60"
+              style={{ padding: "10px 12px", minHeight: 44, lineHeight: 1.4 }}
+            />
+            <div className="flex items-center gap-2">
+              <select
+                value={localStatus[selected.id] || selected.status}
+                onChange={(e) => setLocalStatus(prev => ({ ...prev, [selected.id]: e.target.value }))}
+                className="rounded-lg border border-border bg-card text-[13px] text-foreground outline-none"
+                style={{ padding: "8px 10px", minHeight: 44 }}
+              >
+                <option value="offen">Offen</option>
+                <option value="in_bearbeitung">In Bearbeitung</option>
+                <option value="erledigt">Erledigt</option>
+              </select>
+              <div className="flex-1" />
+              <button
+                onClick={() => setLocalStatus(prev => ({ ...prev, [selected.id]: "erledigt" }))}
+                className={`inline-flex items-center gap-1.5 rounded-lg text-[13px] cursor-pointer transition-colors ${
+                  (localStatus[selected.id] || selected.status) === "erledigt"
+                    ? "bg-success-light text-success-foreground border border-success-medium"
+                    : "border border-border text-foreground hover:bg-secondary/60"
+                }`}
+                style={{ padding: "8px 12px", fontWeight: 500, minHeight: 44 }}
+              >
+                <Check className="w-4 h-4" />
+                {(localStatus[selected.id] || selected.status) === "erledigt" ? "Erledigt" : "Erledigen"}
+              </button>
+              <button
+                onClick={() => addComment(selected.id)}
+                disabled={!draftComment.trim()}
+                className="inline-flex items-center gap-1.5 rounded-lg text-[13px] bg-primary text-primary-foreground hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ padding: "8px 12px", fontWeight: 500, minHeight: 44 }}
+              >
+                Senden
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

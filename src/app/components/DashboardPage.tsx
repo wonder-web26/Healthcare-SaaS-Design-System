@@ -83,11 +83,10 @@ export function DashboardPage() {
             <table className="w-full">
               <thead>
                 <tr className="bg-muted/30">
-                  {["Klient", "Aufgabe", "Fällig", "Verantwortlich"].map((col) => (
-                    <th key={col} className="px-5 py-2.5 text-left">
-                      <span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>{col}</span>
-                    </th>
-                  ))}
+                  <th className="px-3 sm:px-5 py-2.5 text-left"><span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Klient</span></th>
+                  <th className="px-3 sm:px-5 py-2.5 text-left"><span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Aufgabe</span></th>
+                  <th className="px-3 sm:px-5 py-2.5 text-left hidden sm:table-cell"><span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Fällig</span></th>
+                  <th className="px-3 sm:px-5 py-2.5 text-left hidden md:table-cell"><span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Verantwortlich</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -101,7 +100,7 @@ export function DashboardPage() {
                       else navigate("/patienten");
                     }}
                   >
-                    <td className="px-5 py-3">
+                    <td className="px-3 sm:px-5 py-3">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center shrink-0">
                           <span className="text-[9px] text-primary" style={{ fontWeight: 600 }}>
@@ -111,10 +110,10 @@ export function DashboardPage() {
                         <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{task.klient}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-3 sm:px-5 py-3">
                       <span className="text-[13px] text-foreground">{task.aufgabe}</span>
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-3 sm:px-5 py-3 hidden sm:table-cell">
                       {task.overdue ? (
                         <span className="inline-flex items-center gap-1.5 px-2 py-[2px] rounded-full text-[11px] bg-error-light text-error-foreground" style={{ fontWeight: 500 }}>
                           <span className="w-[5px] h-[5px] rounded-full bg-error" />
@@ -124,7 +123,7 @@ export function DashboardPage() {
                         <span className="text-[13px] text-muted-foreground">{task.faellig}</span>
                       )}
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-3 sm:px-5 py-3 hidden md:table-cell">
                       <span className="text-[12px] text-muted-foreground">{task.verantwortlich}</span>
                     </td>
                   </tr>
