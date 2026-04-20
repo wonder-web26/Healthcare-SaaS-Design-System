@@ -212,7 +212,7 @@ export function ServiceDeskPage() {
           <div className="flex items-start justify-between gap-4 mb-3">
             <div>
               <h1 className="text-foreground" style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.015em" }}>
-                Service Desk und Pendenzenliste
+                Pendenzenliste
               </h1>
               <div className="text-[12.5px] text-muted-foreground mt-[3px]">
                 {headerCounts.offen} offene Einträge ·{" "}

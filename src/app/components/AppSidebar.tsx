@@ -5,7 +5,6 @@ import {
   Users,
   GitBranch,
   Headphones,
-  FileText,
   Settings,
   HelpCircle,
   HeartHandshake,
@@ -20,8 +19,7 @@ const navItems = [
   { id: "patienten", label: "Patienten", icon: Users },
   { id: "angehoerige", label: "Angehörige", icon: HeartHandshake },
   { id: "zuteilung", label: "Zuteilung", icon: GitBranch },
-  { id: "servicedesk", label: "Service Desk", icon: Headphones, badge: myOpenCount },
-  { id: "vorlagen", label: "Vorlagen", icon: FileText },
+  { id: "servicedesk", label: "Pendenzen", icon: Headphones, badge: myOpenCount },
 ];
 
 interface AppSidebarProps {

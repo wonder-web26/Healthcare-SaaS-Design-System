@@ -2392,7 +2392,7 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
   const [cameraDocLabel, setCameraDocLabel] = useState("");
   const [sharePointToasts, setSharePointToasts] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"pflicht" | "ordner">("pflicht");
+  // Pflicht-Dokumente view only (Ordnerstruktur entfernt – erst nach Onboarding-Abschluss relevant)
 
   const requiredKeys = getPatientRequiredDocKeys();
   const uploadedRequired = requiredKeys.filter((k) => !!data.scans[k]).length;
@@ -2449,35 +2449,6 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* View toggle */}
-          <div className="flex items-center bg-muted rounded-xl p-0.5">
-            <button
-              type="button"
-              onClick={() => setViewMode("pflicht")}
-              className={`inline-flex items-center gap-1.5 px-3 py-[6px] rounded-lg text-[12px] transition-all ${
-                viewMode === "pflicht"
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              style={{ fontWeight: 500 }}
-            >
-              <ClipboardList className="w-3.5 h-3.5" />
-              Pflicht-Dokumente
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("ordner")}
-              className={`inline-flex items-center gap-1.5 px-3 py-[6px] rounded-lg text-[12px] transition-all ${
-                viewMode === "ordner"
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              style={{ fontWeight: 500 }}
-            >
-              <Folder className="w-3.5 h-3.5" />
-              Ordnerstruktur
-            </button>
-          </div>
 
           {/* Status badge */}
           <span
@@ -2519,17 +2490,8 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
         </div>
       </div>
 
-      {/* ═══ VIEW: Ordnerstruktur ═══ */}
-      {viewMode === "ordner" && (
-        <SharePointFolderView
-          data={data}
-          onChange={onChange}
-          onOpenCamera={openCamera}
-        />
-      )}
-
-      {/* ═══ VIEW: Pflicht-Dokumente ═══ */}
-      {viewMode === "pflicht" && (
+      {/* ═══ Pflicht-Dokumente ═══ */}
+      {(
         <>
           {/* Grouped document items */}
           {docGroups.map((group) => (

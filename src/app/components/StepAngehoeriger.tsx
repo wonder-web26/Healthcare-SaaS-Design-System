@@ -1928,6 +1928,14 @@ function KinderForm({
         </div>
       </div>
 
+      {/* Info hint: upload Familienbüchlein */}
+      <div className="flex items-start gap-2 p-3 rounded-xl bg-info-light/50 border border-info/10">
+        <Info className="w-3.5 h-3.5 text-info mt-0.5 shrink-0" />
+        <p className="text-[12px] text-info-foreground leading-relaxed">
+          Bitte Familienbüchlein oder Geburtsurkunde der Kinder unter «Dokumente» hochladen.
+        </p>
+      </div>
+
       {/* ── Child cards ──── */}
       <div className="space-y-3">
         {data.kinder.map((kind, idx) => {
@@ -2287,6 +2295,15 @@ function KinderForm({
         </div>
       </div>
 
+      {data.kinderzulagenUeberSpitex === "ja" && (
+        <div className="flex items-start gap-2 p-3 rounded-xl bg-info-light/50 border border-info/10">
+          <Info className="w-3.5 h-3.5 text-info mt-0.5 shrink-0" />
+          <p className="text-[12px] text-info-foreground leading-relaxed">
+            Bitte Hochzeits- oder Familienurkunde unter «Dokumente» hochladen.
+          </p>
+        </div>
+      )}
+
       {/* Info callout */}
       <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-info-light/50 border border-info/10">
         <Info className="w-4 h-4 text-info mt-0.5 shrink-0" />
@@ -2642,6 +2659,22 @@ const SCAN_ITEMS: ScanItemDef[] = [
     icon: Baby,
     mandatory: true,
     condition: (d) => d.hatUnterhaltspflichtigeKinder === "ja",
+  },
+  {
+    key: "nachweis_unterhaltspflichtige_kinder",
+    label: "Nachweis für unterhaltspflichtige Kinder",
+    description: "Familienbüchlein oder Geburtsurkunde der unterhaltspflichtigen Kinder. Eines der beiden Dokumente genügt.",
+    icon: FileText,
+    mandatory: true,
+    condition: (d) => d.hatUnterhaltspflichtigeKinder === "ja",
+  },
+  {
+    key: "nachweis_kinderzulagen",
+    label: "Nachweis für Kinderzulagen über Spitex",
+    description: "Hochzeitsurkunde oder Familienurkunde. Eines der beiden Dokumente genügt.",
+    icon: FileText,
+    mandatory: true,
+    condition: (d) => d.kinderzulagenUeberSpitex === "ja",
   },
   {
     key: "familienbuchlein",

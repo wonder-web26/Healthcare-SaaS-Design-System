@@ -2662,7 +2662,7 @@ function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path:
           style={{ fontWeight: 500 }}
         >
           <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-          Service Desk öffnen
+          Pendenzenliste öffnen
         </button>
       </div>
 
@@ -2712,7 +2712,7 @@ function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path:
           style={{ fontWeight: 500 }}
         >
           <Headphones className="w-4 h-4" />
-          Zum Service Desk
+          Zur Pendenzenliste
         </button>
       </div>
     </div>
