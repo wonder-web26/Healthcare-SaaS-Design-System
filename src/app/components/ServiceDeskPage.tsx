@@ -124,14 +124,19 @@ export function ServiceDeskPage() {
     return list;
   }, [entries, view, quelleFilter, typFilter]);
 
-  // Auto-select
+  // Auto-select first entry on desktop only (≥1024px).
+  // On mobile, the list is the default — no auto-selection.
   useEffect(() => {
+    const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
     if (filtered.length === 0) {
       if (selectedId) setParam({ id: null });
       return;
     }
-    if (!filtered.some(e => e.id === selectedId)) {
+    if (isDesktop && !filtered.some(e => e.id === selectedId)) {
       setParam({ id: filtered[0].id });
+    }
+    if (!isDesktop && selectedId && !filtered.some(e => e.id === selectedId)) {
+      setParam({ id: null });
     }
   }, [filtered, selectedId]);
 
@@ -560,6 +565,7 @@ export function ServiceDeskPage() {
           <div className="flex items-center gap-3 px-3 py-3 border-b border-border shrink-0">
             <button
               onClick={() => setParam({ id: null })}
+              aria-label="Zurück zur Pendenzenliste"
               className="p-2 -ml-1 rounded-xl hover:bg-secondary transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-muted-foreground" />
