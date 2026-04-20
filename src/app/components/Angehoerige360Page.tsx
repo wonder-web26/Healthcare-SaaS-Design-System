@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import {
   ArrowLeft,
   Phone,
@@ -59,6 +59,7 @@ import {
   type Angehoeriger,
 } from "./angehoerigeData";
 import { TabDokumenteGeneric, type DocFolder } from "./TabDokumente";
+import { DetailNavigation } from "./DetailNavigation";
 
 /* ══════════════════════════════════════════
    EXTENDED MOCK DATA — HR detail fields
@@ -404,8 +405,16 @@ function getHistorie(): HistoryEntry[] {
 export function Angehoerige360Page() {
   const { angehoerigerIdOrNew } = useParams();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("ueberblick");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") || "ueberblick";
+  const setActiveTab = (tab: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (tab === "ueberblick") next.delete("tab");
+    else next.set("tab", tab);
+    setSearchParams(next, { replace: true });
+  };
 
+  const allAngehoerigeIds = angehoerige.map(x => x.id);
   const a = angehoerige.find((x) => x.id === angehoerigerIdOrNew);
 
   if (!a) {
@@ -435,16 +444,16 @@ export function Angehoerige360Page() {
 
   return (
     <>
-      {/* ── Back Navigation ────────────────── */}
+      {/* ── Back + Prev/Next Navigation ──────── */}
       <div className="px-4 md:px-8 pt-5 pb-0">
-        <button
-          onClick={() => navigate("/angehoerige")}
-          className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors -ml-1"
-          style={{ fontWeight: 450 }}
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Angehörige
-        </button>
+        <DetailNavigation
+          backLabel="Angehörige"
+          backPath="/angehoerige"
+          currentId={angehoerigerIdOrNew!}
+          allIds={allAngehoerigeIds}
+          buildPath={(id) => `/angehoerige/${id}`}
+          tabParam={activeTab !== "ueberblick" ? activeTab : undefined}
+        />
       </div>
 
       {/* ── Header ─────────────────────────── */}

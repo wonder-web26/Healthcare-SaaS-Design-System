@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import {
   Search,
   Download,
@@ -32,22 +32,15 @@ import {
 } from "./PflegefachkraftSidebar";
 import { toast } from "sonner";
 
-/* ── Primary Work-Mode Tabs ──────────────── */
-type WorkMode =
-  | "alle"
-  | "meine"
-  | "nicht_zugewiesen"
-  | "aufmerksamkeit"
-  | "reassessment";
+/* ── Primary Views (reduced to 3) ────────── */
+type ViewKey = "alle" | "meine" | "aufmerksamkeit";
 
-const CURRENT_USER_NAME = "Sandra Weber"; // simulate logged-in user
+const CURRENT_USER_NAME = "Sandra Weber";
 
-function workModeFilter(list: Patient[], mode: WorkMode): Patient[] {
-  switch (mode) {
+function viewFilter(list: Patient[], view: ViewKey): Patient[] {
+  switch (view) {
     case "meine":
       return list.filter((p) => p.pflegefachkraft === CURRENT_USER_NAME);
-    case "nicht_zugewiesen":
-      return list.filter((p) => p.pflegefachkraft === "—");
     case "aufmerksamkeit":
       return list.filter(
         (p) =>
@@ -55,25 +48,15 @@ function workModeFilter(list: Patient[], mode: WorkMode): Patient[] {
           p.status === "nicht_abrechenbar" ||
           (p.prozessStatus?.ueberfaellig === true)
       );
-    case "reassessment":
-      return list.filter(
-        (p) => p.reAssessmentTage !== null && p.reAssessmentTage <= 30
-      );
     default:
       return list;
   }
 }
 
-const workModeTabs: {
-  id: WorkMode;
-  label: string;
-  icon: React.ElementType;
-}[] = [
+const viewTabs: { id: ViewKey; label: string; icon: React.ElementType }[] = [
   { id: "alle", label: "Alle Patienten", icon: Users },
   { id: "meine", label: "Meine Patienten", icon: Users },
-  { id: "nicht_zugewiesen", label: "Nicht zugewiesen", icon: UserX },
   { id: "aufmerksamkeit", label: "Aufmerksamkeit nötig", icon: AlertCircle },
-  { id: "reassessment", label: "Re-Assessment fällig", icon: CalendarClock },
 ];
 
 /* ── Filter chip definitions ─────────────── */
@@ -123,6 +106,24 @@ function buildFilterDefs(patients: Patient[]): FilterDef[] {
         { value: "ueberfaellig", label: "Überfällige Aufgaben" },
         { value: "anstehend", label: "Anstehende Aufgaben" },
         { value: "erledigt", label: "Keine offenen Aufgaben" },
+      ],
+    },
+    {
+      id: "reassessment",
+      label: "Re-Assessment",
+      options: [
+        { value: "ueberfaellig", label: "Überfällig" },
+        { value: "diesen_monat", label: "Diesen Monat fällig" },
+        { value: "naechsten_monat", label: "Nächsten Monat fällig" },
+        { value: "spaeter", label: "Später" },
+      ],
+    },
+    {
+      id: "zuweisung",
+      label: "Zuweisung",
+      options: [
+        { value: "zugewiesen", label: "Zugewiesen" },
+        { value: "nicht_zugewiesen", label: "Nicht zugewiesen" },
       ],
     },
   ];
@@ -238,8 +239,62 @@ function isUnassigned(p: Patient): boolean {
    ══════════════════════════════════════════ */
 export function PatientenPage() {
   const navigate = useNavigate();
-  const [activeWorkMode, setActiveWorkMode] = useState<WorkMode>("alle");
-  const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeView = (searchParams.get("view") || "meine") as ViewKey;
+  const search = searchParams.get("q") || "";
+  const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  const setView = (v: ViewKey) => {
+    const next = new URLSearchParams(searchParams);
+    if (v === "meine") next.delete("view");
+    else next.set("view", v);
+    setSearchParams(next, { replace: true });
+  };
+
+  const setSearch = (q: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (!q) next.delete("q");
+    else next.set("q", q);
+    setSearchParams(next, { replace: true });
+  };
+
+  // Parse chip filters from URL
+  const chipFilters = useMemo(() => {
+    const filters: Record<string, Set<string>> = {};
+    for (const [key, value] of searchParams.entries()) {
+      if (["view", "q"].includes(key)) continue;
+      filters[key] = new Set(value.split(",").filter(Boolean));
+    }
+    return filters;
+  }, [searchParams]);
+
+  const updateChipFilter = (id: string, next: Set<string>) => {
+    const params = new URLSearchParams(searchParams);
+    if (next.size === 0) params.delete(id);
+    else params.set(id, Array.from(next).join(","));
+    setSearchParams(params, { replace: true });
+  };
+
+  const clearAllChipFilters = () => {
+    const params = new URLSearchParams();
+    const v = searchParams.get("view");
+    const q = searchParams.get("q");
+    if (v) params.set("view", v);
+    if (q) params.set("q", q);
+    setSearchParams(params, { replace: true });
+  };
+
+  // Close filter popover on outside click
+  useEffect(() => {
+    if (!filterPopoverOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterPopoverOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [filterPopoverOpen]);
+
   const [assignmentOverrides, setAssignmentOverrides] = useState<
     Record<string, { name: string; initialen: string }>
   >({});
@@ -247,29 +302,6 @@ export function PatientenPage() {
     open: boolean;
     patient: Patient | null;
   }>({ open: false, patient: null });
-
-  /* ── Multi-select chip filter state ─────── */
-  const [chipFilters, setChipFilters] = useState<Record<string, Set<string>>>({
-    schweregrad: new Set(),
-    pflegefachkraft: new Set(),
-    region: new Set(),
-    sprache: new Set(),
-    prozessstatus: new Set(),
-  });
-
-  const updateChipFilter = (id: string, next: Set<string>) => {
-    setChipFilters((prev) => ({ ...prev, [id]: next }));
-  };
-
-  const clearAllChipFilters = () => {
-    setChipFilters({
-      schweregrad: new Set(),
-      pflegefachkraft: new Set(),
-      region: new Set(),
-      sprache: new Set(),
-      prozessstatus: new Set(),
-    });
-  };
 
   const patients = useMemo(() => {
     return initialPatients.map((p) => {
@@ -332,27 +364,47 @@ export function PatientenPage() {
   const hasAnyChipFilter = activeFilterTags.length > 0;
 
   const filtered = useMemo(() => {
-    let list = workModeFilter(patients, activeWorkMode);
+    let list = viewFilter(patients, activeView);
 
-    // Apply chip filters
     const sg = chipFilters.schweregrad;
-    if (sg.size > 0) list = list.filter((p) => sg.has(p.schweregrad));
+    if (sg && sg.size > 0) list = list.filter((p) => sg.has(p.schweregrad));
 
     const pf = chipFilters.pflegefachkraft;
-    if (pf.size > 0) list = list.filter((p) => pf.has(p.pflegefachkraft));
+    if (pf && pf.size > 0) list = list.filter((p) => pf.has(p.pflegefachkraft));
 
     const rg = chipFilters.region;
-    if (rg.size > 0) list = list.filter((p) => rg.has(p.kanton));
+    if (rg && rg.size > 0) list = list.filter((p) => rg.has(p.kanton));
 
     const sp = chipFilters.sprache;
-    if (sp.size > 0) list = list.filter((p) => sp.has(p.sprache));
+    if (sp && sp.size > 0) list = list.filter((p) => sp.has(p.sprache));
 
     const ps = chipFilters.prozessstatus;
-    if (ps.size > 0) {
+    if (ps && ps.size > 0) {
       list = list.filter((p) => {
         if (ps.has("ueberfaellig") && p.prozessStatus?.ueberfaellig) return true;
         if (ps.has("anstehend") && p.prozessStatus && !p.prozessStatus.ueberfaellig) return true;
         if (ps.has("erledigt") && p.prozessStatus === null) return true;
+        return false;
+      });
+    }
+
+    const ra = chipFilters.reassessment;
+    if (ra && ra.size > 0) {
+      list = list.filter((p) => {
+        if (p.reAssessmentTage === null) return false;
+        if (ra.has("ueberfaellig") && p.reAssessmentTage <= 0) return true;
+        if (ra.has("diesen_monat") && p.reAssessmentTage > 0 && p.reAssessmentTage <= 30) return true;
+        if (ra.has("naechsten_monat") && p.reAssessmentTage > 30 && p.reAssessmentTage <= 60) return true;
+        if (ra.has("spaeter") && p.reAssessmentTage > 60) return true;
+        return false;
+      });
+    }
+
+    const zw = chipFilters.zuweisung;
+    if (zw && zw.size > 0) {
+      list = list.filter((p) => {
+        if (zw.has("zugewiesen") && p.pflegefachkraft !== "—") return true;
+        if (zw.has("nicht_zugewiesen") && p.pflegefachkraft === "—") return true;
         return false;
       });
     }
@@ -369,7 +421,7 @@ export function PatientenPage() {
       );
     }
     return list;
-  }, [activeWorkMode, search, chipFilters, patients]);
+  }, [activeView, search, chipFilters, patients]);
 
   const openStatusModal = (patient: Patient, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -386,140 +438,179 @@ export function PatientenPage() {
 
   return (
     <>
-      {/* ── Page Header ──────────────────── */}
-      <div className="px-8 pt-7 pb-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-foreground">Patienten</h2>
-            <p className="text-[13px] text-muted-foreground mt-0.5">
-              {patients.length} Patienten · Operative Übersicht aller Mandate
-            </p>
+      <div className="flex flex-col lg:flex-row h-full">
+        {/* ── LEFT: Views-Rail (desktop) ───── */}
+        <div className="hidden lg:block w-[220px] shrink-0 border-r border-border-light bg-[#FAFBFC] overflow-y-auto" style={{ padding: "20px 14px" }}>
+          <div className="text-[10.5px] text-muted-foreground uppercase tracking-wider px-2 pb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>
+            Ansichten
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors"
-              style={{ fontWeight: 500 }}
-            >
-              <Download className="w-3.5 h-3.5 text-muted-foreground" />
-              Export
-            </button>
-            <button
-              onClick={() => navigate("/onboarding")}
-              className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors"
-              style={{ fontWeight: 500 }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Patient anlegen
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Work-Mode Tabs ────────────────── */}
-      <div className="px-8 pt-5 pb-0">
-        <div className="flex gap-1.5 overflow-x-auto">
-          {workModeTabs.map((tab) => {
-            const isActive = activeWorkMode === tab.id;
-            const cnt = workModeFilter(patients, tab.id).length;
+          {viewTabs.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeView === tab.id;
+            const cnt = viewFilter(patients, tab.id).length;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveWorkMode(tab.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-[5px] rounded-lg text-[12px] border transition-all whitespace-nowrap ${
-                  isActive
-                    ? "border-primary/20 bg-primary-light text-primary"
-                    : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
+                onClick={() => setView(tab.id)}
+                className={`w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] text-left mb-0.5 transition-colors cursor-pointer ${
+                  isActive ? "bg-primary-light text-primary" : "text-foreground hover:bg-muted/40"
                 }`}
                 style={{ fontWeight: isActive ? 500 : 400 }}
               >
-                <tab.icon className="w-3.5 h-3.5" />
-                {tab.label}
-                <span
-                  className={`text-[10px] px-[5px] py-[1px] rounded-md ${
-                    isActive
-                      ? "bg-primary/10 text-primary"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                  style={{ fontWeight: 600 }}
-                >
-                  {cnt}
-                </span>
+                <Icon className={`w-[15px] h-[15px] shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                <span className="flex-1 truncate">{tab.label}</span>
+                <span className="text-[11px] text-muted-foreground" style={{ fontWeight: 500 }}>{cnt}</span>
               </button>
             );
           })}
         </div>
-      </div>
 
-      {/* ── Search + Filter Chips ─────────── */}
-      <div className="px-8 pt-3 pb-0">
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Search field */}
-          <div className="flex items-center gap-2 bg-background rounded-xl px-3 py-[6px] border border-border-light min-w-[220px] max-w-[300px]">
-            <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Patienten suchen…"
-              className="bg-transparent outline-none text-[12px] flex-1 placeholder:text-muted-foreground/50"
-              style={{ fontWeight: 400 }}
-            />
-            {search && (
-              <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground transition-colors">
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-
-          {/* Divider */}
-          <div className="w-px h-5 bg-border" />
-
-          {/* Filter chips */}
-          {filterDefs.map((def) => (
-            <FilterChipPopover
-              key={def.id}
-              def={def}
-              selected={chipFilters[def.id] || new Set()}
-              onChange={(next) => updateChipFilter(def.id, next)}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* ── Active Filter Tags ───────────── */}
-      {hasAnyChipFilter && (
-        <div className="px-8 pt-2.5 pb-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {activeFilterTags.map((tag) => (
-              <span
-                key={`${tag.filterId}-${tag.value}`}
-                className="inline-flex items-center gap-1 px-2 py-[3px] rounded-lg bg-primary/8 border border-primary/15 text-[11px] text-primary"
-                style={{ fontWeight: 450 }}
+        {/* Mobile views tabs */}
+        <div className="lg:hidden flex items-center gap-1 px-3 py-2 border-b border-border-light bg-[#FAFBFC] overflow-x-auto shrink-0">
+          {viewTabs.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeView === tab.id;
+            const cnt = viewFilter(patients, tab.id).length;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setView(tab.id)}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                  isActive ? "bg-primary-light text-primary" : "text-muted-foreground hover:bg-muted/40"
+                }`}
+                style={{ fontWeight: isActive ? 500 : 400 }}
               >
-                <span className="text-primary/60">{tag.filterLabel}:</span>
-                {tag.displayLabel}
-                <button
-                  onClick={() => removeFilterTag(tag.filterId, tag.value)}
-                  className="ml-0.5 hover:bg-primary/10 rounded p-0.5 transition-colors"
-                >
-                  <X className="w-2.5 h-2.5" />
-                </button>
-              </span>
-            ))}
-            <button
-              onClick={clearAllChipFilters}
-              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-[3px]"
-              style={{ fontWeight: 450 }}
-            >
-              Alle zurücksetzen
-            </button>
-          </div>
+                <Icon className="w-[14px] h-[14px]" />
+                {tab.label}
+                <span className="text-[10px] opacity-70">{cnt}</span>
+              </button>
+            );
+          })}
         </div>
-      )}
 
-      {/* ── Spacer before table ──────────── */}
-      <div className="pt-4" />
+        {/* ── MAIN: Content area ─────────── */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* Page header + filter */}
+          <div className="border-b border-border-light" style={{ padding: "14px 16px 10px" }}>
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <div>
+                <h1 className="text-foreground" style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.015em" }}>
+                  Patienten
+                </h1>
+                <div className="text-[12.5px] text-muted-foreground mt-[3px]">
+                  {filtered.length} von {patients.length} Patienten
+                </div>
+              </div>
+              <button
+                onClick={() => navigate("/onboarding")}
+                className="inline-flex items-center gap-1.5 shrink-0 rounded-[10px] bg-primary text-primary-foreground hover:bg-primary-hover transition-colors cursor-pointer"
+                style={{ padding: "8px 13px", fontSize: 12.5, fontWeight: 500 }}
+              >
+                <Plus className="w-[13px] h-[13px]" />
+                <span className="hidden sm:inline">Patient anlegen</span>
+              </button>
+            </div>
 
-      {/* ── Content ──────────────────────── */}
+            {/* Filter bar */}
+            <div className="flex items-center gap-2 flex-wrap relative">
+              <div className="flex items-center gap-2 bg-background rounded-xl px-3 py-[6px] border border-border-light flex-1 sm:flex-none sm:min-w-[220px] sm:max-w-[300px]">
+                <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Patienten suchen…"
+                  className="bg-transparent outline-none text-[12px] flex-1 placeholder:text-muted-foreground/50"
+                  style={{ fontWeight: 400 }}
+                />
+                {search && (
+                  <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="relative" ref={filterRef}>
+                <button
+                  onClick={() => setFilterPopoverOpen(o => !o)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-[6px] rounded-full border text-[12px] transition-colors cursor-pointer ${
+                    filterPopoverOpen ? "border-primary/30 bg-primary-light text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
+                  }`}
+                  style={{ fontWeight: 500 }}
+                >
+                  <ChevronDown className="w-3 h-3" />
+                  Filter
+                  {activeFilterTags.length > 0 && (
+                    <span className="w-[5px] h-[5px] rounded-full bg-primary" />
+                  )}
+                </button>
+
+                {filterPopoverOpen && (
+                  <div className="absolute top-[calc(100%+6px)] left-0 z-50 bg-card border border-border rounded-xl w-[300px]" style={{ padding: 14, boxShadow: "0 8px 24px rgba(17,24,39,0.08)" }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[12px] text-foreground" style={{ fontWeight: 600 }}>Filter</span>
+                      <button onClick={() => setFilterPopoverOpen(false)} className="text-muted-foreground cursor-pointer"><X className="w-[14px] h-[14px]" /></button>
+                    </div>
+                    <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                      {filterDefs.map((def) => (
+                        <div key={def.id}>
+                          <div className="text-[10.5px] text-muted-foreground uppercase mb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>{def.label}</div>
+                          <div className="flex flex-wrap gap-1">
+                            {def.options.map((opt) => {
+                              const sel = chipFilters[def.id] || new Set();
+                              const active = sel.has(opt.value);
+                              return (
+                                <button
+                                  key={opt.value}
+                                  onClick={() => {
+                                    const next = new Set(sel);
+                                    if (active) next.delete(opt.value);
+                                    else next.add(opt.value);
+                                    updateChipFilter(def.id, next);
+                                  }}
+                                  className={`rounded-full text-[11.5px] border transition-colors cursor-pointer ${
+                                    active ? "border-primary bg-primary-light text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
+                                  }`}
+                                  style={{ padding: "4px 10px", fontWeight: active ? 500 : 400 }}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {activeFilterTags.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-border-light flex justify-end">
+                        <button onClick={clearAllChipFilters} className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer" style={{ fontWeight: 500 }}>
+                          Alle zurücksetzen
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {activeFilterTags.map((tag) => (
+                <button
+                  key={`${tag.filterId}-${tag.value}`}
+                  onClick={() => removeFilterTag(tag.filterId, tag.value)}
+                  className="inline-flex items-center gap-1 rounded-full bg-primary-light text-primary text-[11.5px] cursor-pointer"
+                  style={{ padding: "5px 10px", fontWeight: 500 }}
+                >
+                  {tag.filterLabel}: {tag.displayLabel} <X className="w-[11px] h-[11px]" />
+                </button>
+              ))}
+              {activeFilterTags.length > 0 && (
+                <button onClick={clearAllChipFilters} className="text-[11.5px] text-muted-foreground cursor-pointer" style={{ padding: "5px 6px", fontWeight: 500 }}>
+                  Alle zurücksetzen
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* ── Table ───────────────────────── */}
+          <div className="flex-1 overflow-y-auto">
       <TableView
         patients={filtered}
         navigate={navigate}
@@ -527,6 +618,9 @@ export function PatientenPage() {
         openAssignSidebar={openAssignSidebar}
         totalCount={patients.length}
       />
+          </div>
+        </div>
+      </div>
 
       {/* ── Status Modal ─────────────────── */}
       <StatusModal
@@ -568,7 +662,7 @@ function TableView({
   totalCount: number;
 }) {
   return (
-    <div className="px-8 pb-10">
+    <div className="px-4 md:px-8 pb-10">
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">

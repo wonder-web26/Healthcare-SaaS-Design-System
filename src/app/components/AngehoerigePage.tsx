@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import {
   Search,
   Plus,
@@ -26,41 +26,38 @@ import {
   type Angehoeriger,
 } from "./angehoerigeData";
 
-/* ── Status filter tabs ──────────────────── */
-type FilterKey = "alle" | "in_onboarding" | "aktiv" | "fehlende_dokumente";
+/* ── Views ──────────────────────────────── */
+type ViewKey = "alle" | "meine" | "aufmerksamkeit" | "srk_offen" | "im_onboarding";
 
-const filterTabs: {
-  id: FilterKey;
-  label: string;
-  dotColor?: string;
-}[] = [
-  { id: "alle", label: "Alle" },
-  { id: "in_onboarding", label: "In Onboarding", dotColor: "bg-warning" },
-  { id: "aktiv", label: "Aktiv", dotColor: "bg-success" },
-  {
-    id: "fehlende_dokumente",
-    label: "Fehlende Dokumente",
-    dotColor: "bg-error",
-  },
-];
+const CURRENT_USER_PFK = "Sandra Weber";
 
-/* ── Helpers ─────────────────────────────── */
-function filterList(list: Angehoeriger[], key: FilterKey): Angehoeriger[] {
-  switch (key) {
-    case "in_onboarding":
+function viewFilter(list: Angehoeriger[], view: ViewKey): Angehoeriger[] {
+  switch (view) {
+    case "meine":
+      return list.filter((a) => a.pflegefachkraft === CURRENT_USER_PFK);
+    case "aufmerksamkeit":
+      return list.filter((a) =>
+        a.monatsSchritt.ueberfaellig ||
+        hasHRIssue(a) ||
+        isBillingBlocked(a) ||
+        (a.qualifikation === "ohne_srk" && !a.srkKursDatum)
+      );
+    case "srk_offen":
+      return list.filter((a) => a.qualifikation === "ohne_srk" && !a.srkKursDatum);
+    case "im_onboarding":
       return list.filter((a) => a.status === "in_onboarding");
-    case "aktiv":
-      return list.filter((a) => a.status === "aktiv");
-    case "fehlende_dokumente":
-      return list.filter((a) => a.status === "fehlende_dokumente");
     default:
       return list;
   }
 }
 
-function countFor(key: FilterKey): number {
-  return filterList(angehoerige, key).length;
-}
+const viewTabs: { id: ViewKey; label: string; icon: React.ElementType }[] = [
+  { id: "alle", label: "Alle Angehörigen", icon: Users },
+  { id: "meine", label: "Meine Angehörigen", icon: Users },
+  { id: "aufmerksamkeit", label: "Aufmerksamkeit nötig", icon: AlertCircle },
+  { id: "srk_offen", label: "SRK offen", icon: GraduationCap },
+  { id: "im_onboarding", label: "Im Onboarding", icon: UserPlus },
+];
 
 function hasHRIssue(a: Angehoeriger): boolean {
   return (
@@ -86,7 +83,6 @@ function buildFilterDefs(): FilterDef[] {
     new Set(angehoerige.map((a) => a.pflegefachkraft))
   ).sort();
 
-  // Collect unique step labels from monatsSchritt data
   const stepLabels = Array.from(
     new Set(
       angehoerige
@@ -115,9 +111,31 @@ function buildFilterDefs(): FilterDef[] {
       ],
     },
     {
+      id: "monatsschritt_status",
+      label: "Monatsschritt-Status",
+      options: [
+        { value: "ueberfaellig", label: "Überfällig" },
+        { value: "heute", label: "Heute fällig" },
+        { value: "diese_woche", label: "Diese Woche fällig" },
+        { value: "spaeter", label: "Später" },
+      ],
+    },
+    {
       id: "pflegefachkraft",
       label: "Pflegefachkraft",
-      options: pflegefachkraefte.map((pf) => ({ value: pf, label: pf })),
+      options: [
+        ...pflegefachkraefte.map((pf) => ({ value: pf, label: pf })),
+        { value: "__nicht_zugewiesen", label: "Nicht zugewiesen" },
+      ],
+    },
+    {
+      id: "srk_status",
+      label: "SRK-Kurs-Status",
+      options: [
+        { value: "ausstehend", label: "Ausstehend" },
+        { value: "absolviert", label: "Absolviert" },
+        { value: "nicht_erforderlich", label: "Nicht erforderlich" },
+      ],
     },
   ];
 }
@@ -321,35 +339,66 @@ function KPIStrip() {
    ══════════════════════════════════════════ */
 export function AngehoerigePage() {
   const navigate = useNavigate();
-  const [activeFilter, setActiveFilter] = useState<FilterKey>("alle");
-  const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeView = (searchParams.get("view") || "meine") as ViewKey;
+  const search = searchParams.get("q") || "";
+  const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
 
-  /* ── Multi-select chip filter state ─────── */
-  const [chipFilters, setChipFilters] = useState<Record<string, Set<string>>>({
-    qualifikation: new Set(),
-    monatsschritt: new Set(),
-    pflegefachkraft: new Set(),
-  });
+  const setView = (v: ViewKey) => {
+    const next = new URLSearchParams(searchParams);
+    if (v === "meine") next.delete("view");
+    else next.set("view", v);
+    setSearchParams(next, { replace: true });
+  };
+
+  const setSearch = (q: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (!q) next.delete("q");
+    else next.set("q", q);
+    setSearchParams(next, { replace: true });
+  };
+
+  const chipFilters = useMemo(() => {
+    const filters: Record<string, Set<string>> = {};
+    for (const [key, value] of searchParams.entries()) {
+      if (["view", "q"].includes(key)) continue;
+      filters[key] = new Set(value.split(",").filter(Boolean));
+    }
+    return filters;
+  }, [searchParams]);
 
   const updateChipFilter = (id: string, next: Set<string>) => {
-    setChipFilters((prev) => ({ ...prev, [id]: next }));
+    const params = new URLSearchParams(searchParams);
+    if (next.size === 0) params.delete(id);
+    else params.set(id, Array.from(next).join(","));
+    setSearchParams(params, { replace: true });
   };
 
   const clearAllChipFilters = () => {
-    setChipFilters({
-      qualifikation: new Set(),
-      monatsschritt: new Set(),
-      pflegefachkraft: new Set(),
-    });
+    const params = new URLSearchParams();
+    const v = searchParams.get("view");
+    const q = searchParams.get("q");
+    if (v) params.set("view", v);
+    if (q) params.set("q", q);
+    setSearchParams(params, { replace: true });
   };
 
   const removeFilterTag = (filterId: string, value: string) => {
-    setChipFilters((prev) => {
-      const next = new Set(prev[filterId]);
-      next.delete(value);
-      return { ...prev, [filterId]: next };
-    });
+    const sel = chipFilters[filterId] || new Set();
+    const next = new Set(sel);
+    next.delete(value);
+    updateChipFilter(filterId, next);
   };
+
+  useEffect(() => {
+    if (!filterPopoverOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterPopoverOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [filterPopoverOpen]);
 
   /* ── Derived: filter defs ──────────────── */
   const filterDefs = useMemo(() => buildFilterDefs(), []);
@@ -382,15 +431,15 @@ export function AngehoerigePage() {
 
   /* ── Combined filtering ────────────────── */
   const filtered = useMemo(() => {
-    let list = filterList(angehoerige, activeFilter);
+    let list = viewFilter(angehoerige, activeView);
 
     // Qualifikation chip
     const qf = chipFilters.qualifikation;
-    if (qf.size > 0) list = list.filter((a) => qf.has(a.qualifikation));
+    if (qf && qf.size > 0) list = list.filter((a) => qf.has(a.qualifikation));
 
     // Monatsschritt chip
     const ms = chipFilters.monatsschritt;
-    if (ms.size > 0) {
+    if (ms && ms.size > 0) {
       list = list.filter((a) => {
         // Check step-label matches
         if (ms.has(`step:${a.monatsSchritt.label}`)) return true;
@@ -405,7 +454,24 @@ export function AngehoerigePage() {
 
     // Pflegefachkraft chip
     const pf = chipFilters.pflegefachkraft;
-    if (pf.size > 0) list = list.filter((a) => pf.has(a.pflegefachkraft));
+    if (pf && pf.size > 0) {
+      list = list.filter((a) => {
+        if (pf.has("__nicht_zugewiesen") && a.pflegefachkraft === "—") return true;
+        if (pf.has(a.pflegefachkraft)) return true;
+        return false;
+      });
+    }
+
+    // SRK status
+    const srk = chipFilters.srk_status;
+    if (srk && srk.size > 0) {
+      list = list.filter((a) => {
+        if (srk.has("ausstehend") && a.qualifikation === "ohne_srk" && !a.srkKursDatum) return true;
+        if (srk.has("absolviert") && a.srkKursDatum) return true;
+        if (srk.has("nicht_erforderlich") && a.qualifikation !== "ohne_srk" && !a.srkKursDatum) return true;
+        return false;
+      });
+    }
 
     // Text search
     if (search.trim()) {
@@ -422,151 +488,184 @@ export function AngehoerigePage() {
       );
     }
     return list;
-  }, [activeFilter, search, chipFilters]);
+  }, [activeView, search, chipFilters]);
 
   return (
     <>
-      {/* ── Page Header ──────────────────── */}
-      <div className="px-8 pt-7 pb-0">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h2 className="text-foreground">
-              Angehörige – Operative HR-Übersicht
-            </h2>
-            <p className="text-[13px] text-muted-foreground mt-0.5">
-              {angehoerige.length} pflegende Angehörige · Personalverwaltung &
-              Abrechnungsstatus
-            </p>
+      <div className="flex flex-col lg:flex-row h-full">
+        {/* ── LEFT: Views-Rail (desktop) ───── */}
+        <div className="hidden lg:block w-[220px] shrink-0 border-r border-border-light bg-[#FAFBFC] overflow-y-auto" style={{ padding: "20px 14px" }}>
+          <div className="text-[10.5px] text-muted-foreground uppercase tracking-wider px-2 pb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>
+            Ansichten
           </div>
-          <button
-            onClick={() => navigate("/onboarding/neu")}
-            className="inline-flex items-center gap-1.5 px-3.5 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors whitespace-nowrap"
-            style={{ fontWeight: 500 }}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Neuen Angehörigen anlegen
-          </button>
-        </div>
-      </div>
-
-      {/* ── KPI Strip ────────────────────── */}
-      <div className="px-8 pt-5">
-        <KPIStrip />
-      </div>
-
-      {/* ── Status Filter Tabs ───────────── */}
-      <div className="px-8 pt-5 pb-0">
-        <div className="flex gap-1.5 overflow-x-auto">
-          {filterTabs.map((tab) => {
-            const isActive = activeFilter === tab.id;
-            const cnt = countFor(tab.id);
+          {viewTabs.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeView === tab.id;
+            const cnt = viewFilter(angehoerige, tab.id).length;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveFilter(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-[6px] rounded-lg text-[12px] border transition-all whitespace-nowrap ${
-                  isActive
-                    ? "border-primary/20 bg-primary-light text-primary"
-                    : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
+                onClick={() => setView(tab.id)}
+                className={`w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] text-left mb-0.5 transition-colors cursor-pointer ${
+                  isActive ? "bg-primary-light text-primary" : "text-foreground hover:bg-muted/40"
                 }`}
                 style={{ fontWeight: isActive ? 500 : 400 }}
               >
-                {tab.dotColor && (
-                  <span
-                    className={`w-[6px] h-[6px] rounded-full ${tab.dotColor}`}
-                  />
-                )}
-                {tab.label}
-                <span
-                  className={`text-[10px] px-[5px] py-[1px] rounded-md ${
-                    isActive
-                      ? "bg-primary/10 text-primary"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                  style={{ fontWeight: 600 }}
-                >
-                  {cnt}
-                </span>
+                <Icon className={`w-[15px] h-[15px] shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                <span className="flex-1 truncate">{tab.label}</span>
+                <span className="text-[11px] text-muted-foreground" style={{ fontWeight: 500 }}>{cnt}</span>
               </button>
             );
           })}
         </div>
-      </div>
 
-      {/* ── Search + Filter Chips ─────────── */}
-      <div className="px-8 pt-3 pb-0">
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Search field */}
-          <div className="flex items-center gap-2 bg-background rounded-xl px-3 py-[6px] border border-border-light min-w-[220px] max-w-[300px]">
-            <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Name / OB-Nummer suchen…"
-              className="bg-transparent outline-none text-[12px] flex-1 placeholder:text-muted-foreground/50"
-              style={{ fontWeight: 400 }}
-            />
-            {search && (
+        {/* Mobile views tabs */}
+        <div className="lg:hidden flex items-center gap-1 px-3 py-2 border-b border-border-light bg-[#FAFBFC] overflow-x-auto shrink-0">
+          {viewTabs.map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeView === tab.id;
+            const cnt = viewFilter(angehoerige, tab.id).length;
+            return (
               <button
-                onClick={() => setSearch("")}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                key={tab.id}
+                onClick={() => setView(tab.id)}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                  isActive ? "bg-primary-light text-primary" : "text-muted-foreground hover:bg-muted/40"
+                }`}
+                style={{ fontWeight: isActive ? 500 : 400 }}
               >
-                <X className="w-3 h-3" />
+                <Icon className="w-[14px] h-[14px]" />
+                {tab.label}
+                <span className="text-[10px] opacity-70">{cnt}</span>
               </button>
-            )}
-          </div>
-
-          {/* Divider */}
-          <div className="w-px h-5 bg-border" />
-
-          {/* Filter chips */}
-          {filterDefs.map((def) => (
-            <FilterChipPopover
-              key={def.id}
-              def={def}
-              selected={chipFilters[def.id] || new Set()}
-              onChange={(next) => updateChipFilter(def.id, next)}
-            />
-          ))}
+            );
+          })}
         </div>
-      </div>
 
-      {/* ── Active Filter Tags ───────────── */}
-      {hasAnyChipFilter && (
-        <div className="px-8 pt-2.5 pb-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {activeFilterTags.map((tag) => (
-              <span
-                key={`${tag.filterId}-${tag.value}`}
-                className="inline-flex items-center gap-1 px-2 py-[3px] rounded-lg bg-primary/8 border border-primary/15 text-[11px] text-primary"
-                style={{ fontWeight: 450 }}
+        {/* ── MAIN: Content area ─────────── */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          {/* Page header + filter */}
+          <div className="border-b border-border-light" style={{ padding: "14px 16px 10px" }}>
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <div>
+                <h1 className="text-foreground" style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.015em" }}>
+                  Angehörige
+                </h1>
+                <div className="text-[12.5px] text-muted-foreground mt-[3px]">
+                  {filtered.length} von {angehoerige.length} Angehörige
+                </div>
+              </div>
+              <button
+                onClick={() => navigate("/onboarding/neu")}
+                className="inline-flex items-center gap-1.5 shrink-0 rounded-[10px] bg-primary text-primary-foreground hover:bg-primary-hover transition-colors cursor-pointer"
+                style={{ padding: "8px 13px", fontSize: 12.5, fontWeight: 500 }}
               >
-                <span className="text-primary/60">{tag.filterLabel}:</span>
-                {tag.displayLabel}
+                <Plus className="w-[13px] h-[13px]" />
+                <span className="hidden sm:inline">Neuen Angehörigen anlegen</span>
+              </button>
+            </div>
+
+            {/* Filter bar */}
+            <div className="flex items-center gap-2 flex-wrap relative">
+              <div className="flex items-center gap-2 bg-background rounded-xl px-3 py-[6px] border border-border-light flex-1 sm:flex-none sm:min-w-[220px] sm:max-w-[300px]">
+                <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Angehörige suchen…"
+                  className="bg-transparent outline-none text-[12px] flex-1 placeholder:text-muted-foreground/50"
+                  style={{ fontWeight: 400 }}
+                />
+                {search && (
+                  <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              <div className="relative" ref={filterRef}>
                 <button
-                  onClick={() => removeFilterTag(tag.filterId, tag.value)}
-                  className="ml-0.5 hover:bg-primary/10 rounded p-0.5 transition-colors"
+                  onClick={() => setFilterPopoverOpen(o => !o)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-[6px] rounded-full border text-[12px] transition-colors cursor-pointer ${
+                    filterPopoverOpen ? "border-primary/30 bg-primary-light text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
+                  }`}
+                  style={{ fontWeight: 500 }}
                 >
-                  <X className="w-2.5 h-2.5" />
+                  <ChevronDown className="w-3 h-3" />
+                  Filter
+                  {activeFilterTags.length > 0 && (
+                    <span className="w-[5px] h-[5px] rounded-full bg-primary" />
+                  )}
                 </button>
-              </span>
-            ))}
-            <button
-              onClick={clearAllChipFilters}
-              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-[3px]"
-              style={{ fontWeight: 450 }}
-            >
-              Alle zurücksetzen
-            </button>
+
+                {filterPopoverOpen && (
+                  <div className="absolute top-[calc(100%+6px)] left-0 z-50 bg-card border border-border rounded-xl w-[300px]" style={{ padding: 14, boxShadow: "0 8px 24px rgba(17,24,39,0.08)" }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[12px] text-foreground" style={{ fontWeight: 600 }}>Filter</span>
+                      <button onClick={() => setFilterPopoverOpen(false)} className="text-muted-foreground cursor-pointer"><X className="w-[14px] h-[14px]" /></button>
+                    </div>
+                    <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                      {filterDefs.map((def) => (
+                        <div key={def.id}>
+                          <div className="text-[10.5px] text-muted-foreground uppercase mb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>{def.label}</div>
+                          <div className="flex flex-wrap gap-1">
+                            {def.options.map((opt) => {
+                              const sel = chipFilters[def.id] || new Set();
+                              const active = sel.has(opt.value);
+                              return (
+                                <button
+                                  key={opt.value}
+                                  onClick={() => {
+                                    const next = new Set(sel);
+                                    if (active) next.delete(opt.value);
+                                    else next.add(opt.value);
+                                    updateChipFilter(def.id, next);
+                                  }}
+                                  className={`rounded-full text-[11.5px] border transition-colors cursor-pointer ${
+                                    active ? "border-primary bg-primary-light text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
+                                  }`}
+                                  style={{ padding: "4px 10px", fontWeight: active ? 500 : 400 }}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {activeFilterTags.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-border-light flex justify-end">
+                        <button onClick={clearAllChipFilters} className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer" style={{ fontWeight: 500 }}>
+                          Alle zurücksetzen
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {activeFilterTags.map((tag) => (
+                <button
+                  key={`${tag.filterId}-${tag.value}`}
+                  onClick={() => removeFilterTag(tag.filterId, tag.value)}
+                  className="inline-flex items-center gap-1 rounded-full bg-primary-light text-primary text-[11.5px] cursor-pointer"
+                  style={{ padding: "5px 10px", fontWeight: 500 }}
+                >
+                  {tag.filterLabel}: {tag.displayLabel} <X className="w-[11px] h-[11px]" />
+                </button>
+              ))}
+              {activeFilterTags.length > 0 && (
+                <button onClick={clearAllChipFilters} className="text-[11.5px] text-muted-foreground cursor-pointer" style={{ padding: "5px 6px", fontWeight: 500 }}>
+                  Alle zurücksetzen
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* ── Spacer before table ──────────── */}
-      <div className="pt-4" />
-
-      {/* ── Table ────────────────────────── */}
-      <div className="px-8 pb-10">
+          {/* ── Table ───────────────────────── */}
+          <div className="flex-1 overflow-y-auto">
+      <div className="px-4 md:px-8 pb-10 pt-4">
         <div className="bg-card rounded-2xl border border-border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -884,6 +983,9 @@ export function AngehoerigePage() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+      </div>
         </div>
       </div>
     </>
