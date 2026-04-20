@@ -34,7 +34,7 @@ export function AppShell() {
   return (
     <div className="h-screen flex overflow-hidden bg-background font-sans">
       <AppSidebar activeItem={getActiveNav()} onItemChange={handleNavChange} />
-      <div className="flex-1 flex flex-col ml-[256px] min-h-0">
+      <div className="flex-1 flex flex-col ml-[76px] min-h-0">
         <AppTopbar />
         <div className="flex-1 overflow-y-auto">
           <Outlet />

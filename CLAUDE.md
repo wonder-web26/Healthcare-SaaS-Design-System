@@ -331,4 +331,8 @@ Reihenfolge, die sich bewährt hat:
   Onboarding, Schweregrad, Zuteilung. Nicht übersetzen in "Patient" oder 
   "Caregiver", auch wenn ein englischer Code-Kontext das nahelegt
 
+
+
+
+  Codex will review your output once you are done. 
   

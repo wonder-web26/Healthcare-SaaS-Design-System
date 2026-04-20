@@ -21,7 +21,7 @@ interface FocusTask {
 
 const focusTasks: FocusTask[] = [
   {
-    id: "SD-2026-0418",
+    id: "W-0145",
     title: "Re-Assessment bei Monika Brunner durchführen",
     context: "Seit 3 Tagen überfällig · letzte Pflegeeinstufung abgelaufen",
     clientName: "Monika Brunner",
@@ -31,7 +31,7 @@ const focusTasks: FocusTask[] = [
     status: "overdue",
   },
   {
-    id: "SD-2026-0415",
+    id: "W-0146",
     title: "KLV-Kontrolle für Hans Keller freigeben",
     context: "Steckt seit 5 Tagen in Schritt 4 · blockiert Aktivierung",
     clientName: "Hans Keller",
@@ -41,7 +41,7 @@ const focusTasks: FocusTask[] = [
     status: "today",
   },
   {
-    id: "SD-2026-0412",
+    id: "T-0090",
     title: "Verordnung für Ruth Fischer erneuern",
     context: "Läuft in 3 Tagen ab · Arzt bereits kontaktiert",
     clientName: "Ruth Fischer",
@@ -133,7 +133,7 @@ export function DashboardHero() {
                 key={task.id}
                 aria-label={`${task.title} – ${task.clientName}${task.status === "overdue" ? ", überfällig" : ""}`}
                 className={`w-full flex items-center gap-3 bg-card rounded-xl border border-border border-l-[3px] ${statusBorder[task.status]} px-4 py-3 text-left transition-colors hover:bg-secondary/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring cursor-pointer`}
-                onClick={() => navigate(`/servicedesk/${task.id}`)}
+                onClick={() => navigate(`/servicedesk?id=${task.id}`)}
               >
                 {/* Avatar */}
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${statusAvatarBg[task.status]}`}>

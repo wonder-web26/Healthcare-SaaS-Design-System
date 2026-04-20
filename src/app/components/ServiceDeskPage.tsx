@@ -1,411 +1,578 @@
-import { useMemo } from "react";
-import { useNavigate, useSearchParams, useParams } from "react-router";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router";
 import {
-  Search,
+  User,
+  Users,
+  Inbox,
+  CheckCircle2,
+  SlidersHorizontal,
   Plus,
   X,
-  ArrowLeft,
-  Zap,
-  MessageSquare,
+  MoreHorizontal,
+  AlertTriangle,
+  Check,
+  Upload,
 } from "lucide-react";
 import {
   unifiedEntries,
-  allWorkflowTypen,
-  allTicketTypen,
-  workflowTypLabel,
-  ticketTypLabel,
-  type Quelle,
+  entryTitle,
+  WORKFLOW_TYPES,
+  TICKET_TYPES,
+  CURRENT_USER,
+  MY_TEAM,
   type UnifiedEntry,
-  type WorkflowTyp,
-  type TicketTyp,
+  type Quelle,
 } from "../../lib/mocks/service-desk-unified";
 
 const TODAY = "2026-03-03";
 
-type StatusKey = "offen" | "in_bearbeitung" | "erledigt";
-
-const statusCfg: Record<StatusKey, { label: string; dot: string; bg: string; text: string }> = {
-  offen: { label: "Offen", dot: "bg-error", bg: "bg-error-light", text: "text-error-foreground" },
-  in_bearbeitung: { label: "In Bearbeitung", dot: "bg-warning", bg: "bg-warning-light", text: "text-warning-foreground" },
-  erledigt: { label: "Erledigt", dot: "bg-success", bg: "bg-success-light", text: "text-success-foreground" },
-};
-
-function faelligkeitStatus(faellig: string | null): "overdue" | "today" | "later" | null {
-  if (!faellig) return null;
-  if (faellig < TODAY) return "overdue";
-  if (faellig === TODAY) return "today";
-  return "later";
-}
+// ── Helpers ──
 
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${d}.${m}.${y}`;
 }
 
-const faelligDot: Record<string, string> = {
-  overdue: "bg-error",
-  today: "bg-warning",
-  later: "bg-muted-foreground/30",
+function formatShort(iso: string): string {
+  const months = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+  const [, m, d] = iso.split("-");
+  return `${parseInt(d)}. ${months[parseInt(m) - 1]}`;
+}
+
+function daysFromToday(iso: string | null): number | null {
+  if (!iso) return null;
+  const t = new Date(TODAY);
+  const d = new Date(iso);
+  return Math.round((d.getTime() - t.getTime()) / 86400000);
+}
+
+type BucketKey = "ueberfaellig" | "heute" | "morgen" | "diese_woche" | "spaeter" | "kein";
+
+function faelligBucket(iso: string | null): BucketKey {
+  if (!iso) return "kein";
+  const d = daysFromToday(iso)!;
+  if (d < 0) return "ueberfaellig";
+  if (d === 0) return "heute";
+  if (d === 1) return "morgen";
+  if (d <= 7) return "diese_woche";
+  return "spaeter";
+}
+
+const BUCKETS: { key: BucketKey; label: string; color: string }[] = [
+  { key: "ueberfaellig", label: "Überfällig", color: "text-error" },
+  { key: "heute", label: "Heute", color: "text-warning" },
+  { key: "morgen", label: "Morgen", color: "text-warning" },
+  { key: "diese_woche", label: "Diese Woche", color: "text-foreground" },
+  { key: "spaeter", label: "Später", color: "text-muted-foreground" },
+  { key: "kein", label: "Ohne Termin", color: "text-muted-foreground/60" },
+];
+
+const statusCfg = {
+  offen: { label: "Offen", dot: "bg-error", bg: "bg-error-light", text: "text-error-foreground" },
+  in_bearbeitung: { label: "In Bearbeitung", dot: "bg-warning", bg: "bg-warning-light", text: "text-warning-foreground" },
+  erledigt: { label: "Erledigt", dot: "bg-success", bg: "bg-success-light", text: "text-success-foreground" },
 };
 
-const faelligText: Record<string, string> = {
-  overdue: "text-error-foreground",
-  today: "text-warning-foreground",
-  later: "text-muted-foreground",
+const prioCfg = {
+  hoch: { label: "Hoch", color: "bg-error", textColor: "text-error" },
+  mittel: { label: "Mittel", color: "bg-warning", textColor: "text-warning" },
+  niedrig: { label: "Niedrig", color: "bg-muted-foreground/40", textColor: "text-muted-foreground" },
 };
 
-/* ══════════════════════════════════════════ */
+type ViewKey = "mir" | "team" | "alle" | "erledigt";
+
+// ── Main Component ──
 
 export function ServiceDeskPage() {
-  const navigate = useNavigate();
-  const { ticketId } = useParams<{ ticketId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const quelleParam = searchParams.get("quelle") as Quelle | null;
-  const typParam = searchParams.get("typ");
-  const statusParam = searchParams.get("status") as StatusKey | null;
-  const ueberfaelligParam = searchParams.get("ueberfaellig") === "true";
-  const qParam = searchParams.get("q") || "";
+  const view = (searchParams.get("view") || "mir") as ViewKey;
+  const quelleFilter = (searchParams.get("quelle") || "") as Quelle | "";
+  const typFilter = searchParams.get("typ") || "";
+  const selectedId = searchParams.get("id") || null;
 
-  // Infer quelle from typ if set
-  const effectiveQuelle: Quelle | null = typParam
-    ? allWorkflowTypen.includes(typParam as WorkflowTyp) ? "workflow" : "ticket"
-    : quelleParam;
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [localStatus, setLocalStatus] = useState<Record<string, string>>({});
+  const [comments, setComments] = useState<Record<string, { text: string; by: string; at: string }[]>>({});
+  const [draftComment, setDraftComment] = useState("");
 
-  const activeTab: "alle" | "workflow" | "ticket" =
-    effectiveQuelle === "workflow" ? "workflow" : effectiveQuelle === "ticket" ? "ticket" : "alle";
-
-  // If a specific ticket is selected via URL param, show detail
-  const selectedEntry = ticketId ? unifiedEntries.find((e) => e.id === ticketId) : null;
-
-  const filtered = useMemo(() => {
-    let list = unifiedEntries;
-    if (effectiveQuelle) list = list.filter((e) => e.quelle === effectiveQuelle);
-    if (typParam) list = list.filter((e) => e.typ === typParam);
-    if (statusParam) list = list.filter((e) => e.status === statusParam);
-    if (ueberfaelligParam) list = list.filter((e) => e.faellig && e.faellig < TODAY);
-    if (qParam.trim()) {
-      const q = qParam.toLowerCase();
-      list = list.filter(
-        (e) =>
-          e.titel.toLowerCase().includes(q) ||
-          (e.betroffenePerson?.name.toLowerCase().includes(q) ?? false)
-      );
-    }
-    return list;
-  }, [effectiveQuelle, typParam, statusParam, ueberfaelligParam, qParam]);
-
-  function setParam(key: string, value: string | null) {
+  function setParam(updates: Record<string, string | null>) {
     const next = new URLSearchParams(searchParams);
-    if (value === null) next.delete(key);
-    else next.set(key, value);
+    for (const [k, v] of Object.entries(updates)) {
+      if (v === null || v === "") next.delete(k);
+      else next.set(k, v);
+    }
     setSearchParams(next, { replace: true });
   }
 
-  function clearFilters() {
-    setSearchParams({}, { replace: true });
+  const entries = useMemo(() => {
+    return unifiedEntries.map(e => ({
+      ...e,
+      status: (localStatus[e.id] || e.status) as "offen" | "in_bearbeitung" | "erledigt",
+    }));
+  }, [localStatus]);
+
+  const filtered = useMemo(() => {
+    let list = entries;
+    if (view === "mir") list = list.filter(e => e.verantwortlich.initialen === CURRENT_USER);
+    else if (view === "team") list = list.filter(e => MY_TEAM.includes(e.verantwortlich.initialen));
+    else if (view === "erledigt") list = list.filter(e => e.status === "erledigt");
+    if (view !== "erledigt") list = list.filter(e => e.status !== "erledigt");
+    if (quelleFilter) list = list.filter(e => e.quelle === quelleFilter);
+    if (typFilter) list = list.filter(e => e.typ === typFilter);
+    return list;
+  }, [entries, view, quelleFilter, typFilter]);
+
+  // Auto-select
+  useEffect(() => {
+    if (filtered.length === 0) {
+      if (selectedId) setParam({ id: null });
+      return;
+    }
+    if (!filtered.some(e => e.id === selectedId)) {
+      setParam({ id: filtered[0].id });
+    }
+  }, [filtered, selectedId]);
+
+  const selected = selectedId ? entries.find(e => e.id === selectedId) || null : null;
+
+  const grouped = useMemo(() => {
+    const g: Record<BucketKey, UnifiedEntry[]> = { ueberfaellig: [], heute: [], morgen: [], diese_woche: [], spaeter: [], kein: [] };
+    filtered.forEach(e => {
+      const b = faelligBucket(e.faellig);
+      g[b].push(e);
+    });
+    for (const arr of Object.values(g)) arr.sort((a, b) => (a.faellig || "").localeCompare(b.faellig || ""));
+    return g;
+  }, [filtered]);
+
+  const viewCounts = useMemo(() => ({
+    mir: entries.filter(e => e.verantwortlich.initialen === CURRENT_USER && e.status !== "erledigt").length,
+    team: entries.filter(e => MY_TEAM.includes(e.verantwortlich.initialen) && e.status !== "erledigt").length,
+    alle: entries.filter(e => e.status !== "erledigt").length,
+    erledigt: entries.filter(e => e.status === "erledigt").length,
+  }), [entries]);
+
+  const headerCounts = {
+    offen: filtered.length,
+    ueberfaellig: grouped.ueberfaellig.length,
+    dieseWoche: grouped.heute.length + grouped.morgen.length + grouped.diese_woche.length,
+  };
+
+  const views: { id: ViewKey; label: string; icon: typeof User; count: number }[] = [
+    { id: "mir", label: "Mir zugewiesen", icon: User, count: viewCounts.mir },
+    { id: "team", label: "Mein Team", icon: Users, count: viewCounts.team },
+    { id: "alle", label: "Alle", icon: Inbox, count: viewCounts.alle },
+    { id: "erledigt", label: "Erledigt", icon: CheckCircle2, count: viewCounts.erledigt },
+  ];
+
+  const hasFilters = !!quelleFilter || !!typFilter;
+  const allTypes = [...WORKFLOW_TYPES, ...TICKET_TYPES];
+
+  function addComment(entryId: string) {
+    if (!draftComment.trim()) return;
+    setComments(prev => ({
+      ...prev,
+      [entryId]: [...(prev[entryId] || []), { text: draftComment.trim(), by: "Maria Keller", at: "jetzt" }],
+    }));
+    setDraftComment("");
   }
 
-  // Active filter chips
-  const chips: { label: string; key: string }[] = [];
-  if (typParam) {
-    const label =
-      workflowTypLabel[typParam as WorkflowTyp] ?? ticketTypLabel[typParam as TicketTyp] ?? typParam;
-    chips.push({ label, key: "typ" });
-  }
-  if (statusParam) chips.push({ label: statusCfg[statusParam]?.label ?? statusParam, key: "status" });
-  if (ueberfaelligParam) chips.push({ label: "Überfällig", key: "ueberfaellig" });
-
-  // Subtitle
-  const subtitleParts: string[] = [`${filtered.length} Einträge`];
-  if (typParam) {
-    subtitleParts.push(workflowTypLabel[typParam as WorkflowTyp] ?? ticketTypLabel[typParam as TicketTyp] ?? typParam);
-  } else if (activeTab !== "alle") {
-    subtitleParts.push(activeTab === "workflow" ? "Workflow-Aufgaben" : "Tickets");
-  } else {
-    subtitleParts.push("Alle");
-  }
-
-  // ── Detail view ──
-  if (selectedEntry) {
-    const st = statusCfg[selectedEntry.status];
-    const fs = faelligkeitStatus(selectedEntry.faellig);
-    return (
-      <>
-        <div className="px-4 md:px-8 pt-5">
-          <button
-            onClick={() => navigate("/servicedesk")}
-            className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors -ml-1 cursor-pointer"
-            style={{ fontWeight: 450 }}
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Zurück zur Liste
-          </button>
+  return (
+    <div className="flex" style={{ height: "calc(100vh - 64px)" }}>
+      {/* ── LEFT: Views rail ── */}
+      <div className="w-[220px] shrink-0 border-r border-border-light bg-[#FAFBFC] overflow-y-auto" style={{ padding: "20px 14px" }}>
+        <div className="text-[10.5px] text-muted-foreground uppercase tracking-wider px-2 pb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>
+          Ansichten
         </div>
-        <div className="px-4 md:px-8 pt-4 pb-10">
-          <div className="bg-card rounded-2xl border border-border p-5 md:p-6 max-w-3xl">
-            <div className="flex items-center gap-2 mb-3">
-              {selectedEntry.quelle === "workflow" ? (
-                <Zap className="w-3.5 h-3.5 text-primary" />
-              ) : (
-                <MessageSquare className="w-3.5 h-3.5 text-info" />
-              )}
-              <span className="text-[11px] text-muted-foreground" style={{ fontWeight: 500 }}>
-                {selectedEntry.quelle === "workflow" ? "Workflow-Aufgabe" : "Service-Ticket"} · {selectedEntry.id}
-              </span>
-              <span className={`ml-auto inline-flex items-center gap-1.5 px-2 py-[2px] rounded-full text-[11px] ${st.bg} ${st.text}`} style={{ fontWeight: 500 }}>
-                <span className={`w-[5px] h-[5px] rounded-full ${st.dot}`} />
-                {st.label}
-              </span>
+        {views.map(v => {
+          const Icon = v.icon;
+          const isActive = view === v.id;
+          return (
+            <button
+              key={v.id}
+              onClick={() => setParam({ view: v.id === "mir" ? null : v.id, id: null })}
+              className={`w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] text-left mb-0.5 transition-colors cursor-pointer ${
+                isActive ? "bg-primary-light text-primary" : "text-foreground hover:bg-muted/40"
+              }`}
+              style={{ fontWeight: isActive ? 500 : 400 }}
+            >
+              <Icon className={`w-[15px] h-[15px] shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+              <span className="flex-1 truncate">{v.label}</span>
+              <span className="text-[11px] text-muted-foreground" style={{ fontWeight: 500 }}>{v.count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── MIDDLE: List ── */}
+      <div className="flex-1 min-w-0 flex flex-col border-r border-border-light">
+        {/* Page header */}
+        <div className="border-b border-border-light" style={{ padding: "20px 24px 14px" }}>
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <h1 className="text-foreground" style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.015em" }}>
+                Service Desk und Pendenzenliste
+              </h1>
+              <div className="text-[12.5px] text-muted-foreground mt-[3px]">
+                {headerCounts.offen} offene Einträge ·{" "}
+                <span className={headerCounts.ueberfaellig > 0 ? "text-error-foreground" : ""} style={{ fontWeight: headerCounts.ueberfaellig > 0 ? 500 : 400 }}>
+                  {headerCounts.ueberfaellig} überfällig
+                </span>
+                {" "}· {headerCounts.dieseWoche} diese Woche fällig
+              </div>
             </div>
-            <h3 className="text-foreground mb-2">{selectedEntry.titel}</h3>
-            <p className="text-[13px] text-muted-foreground leading-relaxed mb-4">{selectedEntry.kontext}</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-[12px]">
-              <div>
-                <div className="text-muted-foreground/60 uppercase tracking-wider text-[10px] mb-0.5" style={{ fontWeight: 500 }}>Typ</div>
-                <div className="text-foreground" style={{ fontWeight: 500 }}>{selectedEntry.typLabel}</div>
-              </div>
-              {selectedEntry.betroffenePerson && (
-                <div>
-                  <div className="text-muted-foreground/60 uppercase tracking-wider text-[10px] mb-0.5" style={{ fontWeight: 500 }}>Betroffene Person</div>
-                  <div className="text-foreground" style={{ fontWeight: 500 }}>{selectedEntry.betroffenePerson.name}</div>
-                </div>
-              )}
-              <div>
-                <div className="text-muted-foreground/60 uppercase tracking-wider text-[10px] mb-0.5" style={{ fontWeight: 500 }}>Verantwortlich</div>
-                <div className="text-foreground" style={{ fontWeight: 500 }}>{selectedEntry.verantwortlich.name}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground/60 uppercase tracking-wider text-[10px] mb-0.5" style={{ fontWeight: 500 }}>Erstellt</div>
-                <div className="text-muted-foreground">{formatDate(selectedEntry.erstellt)}</div>
-              </div>
-              {selectedEntry.faellig && (
-                <div>
-                  <div className="text-muted-foreground/60 uppercase tracking-wider text-[10px] mb-0.5" style={{ fontWeight: 500 }}>Fällig</div>
-                  <div className={fs === "overdue" ? "text-error-foreground" : fs === "today" ? "text-warning-foreground" : "text-muted-foreground"} style={{ fontWeight: 500 }}>
-                    {formatDate(selectedEntry.faellig)}
-                    {fs === "overdue" && " · überfällig"}
+            <button className="inline-flex items-center gap-1.5 shrink-0 rounded-[10px] bg-primary text-primary-foreground hover:bg-primary-hover transition-colors cursor-pointer" style={{ padding: "8px 13px", fontSize: 12.5, fontWeight: 500 }}>
+              <Plus className="w-[13px] h-[13px]" />
+              Neues Ticket
+            </button>
+          </div>
+
+          {/* Filter bar */}
+          <div className="flex items-center gap-2 flex-wrap relative">
+            <div className="relative">
+              <button
+                onClick={() => setFilterOpen(o => !o)}
+                className={`inline-flex items-center gap-1.5 rounded-full border border-border text-[12px] text-foreground transition-colors cursor-pointer ${filterOpen ? "bg-secondary" : "bg-card hover:bg-secondary/60"}`}
+                style={{ padding: "6px 11px", fontWeight: 500 }}
+              >
+                <SlidersHorizontal className="w-3 h-3" />
+                Filter
+                {hasFilters && <span className="w-[5px] h-[5px] rounded-full bg-primary" />}
+              </button>
+
+              {/* Filter popover */}
+              {filterOpen && (
+                <div className="absolute top-[calc(100%+6px)] left-0 z-20 bg-card border border-border rounded-xl w-[280px]" style={{ padding: 14, boxShadow: "0 8px 24px rgba(17,24,39,0.08)" }}>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <span className="text-[12px] text-foreground" style={{ fontWeight: 600 }}>Filter</span>
+                    <button onClick={() => setFilterOpen(false)} className="text-muted-foreground p-0.5 cursor-pointer"><X className="w-[14px] h-[14px]" /></button>
+                  </div>
+                  <div className="text-[10.5px] text-muted-foreground uppercase mb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>Quelle</div>
+                  <div className="flex gap-1.5 mb-3.5">
+                    {([["workflow", "Workflow"], ["ticket", "Tickets"]] as const).map(([id, label]) => {
+                      const active = quelleFilter === id;
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => setParam({ quelle: active ? null : id, typ: null })}
+                          className={`flex-1 rounded-lg text-[12px] border transition-colors cursor-pointer ${
+                            active ? "border-primary bg-primary-light text-primary" : "border-border bg-card text-foreground hover:bg-secondary/60"
+                          }`}
+                          style={{ padding: "7px 10px", fontWeight: active ? 500 : 400 }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-[10.5px] text-muted-foreground uppercase mb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>Typ</div>
+                  <div className="flex flex-wrap gap-1">
+                    {allTypes.map(t => {
+                      const active = typFilter === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => setParam({ typ: active ? null : t.id })}
+                          className={`rounded-full text-[11.5px] border transition-colors cursor-pointer ${
+                            active ? "border-primary bg-primary-light text-primary" : "border-border bg-card text-foreground hover:bg-secondary/60"
+                          }`}
+                          style={{ padding: "5px 10px", fontWeight: active ? 500 : 400 }}
+                        >
+                          {t.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
             </div>
+
+            {quelleFilter && (
+              <button onClick={() => setParam({ quelle: null })} className="inline-flex items-center gap-1 rounded-full bg-primary-light text-primary text-[11.5px] cursor-pointer" style={{ padding: "5px 10px", fontWeight: 500 }}>
+                Quelle: {quelleFilter === "workflow" ? "Workflow" : "Tickets"} <X className="w-[11px] h-[11px]" />
+              </button>
+            )}
+            {typFilter && (
+              <button onClick={() => setParam({ typ: null })} className="inline-flex items-center gap-1 rounded-full bg-primary-light text-primary text-[11.5px] cursor-pointer" style={{ padding: "5px 10px", fontWeight: 500 }}>
+                Typ: {allTypes.find(t => t.id === typFilter)?.label || typFilter} <X className="w-[11px] h-[11px]" />
+              </button>
+            )}
+            {hasFilters && (
+              <button onClick={() => setParam({ quelle: null, typ: null })} className="text-[11.5px] text-muted-foreground cursor-pointer" style={{ padding: "5px 6px", fontWeight: 500 }}>
+                Alle zurücksetzen
+              </button>
+            )}
           </div>
         </div>
-      </>
-    );
-  }
 
-  // ── List view ──
-  return (
-    <>
-      {/* Page header */}
-      <div className="px-4 md:px-8 pt-7 pb-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-foreground">Service Desk</h1>
-            <p className="text-[13px] text-muted-foreground mt-0.5">
-              {subtitleParts.join(" · ")}
-            </p>
-          </div>
-          <button
-            onClick={() => {/* placeholder */}}
-            className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors cursor-pointer"
-            style={{ fontWeight: 500 }}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Neues Ticket
-          </button>
-        </div>
-      </div>
+        {/* Grouped list */}
+        <div className="flex-1 overflow-y-auto">
+          {filtered.length === 0 && (
+            <div className="text-center text-muted-foreground text-[13px]" style={{ padding: 56 }}>
+              Keine Einträge mit diesen Filtern.
+            </div>
+          )}
+          {BUCKETS.map(bucket => {
+            const items = grouped[bucket.key];
+            if (!items || items.length === 0) return null;
+            return (
+              <div key={bucket.key}>
+                <div className="flex items-center gap-2.5 bg-[#FAFBFC] border-y border-border-light" style={{ padding: "10px 24px" }}>
+                  <span className={`text-[11px] uppercase ${bucket.color}`} style={{ fontWeight: 600, letterSpacing: "0.08em" }}>
+                    {bucket.label}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground" style={{ fontWeight: 500 }}>{items.length}</span>
+                </div>
+                {items.map(e => {
+                  const isSelected = selectedId === e.id;
+                  const b = faelligBucket(e.faellig);
+                  const d = daysFromToday(e.faellig);
+                  const dateLabel = b === "ueberfaellig"
+                    ? `${Math.abs(d!)} ${Math.abs(d!) === 1 ? "Tag" : "Tage"} überfällig`
+                    : b === "heute" ? "heute" : b === "morgen" ? "morgen"
+                    : e.faellig ? formatShort(e.faellig) : "—";
+                  const dateColor = b === "ueberfaellig" ? "text-error" : b === "heute" || b === "morgen" ? "text-warning" : "text-muted-foreground";
+                  const tc = e.quelle === "workflow" ? { text: "text-primary", bg: "bg-primary-light" } : { text: "text-info-foreground", bg: "bg-info-light" };
 
-      <div className="px-4 md:px-8 pt-5 pb-10">
-        <div className="bg-card rounded-2xl border border-border overflow-hidden">
-
-          {/* Tabs + search */}
-          <div className="px-5 pt-4 pb-3 border-b border-border-light">
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Tabs */}
-              <div className="flex gap-1.5">
-                {([["alle", "Alle"], ["workflow", "Workflow"], ["ticket", "Tickets"]] as const).map(([key, label]) => {
-                  const isActive = activeTab === key;
                   return (
                     <button
-                      key={key}
-                      onClick={() => {
-                        const next = new URLSearchParams(searchParams);
-                        next.delete("typ");
-                        if (key === "alle") next.delete("quelle");
-                        else next.set("quelle", key);
-                        setSearchParams(next, { replace: true });
-                      }}
-                      className={`px-2.5 py-[5px] rounded-lg text-[12px] border transition-all cursor-pointer ${
-                        isActive
-                          ? "border-primary/20 bg-primary-light text-primary"
-                          : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
-                      }`}
-                      style={{ fontWeight: isActive ? 500 : 400 }}
+                      key={e.id}
+                      onClick={() => setParam({ id: e.id })}
+                      className={`w-full text-left transition-colors cursor-pointer ${isSelected ? "bg-primary-light" : "hover:bg-primary/[0.03]"}`}
+                      style={{ display: "grid", gridTemplateColumns: "4px 1fr auto", gap: 12, padding: "11px 24px 11px 20px", borderBottom: "1px solid #F7F8FA" }}
                     >
-                      {label}
+                      <div className={`w-1 rounded-sm ${prioCfg[e.prioritaet].color}`} style={{ height: 36, opacity: e.prioritaet === "niedrig" ? 0.3 : 0.9 }} />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-[3px]">
+                          <span className={`inline-flex items-center rounded-md text-[11px] ${tc.bg} ${tc.text}`} style={{ padding: "2px 7px", fontWeight: 500 }}>
+                            {e.typLabel}
+                          </span>
+                          <span className={`text-[13px] truncate ${isSelected ? "text-primary" : "text-foreground"}`} style={{ fontWeight: 500 }}>
+                            {entryTitle(e)}
+                          </span>
+                        </div>
+                        <div className="text-[11.5px] text-muted-foreground truncate">{e.kontext}</div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className={`text-[11.5px] ${dateColor}`} style={{ fontWeight: 500 }}>{dateLabel}</span>
+                        {e.verantwortlich && (
+                          <div className="w-[18px] h-[18px] rounded-full flex items-center justify-center shrink-0" style={{ background: e.verantwortlich.color ? `${e.verantwortlich.color}15` : "#F3F4F6" }}>
+                            <span className="text-[8.5px]" style={{ fontWeight: 600, color: e.verantwortlich.color || "#6B7280" }}>{e.verantwortlich.initialen}</span>
+                          </div>
+                        )}
+                      </div>
                     </button>
                   );
                 })}
               </div>
+            );
+          })}
+        </div>
+      </div>
 
-              <div className="flex-1" />
+      {/* ── RIGHT: Detail pane ── */}
+      <div className="w-[540px] shrink-0 bg-[#FAFBFC] overflow-y-auto">
+        {selected ? (
+          <div style={{ padding: "20px 22px 28px" }} className="flex flex-col gap-[16px]">
+            {/* Header */}
+            <div>
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className={`inline-flex items-center rounded-md text-[11px] ${selected.quelle === "workflow" ? "bg-primary-light text-primary" : "bg-info-light text-info-foreground"}`} style={{ padding: "2px 7px", fontWeight: 500 }}>
+                  {selected.typLabel}
+                </span>
+                <span className="text-[10.5px] text-muted-foreground font-mono">{selected.id}</span>
+                <div className="flex-1" />
+                <button className="p-1 text-muted-foreground cursor-pointer"><MoreHorizontal className="w-4 h-4" /></button>
+              </div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.3 }} className="text-foreground">
+                {entryTitle(selected)}
+              </h2>
+              <p className="text-[13px] text-muted-foreground mt-1.5" style={{ lineHeight: 1.5 }}>{selected.kontext}</p>
+              {selected.beschreibung && (
+                <div className="text-[12.5px] text-foreground/80 mt-3" style={{ lineHeight: 1.55 }}>
+                  {selected.beschreibung}
+                </div>
+              )}
+            </div>
 
-              {/* Search */}
-              <div className="flex items-center gap-2 bg-background rounded-xl px-3 py-[6px] border border-border-light min-w-[220px] max-w-[320px]">
-                <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <input
-                  value={qParam}
-                  onChange={(e) => setParam("q", e.target.value || null)}
-                  placeholder="Suche nach Titel, Person…"
-                  className="bg-transparent outline-none text-[12px] flex-1 placeholder:text-muted-foreground/50"
-                  style={{ fontWeight: 400 }}
-                />
+            {/* Urgency alert */}
+            {(() => {
+              const b = faelligBucket(selected.faellig);
+              const d = daysFromToday(selected.faellig);
+              if (b === "ueberfaellig") return (
+                <div className="flex items-center gap-2 rounded-[10px] bg-error-light" style={{ padding: "9px 12px" }}>
+                  <AlertTriangle className="w-[14px] h-[14px] text-error" />
+                  <span className="text-[12px] text-error-foreground" style={{ fontWeight: 500 }}>{Math.abs(d!)} {Math.abs(d!) === 1 ? "Tag" : "Tage"} überfällig</span>
+                </div>
+              );
+              if (b === "heute") return (
+                <div className="flex items-center gap-2 rounded-[10px] bg-warning-light" style={{ padding: "9px 12px" }}>
+                  <AlertTriangle className="w-[14px] h-[14px] text-warning" />
+                  <span className="text-[12px] text-warning-foreground" style={{ fontWeight: 500 }}>heute fällig</span>
+                </div>
+              );
+              return null;
+            })()}
+
+            {/* Meta card */}
+            <div className="bg-card border border-border-light rounded-[10px]" style={{ padding: 14 }}>
+              <div className="grid grid-cols-2" style={{ rowGap: 14, columnGap: 16 }}>
+                <MetaCell label="Typ">
+                  <span className={`inline-flex items-center rounded-md text-[11px] ${selected.quelle === "workflow" ? "bg-primary-light text-primary" : "bg-info-light text-info-foreground"}`} style={{ padding: "2px 7px", fontWeight: 500 }}>
+                    {selected.typLabel}
+                  </span>
+                </MetaCell>
+                <MetaCell label="Status">
+                  {(() => { const s = statusCfg[selected.status]; return (
+                    <span className={`inline-flex items-center gap-1.5 rounded-full text-[11px] ${s.bg} ${s.text}`} style={{ padding: "2px 8px", fontWeight: 500 }}>
+                      <span className={`w-[5px] h-[5px] rounded-full ${s.dot}`} /> {s.label}
+                    </span>
+                  ); })()}
+                </MetaCell>
+                {selected.person && (
+                  <MetaCell label="Betroffene Person">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Avatar person={selected.person} size={18} />
+                      <span className="text-[12.5px]" style={{ fontWeight: 500 }}>{selected.person.name}</span>
+                    </span>
+                  </MetaCell>
+                )}
+                <MetaCell label="Verantwortlich">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Avatar person={selected.verantwortlich} size={18} />
+                    <span className="text-[12.5px]" style={{ fontWeight: 500 }}>{selected.verantwortlich.name}</span>
+                  </span>
+                </MetaCell>
+                <MetaCell label="Priorität">
+                  <span className={`inline-flex items-center gap-1.5 text-[12.5px] ${prioCfg[selected.prioritaet].textColor}`} style={{ fontWeight: 500 }}>
+                    <span className={`w-[6px] h-[6px] rounded-full ${prioCfg[selected.prioritaet].color}`} />
+                    {prioCfg[selected.prioritaet].label}
+                  </span>
+                </MetaCell>
+                <MetaCell label="Fällig">
+                  {selected.faellig ? (
+                    <span className={`inline-flex items-center gap-1.5 text-[12px] ${faelligBucket(selected.faellig) === "ueberfaellig" ? "text-error-foreground" : faelligBucket(selected.faellig) === "heute" ? "text-warning-foreground" : "text-muted-foreground"}`} style={{ fontWeight: faelligBucket(selected.faellig) === "ueberfaellig" || faelligBucket(selected.faellig) === "heute" ? 500 : 400 }}>
+                      <span className={`w-[5px] h-[5px] rounded-full ${faelligBucket(selected.faellig) === "ueberfaellig" ? "bg-error" : faelligBucket(selected.faellig) === "heute" ? "bg-warning" : "bg-muted-foreground/30"}`} />
+                      {formatDate(selected.faellig)}
+                    </span>
+                  ) : <span className="text-[12px] text-muted-foreground">—</span>}
+                </MetaCell>
+                <MetaCell label="Erstellt">
+                  <span className="text-[12px] text-muted-foreground">{formatDate(selected.erstellt)}</span>
+                </MetaCell>
               </div>
             </div>
 
-            {/* Filter chips */}
-            {chips.length > 0 && (
-              <div className="flex items-center gap-1.5 mt-2.5">
-                {chips.map((chip) => (
-                  <button
-                    key={chip.key}
-                    onClick={() => setParam(chip.key, null)}
-                    className="inline-flex items-center gap-1 px-2 py-[3px] rounded-lg bg-primary-light text-primary text-[11px] transition-colors hover:bg-primary/15 cursor-pointer"
-                    style={{ fontWeight: 500 }}
-                  >
-                    {chip.label}
-                    <X className="w-3 h-3" />
-                  </button>
-                ))}
-                <button
-                  onClick={clearFilters}
-                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors px-1 cursor-pointer"
-                  style={{ fontWeight: 500 }}
+            {/* Aktionen */}
+            <div className="bg-card border border-border-light rounded-[10px]" style={{ padding: 14 }}>
+              <textarea
+                value={draftComment}
+                onChange={(e) => setDraftComment(e.target.value)}
+                placeholder="Kommentar hinzufügen…"
+                className="w-full rounded-lg border border-border text-[12.5px] text-foreground outline-none resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary/60"
+                style={{ padding: "8px 10px", minHeight: 48, lineHeight: 1.4 }}
+              />
+              <div className="flex items-center gap-2 mt-2">
+                <select
+                  value={localStatus[selected.id] || selected.status}
+                  onChange={(e) => setLocalStatus(prev => ({ ...prev, [selected.id]: e.target.value }))}
+                  className="rounded-lg border border-border bg-card text-[12px] text-foreground outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/60"
+                  style={{ padding: "5px 8px" }}
                 >
-                  Alle zurücksetzen
+                  <option value="offen">Offen</option>
+                  <option value="in_bearbeitung">In Bearbeitung</option>
+                  <option value="erledigt">Erledigt</option>
+                </select>
+                <div className="flex-1" />
+                <button
+                  onClick={() => setLocalStatus(prev => ({ ...prev, [selected.id]: "erledigt" }))}
+                  className={`inline-flex items-center gap-1 rounded-lg text-[11.5px] cursor-pointer transition-colors ${
+                    (localStatus[selected.id] || selected.status) === "erledigt"
+                      ? "bg-success-light text-success-foreground border border-success-medium"
+                      : "border border-border text-foreground hover:bg-secondary/60"
+                  }`}
+                  style={{ padding: "5px 9px", fontWeight: 500 }}
+                >
+                  <Check className="w-3 h-3" />
+                  {(localStatus[selected.id] || selected.status) === "erledigt" ? "Erledigt" : "Erledigen"}
+                </button>
+                <button
+                  onClick={() => addComment(selected.id)}
+                  disabled={!draftComment.trim()}
+                  className="inline-flex items-center gap-1 rounded-lg text-[11.5px] bg-primary text-primary-foreground hover:bg-primary-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ padding: "5px 10px", fontWeight: 500 }}
+                >
+                  Senden
                 </button>
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/30">
-                  {["Eintrag", "Betroffene Person", "Typ", "Fällig", "Verantwortlich", "Status"].map((col) => (
-                    <th key={col} className="px-4 py-2.5 text-left">
-                      <span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>{col}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-[13px] text-muted-foreground">
-                      Keine Einträge mit diesem Filter gefunden.
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map((entry) => {
-                    const st = statusCfg[entry.status];
-                    const fs = faelligkeitStatus(entry.faellig);
-                    return (
-                      <tr
-                        key={entry.id}
-                        onClick={() => navigate(`/servicedesk/${entry.id}`)}
-                        className="border-t border-border-light hover:bg-primary/[0.02] transition-colors cursor-pointer group"
-                      >
-                        {/* Entry */}
-                        <td className="px-4 py-3 max-w-[360px]">
-                          <div className="flex items-start gap-2">
-                            {entry.quelle === "workflow" ? (
-                              <Zap className="w-3.5 h-3.5 text-primary/50 shrink-0 mt-0.5" />
-                            ) : (
-                              <MessageSquare className="w-3.5 h-3.5 text-info/50 shrink-0 mt-0.5" />
-                            )}
-                            <div className="min-w-0">
-                              <div className="text-[13px] text-foreground truncate group-hover:text-primary transition-colors" style={{ fontWeight: 500 }}>
-                                {entry.titel}
-                              </div>
-                              <div className="text-[11px] text-muted-foreground truncate mt-0.5">
-                                {entry.kontext}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Betroffene Person */}
-                        <td className="px-4 py-3">
-                          {entry.betroffenePerson ? (
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0">
-                                <span className="text-[8px] text-muted-foreground" style={{ fontWeight: 600 }}>
-                                  {entry.betroffenePerson.initialen}
-                                </span>
-                              </div>
-                              <span className="text-[12px] text-foreground">{entry.betroffenePerson.name}</span>
-                            </div>
-                          ) : (
-                            <span className="text-[12px] text-muted-foreground/40">–</span>
-                          )}
-                        </td>
-
-                        {/* Typ */}
-                        <td className="px-4 py-3">
-                          <span className={`text-[11px] px-2 py-[2px] rounded-md ${
-                            entry.quelle === "workflow" ? "bg-primary-light text-primary" : "bg-info-light text-info-foreground"
-                          }`} style={{ fontWeight: 500 }}>
-                            {entry.typLabel}
-                          </span>
-                        </td>
-
-                        {/* Fällig */}
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          {entry.faellig ? (
-                            <div className="flex items-center gap-1.5">
-                              {fs && <span className={`w-[5px] h-[5px] rounded-full ${faelligDot[fs]}`} />}
-                              <span className={`text-[12px] ${fs ? faelligText[fs] : "text-muted-foreground"}`}>
-                                {formatDate(entry.faellig)}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-[12px] text-muted-foreground/40">–</span>
-                          )}
-                        </td>
-
-                        {/* Verantwortlich */}
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0">
-                              <span className="text-[8px] text-muted-foreground" style={{ fontWeight: 600 }}>
-                                {entry.verantwortlich.initialen}
-                              </span>
-                            </div>
-                            <span className="text-[12px] text-muted-foreground">{entry.verantwortlich.name}</span>
-                          </div>
-                        </td>
-
-                        {/* Status */}
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-[2px] rounded-full text-[11px] ${st.bg} ${st.text}`} style={{ fontWeight: 500 }}>
-                            <span className={`w-[5px] h-[5px] rounded-full ${st.dot}`} />
-                            {st.label}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
+            {/* Verlauf */}
+            <div>
+              <div className="text-[11px] text-muted-foreground uppercase mb-2.5" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>Verlauf</div>
+              <div className="flex flex-col gap-2.5">
+                {[...(comments[selected.id] || [])].reverse().map((c, i) => (
+                  <VerlaufEvent key={`c-${i}`} dotColor="bg-primary" actor={c.by} text={`kommentiert: "${c.text}"`} date={c.at} />
+                ))}
+                {selected.status === "in_bearbeitung" && (
+                  <VerlaufEvent dotColor="bg-warning" actor={selected.verantwortlich.name} text="Status auf ‚In Bearbeitung' gesetzt" date={formatDate(selected.erstellt)} />
                 )}
-              </tbody>
-            </table>
+                <VerlaufEvent dotColor="bg-muted-foreground" actor={selected.verantwortlich.name} text="Eintrag erstellt" date={formatDate(selected.erstellt)} />
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-center text-muted-foreground text-[13px] h-full" style={{ padding: 40 }}>
+            <Inbox className="w-8 h-8 text-muted-foreground/30 mb-3" />
+            Wähle einen Eintrag, um Details zu sehen.
+          </div>
+        )}
       </div>
-    </>
+    </div>
+  );
+}
+
+// ── Sub-components ──
+
+function MetaCell({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10px] text-muted-foreground uppercase mb-1" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>{label}</div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+function VerlaufEvent({ dotColor, actor, text, date }: { dotColor: string; actor: string; text: string; date: string }) {
+  return (
+    <div className="flex gap-2.5 items-start">
+      <div className={`w-[6px] h-[6px] rounded-full ${dotColor} mt-1.5 shrink-0`} />
+      <div className="flex-1">
+        <div className="text-[12px] text-foreground">
+          <span style={{ fontWeight: 500 }}>{actor}</span> · {text}
+        </div>
+        <div className="text-[11px] text-muted-foreground mt-[1px]">{date}</div>
+      </div>
+    </div>
+  );
+}
+
+function Avatar({ person, size = 24 }: { person: { name: string; initialen: string; color?: string }; size?: number }) {
+  return (
+    <div
+      className="rounded-full inline-flex items-center justify-center shrink-0"
+      style={{
+        width: size,
+        height: size,
+        background: person.color ? `${person.color}15` : "#F3F4F6",
+        color: person.color || "#6B7280",
+        fontSize: size <= 18 ? 8.5 : size <= 22 ? 9.5 : 10.5,
+        fontWeight: 600,
+        letterSpacing: 0.2,
+      }}
+    >
+      {person.initialen}
+    </div>
   );
 }
