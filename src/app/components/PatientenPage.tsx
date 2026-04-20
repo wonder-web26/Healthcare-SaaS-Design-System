@@ -438,9 +438,9 @@ export function PatientenPage() {
 
   return (
     <>
-      <div className="flex flex-col lg:flex-row h-full">
+      <div className="flex flex-col lg:flex-row h-full overflow-hidden">
         {/* ── LEFT: Views-Rail (desktop) ───── */}
-        <div className="hidden lg:block w-[220px] shrink-0 border-r border-border-light bg-[#FAFBFC] overflow-y-auto" style={{ padding: "20px 14px" }}>
+        <div className="hidden lg:block w-[200px] shrink-0 border-r border-border-light bg-[#FAFBFC] overflow-y-auto" style={{ padding: "20px 12px" }}>
           <div className="text-[10.5px] text-muted-foreground uppercase tracking-wider px-2 pb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>
             Ansichten
           </div>
@@ -662,10 +662,10 @@ function TableView({
   totalCount: number;
 }) {
   return (
-    <div className="px-4 md:px-8 pb-10">
+    <div className="px-4 md:px-8 pb-10 pt-2">
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full" style={{ minWidth: 1000 }}>
             <thead>
               <tr className="bg-muted/30">
                 {[
@@ -727,7 +727,7 @@ function TableView({
                       }`}
                     >
                       {/* Name */}
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2.5">
                           <div
                             className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
@@ -765,7 +765,7 @@ function TableView({
                       </td>
 
                       {/* Angehöriger */}
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <div
                           className="text-[13px] text-foreground"
                           style={{ fontWeight: 400 }}
@@ -776,10 +776,10 @@ function TableView({
                       </td>
 
                       {/* Status chip */}
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <button
                           onClick={(e) => openStatusModal(p, e)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full text-[11px] transition-all hover:shadow-sm hover:scale-[1.03] active:scale-100 ${st.bg} ${st.text}`}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full text-[11px] whitespace-nowrap transition-all hover:shadow-sm hover:scale-[1.03] active:scale-100 ${st.bg} ${st.text}`}
                           style={{ fontWeight: 500 }}
                           title="Klicken für Statusdetails"
                         >
@@ -791,9 +791,9 @@ function TableView({
                       </td>
 
                       {/* Schweregrad */}
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center px-2 py-[2px] rounded-md text-[11px] ${sg.bg} ${sg.text}`}
+                          className={`inline-flex items-center px-2 py-[2px] rounded-md text-[11px] whitespace-nowrap ${sg.bg} ${sg.text}`}
                           style={{ fontWeight: 500 }}
                         >
                           {sg.label}
@@ -801,7 +801,7 @@ function TableView({
                       </td>
 
                       {/* Pflegefachkraft */}
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <button
                           onClick={(e) => openAssignSidebar(p, e)}
                           className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-[4px] transition-all hover:shadow-sm active:scale-[0.98] ${
@@ -844,42 +844,27 @@ function TableView({
                       </td>
 
                       {/* Prozessstatus */}
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-3 whitespace-nowrap">
                         {p.prozessStatus ? (
-                          <div className="flex flex-col gap-0.5">
+                          <div>
                             <div className="flex items-center gap-1.5">
                               {p.prozessStatus.ueberfaellig ? (
                                 <AlertTriangle className="w-3 h-3 text-error shrink-0" />
                               ) : (
                                 <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
                               )}
-                              <span
-                                className={`text-[12px] ${
-                                  p.prozessStatus.ueberfaellig
-                                    ? "text-error"
-                                    : "text-foreground"
-                                }`}
-                                style={{ fontWeight: p.prozessStatus.ueberfaellig ? 500 : 400 }}
-                              >
+                              <span className={`text-[12px] ${p.prozessStatus.ueberfaellig ? "text-error" : "text-foreground"}`} style={{ fontWeight: p.prozessStatus.ueberfaellig ? 500 : 400 }}>
                                 {p.prozessStatus.naechsteAufgabe}
                               </span>
                             </div>
-                            <span
-                              className={`text-[10.5px] ml-[18px] ${
-                                p.prozessStatus.ueberfaellig
-                                  ? "text-error/70"
-                                  : "text-muted-foreground"
-                              }`}
-                              style={{ fontWeight: p.prozessStatus.ueberfaellig ? 500 : 400 }}
-                            >
-                              {p.prozessStatus.ueberfaellig ? "Überfällig · " : "Fällig "}
-                              {p.prozessStatus.faelligDatum}
-                            </span>
+                            <div className={`text-[10px] ml-[18px] ${p.prozessStatus.ueberfaellig ? "text-error/70" : "text-muted-foreground"}`}>
+                              {p.prozessStatus.ueberfaellig ? "Überfällig · " : "Fällig "}{p.prozessStatus.faelligDatum}
+                            </div>
                           </div>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] text-success" style={{ fontWeight: 500 }}>
+                          <span className="inline-flex items-center gap-1 text-[11px] text-success whitespace-nowrap" style={{ fontWeight: 500 }}>
                             <CheckCircle2 className="w-3 h-3" />
-                            Keine offenen Aufgaben
+                            Aktuell
                           </span>
                         )}
                       </td>

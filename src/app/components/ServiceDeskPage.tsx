@@ -187,7 +187,7 @@ export function ServiceDeskPage() {
   return (
     <div className="flex flex-col lg:flex-row h-full">
       {/* ── LEFT: Views rail (desktop) / horizontal tabs (mobile) ── */}
-      <div className="hidden lg:block w-[220px] shrink-0 border-r border-border-light bg-[#FAFBFC] overflow-y-auto" style={{ padding: "20px 14px" }}>
+      <div className="hidden lg:block w-[200px] shrink-0 border-r border-border-light bg-[#FAFBFC] overflow-y-auto" style={{ padding: "20px 12px" }}>
         <div className="text-[10.5px] text-muted-foreground uppercase tracking-wider px-2 pb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>
           Ansichten
         </div>

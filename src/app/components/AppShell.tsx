@@ -48,7 +48,7 @@ export function AppShell() {
         </div>
       )}
 
-      <div className="flex-1 flex flex-col lg:ml-[76px] min-h-0">
+      <div className="flex-1 flex flex-col lg:ml-[76px] min-h-0 min-w-0">
         <AppTopbar onMenuToggle={() => setSidebarOpen(o => !o)} />
         <div className="flex-1 overflow-y-auto">
           <Outlet />
