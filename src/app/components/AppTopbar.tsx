@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { Search, Plus, Bell, ChevronDown, X, Command, Menu } from "lucide-react";
+import { Search, Plus, Bell, ChevronDown, X, Command, Menu, LogOut } from "lucide-react";
+import { useAuth } from "../auth";
 
 interface AppTopbarProps {
   onMenuToggle?: () => void;
 }
 
 export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
+  const { logout } = useAuth();
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -111,7 +113,7 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
       <div className="hidden sm:block w-px h-6 bg-border" />
 
       {/* User Profile */}
-      <button className="flex items-center gap-2.5 px-1.5 py-1 rounded-xl hover:bg-secondary transition-colors -mr-1">
+      <div className="flex items-center gap-2.5 px-1.5 py-1 -mr-1">
         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary/80 to-primary flex items-center justify-center">
           <span className="text-[11px] text-white" style={{ fontWeight: 600 }}>MK</span>
         </div>
@@ -119,8 +121,14 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
           <span className="text-[12.5px] text-foreground" style={{ fontWeight: 500 }}>Maria Keller</span>
           <span className="text-[10.5px] text-muted-foreground" style={{ fontWeight: 400 }}>Admin</span>
         </div>
-        <ChevronDown className="w-3.5 h-3.5 text-muted-foreground hidden lg:block" />
-      </button>
+        <button
+          onClick={logout}
+          title="Abmelden"
+          className="p-2 rounded-xl hover:bg-secondary transition-colors cursor-pointer"
+        >
+          <LogOut className="w-4 h-4 text-muted-foreground" />
+        </button>
+      </div>
     </header>
   );
 }
