@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import {
-  LayoutDashboard,
+  Sparkles,
   UserPlus,
   Users,
   GitBranch,
@@ -14,7 +14,7 @@ import { unifiedEntries, CURRENT_USER } from "../../lib/mocks/service-desk-unifi
 const myOpenCount = unifiedEntries.filter(e => e.verantwortlich.initialen === CURRENT_USER && e.status !== "erledigt").length;
 
 const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "dashboard", label: "Startseite", icon: Sparkles },
   { id: "onboarding", label: "Onboarding", icon: UserPlus, badge: 3 },
   { id: "patienten", label: "Patienten", icon: Users },
   { id: "angehoerige", label: "Angehörige", icon: HeartHandshake },
@@ -29,61 +29,128 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ activeItem, onItemChange }: AppSidebarProps) {
+  const [tooltip, setTooltip] = useState<string | null>(null);
+
   return (
-    <aside className="fixed left-0 top-0 bottom-0 w-[76px] bg-sidebar border-r border-sidebar-border flex flex-col items-center z-40">
+    <aside
+      className="fixed left-0 top-0 bottom-0 w-[56px] flex flex-col items-center z-40"
+      style={{
+        background: "var(--bg-secondary)",
+        borderRight: "var(--border-thin) solid var(--border-default)",
+        padding: "var(--space-4) 0",
+      }}
+    >
       {/* Logo */}
-      <div className="h-16 flex items-center justify-center shrink-0 w-full border-b border-sidebar-border">
-        <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center">
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M9 1L16 5V13L9 17L2 13V5L9 1Z" stroke="white" strokeWidth="1.5" fill="none" />
-            <circle cx="9" cy="9" r="3" fill="white" opacity="0.9" />
-          </svg>
-        </div>
+      <div
+        className="flex items-center justify-center shrink-0"
+        style={{
+          width: 32, height: 32,
+          borderRadius: "var(--radius-card)",
+          background: "var(--brand-primary)",
+          marginBottom: "var(--space-6)",
+        }}
+      >
+        <span style={{ color: "var(--text-on-dark)", fontSize: 14, fontWeight: "var(--weight-medium)" }}>S</span>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto w-full py-3 px-1.5">
-        <ul className="flex flex-col items-center gap-0.5">
-          {navItems.map((item) => {
-            const isActive = activeItem === item.id;
-            const Icon = item.icon;
-            return (
-              <li key={item.id} className="w-full">
-                <button
-                  onClick={() => onItemChange(item.id)}
-                  className={`w-full flex flex-col items-center gap-[3px] py-2 rounded-lg transition-all cursor-pointer ${
-                    isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground hover:bg-secondary/50"
-                  }`}
-                >
-                  <div className="relative">
-                    <Icon className={`w-5 h-5 ${isActive ? "text-sidebar-accent-foreground" : "text-sidebar-muted"}`} />
-                    {item.badge != null && item.badge > 0 && (
-                      <span className="absolute -top-1 -right-1.5 w-[14px] h-[14px] rounded-full bg-error text-white text-[8px] flex items-center justify-center" style={{ fontWeight: 700 }}>
-                        {item.badge > 9 ? "9+" : item.badge}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] leading-tight text-center truncate w-full px-0.5" style={{ fontWeight: isActive ? 500 : 400 }}>
-                    {item.label}
+      <nav className="flex-1 w-full flex flex-col items-center gap-[var(--space-1)]">
+        {navItems.map((item) => {
+          const isActive = activeItem === item.id;
+          const Icon = item.icon;
+          return (
+            <div key={item.id} className="relative">
+              <button
+                onClick={() => onItemChange(item.id)}
+                onMouseEnter={() => setTooltip(item.id)}
+                onMouseLeave={() => setTooltip(null)}
+                className="relative flex items-center justify-center cursor-pointer transition-colors"
+                style={{
+                  width: 40, height: 40,
+                  borderRadius: "var(--radius-card)",
+                  background: isActive
+                    ? item.id === "dashboard"
+                      ? "linear-gradient(135deg, var(--brand-primary), var(--brand-accent))"
+                      : "var(--text-primary)"
+                    : "transparent",
+                }}
+                aria-label={item.label}
+              >
+                <Icon
+                  style={{
+                    width: 18, height: 18,
+                    color: isActive ? "var(--bg-primary)" : "var(--text-secondary)",
+                  }}
+                />
+                {item.badge != null && item.badge > 0 && (
+                  <span
+                    className="absolute flex items-center justify-center"
+                    style={{
+                      top: 2, right: 2,
+                      width: 16, height: 16,
+                      borderRadius: "var(--radius-pill)",
+                      background: "var(--status-danger)",
+                      color: "var(--text-on-dark)",
+                      fontSize: 10,
+                      fontWeight: "var(--weight-medium)",
+                    }}
+                  >
+                    {item.badge > 9 ? "9+" : item.badge}
                   </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                )}
+              </button>
+
+              {/* Tooltip */}
+              {tooltip === item.id && (
+                <div
+                  className="absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2 z-50 whitespace-nowrap pointer-events-none"
+                  style={{
+                    background: "var(--bg-elevated)",
+                    border: "var(--border-thin) solid var(--border-default)",
+                    borderRadius: "var(--radius-card)",
+                    padding: "var(--space-2)",
+                    fontSize: "var(--text-meta)",
+                    color: "var(--text-primary)",
+                    boxShadow: "var(--shadow-overlay)",
+                  }}
+                >
+                  {item.label}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       {/* Footer */}
-      <div className="w-full px-1.5 pb-3 pt-2 border-t border-sidebar-border flex flex-col items-center gap-0.5">
-        <button className="w-full flex flex-col items-center gap-[3px] py-2 rounded-lg text-sidebar-foreground hover:bg-secondary/50 transition-colors cursor-pointer">
-          <Settings className="w-5 h-5 text-sidebar-muted" />
-          <span className="text-[10px] leading-tight" style={{ fontWeight: 400 }}>Settings</span>
+      <div className="flex flex-col items-center gap-[var(--space-1)]" style={{ marginTop: "var(--space-4)" }}>
+        <button
+          onMouseEnter={() => setTooltip("settings")}
+          onMouseLeave={() => setTooltip(null)}
+          className="relative flex items-center justify-center cursor-pointer transition-colors"
+          style={{ width: 40, height: 40, borderRadius: "var(--radius-card)", background: "transparent" }}
+          aria-label="Einstellungen"
+        >
+          <Settings style={{ width: 18, height: 18, color: "var(--text-secondary)" }} />
+          {tooltip === "settings" && (
+            <div className="absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2 z-50 whitespace-nowrap pointer-events-none" style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-2)", fontSize: "var(--text-meta)", color: "var(--text-primary)", boxShadow: "var(--shadow-overlay)" }}>
+              Einstellungen
+            </div>
+          )}
         </button>
-        <button className="w-full flex flex-col items-center gap-[3px] py-2 rounded-lg text-sidebar-foreground hover:bg-secondary/50 transition-colors cursor-pointer">
-          <HelpCircle className="w-5 h-5 text-sidebar-muted" />
-          <span className="text-[10px] leading-tight" style={{ fontWeight: 400 }}>Hilfe</span>
+        <button
+          onMouseEnter={() => setTooltip("help")}
+          onMouseLeave={() => setTooltip(null)}
+          className="relative flex items-center justify-center cursor-pointer transition-colors"
+          style={{ width: 40, height: 40, borderRadius: "var(--radius-card)", background: "transparent" }}
+          aria-label="Hilfe"
+        >
+          <HelpCircle style={{ width: 18, height: 18, color: "var(--text-secondary)" }} />
+          {tooltip === "help" && (
+            <div className="absolute left-[calc(100%+8px)] top-1/2 -translate-y-1/2 z-50 whitespace-nowrap pointer-events-none" style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-2)", fontSize: "var(--text-meta)", color: "var(--text-primary)", boxShadow: "var(--shadow-overlay)" }}>
+              Hilfe & Support
+            </div>
+          )}
         </button>
       </div>
     </aside>

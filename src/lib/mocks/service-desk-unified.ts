@@ -1,6 +1,7 @@
 import { workflowTasks, workflowTypLabel, CURRENT_USER, MY_TEAM, type WorkflowTask, type WorkflowTyp, type Person, type Prioritaet } from "./workflow-tasks";
 import { serviceTickets, ticketTypLabel, type ServiceTicket, type TicketTyp } from "./service-tickets";
 import { generateWorkflowBeschreibung } from "./workflow-task-beschreibungen";
+import type { PendenzTyp } from "../../types/pendenz";
 
 export type Quelle = "workflow" | "ticket";
 
@@ -9,6 +10,7 @@ export interface UnifiedEntry {
   quelle: Quelle;
   typ: WorkflowTyp | TicketTyp;
   typLabel: string;
+  pendenzTyp: PendenzTyp;
   person: Person | null;
   titel?: string;
   kontext: string;
@@ -19,6 +21,24 @@ export interface UnifiedEntry {
   prioritaet: Prioritaet;
   beschreibung: string;
 }
+
+/** Maps legacy WorkflowTyp to typed PendenzTyp */
+const workflowToPendenzTyp: Record<WorkflowTyp, PendenzTyp> = {
+  SRK_ANMELDUNG: "srk-anmeldung",
+  RE_ASSESSMENT: "re-assessment",
+  AUSWEIS_B_ANMELDUNG: "ausweis-b-migrationsamt",
+  QUELLENSTEUER_ANMELDUNG: "quellensteuer",
+  KINDERZULAGEN_ANTRAG: "kinderzulagen",
+  LOHNANPASSUNG_NACH_SRK: "lohn-anpassung",
+};
+
+/** Maps legacy TicketTyp to typed PendenzTyp */
+const ticketToPendenzTyp: Record<TicketTyp, PendenzTyp> = {
+  SCHLUESSEL: "schluessel",
+  ANFRAGE: "anfrage",
+  PROBLEM: "problem",
+  MELDUNG: "meldung",
+};
 
 export const WORKFLOW_TYPES: { id: WorkflowTyp; label: string }[] = [
   { id: "SRK_ANMELDUNG", label: "SRK-Anmeldung" },
@@ -42,6 +62,7 @@ function toUnifiedWorkflow(t: WorkflowTask): UnifiedEntry {
     quelle: "workflow",
     typ: t.typ,
     typLabel: workflowTypLabel[t.typ],
+    pendenzTyp: workflowToPendenzTyp[t.typ],
     person: t.betroffenePerson,
     kontext: t.kontext,
     erstellt: t.erstellt,
@@ -61,6 +82,7 @@ function toUnifiedTicket(t: ServiceTicket): UnifiedEntry {
     quelle: "ticket",
     typ: t.typ,
     typLabel: ticketTypLabel[t.typ],
+    pendenzTyp: ticketToPendenzTyp[t.typ],
     person: t.betroffenePerson,
     titel: t.titel,
     kontext: t.kontext,
@@ -89,3 +111,4 @@ export function countOpenByWorkflowTyp(typ: WorkflowTyp): number {
 
 export { CURRENT_USER, MY_TEAM, workflowTypLabel, ticketTypLabel };
 export type { WorkflowTyp, TicketTyp, Person, Prioritaet };
+export type { PendenzTyp };

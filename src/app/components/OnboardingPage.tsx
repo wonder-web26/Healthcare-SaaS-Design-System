@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   Users,
@@ -16,6 +16,7 @@ import {
   FileText,
   ShieldAlert,
   Lock,
+  AlertTriangle,
 } from "lucide-react";
 import {
   StepAngehoeriger,
@@ -29,6 +30,9 @@ import {
 } from "./StepPatient";
 import { VertragsunterzeichnungPhase } from "./VertragsunterzeichnungPhase";
 import { SpezialbewilligungDialog } from "./SpezialbewilligungDialog";
+import { SpezialbewilligungStep } from "./form/SpezialbewilligungStep";
+import { VertragsStep } from "./form/VertragsStep";
+import { AnnaListenEinordnung, type DetailKontext } from "../anna/AnnaListenEinordnung";
 
 /* ══════════════════════════════════════════
    STEP DEFINITIONS
@@ -259,124 +263,133 @@ export function OnboardingPage() {
 
   const activeStepData = wizardSteps.find((s) => s.id === currentStep) ?? wizardSteps[0];
 
+  const completedCount = completedSteps.size;
+  const totalSteps = wizardSteps.length;
+
+  // A.2: Action-oriented progress label
+  const progressLabel = (() => {
+    if (progressPercent === 100) return "Onboarding abgeschlossen";
+    if (currentStep === totalSteps && !activeStepData.blocked) return "Bereit zum Abschluss";
+    if (completedSteps.has(currentStep)) return "Bereit für nächsten Schritt";
+    if (completedCount > 0) return "In Bearbeitung";
+    return "Nicht gestartet";
+  })();
+
+  // D: Anna detail context — computed once per mandate state, cached via session storage in the component
+  const annaDetailContext = useMemo<DetailKontext>(() => {
+    const offeneCompliance: string[] = [];
+    if (requiresB && !bewilligungEingereicht) {
+      offeneCompliance.push("Spezialbewilligung muss eingereicht werden, bevor der Vertrag unterzeichnet werden kann");
+    }
+    if (!step3Valid && completedCount > 0) {
+      offeneCompliance.push("Arbeitsvertrag wartet auf die Unterschrift");
+    }
+    // Estimate pflichtfelder from step validity
+    const pflichtGesamt = requiresB ? 4 : 3;
+    return {
+      mandatId: caseId ?? "new",
+      patientenName: caseInfo?.patient ?? "Neuer Patient",
+      angehoerigeName: caseInfo?.angehoeriger ?? "Angehörige/r",
+      aufenthaltsstatus: angehoerigerData.aufenthaltsstatus || "–",
+      erfasstePflichtfelder: { erfuellt: completedCount, gesamt: pflichtGesamt },
+      offeneCompliance,
+      tageSeitStart: caseInfo ? Math.floor((Date.now() - new Date("2026-02-15").getTime()) / 86400000) : 0,
+      completedSteps: completedCount,
+      totalSteps,
+      isBlocked: requiresB && !bewilligungEingereicht,
+    };
+  }, [caseId, caseInfo, requiresB, bewilligungEingereicht, step3Valid, completedCount, totalSteps, angehoerigerData.aufenthaltsstatus]);
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* ═══════════════════════════════════════
-         TOP BAR — Title + Progress + Actions
+         HEADER CARD
          ═══════════════════════════════════════ */}
-      <div className="shrink-0 px-5 lg:px-8 pt-5 pb-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 min-w-0">
-            {/* Back to list */}
-            <button
-              onClick={() => navigate("/onboarding")}
-              className="w-9 h-9 rounded-xl border border-border bg-card hover:bg-secondary/60 flex items-center justify-center shrink-0 transition-colors"
-              title="Zurück zur Übersicht"
-            >
-              <ArrowLeft className="w-4 h-4 text-muted-foreground" />
-            </button>
-            <div className="min-w-0">
-              <h2 className="text-foreground">
-                {isExisting && caseInfo
-                  ? `Onboarding — ${caseInfo.patient}`
-                  : "Neues Mandat eröffnen"}
-              </h2>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                
+      <div className="shrink-0" style={{ padding: "var(--space-5) var(--space-6) 0", marginBottom: "var(--space-5)" }}>
+        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "20px 28px" }}>
+          {/* Row 1: Title + Actions */}
+          <div className="flex items-start justify-between" style={{ gap: "var(--space-4)" }}>
+            <div className="flex items-start min-w-0" style={{ gap: "var(--space-3)" }}>
+              <button
+                onClick={() => navigate("/onboarding")}
+                title="Zurück zur Übersicht"
+                className="shrink-0 flex items-center justify-center cursor-pointer transition-colors"
+                style={{ width: 32, height: 32, marginTop: 4, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "none" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-tertiary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-secondary)"}
+              >
+                <ArrowLeft style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
+              </button>
+              <div className="min-w-0">
+                <h1 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>
+                  {isExisting && caseInfo ? `Onboarding — ${caseInfo.patient}` : "Neues Mandat eröffnen"}
+                </h1>
                 {isExisting && caseInfo && (
-                  <>
-                    <span className="text-[11px] text-muted-foreground/40">·</span>
-                    <span className="text-[11px] text-muted-foreground">
-                      Angehörige/r: {caseInfo.angehoeriger}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground/40">·</span>
-                    <span className="text-[11px] text-success-foreground">
-                      Vertrag: {caseInfo.vertragDatum}
-                    </span>
-                  </>
+                  <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: "var(--space-1)" }}>
+                    Angehörige: {caseInfo.angehoeriger} · Eintrittsdatum: {caseInfo.vertragDatum}
+                  </div>
                 )}
               </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 shrink-0">
-            {/* Save status */}
-            {lastSaved && (
-              <span className="text-[11px] text-muted-foreground hidden lg:flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                Gespeichert um {lastSaved}
-              </span>
-            )}
-
-            {/* Save Button */}
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="inline-flex items-center gap-1.5 px-3.5 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-all disabled:opacity-50"
-              style={{ fontWeight: 500 }}
-            >
-              {isSaving ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-              ) : (
-                <Save className="w-3.5 h-3.5 text-muted-foreground" />
+            <div className="flex items-center shrink-0" style={{ gap: "var(--space-2)" }}>
+              {lastSaved && (
+                <span className="hidden lg:flex items-center" style={{ gap: "var(--space-1)", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+                  <Clock style={{ width: 12, height: 12 }} /> {lastSaved}
+                </span>
               )}
-              Zwischenspeichern
-            </button>
+              <button onClick={handleSave} disabled={isSaving} className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-50"
+                style={{ gap: "var(--space-1)", padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "none", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-tertiary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-secondary)"}>
+                {isSaving ? <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" /> : <Save style={{ width: 14, height: 14 }} />}
+                <span className="hidden sm:inline">Speichern</span>
+              </button>
+              <button onClick={() => navigate("/onboarding")} className="inline-flex items-center cursor-pointer transition-colors"
+                style={{ padding: "7px 14px", borderRadius: "var(--radius-pill)", background: "transparent", border: "none", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <X style={{ width: 14, height: 14 }} />
+              </button>
+            </div>
+          </div>
 
-            {/* Cancel */}
-            <button
-              onClick={() => navigate("/onboarding")}
-              className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors"
-              style={{ fontWeight: 500 }}
-            >
-              <X className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="hidden lg:inline">Abbrechen</span>
-            </button>
+          {/* Row 2: Progress bar + Status */}
+          <div className="flex items-center" style={{ gap: 14, marginTop: "var(--space-4)" }}>
+            <div className="flex-1" style={{ height: 4, background: "var(--bg-secondary)", borderRadius: "var(--radius-pill)", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${progressPercent}%`, background: "var(--brand-primary)", borderRadius: "var(--radius-pill)", transition: "width 0.5s ease-out" }} />
+            </div>
+            <span style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+              Schritt {currentStep} von {totalSteps} · {progressLabel}
+            </span>
           </div>
         </div>
 
-        {/* ── Global Progress Bar ──────────── */}
-        <div className="mt-4 flex items-center gap-3">
-          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${progressPercent}%` }}
-            />
+        {/* Anna detail einordnung */}
+        {isExisting && (
+          <div style={{ marginTop: "var(--space-4)" }}>
+            <AnnaListenEinordnung detailContext={annaDetailContext} />
           </div>
-          <span
-            className="text-[12px] text-primary tabular-nums shrink-0"
-            style={{ fontWeight: 600 }}
-          >
-            {progressPercent}%
-          </span>
-        </div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════
-         MOBILE STEPPER — visible below lg
+         MOBILE STEPPER
          ═══════════════════════════════════════ */}
-      <div className="lg:hidden shrink-0 px-4 pb-3">
-        <div className="flex items-center gap-1 overflow-x-auto">
+      <div className="lg:hidden shrink-0 overflow-x-auto" style={{ padding: "var(--space-3) var(--space-4)" }}>
+        <div className="flex items-center" style={{ gap: "var(--space-1)" }}>
           {wizardSteps.map((step, idx) => {
             const isSelected = currentStep === step.id;
             const isCompleted = completedSteps.has(step.id);
             const isDanger = !!step.danger;
             const isBlocked = !!step.blocked;
             return (
-              <button
-                key={step.key}
-                onClick={() => !isBlocked && goToStep(step.id)}
-                disabled={isBlocked}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                  isBlocked ? "opacity-50 cursor-not-allowed" :
-                  isSelected ? "bg-primary-light text-primary" :
-                  isCompleted ? "bg-success-light text-success-foreground" :
-                  isDanger ? "bg-error-light text-error-foreground" :
-                  "text-muted-foreground hover:bg-muted/40"
-                }`}
-                style={{ fontWeight: isSelected ? 600 : 500 }}
-              >
-                {isCompleted ? <Check className="w-3 h-3" /> : <step.icon className="w-3 h-3" />}
+              <button key={step.key} onClick={() => !isBlocked && goToStep(step.id)} disabled={isBlocked}
+                className="inline-flex items-center whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+                style={{
+                  gap: "var(--space-1)", padding: "var(--space-2) var(--space-3)", borderRadius: "var(--radius-pill)",
+                  fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
+                  opacity: isBlocked ? 0.5 : 1, cursor: isBlocked ? "not-allowed" : "pointer",
+                  background: isSelected ? "var(--brand-primary-light)" : isCompleted ? "var(--status-success-bg)" : isDanger ? "var(--status-danger-bg)" : "transparent",
+                  color: isSelected ? "var(--brand-primary)" : isCompleted ? "var(--status-success-text)" : isDanger ? "var(--status-danger)" : "var(--text-secondary)",
+                }}>
+                {isCompleted ? <Check style={{ width: 12, height: 12 }} /> : <step.icon style={{ width: 12, height: 12 }} />}
                 <span className="hidden sm:inline">{step.shortLabel}</span>
                 <span className="sm:hidden">{idx + 1}</span>
               </button>
@@ -388,133 +401,70 @@ export function OnboardingPage() {
       {/* ═══════════════════════════════════════
          MAIN SPLIT LAYOUT
          ═══════════════════════════════════════ */}
-      <div className="flex-1 flex min-h-0 px-3 sm:px-5 lg:px-8 pb-0">
-        <div className="flex gap-5 lg:gap-6 w-full min-h-0">
-          {/* ─────────────────────────────────────
-             LEFT PANEL — Step Navigation (desktop only)
-             ───────────────────────────────────── */}
-          <div className="hidden lg:flex w-[260px] lg:w-[280px] shrink-0 flex-col min-h-0">
-            <div className="flex-1 overflow-y-auto pr-1">
-              <div className="bg-card rounded-2xl border border-border p-4 lg:p-5">
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4" style={{ fontWeight: 500 }}>
+      <div className="flex-1 flex min-h-0" style={{ padding: "0 var(--space-6)" }}>
+        <div className="flex w-full min-h-0" style={{ gap: "var(--space-5)" }}>
+          {/* ── LEFT: Sidebar (desktop) ── */}
+          <div className="hidden lg:flex shrink-0 flex-col min-h-0" style={{ width: 240 }}>
+            <div className="flex-1 overflow-y-auto" style={{ paddingRight: "var(--space-1)" }}>
+              <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-4)" }}>
+                <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-4)" }}>
                   Fortschritt
                 </div>
 
-                <nav className="space-y-1">
+                <nav className="flex flex-col" style={{ gap: "var(--space-1)" }}>
                   {wizardSteps.map((step, idx) => {
                     const Icon = step.icon;
                     const isSelected = currentStep === step.id;
                     const isCompleted = completedSteps.has(step.id);
                     const isDanger = !!step.danger;
                     const isBlocked = !!step.blocked;
+                    const isInProgress = visitedSteps.has(step.id) && step.id === currentStep;
 
-                    // Lifecycle determines icon circle + status text color
-                    type Lifecycle = "blocked" | "danger" | "completed" | "in_progress" | "pending";
-                    const lifecycle: Lifecycle = isBlocked
-                      ? "blocked"
-                      : isDanger
-                      ? "danger"
-                      : isCompleted
-                      ? "completed"
-                      : visitedSteps.has(step.id) && step.id !== currentStep
-                      ? "pending"
-                      : visitedSteps.has(step.id)
-                      ? "in_progress"
-                      : "pending";
+                    const iconBg = isBlocked ? "var(--status-danger-bg)" : isDanger ? "var(--status-danger)" : isCompleted ? "var(--status-success)" : isInProgress ? "var(--brand-primary)" : "var(--bg-secondary)";
+                    const iconColor = isBlocked ? "var(--status-danger)" : (isDanger || isCompleted || isInProgress) ? "var(--text-on-dark)" : "var(--text-secondary)";
 
-                    const iconCircleClass: Record<Lifecycle, string> = {
-                      blocked: "bg-error-light text-error",
-                      danger: "bg-error text-white",
-                      completed: "bg-success text-white",
-                      in_progress: "bg-primary text-primary-foreground",
-                      pending: "bg-muted text-muted-foreground",
-                    };
-
-                    const labelColorClass: Record<Lifecycle, string> = {
-                      blocked: "text-muted-foreground",
-                      danger: "text-error-foreground",
-                      completed: "text-foreground",
-                      in_progress: "text-foreground",
-                      pending: "text-foreground",
-                    };
-
-                    const statusColorClass: Record<Lifecycle, string> = {
-                      blocked: "text-error",
-                      danger: "text-error",
-                      completed: "text-success-foreground",
-                      in_progress: "text-primary",
-                      pending: "text-muted-foreground",
-                    };
-
-                    // Build status text
                     let statusText = "Ausstehend";
-                    if (lifecycle === "blocked") {
-                      statusText = "Blockiert";
-                    } else if (lifecycle === "danger") {
-                      statusText = "Pflicht · ausstehend";
-                    } else if (lifecycle === "completed") {
-                      if (step.key === "spezialbewilligung" && angehoerigerData.spezialbewilligungEinreichungsDatum) {
-                        const [y, m, d] = angehoerigerData.spezialbewilligungEinreichungsDatum.split("-");
-                        statusText = `Eingereicht am ${d}.${m}.${y}`;
-                      } else {
-                        statusText = "Abgeschlossen";
-                      }
-                    } else if (lifecycle === "in_progress") {
-                      statusText = "In Bearbeitung";
-                    }
+                    let statusColor = "var(--text-tertiary)";
+                    if (isBlocked) { statusText = "Blockiert"; statusColor = "var(--status-danger)"; }
+                    else if (isDanger) { statusText = "Pflicht · ausstehend"; statusColor = "var(--status-danger)"; }
+                    else if (isCompleted) {
+                      statusText = step.key === "spezialbewilligung" && angehoerigerData.spezialbewilligungEinreichungsDatum
+                        ? `Eingereicht am ${angehoerigerData.spezialbewilligungEinreichungsDatum.split("-").reverse().join(".")}`
+                        : "Abgeschlossen";
+                      statusColor = "var(--status-success-text)";
+                    } else if (isInProgress) { statusText = "In Bearbeitung"; statusColor = "var(--text-secondary)"; }
 
                     return (
-                      <div key={step.key} className="contents">
+                      <div key={step.key}>
                         <button
                           onClick={() => !isBlocked && goToStep(step.id)}
                           disabled={isBlocked}
-                          className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl text-left transition-all group ${
-                            isBlocked
-                              ? "opacity-60 cursor-not-allowed"
-                              : isSelected
-                              ? "bg-secondary/60"
-                              : "hover:bg-muted/40"
-                          }`}
+                          className="w-full flex items-start text-left cursor-pointer transition-colors"
+                          style={{
+                            gap: "var(--space-2)", padding: "8px 10px", borderRadius: "var(--radius-card)",
+                            opacity: isBlocked ? 0.6 : 1, cursor: isBlocked ? "not-allowed" : "pointer",
+                            background: isSelected ? "var(--brand-primary-light)" : "transparent",
+                          }}
+                          onMouseEnter={e => { if (!isSelected && !isBlocked) e.currentTarget.style.background = "var(--bg-secondary)"; }}
+                          onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
                         >
-                          {/* Icon circle — lifecycle only */}
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${iconCircleClass[lifecycle]}`}>
-                            {isCompleted ? (
-                              <Check className="w-4 h-4" />
-                            ) : (
-                              <Icon className="w-4 h-4" />
-                            )}
+                          <div className="shrink-0 flex items-center justify-center" style={{ width: 32, height: 32, borderRadius: "var(--radius-card)", background: iconBg }}>
+                            {isCompleted ? <Check style={{ width: 14, height: 14, color: iconColor }} /> : <Icon style={{ width: 14, height: 14, color: iconColor }} />}
                           </div>
-
-                          {/* Label & status text */}
-                          <div className="flex-1 min-w-0 pt-0.5">
-                            <span
-                              className={`text-[13px] truncate block ${labelColorClass[lifecycle]}`}
-                              style={{ fontWeight: isSelected ? 600 : 500 }}
-                            >
+                          <div className="flex-1 min-w-0" style={{ paddingTop: 2 }}>
+                            <div className="truncate" style={{ fontSize: "var(--text-small)", fontWeight: isSelected ? "var(--weight-medium)" : "var(--weight-regular)", color: isSelected ? "var(--brand-primary)" : "var(--text-primary)" }}>
                               {step.label}
-                            </span>
-                            <span
-                              className={`text-[11px] mt-0.5 block truncate ${statusColorClass[lifecycle]}`}
-                              style={{ fontWeight: lifecycle === "danger" || lifecycle === "blocked" ? 500 : undefined }}
-                            >
+                            </div>
+                            <div className="truncate" style={{ fontSize: "var(--text-micro)", color: statusColor, marginTop: 2 }}>
                               {statusText}
-                            </span>
+                            </div>
                           </div>
-
-                          {/* Chevron — selection only */}
-                          {isSelected && !isBlocked && (
-                            <ChevronRight className="w-4 h-4 shrink-0 mt-1 text-muted-foreground" />
-                          )}
+                          {isSelected && !isBlocked && <ChevronRight style={{ width: 16, height: 16, color: "var(--brand-primary)", flexShrink: 0, marginTop: 2 }} />}
+                          {isDanger && <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning)", flexShrink: 0, marginTop: 2 }} title="Erforderlich wegen Aufenthaltsstatus B" />}
                         </button>
-
-                        {/* Connector line */}
                         {idx < wizardSteps.length - 1 && (
-                          <div className="flex justify-start pl-[26px] py-0">
-                            <div
-                              className={`w-[2px] h-3 rounded-full transition-colors ${
-                                isCompleted ? "bg-success" : isDanger ? "bg-error/30" : "bg-border"
-                              }`}
-                            />
+                          <div style={{ display: "flex", justifyContent: "flex-start", paddingLeft: 22 }}>
+                            <div style={{ width: "var(--border-thin)", height: 8, background: isCompleted ? "var(--status-success)" : "var(--border-default)", borderRadius: "var(--radius-pill)" }} />
                           </div>
                         )}
                       </div>
@@ -522,58 +472,13 @@ export function OnboardingPage() {
                   })}
                 </nav>
 
-                {/* ── Quick Stats ─────────────── */}
-                <div className="mt-5 pt-4 border-t border-border-light space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">Abgeschlossen</span>
-                    <span className="text-[12px] text-foreground tabular-nums" style={{ fontWeight: 600 }}>
-                      {completedSteps.size} / {wizardSteps.length}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">Status</span>
-                    <span
-                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-[2px] rounded-full ${
-                        requiresB && !bewilligungEingereicht
-                          ? "bg-error-light text-error-foreground"
-                          : progressPercent === 100
-                          ? "bg-success-light text-success-foreground"
-                          : progressPercent > 0
-                          ? "bg-primary-light text-primary"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                      style={{ fontWeight: 500 }}
-                    >
-                      <span
-                        className={`w-[5px] h-[5px] rounded-full ${
-                          requiresB && !bewilligungEingereicht
-                            ? "bg-error"
-                            : progressPercent === 100
-                            ? "bg-success"
-                            : progressPercent > 0
-                            ? "bg-primary"
-                            : "bg-muted-foreground"
-                        }`}
-                      />
-                      {requiresB && !bewilligungEingereicht
-                        ? "Blockiert"
-                        : progressPercent === 100
-                        ? "Bereit"
-                        : progressPercent > 0
-                        ? "In Bearbeitung"
-                        : "Nicht gestartet"}
-                    </span>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
 
-          {/* ─────────────────────────────────────
-             RIGHT PANEL — Content Area
-             ───────────────────────────────────── */}
+          {/* ── RIGHT: Content ── */}
           <div className="flex-1 flex flex-col min-h-0 min-w-0">
-            <div className="flex-1 overflow-y-auto pb-4">
+            <div className="flex-1 overflow-y-auto" style={{ paddingBottom: "var(--space-4)" }}>
               {activeStepData.key === "angehoeriger" && (
                 <StepAngehoeriger
                   data={angehoerigerData}
@@ -582,64 +487,8 @@ export function OnboardingPage() {
                   onOpenSpezialbewilligung={() => setShowSpezialbewilligung(true)}
                 />
               )}
-              {activeStepData.key === "spezialbewilligung" && !bewilligungEingereicht && (
-                <div className="bg-card rounded-2xl border-2 border-error p-6">
-                  <div className="flex items-start gap-3">
-                    <ShieldAlert className="w-6 h-6 text-error shrink-0" />
-                    <div>
-                      <h3 className="text-error-foreground">Spezialbewilligung B</h3>
-                      <p className="text-[13px] text-muted-foreground mt-2 leading-relaxed">
-                        Für diese Person muss eine Erwerbstätigkeitsbewilligung beim Migrationsamt
-                        beantragt werden. Die Vertragsunterzeichnung ist blockiert, bis die Bewilligung
-                        vorliegt.
-                      </p>
-                      <button
-                        onClick={() => setShowSpezialbewilligung(true)}
-                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-[6px] text-[12px] rounded-xl bg-error text-white hover:bg-error/90 transition-colors cursor-pointer"
-                        style={{ fontWeight: 500 }}
-                      >
-                        Spezialbewilligung jetzt ausfüllen
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {activeStepData.key === "spezialbewilligung" && bewilligungEingereicht && (
-                <div className="bg-card rounded-2xl border border-success/30 p-6">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle2 className="w-6 h-6 text-success shrink-0" />
-                    <div>
-                      <h3 className="text-foreground">Spezialbewilligung B</h3>
-                      <p className="text-[13px] text-muted-foreground mt-2 leading-relaxed">
-                        Einreichungs-Bestätigung vom{" "}
-                        {angehoerigerData.spezialbewilligungEinreichungsDatum
-                          ? (() => { const [y, m, d] = angehoerigerData.spezialbewilligungEinreichungsDatum.split("-"); return `${d}.${m}.${y}`; })()
-                          : "–"}{" "}
-                        liegt vor. Die Vertragsunterzeichnung ist freigegeben.
-                      </p>
-                      {angehoerigerData.spezialbewilligungDokument && (
-                        <div className="mt-3 flex items-center gap-3 px-3 py-2.5 rounded-xl bg-success-light border border-success/15">
-                          <FileText className="w-4 h-4 text-success shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-[12px] text-foreground truncate" style={{ fontWeight: 500 }}>
-                              {angehoerigerData.spezialbewilligungDokument.name}
-                            </div>
-                            <div className="text-[11px] text-muted-foreground">
-                              {angehoerigerData.spezialbewilligungDokument.size}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      <button
-                        onClick={() => setShowSpezialbewilligung(true)}
-                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-[6px] text-[12px] rounded-xl border border-success/30 text-success-foreground hover:bg-success-light transition-colors cursor-pointer"
-                        style={{ fontWeight: 500 }}
-                      >
-                        Dokument ansehen
-                      </button>
-                    </div>
-                  </div>
-                </div>
+              {activeStepData.key === "spezialbewilligung" && (
+                <SpezialbewilligungStep data={angehoerigerData} onChange={setAngehoerigerData} />
               )}
               {activeStepData.key === "patient" && (
                 <StepPatient
@@ -649,97 +498,62 @@ export function OnboardingPage() {
                 />
               )}
               {activeStepData.key === "vertrag" && (
-                <VertragsunterzeichnungPhase
+                <VertragsStep
+                  angehoerigerName={caseInfo?.angehoeriger ?? "Angehörige/r"}
+                  stundenlohn={angehoerigerData.stundenlohn}
+                  eintrittsdatum={angehoerigerData.eintrittsdatum}
                   onValidityChange={setStep3Valid}
                   onComplete={() => setStep3Valid(true)}
-                  onNavigateToBetreuung={() => navigate("/onboarding")}
-                  angehoerigerName={caseInfo?.angehoeriger ?? "Angehörige/r"}
                 />
               )}
             </div>
 
-            {/* ─────────────────────────────────
-               BOTTOM NAVIGATION BAR
-               ───────────────────────────────── */}
-            <div className="shrink-0 py-4 border-t border-border bg-background">
+            {/* ── FOOTER NAVIGATION ── */}
+            <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6)", background: "var(--bg-primary)", borderTop: "var(--border-thin) solid var(--border-default)" }}>
               <div className="flex items-center justify-between">
-                {/* Left: Back button */}
-                <button
-                  onClick={goPrev}
-                  disabled={currentStep === 1}
-                  className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-[13px] border transition-all ${
-                    currentStep === 1
-                      ? "border-border bg-muted/30 text-muted-foreground/40 cursor-not-allowed"
-                      : "border-border bg-card text-foreground hover:bg-secondary/60"
-                  }`}
-                  style={{ fontWeight: 500 }}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  Zurück
+                {/* Left: Back */}
+                <button onClick={goPrev} disabled={currentStep === 1} className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ gap: "var(--space-2)", padding: "9.5px 22px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--text-primary)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
+                  onMouseEnter={e => { if (currentStep > 1) e.currentTarget.style.background = "var(--bg-secondary)"; }} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
+                  <ChevronLeft style={{ width: 14, height: 14 }} /> Zurück
                 </button>
 
-                {/* Center: Step indicator text */}
-                <div className="flex items-center gap-3">
-                  <div className="hidden md:flex items-center gap-1.5">
-                    {wizardSteps.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => goToStep(s.id)}
-                        className={`w-2.5 h-2.5 rounded-full transition-all ${
-                          s.id === currentStep
-                            ? "bg-primary scale-110"
-                            : completedSteps.has(s.id)
-                            ? "bg-success"
-                            : "bg-border hover:bg-muted-foreground/30"
-                        }`}
-                        title={s.label}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-[12px] text-muted-foreground">
-                    Schritt {currentStep} von {wizardSteps.length}
-                  </span>
-                </div>
+                {/* Center: Step indicator */}
+                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Schritt {currentStep} von {wizardSteps.length}</span>
 
-                {/* Right: Forward / Finish buttons */}
-                <div className="flex items-center gap-2">
-                  {/* Save (always visible) */}
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-[13px] border border-border bg-card hover:bg-secondary/60 transition-all disabled:opacity-50"
-                    style={{ fontWeight: 500 }}
-                  >
-                    {isSaving ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                    ) : (
-                      <Save className="w-4 h-4 text-muted-foreground" />
-                    )}
+                {/* Right: Save + Next/Finish */}
+                <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
+                  <button onClick={handleSave} disabled={isSaving} className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-50"
+                    style={{ gap: "var(--space-2)", padding: "9.5px 22px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--text-primary)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
+                    {isSaving ? <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" /> : <Save style={{ width: 14, height: 14 }} />}
                     <span className="hidden lg:inline">Speichern</span>
                   </button>
 
                   {currentStep < wizardSteps.length ? (
-                  <button
-                    onClick={goNext}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-all"
-                    style={{ fontWeight: 500 }}
-                  >
-                    Weiter
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
+                    (() => {
+                      const isOnSpezialbewilligung = activeStepData.key === "spezialbewilligung";
+                      const spezialbewilligungIncomplete = isOnSpezialbewilligung && !bewilligungEingereicht;
+                      return (
+                        <button onClick={spezialbewilligungIncomplete ? undefined : goNext} disabled={spezialbewilligungIncomplete}
+                          className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
+                          onMouseEnter={e => { if (!spezialbewilligungIncomplete) e.currentTarget.style.background = "var(--brand-primary-dark)"; }}
+                          onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
+                          title={spezialbewilligungIncomplete ? "Erst Spezialbewilligung einreichen" : undefined}>
+                          Weiter <ChevronRight style={{ width: 14, height: 14 }} />
+                        </button>
+                      );
+                    })()
                   ) : (
-                  <button
-                    onClick={() => {
-                      handleSave();
-                      setTimeout(() => navigate("/onboarding"), 1400);
-                    }}
-                    disabled={isSaving}
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[13px] bg-success text-white hover:bg-success/90 shadow-sm transition-all disabled:opacity-50"
-                    style={{ fontWeight: 500 }}
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Onboarding abschliessen
-                  </button>
+                    <button
+                      onClick={() => { handleSave(); setTimeout(() => navigate("/onboarding"), 1400); }}
+                      disabled={isSaving}
+                      className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-50"
+                      style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
+                      <Check style={{ width: 14, height: 14 }} /> Onboarding abschliessen
+                    </button>
                   )}
                 </div>
               </div>

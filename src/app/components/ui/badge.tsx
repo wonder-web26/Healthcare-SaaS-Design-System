@@ -5,18 +5,41 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden",
+  "inline-flex items-center justify-center w-fit whitespace-nowrap shrink-0 [&>svg]:pointer-events-none transition-[color,box-shadow] overflow-hidden rounded-[999px]",
   {
     variants: {
       variant: {
+        // Status pills (with bullet dot) — use with data-status attribute for colors
         default:
-          "border-transparent bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
+          "gap-1.5 px-[12px] py-[4px] text-[12px] font-[500] bg-[var(--bg-secondary)] text-[var(--text-primary)]",
+        // Category tags — neutral, no bullet
         secondary:
-          "border-transparent bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
+          "gap-1 px-[12px] py-[3px] text-[12px] font-[400] bg-[var(--bg-secondary)] text-[var(--text-primary)]",
+        // Destructive status
         destructive:
-          "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "gap-1.5 px-[12px] py-[4px] text-[12px] font-[500] bg-[var(--status-danger-bg)] text-[var(--status-danger)]",
+        // Outline (legacy compat)
         outline:
-          "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
+          "gap-1 px-[12px] py-[3px] text-[12px] font-[400] border-[0.5px] border-[var(--border-default)] text-[var(--text-primary)]",
+        // Filter chip — dark background, white text, with X
+        filter:
+          "gap-[8px] pl-[14px] pr-[10px] py-[6px] text-[12px] font-[500] bg-[var(--text-primary)] text-[var(--text-on-dark)] cursor-pointer",
+        // Accent: primary
+        "accent-primary":
+          "gap-1 px-[12px] py-[4px] text-[12px] font-[500] bg-[var(--brand-primary)] text-[var(--text-on-dark)]",
+        // Accent: secondary (light brand bg)
+        "accent-secondary":
+          "gap-1 px-[12px] py-[4px] text-[12px] font-[500] bg-[var(--brand-primary-light)] text-[var(--brand-primary)]",
+        // Accent: info
+        "accent-info":
+          "gap-1 px-[12px] py-[4px] text-[12px] font-[500] bg-[var(--brand-accent-light)] text-[var(--status-info)]",
+        // Status-specific presets
+        success:
+          "gap-1.5 px-[12px] py-[4px] text-[12px] font-[500] bg-[var(--status-success-bg)] text-[var(--status-success-text)]",
+        warning:
+          "gap-1.5 px-[12px] py-[4px] text-[12px] font-[500] bg-[var(--status-warning-bg)] text-[var(--status-warning-text)]",
+        info:
+          "gap-1.5 px-[12px] py-[4px] text-[12px] font-[500] bg-[var(--status-info-bg)] text-[var(--status-info)]",
       },
     },
     defaultVariants: {

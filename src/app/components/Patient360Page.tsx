@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
+import { AnnaPatientSummary } from "../anna/AnnaPatientSummary";
 import {
   ArrowLeft,
   Phone,
@@ -226,7 +227,6 @@ function getHistorie(_patientId: string): HistoryEntry[] {
 /* ── Masked AHV number ─────────────────── */
 function MaskedAhv({ ahv }: { ahv: string }) {
   const [visible, setVisible] = useState(false);
-  // Mask: keep first 3 digits, mask rest except last 2 → "756.XXXX.XXXX.83"
   const masked = ahv.replace(/^(\d{3}\.)(.+)(.\d{2})$/, (_, p1, _mid, p3) =>
     p1 + _mid.replace(/\d/g, "•") + p3
   );
@@ -234,13 +234,14 @@ function MaskedAhv({ ahv }: { ahv: string }) {
     <button
       type="button"
       onClick={() => setVisible((v) => !v)}
-      className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors group cursor-pointer"
+      className="inline-flex items-center cursor-pointer transition-colors"
+      style={{ gap: 6, background: "transparent", border: "none", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}
       title={visible ? "AHV-Nummer ausblenden" : "AHV-Nummer anzeigen"}
     >
-      <span>AHV: <span className={visible ? "" : "tracking-wider"}>{visible ? ahv : masked}</span></span>
+      <span>AHV: <span style={visible ? {} : { letterSpacing: "0.05em" }}>{visible ? ahv : masked}</span></span>
       {visible
-        ? <EyeOff className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-        : <Eye className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+        ? <EyeOff style={{ width: 12, height: 12, color: "var(--text-tertiary)" }} />
+        : <Eye style={{ width: 12, height: 12, color: "var(--text-tertiary)" }} />
       }
     </button>
   );
@@ -267,17 +268,17 @@ export function Patient360Page() {
 
   if (!patient) {
     return (
-      <div className="px-8 py-16 text-center">
-        <h3 className="text-foreground">Patient nicht gefunden</h3>
-        <p className="text-[13px] text-muted-foreground mt-1">
+      <div style={{ padding: "64px 32px", textAlign: "center" }}>
+        <h3 style={{ color: "var(--text-primary)", fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)" }}>Patient nicht gefunden</h3>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 4 }}>
           Der Patient mit der ID «{patientId}» konnte nicht gefunden werden.
         </p>
         <button
           onClick={() => navigate("/patienten")}
-          className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover text-[13px] transition-colors"
-          style={{ fontWeight: 500 }}
+          className="inline-flex items-center cursor-pointer transition-colors"
+          style={{ marginTop: 16, gap: 8, padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft style={{ width: 16, height: 16 }} />
           Zurück zur Patientenübersicht
         </button>
       </div>
@@ -289,10 +290,15 @@ export function Patient360Page() {
   const sg = schweregradConfig[patient.schweregrad];
   const tickets = getTickets(patient.id);
 
+  // Status styles mapped to CSS variables
+  const stStyle = { bg: st.bg, text: st.text, dot: st.dot };
+  const astStyle = { bg: ast.bg, text: ast.text, dot: ast.dot };
+  const sgStyle = { bg: sg.bg, text: sg.text };
+
   return (
     <>
       {/* ── Back + Prev/Next Navigation ──────── */}
-      <div className="px-4 md:px-8 pt-5 pb-0">
+      <div style={{ padding: "var(--space-4) var(--space-6) 0" }}>
         <DetailNavigation
           backLabel="Patienten"
           backPath="/patienten"
@@ -304,94 +310,105 @@ export function Patient360Page() {
       </div>
 
       {/* ── Patient Header ─────────────────── */}
-      <div className="px-4 md:px-8 pt-4 pb-5">
-        <div className="bg-card rounded-2xl border border-border p-4 md:p-6">
-          <div className="flex flex-col md:flex-row md:items-start gap-4 md:gap-5">
+      <div style={{ padding: "var(--space-4) var(--space-6) 0" }}>
+        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "20px 24px" }}>
+          <div className="flex flex-col md:flex-row md:items-start" style={{ gap: 20 }}>
             {/* Avatar */}
-            <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center shrink-0">
-              <span className="text-[18px] md:text-[20px] text-primary" style={{ fontWeight: 600 }}>
+            <div className="shrink-0 flex items-center justify-center" style={{ width: 56, height: 56, borderRadius: "var(--radius-card)", background: "var(--brand-primary-light)" }}>
+              <span style={{ fontSize: 20, fontWeight: "var(--weight-semibold)", color: "var(--brand-primary)" }}>
                 {patient.vorname[0]}{patient.nachname[0]}
               </span>
             </div>
 
             {/* Info */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h2 className="text-foreground">
+              <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
+                <h2 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
                   {patient.nachname}, {patient.vorname}
                 </h2>
                 <button
                   onClick={() => setStatusModal(true)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full text-[11px] transition-all hover:shadow-sm hover:scale-[1.03] active:scale-100 cursor-pointer ${st.bg} ${st.text}`}
-                  style={{ fontWeight: 500 }}
+                  className={`inline-flex items-center cursor-pointer ${st.bg} ${st.text}`}
+                  style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", border: "none" }}
                   title="Klicken für Statusdetails"
                 >
-                  <span className={`w-[5px] h-[5px] rounded-full ${st.dot}`} />
+                  <span className={st.dot} style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)" }} />
                   {st.label}
                 </button>
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full text-[11px] ${ast.bg} ${ast.text}`} style={{ fontWeight: 500 }}>
-                  <span className={`w-[5px] h-[5px] rounded-full ${ast.dot}`} />
+                <span className={`inline-flex items-center ${ast.bg} ${ast.text}`} style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)" }}>
+                  <span className={ast.dot} style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)" }} />
                   {ast.label}
                 </span>
-                <span className={`inline-flex items-center px-2 py-[2px] rounded-md text-[11px] ${sg.bg} ${sg.text}`} style={{ fontWeight: 500 }}>
+                <span className={`inline-flex items-center ${sg.bg} ${sg.text}`} style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)" }}>
                   {sg.label}
                 </span>
               </div>
 
-              <div className="flex items-center gap-3 md:gap-4 mt-2 text-[12px] text-muted-foreground flex-wrap">
-                
-                
+              <div className="flex items-center flex-wrap" style={{ gap: "var(--space-3)", marginTop: 8, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
                 <MaskedAhv ahv={patient.ahvNummer} />
                 <span className="hidden md:inline">·</span>
                 <span>Geb.: {patient.geburtsdatum}</span>
               </div>
 
-              {/* Pflegefachkraft inline */}
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center" style={{ gap: "var(--space-2)", marginTop: 8 }}>
                 {patient.pflegefachkraft !== "—" ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center shrink-0">
-                      <span className="text-[9px] text-primary" style={{ fontWeight: 600 }}>{patient.pflegefachkraftInitialen}</span>
+                  <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
+                    <div className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
+                      <span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{patient.pflegefachkraftInitialen}</span>
                     </div>
-                    <span className="text-[12px] text-muted-foreground">
-                      <span style={{ fontWeight: 500 }} className="text-foreground">{patient.pflegefachkraft}</span> — Zugewiesen
+                    <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+                      <span style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{patient.pflegefachkraft}</span> — Zugewiesen
                     </span>
                   </div>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-[12px] text-warning" style={{ fontWeight: 500 }}>
-                    <AlertTriangle className="w-3 h-3" />
-                    Nicht zugewiesen
+                  <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-small)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
+                    <AlertTriangle style={{ width: 12, height: 12 }} /> Nicht zugewiesen
                   </span>
                 )}
               </div>
             </div>
 
             {/* Actions */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center shrink-0" style={{ gap: "var(--space-2)" }}>
               <button
                 onClick={() => navigate("/servicedesk")}
-                className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors"
-                style={{ fontWeight: 500 }}
+                className="inline-flex items-center cursor-pointer transition-colors"
+                style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"}
+                onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
               >
-                <Plus className="w-3.5 h-3.5" />
-                Ticket erstellen
+                <Plus style={{ width: 14, height: 14 }} /> Ticket erstellen
               </button>
-              <button className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors" style={{ fontWeight: 500 }}>
-                <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
-                Bearbeiten
+              <button
+                className="inline-flex items-center cursor-pointer transition-colors"
+                style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
+                onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}
+              >
+                <Edit3 style={{ width: 14, height: 14, color: "var(--text-secondary)" }} /> Bearbeiten
               </button>
-              <button className="p-2 rounded-xl border border-border hover:bg-secondary/60 transition-colors">
-                <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+              <button
+                className="flex items-center justify-center cursor-pointer transition-colors"
+                style={{ width: 32, height: 32, borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
+                <MoreHorizontal style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
               </button>
             </div>
           </div>
         </div>
+
+        {/* Anna Patient Summary */}
+        <div style={{ marginTop: 12 }}>
+          <AnnaPatientSummary patient={patient} />
+        </div>
       </div>
 
       {/* ── Tabs ───────────────────────────── */}
-      <div className="px-4 md:px-8">
-        <div className="border-b border-border">
-          <div className="flex gap-0 -mb-px overflow-x-auto">
+      <div style={{ padding: "0 var(--space-6)", marginTop: 20 }}>
+        <div style={{ borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+          <div className="flex overflow-x-auto" style={{ gap: 0, marginBottom: -1 }}>
             {profileTabs.map((t) => {
               const Icon = t.icon;
               const isActive = activeTab === t.id;
@@ -400,19 +417,23 @@ export function Patient360Page() {
                 <button
                   key={t.id}
                   onClick={() => setActiveTab(t.id)}
-                  className={`flex items-center gap-1.5 px-3 md:px-4 py-2.5 text-[13px] border-b-2 transition-colors whitespace-nowrap ${
-                    isActive
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-                  }`}
-                  style={{ fontWeight: isActive ? 500 : 400 }}
+                  className="relative flex items-center whitespace-nowrap cursor-pointer transition-colors"
+                  style={{
+                    gap: "var(--space-2)", padding: "12px 16px",
+                    fontSize: "var(--text-body)", fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",
+                    color: isActive ? "var(--brand-primary)" : "var(--text-secondary)",
+                    background: "transparent", border: "none",
+                  }}
                 >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? "text-primary" : ""}`} />
+                  <Icon style={{ width: 16, height: 16 }} />
                   {t.label}
                   {t.id === "tickets" && ticketCount > 0 && (
-                    <span className="ml-1 text-[10px] px-[5px] py-[1px] rounded-md bg-error-light text-error-foreground" style={{ fontWeight: 600 }}>
+                    <span style={{ marginLeft: 4, padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-semibold)", background: "var(--status-danger-bg)", color: "var(--status-danger)" }}>
                       {ticketCount}
                     </span>
+                  )}
+                  {isActive && (
+                    <span className="absolute" style={{ bottom: -1, left: 8, right: 8, height: 2, background: "var(--brand-primary)", borderTopLeftRadius: "var(--radius-pill)", borderTopRightRadius: "var(--radius-pill)" }} />
                   )}
                 </button>
               );
@@ -422,7 +443,7 @@ export function Patient360Page() {
       </div>
 
       {/* ── Tab Content ────────────────────── */}
-      <div className="px-4 md:px-8 pt-5 pb-10">
+      <div style={{ padding: "20px var(--space-6) 40px" }}>
         {activeTab === "ueberblick" && <TabUeberblick patient={patient} onNavigateTab={setActiveTab} />}
         {activeTab === "anamnese" && <TabAnamnese patient={patient} />}
         {activeTab === "atl" && <TabATL patient={patient} />}
@@ -1191,7 +1212,7 @@ function WorkflowSection({
   };
 
   return (
-    <div className="bg-card rounded-2xl border border-border overflow-hidden">
+    <div className="rounded-2xl overflow-hidden">
       {/* Section header */}
       <div className="px-5 py-4 border-b border-border-light">
         <div className="flex items-center justify-between">
@@ -1692,7 +1713,7 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
           {olderAnamnesen.map((entry) => {
             const isOpen = expandedOld.has(entry.id);
             return (
-              <div key={entry.id} className="bg-card rounded-2xl border border-border overflow-hidden">
+              <div key={entry.id} className="rounded-2xl overflow-hidden">
                 <button
                   onClick={() => setExpandedOld(prev => { const n = new Set(prev); if (n.has(entry.id)) n.delete(entry.id); else n.add(entry.id); return n; })}
                   className="w-full px-5 py-3 flex items-center gap-2 text-left hover:bg-secondary/30 transition-colors cursor-pointer"
@@ -1839,7 +1860,7 @@ function TabATL({ patient }: { patient: Patient }) {
   return (
     <div className="space-y-5">
       {/* ── Summary bar ──────────────────── */}
-      <div className="bg-card rounded-2xl border border-border p-5">
+      <div className="rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <ClipboardList className="w-4 h-4 text-primary" />
           <h5 className="text-foreground">ATL-Übersicht</h5>
@@ -2159,7 +2180,7 @@ function TableStempel() {
     <div className="space-y-4">
 
       {/* ═══ SECTION 1: Aktive Bewilligung ═══ */}
-      <div className="bg-card rounded-2xl border border-border">
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
         <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Stamp className="w-4 h-4 text-primary" />
@@ -2368,7 +2389,7 @@ function TableStempel() {
 
       {/* ═══ SECTION 2: Bewilligungs-Historie ═══ */}
       {historie.length > 0 && (
-        <div className="bg-card rounded-2xl border border-border">
+        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
           <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
             <div className="flex items-center gap-2">
               <History className="w-4 h-4 text-muted-foreground" />
@@ -2433,7 +2454,7 @@ function TableStempel() {
       )}
 
       {/* ═══ SECTION 3: Absenzen ═══ */}
-      <div className="bg-card rounded-2xl border border-border">
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
         <div className="px-5 py-4 border-b border-border-light flex items-center gap-2">
           <CalendarOff className="w-4 h-4 text-primary" />
           <h5 className="text-foreground flex-1">Absenzen</h5>
@@ -2675,7 +2696,7 @@ function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path:
         </button>
       </div>
 
-      <div className="bg-card rounded-2xl border border-border overflow-hidden">
+      <div className="rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -2753,7 +2774,7 @@ function TabHistorie({ patient }: { patient: Patient }) {
         </span>
       </div>
 
-      <div className="bg-card rounded-2xl border border-border overflow-hidden">
+      <div className="rounded-2xl overflow-hidden">
         <div className="p-5">
           <div className="relative">
             {/* Timeline line */}

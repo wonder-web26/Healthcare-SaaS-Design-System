@@ -9,6 +9,7 @@ import { ZuteilungPage } from "./components/ZuteilungPage";
 import { ServiceDeskPage } from "./components/ServiceDeskPage";
 import { AngehoerigePage } from "./components/AngehoerigePage";
 import { Angehoerige360Page } from "./components/Angehoerige360Page";
+import { FormShowcase } from "./components/FormShowcase";
 
 export const router = createBrowserRouter([
   {
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       { path: "onboarding/:caseId", Component: OnboardingPage },
       { path: "zuteilung", Component: ZuteilungPage },
       { path: "servicedesk", Component: ServiceDeskPage },
+      { path: "showcase/forms", Component: FormShowcase },
       { path: "vorlagen", Component: PlaceholderPage },
       { path: "*", Component: PlaceholderPage },
     ],

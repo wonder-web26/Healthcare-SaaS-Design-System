@@ -17,35 +17,32 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--bg-primary)", fontFamily: "var(--font-family)" }}>
       <div className="w-full max-w-[360px]">
         {/* Logo */}
         <div className="flex justify-center mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center">
-            <svg width="26" height="26" viewBox="0 0 18 18" fill="none">
-              <path d="M9 1L16 5V13L9 17L2 13V5L9 1Z" stroke="white" strokeWidth="1.5" fill="none" />
-              <circle cx="9" cy="9" r="3" fill="white" opacity="0.9" />
-            </svg>
+          <div className="flex items-center justify-center" style={{ width: 48, height: 48, borderRadius: "var(--radius-card)", background: "var(--brand-primary)" }}>
+            <span style={{ color: "var(--text-on-dark)", fontSize: 22, fontWeight: "var(--weight-medium)" }}>S</span>
           </div>
         </div>
 
-        <h1 className="text-center text-foreground mb-1" style={{ fontSize: 20, fontWeight: 600 }}>
+        <h1 className="text-center" style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: "var(--space-1)" }}>
           Spitex-Cockpit
         </h1>
-        <p className="text-center text-[13px] text-muted-foreground mb-6">
+        <p className="text-center" style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: "var(--space-6)" }}>
           Bitte melden Sie sich an
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col" style={{ gap: "var(--space-4)" }}>
           {error && (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-error-light border border-error/20 text-[12px] text-error-foreground">
-              <AlertCircle className="w-4 h-4 shrink-0" />
+            <div className="flex items-center" style={{ gap: "var(--space-2)", padding: "var(--space-3)", borderRadius: "var(--radius-card)", background: "var(--status-danger-bg)", border: "var(--border-thin) solid var(--status-danger)", fontSize: "var(--text-meta)", color: "var(--status-danger)" }}>
+              <AlertCircle style={{ width: 16, height: 16, flexShrink: 0 }} />
               Benutzername oder Passwort ist falsch.
             </div>
           )}
 
           <div>
-            <label className="text-[12px] text-muted-foreground block mb-1.5" style={{ fontWeight: 500 }}>
+            <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", marginBottom: "var(--space-1)" }}>
               Benutzername
             </label>
             <input
@@ -54,12 +51,22 @@ export function LoginPage() {
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
               autoFocus
-              className="w-full bg-input-background border border-border rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:ring-[3px] focus:ring-primary/10 focus:border-primary/60 transition-all"
+              className="w-full outline-none transition-all"
+              style={{
+                background: "var(--bg-elevated)",
+                border: "var(--border-thin) solid var(--border-default)",
+                borderRadius: "var(--radius-card)",
+                padding: "11px 16px",
+                fontSize: "var(--text-body)",
+                color: "var(--text-primary)",
+              }}
+              onFocus={e => e.currentTarget.style.border = "var(--border-thick) solid var(--brand-primary)"}
+              onBlur={e => e.currentTarget.style.border = "var(--border-thin) solid var(--border-default)"}
             />
           </div>
 
           <div>
-            <label className="text-[12px] text-muted-foreground block mb-1.5" style={{ fontWeight: 500 }}>
+            <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", marginBottom: "var(--space-1)" }}>
               Passwort
             </label>
             <input
@@ -67,14 +74,34 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
-              className="w-full bg-input-background border border-border rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:ring-[3px] focus:ring-primary/10 focus:border-primary/60 transition-all"
+              className="w-full outline-none transition-all"
+              style={{
+                background: "var(--bg-elevated)",
+                border: "var(--border-thin) solid var(--border-default)",
+                borderRadius: "var(--radius-card)",
+                padding: "11px 16px",
+                fontSize: "var(--text-body)",
+                color: "var(--text-primary)",
+              }}
+              onFocus={e => e.currentTarget.style.border = "var(--border-thick) solid var(--brand-primary)"}
+              onBlur={e => e.currentTarget.style.border = "var(--border-thin) solid var(--border-default)"}
             />
           </div>
 
           <button
             type="submit"
-            className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors text-[14px] cursor-pointer"
-            style={{ fontWeight: 500 }}
+            className="w-full cursor-pointer transition-colors"
+            style={{
+              padding: "10px 22px",
+              borderRadius: "var(--radius-pill)",
+              background: "var(--brand-primary)",
+              color: "var(--text-on-dark)",
+              fontSize: "var(--text-body)",
+              fontWeight: "var(--weight-medium)",
+              border: "none",
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"}
+            onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
           >
             Anmelden
           </button>

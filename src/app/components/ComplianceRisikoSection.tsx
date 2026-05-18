@@ -12,12 +12,12 @@ interface Metric {
 }
 
 const metricDefs: Metric[] = [
-  { label: "SRK offen", typ: "SRK_ANMELDUNG", status: "amber", context: "nicht angemeldet", trend: 1 },
-  { label: "Re-Assessments", typ: "RE_ASSESSMENT", status: "amber", context: "diesen Monat fällig" },
-  { label: "Ausweis B", typ: "AUSWEIS_B_ANMELDUNG", status: "neutral", context: "offene Anmeldungen" },
-  { label: "Quellensteuer", typ: "QUELLENSTEUER_ANMELDUNG", status: "amber", context: "Steueramt", trend: 2 },
-  { label: "Kinderzulagen", typ: "KINDERZULAGEN_ANTRAG", status: "neutral", context: "offener Antrag" },
-  { label: "Lohnanpassung offen", typ: "LOHNANPASSUNG_NACH_SRK", status: "amber", context: "nach SRK-Kurs" },
+  { label: "SRK noch nicht gemacht", typ: "SRK_ANMELDUNG", status: "amber", context: "+1 diesen Monat", trend: 1 },
+  { label: "Re-Assessments fällig", typ: "RE_ASSESSMENT", status: "amber", context: "diesen Monat" },
+  { label: "Ausweis B Anmeldungen", typ: "AUSWEIS_B_ANMELDUNG", status: "neutral", context: "beim Migrationsamt offen" },
+  { label: "Quellensteuer-Anmeldungen", typ: "QUELLENSTEUER_ANMELDUNG", status: "amber", context: "+2 diesen Monat", trend: 2 },
+  { label: "Kinderzulagen-Anträge", typ: "KINDERZULAGEN_ANTRAG", status: "neutral", context: "alle eingereicht" },
+  { label: "Lohnanpassungen fällig", typ: "LOHNANPASSUNG_NACH_SRK", status: "amber", context: "nach SRK-Kurs-Abschluss" },
 ];
 
 const metrics = metricDefs.map((m) => ({
@@ -30,9 +30,9 @@ const totalOpen = metrics.reduce((s, m) => s + m.value, 0);
 const totalTrend = 3;
 
 const dotColor: Record<Status, string> = {
-  amber: "bg-warning",
-  neutral: "bg-neutral",
-  critical: "bg-error",
+  amber: "var(--status-warning)",
+  neutral: "var(--text-tertiary)",
+  critical: "var(--status-danger)",
 };
 
 export function ComplianceRisikoSection() {
@@ -41,52 +41,50 @@ export function ComplianceRisikoSection() {
   return (
     <div>
       {/* Section header */}
-      <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between" style={{ gap: "var(--space-1)", marginBottom: "var(--space-4)" }}>
         <div>
-          <h4 className="text-foreground">Compliance & Risiko</h4>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            HR-Status, Versicherung, Aufsicht
-          </p>
-        </div>
-        <div className="flex items-baseline gap-1.5 text-[12px]">
-          <span className="text-primary tabular-nums" style={{ fontWeight: 600 }}>{totalOpen} offene Punkte</span>
-          <span className="text-muted-foreground">·</span>
-          <span className="text-warning tabular-nums" style={{ fontWeight: 600 }}>
-            ↑ {totalTrend}
-          </span>
-          <span className="text-muted-foreground">ggü. Vormonat</span>
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", fontWeight: "var(--weight-regular)" }}>
+            Compliance & Risiko
+          </div>
+          <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: "var(--space-1)" }}>
+            {totalOpen} offene Punkte · <span style={{ color: "var(--status-warning)", fontWeight: "var(--weight-medium)" }}>↑ {totalTrend}</span> ggü. Vormonat
+          </div>
         </div>
       </div>
 
       {/* Metric cards grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6" style={{ gap: "var(--space-3)" }}>
         {metrics.map((m) => (
           <button
             key={m.label}
-            aria-label={`${m.label}: ${m.value}${m.context ? `, ${m.context}` : ""}${m.trend ? `, +${m.trend} gegenüber Vormonat` : ""}`}
-            className="bg-card rounded-xl border border-border px-4 py-3.5 text-left transition-colors hover:bg-secondary/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring cursor-pointer"
+            aria-label={`${m.label}: ${m.value}`}
+            className="text-left cursor-pointer transition-colors"
+            style={{
+              background: "var(--bg-elevated)",
+              border: "var(--border-thin) solid var(--border-default)",
+              borderRadius: "var(--radius-card)",
+              padding: "var(--space-4)",
+            }}
             onClick={() => navigate(m.href)}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
+            onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}
           >
-            <div className="flex items-center gap-1.5">
-              <span className={`w-[6px] h-[6px] rounded-full shrink-0 ${dotColor[m.status]}`} />
-              <span className="text-[11px] text-muted-foreground truncate" style={{ fontWeight: 500 }}>
+            {/* Label + dot */}
+            <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
+              <span className="shrink-0" style={{ width: 6, height: 6, borderRadius: "var(--radius-pill)", background: dotColor[m.status] }} />
+              <span className="truncate" style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)" }}>
                 {m.label}
               </span>
             </div>
 
-            <div className="text-[28px] text-foreground tracking-tight leading-none mt-2 tabular-nums" style={{ fontWeight: 700 }}>
+            {/* Value */}
+            <div style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginTop: "var(--space-2)", lineHeight: 1, letterSpacing: "var(--tracking-tight)" }} className="tabular-nums">
               {m.value}
             </div>
 
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <span className="text-[11px] text-muted-foreground">
-                {m.context}
-              </span>
-              {m.trend != null && m.trend !== 0 && (
-                <span className="text-[10px] text-warning tabular-nums" style={{ fontWeight: 600 }}>
-                  ↑ {m.trend}
-                </span>
-              )}
+            {/* Context */}
+            <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: "var(--space-2)" }}>
+              {m.context}
             </div>
           </button>
         ))}

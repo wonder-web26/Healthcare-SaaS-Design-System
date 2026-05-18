@@ -49,6 +49,8 @@ import {
 } from "./ui/select";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { PersonalienFormV2, SteuerFormV2, AnstellungFormV2 } from "./form/MigratedAngehoerigerForms";
+import { PartnerFormV2, KinderFormV2, DokumenteFormV2 } from "./form/MigratedAngehoerigerForms2";
 
 /* ══════════════════════════════════════════
    TYPES (unchanged export contract)
@@ -484,94 +486,60 @@ export function StepAngehoeriger({
     }, 900);
   }, []);
 
-  const angehName =
-    filled(data.vorname) && filled(data.name)
-      ? `${data.vorname} ${data.name}`
-      : filled(data.name)
-      ? data.name
-      : "Neuer Angehöriger";
-
   const statusLabel = allComplete
     ? "Vollständig"
     : completedCount > 0
     ? "In Erfassung"
     : "Ausstehend";
 
-  const statusBadgeColor = allComplete
-    ? "bg-success-light text-success-foreground"
-    : completedCount > 0
-    ? "bg-warning-light text-warning-foreground"
-    : "bg-muted text-muted-foreground";
-
   return (
     <div className="space-y-0">
       {/* ═══════════════════════════════════════
-         TOP HEADER
+         TOP HEADER (compact)
          ═══════════════════════════════════════ */}
-      <div className="bg-card rounded-t-2xl border border-border px-5 py-4 lg:px-6 lg:py-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div
-              className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
-                allComplete ? "bg-success-light" : "bg-primary-light"
-              }`}
-            >
+      <div style={{ background: "var(--bg-elevated)", borderTopLeftRadius: "var(--radius-card)", borderTopRightRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", padding: "16px 20px 12px" }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center" style={{ gap: "var(--space-3)" }}>
+            <div className="shrink-0 flex items-center justify-center" style={{
+              width: 32, height: 32, borderRadius: "var(--radius-card)",
+              background: allComplete ? "var(--status-success-bg)" : "var(--brand-primary-light)",
+            }}>
               {allComplete ? (
-                <CheckCircle2 className="w-5 h-5 text-success" />
+                <CheckCircle2 style={{ width: 16, height: 16, color: "var(--status-success)" }} />
               ) : (
-                <User className="w-5 h-5 text-primary" />
+                <User style={{ width: 16, height: 16, color: "var(--brand-primary)" }} />
               )}
             </div>
             <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h3 className="text-foreground">{angehName}</h3>
-                <span
-                  className={`inline-flex items-center gap-1 px-2 py-[2px] rounded-full text-[11px] ${statusBadgeColor}`}
-                  style={{ fontWeight: 500 }}
-                >
-                  <span
-                    className={`w-[5px] h-[5px] rounded-full ${
-                      allComplete
-                        ? "bg-success"
-                        : completedCount > 0
-                        ? "bg-warning"
-                        : "bg-muted-foreground"
-                    }`}
-                  />
+              <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
+                <span style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Angehörigendaten</span>
+                <span className="inline-flex items-center" style={{
+                  gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
+                  background: allComplete ? "var(--status-success-bg)" : completedCount > 0 ? "var(--brand-primary-light)" : "var(--bg-secondary)",
+                  color: allComplete ? "var(--status-success-text)" : completedCount > 0 ? "var(--brand-primary)" : "var(--text-tertiary)",
+                }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "currentColor" }} />
                   {statusLabel}
                 </span>
               </div>
-              <p className="text-[12px] text-muted-foreground mt-0.5">
-                Angehöriger / HR-Daten — Schritt 3
-              </p>
+              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 2 }}>
+                {subSteps[activeTab].label}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {showSaved && (
-              <span className="text-[11px] text-success-foreground flex items-center gap-1 animate-in fade-in duration-200">
-                <CheckCircle2 className="w-3 h-3" />
-                Gespeichert
-              </span>
-            )}
-            <span
-              className={`text-[12px] px-2.5 py-1 rounded-lg tabular-nums ${
-                allComplete
-                  ? "bg-success-light text-success-foreground"
-                  : "bg-primary-light text-primary"
-              }`}
-              style={{ fontWeight: 600 }}
-            >
-              {completedCount}/{subSteps.length}
+          {showSaved && (
+            <span className="flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", color: "var(--status-success-text)" }}>
+              <CheckCircle2 style={{ width: 12, height: 12 }} /> Gespeichert
             </span>
-          </div>
+          )}
         </div>
       </div>
 
       {/* ═══════════════════════��═══════════════
          HORIZONTAL TAB NAVIGATION
          ═══════════════════════════════════════ */}
-      <div className="bg-card border-x border-border px-5 lg:px-6 overflow-x-auto">
-        <div className="flex gap-0 min-w-max border-b border-border">
+      <div className="overflow-x-auto" style={{ background: "var(--bg-elevated)", borderLeft: "var(--border-thin) solid var(--border-default)", borderRight: "var(--border-thin) solid var(--border-default)", padding: "0 20px" }}>
+        <div className="flex min-w-max" style={{ gap: 0, borderBottom: "var(--border-thin) solid var(--border-default)" }}>
           {subSteps.map((tab, idx) => {
             const isActive = activeTab === idx;
             const tabStatus = statuses[idx].status;
@@ -581,23 +549,22 @@ export function StepAngehoeriger({
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(idx)}
-                className={`relative flex items-center gap-2 px-4 py-3 text-[13px] whitespace-nowrap transition-colors ${
-                  isActive
-                    ? "text-primary"
-                    : tabStatus === "complete"
-                    ? "text-success-foreground hover:text-success-foreground/80"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                style={{ fontWeight: isActive ? 600 : 500 }}
+                className="relative flex items-center whitespace-nowrap transition-colors cursor-pointer"
+                style={{
+                  gap: "var(--space-2)", padding: "var(--space-3) var(--space-4)",
+                  fontSize: "var(--text-small)", fontWeight: isActive ? "var(--weight-semibold)" : "var(--weight-medium)",
+                  color: isActive ? "var(--brand-primary)" : tabStatus === "complete" ? "var(--status-success-text)" : "var(--text-secondary)",
+                  background: "transparent", border: "none",
+                }}
               >
                 {tabStatus === "complete" && !isActive ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                  <CheckCircle2 style={{ width: 14, height: 14, color: "var(--status-success)" }} />
                 ) : (
-                  <TabIcon className={`w-3.5 h-3.5 ${isActive ? "text-primary" : ""}`} />
+                  <TabIcon style={{ width: 14, height: 14 }} />
                 )}
                 {tab.label}
                 {isActive && (
-                  <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-primary rounded-t-full" />
+                  <span className="absolute" style={{ bottom: 0, left: 8, right: 8, height: 2, background: "var(--brand-primary)", borderTopLeftRadius: "var(--radius-pill)", borderTopRightRadius: "var(--radius-pill)" }} />
                 )}
               </button>
             );
@@ -608,21 +575,21 @@ export function StepAngehoeriger({
       {/* ═══════════════════════════════════════
          CONTENT AREA
          ═══════════════════════════════════════ */}
-      <div className="bg-card rounded-b-2xl border-x border-b border-border">
-        <div className="p-5 lg:p-6">
-          {activeTab === 0 && <PersonalienForm data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />}
-          {activeTab === 1 && <SteuerForm data={data} onChange={onChange} />}
-          {activeTab === 2 && <PartnerForm data={data} onChange={onChange} />}
-          {activeTab === 3 && <KinderForm data={data} onChange={onChange} />}
-          {activeTab === 4 && <AnstellungForm data={data} onChange={onChange} />}
-          {activeTab === 5 && <DokumenteForm data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />}
+      <div style={{ background: "var(--bg-elevated)", borderBottomLeftRadius: "var(--radius-card)", borderBottomRightRadius: "var(--radius-card)", borderLeft: "var(--border-thin) solid var(--border-default)", borderRight: "var(--border-thin) solid var(--border-default)", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+        <div style={{ padding: "20px 32px 24px" }}>
+          {activeTab === 0 && <PersonalienFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />}
+          {activeTab === 1 && <SteuerFormV2 data={data} onChange={onChange} />}
+          {activeTab === 2 && <PartnerFormV2 data={data} onChange={onChange} />}
+          {activeTab === 3 && <KinderFormV2 data={data} onChange={onChange} />}
+          {activeTab === 4 && <AnstellungFormV2 data={data} onChange={onChange} />}
+          {activeTab === 5 && <DokumenteFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />}
         </div>
       </div>
 
       {/* ── Hint ── */}
-      <div className="flex items-center gap-2 px-1 pt-2">
-        <Info className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        <span className="text-[11px] text-muted-foreground">
+      <div className="flex items-center" style={{ gap: "var(--space-2)", padding: "var(--space-2) 2px 0" }}>
+        <Info style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
+        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
           Navigieren Sie zwischen den Tabs, um alle Angehörigen-Daten zu erfassen. Pflichtfelder sind mit * markiert.
         </span>
       </div>
@@ -3672,22 +3639,22 @@ function SubStepContent({
       {/* ── Content area ───────────────────── */}
       <div className="px-5 py-5 lg:px-6 lg:py-6">
         {stepKey === "personalien" && (
-          <PersonalienForm data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />
+          <PersonalienFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />
         )}
         {stepKey === "steuer" && (
-          <SteuerForm data={data} onChange={onChange} />
+          <SteuerFormV2 data={data} onChange={onChange} />
         )}
         {stepKey === "partner" && (
-          <PartnerForm data={data} onChange={onChange} />
+          <PartnerFormV2 data={data} onChange={onChange} />
         )}
         {stepKey === "kinder" && (
-          <KinderForm data={data} onChange={onChange} />
+          <KinderFormV2 data={data} onChange={onChange} />
         )}
         {stepKey === "anstellung" && (
-          <AnstellungForm data={data} onChange={onChange} />
+          <AnstellungFormV2 data={data} onChange={onChange} />
         )}
         {stepKey === "dokumente" && (
-          <DokumenteForm data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />
+          <DokumenteFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />
         )}
         {!isRealForm && hint.fields.length > 0 && (
           <>

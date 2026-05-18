@@ -48,6 +48,9 @@ import {
    TYPES
    ══════════════════════════════════════════ */
 
+import { TabPersonalienV2, TabSteuerV2, TabAnamneseV2 } from "./form/MigratedPatientForms";
+import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
+
 export interface ATLEntry {
   ja: boolean | null;
   bemerkungen: string;
@@ -341,13 +344,6 @@ export function StepPatient({ data, onChange, onValidityChange }: StepPatientPro
   const [activeTab, setActiveTab] = useState(0);
   const [touched, setTouched] = useState<Set<string>>(new Set());
 
-  const patientName =
-    filled(data.vorname) && filled(data.name)
-      ? `${data.vorname} ${data.name}`
-      : filled(data.name)
-      ? data.name
-      : "Neuer Patient";
-
   /* Compute overall validity (tabs 1-3 must be complete) */
   const requiredTabs = ["personalien", "steuer", "anamnese"];
   const allRequiredComplete = requiredTabs.every((k) => isTabComplete(k, data));
@@ -389,66 +385,40 @@ export function StepPatient({ data, onChange, onValidityChange }: StepPatientPro
     ? "In Vorbereitung"
     : "Nicht abrechenbar";
 
-  const statusColor = allRequiredComplete
-    ? "bg-success-light text-success-foreground"
-    : completedTabCount > 0
-    ? "bg-warning-light text-warning-foreground"
-    : "bg-muted text-muted-foreground";
-
   return (
     <div className="space-y-0">
       {/* ═══════════════════════════════════════
-         TOP HEADER
+         TOP HEADER (compact)
          ═══════════════════════════════════════ */}
-      <div className="bg-card rounded-t-2xl border border-border px-5 py-4 lg:px-6 lg:py-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div
-              className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
-                allRequiredComplete ? "bg-success-light" : "bg-primary-light"
-              }`}
-            >
+      <div style={{ background: "var(--bg-elevated)", borderTopLeftRadius: "var(--radius-card)", borderTopRightRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", padding: "16px 20px 12px" }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center" style={{ gap: "var(--space-3)" }}>
+            <div className="shrink-0 flex items-center justify-center" style={{
+              width: 32, height: 32, borderRadius: "var(--radius-card)",
+              background: allRequiredComplete ? "var(--status-success-bg)" : "var(--brand-primary-light)",
+            }}>
               {allRequiredComplete ? (
-                <CheckCircle2 className="w-5 h-5 text-success" />
+                <CheckCircle2 style={{ width: 16, height: 16, color: "var(--status-success)" }} />
               ) : (
-                <HeartPulse className="w-5 h-5 text-primary" />
+                <HeartPulse style={{ width: 16, height: 16, color: "var(--brand-primary)" }} />
               )}
             </div>
             <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h3 className="text-foreground">{patientName}</h3>
-                <span
-                  className={`inline-flex items-center gap-1 px-2 py-[2px] rounded-full text-[11px] ${statusColor}`}
-                  style={{ fontWeight: 500 }}
-                >
-                  <span
-                    className={`w-[5px] h-[5px] rounded-full ${
-                      allRequiredComplete
-                        ? "bg-success"
-                        : completedTabCount > 0
-                        ? "bg-warning"
-                        : "bg-muted-foreground"
-                    }`}
-                  />
+              <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
+                <span style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Patientendaten</span>
+                <span className="inline-flex items-center" style={{
+                  gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
+                  background: allRequiredComplete ? "var(--status-success-bg)" : completedTabCount > 0 ? "var(--brand-primary-light)" : "var(--bg-secondary)",
+                  color: allRequiredComplete ? "var(--status-success-text)" : completedTabCount > 0 ? "var(--brand-primary)" : "var(--text-tertiary)",
+                }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "currentColor" }} />
                   {status}
                 </span>
               </div>
-              <p className="text-[12px] text-muted-foreground mt-0.5">
-                Patient (Medizinische Daten) — Schritt 2
-              </p>
+              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 2 }}>
+                {tabDefs[activeTab].label}
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span
-              className={`text-[12px] px-2.5 py-1 rounded-lg tabular-nums ${
-                allRequiredComplete
-                  ? "bg-success-light text-success-foreground"
-                  : "bg-primary-light text-primary"
-              }`}
-              style={{ fontWeight: 600 }}
-            >
-              {completedTabCount}/{tabDefs.length}
-            </span>
           </div>
         </div>
       </div>
@@ -456,8 +426,8 @@ export function StepPatient({ data, onChange, onValidityChange }: StepPatientPro
       {/* ═══════════════════════════════════════
          HORIZONTAL TAB NAVIGATION
          ═══════════════════════════════════════ */}
-      <div className="bg-card border-x border-border px-5 lg:px-6 overflow-x-auto">
-        <div className="flex gap-0 min-w-max border-b border-border">
+      <div className="overflow-x-auto" style={{ background: "var(--bg-elevated)", borderLeft: "var(--border-thin) solid var(--border-default)", borderRight: "var(--border-thin) solid var(--border-default)", padding: "0 20px" }}>
+        <div className="flex min-w-max" style={{ gap: 0, borderBottom: "var(--border-thin) solid var(--border-default)" }}>
           {tabDefs.map((tab, idx) => {
             const isActive = activeTab === idx;
             const complete = isTabComplete(tab.key, data);
@@ -467,23 +437,22 @@ export function StepPatient({ data, onChange, onValidityChange }: StepPatientPro
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(idx)}
-                className={`relative flex items-center gap-2 px-4 py-3 text-[13px] whitespace-nowrap transition-colors ${
-                  isActive
-                    ? "text-primary"
-                    : complete
-                    ? "text-success-foreground hover:text-success-foreground/80"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                style={{ fontWeight: isActive ? 600 : 500 }}
+                className="relative flex items-center whitespace-nowrap transition-colors cursor-pointer"
+                style={{
+                  gap: "var(--space-2)", padding: "var(--space-3) var(--space-4)",
+                  fontSize: "var(--text-small)", fontWeight: isActive ? "var(--weight-semibold)" : "var(--weight-medium)",
+                  color: isActive ? "var(--brand-primary)" : complete ? "var(--status-success-text)" : "var(--text-secondary)",
+                  background: "transparent", border: "none",
+                }}
               >
                 {complete && !isActive ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                  <CheckCircle2 style={{ width: 14, height: 14, color: "var(--status-success)" }} />
                 ) : (
-                  <TabIcon className={`w-3.5 h-3.5 ${isActive ? "text-primary" : ""}`} />
+                  <TabIcon style={{ width: 14, height: 14 }} />
                 )}
                 {tab.label}
                 {isActive && (
-                  <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-primary rounded-t-full" />
+                  <span className="absolute" style={{ bottom: 0, left: 8, right: 8, height: 2, background: "var(--brand-primary)", borderTopLeftRadius: "var(--radius-pill)", borderTopRightRadius: "var(--radius-pill)" }} />
                 )}
               </button>
             );
@@ -494,28 +463,28 @@ export function StepPatient({ data, onChange, onValidityChange }: StepPatientPro
       {/* ═══════════════════════════════════════
          TAB CONTENT
          ═══════════════════════════════════════ */}
-      <div className="bg-card rounded-b-2xl border-x border-b border-border">
-        <div className="p-5 lg:p-6">
+      <div style={{ background: "var(--bg-elevated)", borderBottomLeftRadius: "var(--radius-card)", borderBottomRightRadius: "var(--radius-card)", borderLeft: "var(--border-thin) solid var(--border-default)", borderRight: "var(--border-thin) solid var(--border-default)", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+        <div style={{ padding: "20px 32px 24px" }}>
           {activeTab === 0 && (
-            <TabPersonalien data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
+            <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
           {activeTab === 1 && (
-            <TabSteuer data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
+            <TabSteuerV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
           {activeTab === 2 && (
-            <TabAnamnese data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
+            <TabAnamneseV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
           {activeTab === 3 && (
-            <TabAktivitaeten data={data} onUpdateATL={updateATL} />
+            <TabAktivitaetenV2 data={data} onUpdateATL={updateATL} />
           )}
           {activeTab === 4 && <TabDokumente data={data} onChange={onChange} />}
         </div>
       </div>
 
       {/* ── Hint ── */}
-      <div className="flex items-center gap-2 px-1 pt-2">
-        <Info className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        <span className="text-[11px] text-muted-foreground">
+      <div className="flex items-center" style={{ gap: "var(--space-2)", padding: "var(--space-2) 2px 0" }}>
+        <Info style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
+        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
           Navigieren Sie zwischen den Tabs, um alle Patientendaten zu erfassen. Pflichtfelder sind mit * markiert.
         </span>
       </div>

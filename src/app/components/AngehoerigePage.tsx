@@ -3,991 +3,402 @@ import { useNavigate, useSearchParams } from "react-router";
 import {
   Search,
   Plus,
-  ArrowUpDown,
   ExternalLink,
   AlertCircle,
-  Users,
-  UserPlus,
-  FileWarning,
-  XCircle,
-  ChevronLeft,
-  ChevronRight,
   GraduationCap,
   CheckCircle2,
   Clock,
   AlertTriangle,
-  ChevronDown,
   X,
-  Check,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   angehoerige,
   qualifikationConfig,
   type Angehoeriger,
 } from "./angehoerigeData";
+import { useCurrentRole } from "../auth";
+import { AnnaListenEinordnung, type ListenKontext } from "../anna/AnnaListenEinordnung";
+import type { UserRole } from "../../types/user";
 
-/* ── Views ──────────────────────────────── */
+/* ── Views ── */
 type ViewKey = "alle" | "meine" | "aufmerksamkeit" | "srk_offen" | "im_onboarding";
-
 const CURRENT_USER_PFK = "Sandra Weber";
 
 function viewFilter(list: Angehoeriger[], view: ViewKey): Angehoeriger[] {
   switch (view) {
-    case "meine":
-      return list.filter((a) => a.pflegefachkraft === CURRENT_USER_PFK);
-    case "aufmerksamkeit":
-      return list.filter((a) =>
-        a.monatsSchritt.ueberfaellig ||
-        hasHRIssue(a) ||
-        isBillingBlocked(a) ||
-        (a.qualifikation === "ohne_srk" && !a.srkKursDatum)
-      );
-    case "srk_offen":
-      return list.filter((a) => a.qualifikation === "ohne_srk" && !a.srkKursDatum);
-    case "im_onboarding":
-      return list.filter((a) => a.status === "in_onboarding");
-    default:
-      return list;
+    case "meine": return list.filter(a => a.pflegefachkraft === CURRENT_USER_PFK);
+    case "aufmerksamkeit": return list.filter(a =>
+      a.monatsSchritt.ueberfaellig || hasHRIssue(a) || isBillingBlocked(a) || (a.qualifikation === "ohne_srk" && !a.srkKursDatum)
+    );
+    case "srk_offen": return list.filter(a => a.qualifikation === "ohne_srk" && !a.srkKursDatum);
+    case "im_onboarding": return list.filter(a => a.status === "in_onboarding");
+    default: return list;
   }
 }
 
-const viewTabs: { id: ViewKey; label: string; icon: React.ElementType }[] = [
-  { id: "alle", label: "Alle Angehörigen", icon: Users },
-  { id: "meine", label: "Meine Angehörigen", icon: Users },
-  { id: "aufmerksamkeit", label: "Aufmerksamkeit nötig", icon: AlertCircle },
-  { id: "srk_offen", label: "SRK offen", icon: GraduationCap },
-  { id: "im_onboarding", label: "Im Onboarding", icon: UserPlus },
+const VIEW_DEFS: { key: ViewKey; label: string }[] = [
+  { key: "alle", label: "Alle Angehörigen" },
+  { key: "meine", label: "Meine Angehörigen" },
+  { key: "aufmerksamkeit", label: "Aufmerksamkeit" },
+  { key: "srk_offen", label: "SRK offen" },
+  { key: "im_onboarding", label: "Im Onboarding" },
 ];
 
+function getDefaultView(role: UserRole): ViewKey {
+  return role === "diplomiert" ? "meine" : "alle";
+}
+
+function getViewOrder(role: UserRole): ViewKey[] {
+  if (role === "diplomiert") return ["meine", "alle", "aufmerksamkeit", "srk_offen", "im_onboarding"];
+  return ["alle", "meine", "aufmerksamkeit", "srk_offen", "im_onboarding"];
+}
+
 function hasHRIssue(a: Angehoeriger): boolean {
-  return (
-    !a.hrCheck.bankdaten ||
-    !a.hrCheck.kinderzulagen ||
-    a.hrCheck.quellensteuerTarif === null
-  );
+  return !a.hrCheck.bankdaten || !a.hrCheck.kinderzulagen || a.hrCheck.quellensteuerTarif === null;
 }
 
 function isBillingBlocked(a: Angehoeriger): boolean {
   return a.billingReadiness === "nicht_abrechenbar";
 }
 
-/* ── Filter chip definitions ─────────────── */
-interface FilterDef {
-  id: string;
-  label: string;
-  options: { value: string; label: string }[];
-}
+/* ── Qualifikation styles (new design system) ── */
+const QUAL_STYLE: Record<string, { bg: string; color: string; label: string }> = {
+  ohne_srk: { bg: "var(--bg-secondary)", color: "var(--text-secondary)", label: "ohne SRK" },
+  srk: { bg: "var(--status-info-bg)", color: "var(--status-info)", label: "SRK" },
+  fage_dipl: { bg: "var(--brand-primary-light)", color: "var(--brand-primary)", label: "FaGe / Dipl" },
+};
+
+/* ── Filter defs ── */
+interface FilterDef { id: string; label: string; options: { value: string; label: string }[] }
 
 function buildFilterDefs(): FilterDef[] {
-  const pflegefachkraefte = Array.from(
-    new Set(angehoerige.map((a) => a.pflegefachkraft))
-  ).sort();
-
-  const stepLabels = Array.from(
-    new Set(
-      angehoerige
-        .filter((a) => !a.monatsSchritt.abgeschlossen)
-        .map((a) => a.monatsSchritt.label)
-    )
-  ).sort();
-
+  const pflegefachkraefte = Array.from(new Set(angehoerige.map(a => a.pflegefachkraft))).sort();
   return [
-    {
-      id: "qualifikation",
-      label: "Qualifikation",
-      options: [
-        { value: "ohne_srk", label: "ohne SRK" },
-        { value: "srk", label: "SRK" },
-        { value: "fage_dipl", label: "FaGe / Dipl" },
-      ],
-    },
-    {
-      id: "monatsschritt",
-      label: "Monatsschritt",
-      options: [
-        ...stepLabels.map((s) => ({ value: `step:${s}`, label: s })),
-        { value: "meta:ueberfaellig", label: "Schritt überfällig" },
-        { value: "meta:abgeschlossen", label: "Alle Schritte erledigt" },
-      ],
-    },
-    {
-      id: "monatsschritt_status",
-      label: "Monatsschritt-Status",
-      options: [
-        { value: "ueberfaellig", label: "Überfällig" },
-        { value: "heute", label: "Heute fällig" },
-        { value: "diese_woche", label: "Diese Woche fällig" },
-        { value: "spaeter", label: "Später" },
-      ],
-    },
-    {
-      id: "pflegefachkraft",
-      label: "Pflegefachkraft",
-      options: [
-        ...pflegefachkraefte.map((pf) => ({ value: pf, label: pf })),
-        { value: "__nicht_zugewiesen", label: "Nicht zugewiesen" },
-      ],
-    },
-    {
-      id: "srk_status",
-      label: "SRK-Kurs-Status",
-      options: [
-        { value: "ausstehend", label: "Ausstehend" },
-        { value: "absolviert", label: "Absolviert" },
-        { value: "nicht_erforderlich", label: "Nicht erforderlich" },
-      ],
-    },
+    { id: "qualifikation", label: "Qualifikation", options: [{ value: "ohne_srk", label: "ohne SRK" }, { value: "srk", label: "SRK" }, { value: "fage_dipl", label: "FaGe / Dipl" }] },
+    { id: "pflegefachkraft", label: "Pflegefachkraft", options: pflegefachkraefte.map(pf => ({ value: pf, label: pf })) },
+    { id: "srk_status", label: "SRK-Status", options: [{ value: "ausstehend", label: "Ausstehend" }, { value: "absolviert", label: "Absolviert" }] },
   ];
 }
 
-/* ── Multi-select popover chip ───────────── */
-function FilterChipPopover({
-  def,
-  selected,
-  onChange,
-}: {
-  def: FilterDef;
-  selected: Set<string>;
-  onChange: (next: Set<string>) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+/* ── Anna context ── */
+function buildAnnaContext(allAngehoerige: Angehoeriger[], role: UserRole): ListenKontext {
+  const active = allAngehoerige.filter(a => a.status !== "gekuendigt");
+  const srkOffen = active.filter(a => a.qualifikation === "ohne_srk" && !a.srkKursDatum);
+  const ueberfaellig = active.filter(a => a.monatsSchritt.ueberfaellig);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node))
-        setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  const byStatus: Record<string, number> = {};
+  if (srkOffen.length > 0) byStatus["srk_offen"] = srkOffen.length;
+  if (ueberfaellig.length > 0) byStatus["ueberfaellig"] = ueberfaellig.length;
 
-  const hasSelection = selected.size > 0;
+  const highlights: string[] = [];
 
-  const toggle = (val: string) => {
-    const next = new Set(selected);
-    if (next.has(val)) next.delete(val);
-    else next.add(val);
-    onChange(next);
-  };
+  if (role === "diplomiert") {
+    if (ueberfaellig.length > 0) {
+      const names = ueberfaellig.slice(0, 2).map(a => `${a.vorname} ${a.nachname}`).join(" und ");
+      highlights.push(`Bei ${names} ${ueberfaellig.length === 1 ? "ist ein Monatsschritt" : "sind Monatsschritte"} überfällig`);
+    }
+    if (srkOffen.length > 0) highlights.push(`${srkOffen.length} Angehörige ohne SRK-Schulung – Anmeldung sinnvoll`);
+  } else if (role === "backoffice") {
+    if (srkOffen.length > 0) highlights.push(`${srkOffen.length} ausstehende SRK-Anmeldungen`);
+    const blocked = active.filter(a => isBillingBlocked(a));
+    if (blocked.length > 0) highlights.push(`${blocked.length} nicht abrechenbar – Compliance prüfen`);
+  } else {
+    if (srkOffen.length > 0) highlights.push(`Compliance-Risiko bei ${srkOffen.length} Fällen – alle im SRK-Bereich`);
+    const pfCounts: Record<string, number> = {};
+    for (const a of srkOffen) pfCounts[a.pflegefachkraft] = (pfCounts[a.pflegefachkraft] || 0) + 1;
+    const top = Object.entries(pfCounts).sort((a, b) => b[1] - a[1])[0];
+    if (top && top[1] >= 2) highlights.push(`Konzentration bei ${top[0]} (${top[1]} offene SRK-Fälle) – möglicher Engpass`);
+  }
 
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-[5px] rounded-lg text-[12px] border transition-all whitespace-nowrap ${
-          hasSelection
-            ? "border-primary/25 bg-primary-light text-primary"
-            : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
-        }`}
-        style={{ fontWeight: hasSelection ? 500 : 400 }}
-      >
-        {def.label}
-        {hasSelection && (
-          <span
-            className="text-[10px] px-[5px] py-[1px] rounded-md bg-primary/10 text-primary"
-            style={{ fontWeight: 600 }}
-          >
-            {selected.size}
-          </span>
-        )}
-        <ChevronDown
-          className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""} ${hasSelection ? "text-primary" : "text-muted-foreground/50"}`}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute top-full mt-1.5 left-0 z-50 min-w-[210px] bg-card border border-border rounded-xl shadow-lg py-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
-          <div
-            className="px-3 py-1.5 text-[10.5px] text-muted-foreground uppercase tracking-wider"
-            style={{ fontWeight: 500 }}
-          >
-            {def.label}
-          </div>
-          {def.options.map((opt) => {
-            const isChecked = selected.has(opt.value);
-            return (
-              <button
-                key={opt.value}
-                onClick={() => toggle(opt.value)}
-                className="flex items-center gap-2.5 w-full px-3 py-[7px] text-[12px] text-left hover:bg-secondary/60 transition-colors"
-                style={{ fontWeight: isChecked ? 500 : 400 }}
-              >
-                <div
-                  className={`w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 transition-all ${
-                    isChecked
-                      ? "bg-primary border-primary"
-                      : "border-border bg-card"
-                  }`}
-                >
-                  {isChecked && (
-                    <Check className="w-2.5 h-2.5 text-primary-foreground" />
-                  )}
-                </div>
-                <span
-                  className={
-                    isChecked ? "text-foreground" : "text-muted-foreground"
-                  }
-                >
-                  {opt.label}
-                </span>
-              </button>
-            );
-          })}
-          {hasSelection && (
-            <div className="border-t border-border-light mt-1 pt-1 px-3">
-              <button
-                onClick={() => {
-                  onChange(new Set());
-                  setOpen(false);
-                }}
-                className="text-[11px] text-primary hover:underline py-1"
-                style={{ fontWeight: 500 }}
-              >
-                Auswahl zurücksetzen
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
+  return { seite: `angehoerige_${role}`, totalCount: active.length, byStatus, highlights };
 }
 
 /* ══════════════════════════════════════════
-   KPI STRIP
-   ══════════════════════════════════════════ */
-function KPIStrip() {
-  const aktiv = angehoerige.filter((a) => a.status === "aktiv").length;
-  const onboarding = angehoerige.filter(
-    (a) => a.status === "in_onboarding"
-  ).length;
-  const hrFehler = angehoerige.filter((a) => hasHRIssue(a)).length;
-  const nichtAbrechenbar = angehoerige.filter(
-    (a) => a.billingReadiness === "nicht_abrechenbar"
-  ).length;
-
-  const kpis = [
-    {
-      label: "Aktiv",
-      value: aktiv,
-      icon: Users,
-      iconColor: "text-success",
-      bgColor: "bg-success-light",
-    },
-    {
-      label: "In Onboarding",
-      value: onboarding,
-      icon: UserPlus,
-      iconColor: "text-warning",
-      bgColor: "bg-warning-light",
-    },
-    {
-      label: "Mit HR-Fehler",
-      value: hrFehler,
-      icon: FileWarning,
-      iconColor: "text-warning",
-      bgColor: "bg-warning-light",
-    },
-    {
-      label: "Nicht abrechenbar",
-      value: nichtAbrechenbar,
-      icon: XCircle,
-      iconColor: "text-error",
-      bgColor: "bg-error-light",
-    },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      {kpis.map((kpi) => {
-        const Icon = kpi.icon;
-        return (
-          <div
-            key={kpi.label}
-            className="bg-card rounded-xl border border-border px-4 py-3 flex items-center gap-3"
-          >
-            <div
-              className={`w-9 h-9 rounded-lg ${kpi.bgColor} flex items-center justify-center shrink-0`}
-            >
-              <Icon className={`w-4 h-4 ${kpi.iconColor}`} />
-            </div>
-            <div>
-              <div
-                className="text-[20px] text-foreground"
-                style={{ fontWeight: 600, lineHeight: "1.2" }}
-              >
-                {kpi.value}
-              </div>
-              <div
-                className="text-[11px] text-muted-foreground"
-                style={{ fontWeight: 400 }}
-              >
-                {kpi.label}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════
-   ANGEHÖRIGE ÜBERSICHT PAGE
+   MAIN COMPONENT
    ══════════════════════════════════════════ */
 export function AngehoerigePage() {
   const navigate = useNavigate();
+  const role = useCurrentRole();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeView = (searchParams.get("view") || "meine") as ViewKey;
+  const defaultView = getDefaultView(role);
+  const activeView = (searchParams.get("view") || defaultView) as ViewKey;
   const search = searchParams.get("q") || "";
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const prevRole = useRef(role);
 
-  const setView = (v: ViewKey) => {
-    const next = new URLSearchParams(searchParams);
-    if (v === "meine") next.delete("view");
-    else next.set("view", v);
-    setSearchParams(next, { replace: true });
-  };
-
-  const setSearch = (q: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (!q) next.delete("q");
-    else next.set("q", q);
-    setSearchParams(next, { replace: true });
-  };
-
-  const chipFilters = useMemo(() => {
-    const filters: Record<string, Set<string>> = {};
-    for (const [key, value] of searchParams.entries()) {
-      if (["view", "q"].includes(key)) continue;
-      filters[key] = new Set(value.split(",").filter(Boolean));
-    }
-    return filters;
-  }, [searchParams]);
-
-  const updateChipFilter = (id: string, next: Set<string>) => {
-    const params = new URLSearchParams(searchParams);
-    if (next.size === 0) params.delete(id);
-    else params.set(id, Array.from(next).join(","));
-    setSearchParams(params, { replace: true });
-  };
-
-  const clearAllChipFilters = () => {
-    const params = new URLSearchParams();
-    const v = searchParams.get("view");
-    const q = searchParams.get("q");
-    if (v) params.set("view", v);
-    if (q) params.set("q", q);
-    setSearchParams(params, { replace: true });
-  };
-
-  const removeFilterTag = (filterId: string, value: string) => {
-    const sel = chipFilters[filterId] || new Set();
-    const next = new Set(sel);
-    next.delete(value);
-    updateChipFilter(filterId, next);
-  };
+  const setView = (v: ViewKey) => { const n = new URLSearchParams(searchParams); if (v === defaultView) n.delete("view"); else n.set("view", v); setSearchParams(n, { replace: true }); };
+  const setSearch = (q: string) => { const n = new URLSearchParams(searchParams); if (!q) n.delete("q"); else n.set("q", q); setSearchParams(n, { replace: true }); };
 
   useEffect(() => {
-    if (!filterPopoverOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterPopoverOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [filterPopoverOpen]);
+    if (prevRole.current !== role) { prevRole.current = role; const n = new URLSearchParams(searchParams); n.delete("view"); setSearchParams(n, { replace: true }); }
+  }, [role]);
 
-  /* ── Derived: filter defs ──────────────── */
+  const chipFilters = useMemo(() => {
+    const f: Record<string, Set<string>> = {};
+    for (const [key, value] of searchParams.entries()) { if (["view", "q"].includes(key)) continue; f[key] = new Set(value.split(",").filter(Boolean)); }
+    return f;
+  }, [searchParams]);
+
+  const updateChipFilter = (id: string, next: Set<string>) => { const p = new URLSearchParams(searchParams); if (next.size === 0) p.delete(id); else p.set(id, Array.from(next).join(",")); setSearchParams(p, { replace: true }); };
+  const clearAllFilters = () => { const p = new URLSearchParams(); const v = searchParams.get("view"); const q = searchParams.get("q"); if (v) p.set("view", v); if (q) p.set("q", q); setSearchParams(p, { replace: true }); };
+
+  useEffect(() => { if (!filterPopoverOpen) return; const h = (e: MouseEvent) => { if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterPopoverOpen(false); }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, [filterPopoverOpen]);
+
   const filterDefs = useMemo(() => buildFilterDefs(), []);
 
-  /* ── Active filter tags for display ─────── */
   const activeFilterTags = useMemo(() => {
-    const tags: {
-      filterId: string;
-      filterLabel: string;
-      value: string;
-      displayLabel: string;
-    }[] = [];
-    filterDefs.forEach((def) => {
-      const sel = chipFilters[def.id];
-      if (!sel) return;
-      sel.forEach((val) => {
-        const opt = def.options.find((o) => o.value === val);
-        tags.push({
-          filterId: def.id,
-          filterLabel: def.label,
-          value: val,
-          displayLabel: opt?.label || val,
-        });
-      });
-    });
+    const tags: { filterId: string; value: string; displayLabel: string }[] = [];
+    filterDefs.forEach(def => { const sel = chipFilters[def.id]; if (!sel) return; sel.forEach(val => { const opt = def.options.find(o => o.value === val); tags.push({ filterId: def.id, value: val, displayLabel: `${def.label}: ${opt?.label || val}` }); }); });
     return tags;
   }, [chipFilters, filterDefs]);
 
-  const hasAnyChipFilter = activeFilterTags.length > 0;
+  const removeFilterTag = (filterId: string, value: string) => { const sel = chipFilters[filterId] || new Set(); const next = new Set(sel); next.delete(value); updateChipFilter(filterId, next); };
 
-  /* ── Combined filtering ────────────────── */
   const filtered = useMemo(() => {
     let list = viewFilter(angehoerige, activeView);
-
-    // Qualifikation chip
-    const qf = chipFilters.qualifikation;
-    if (qf && qf.size > 0) list = list.filter((a) => qf.has(a.qualifikation));
-
-    // Monatsschritt chip
-    const ms = chipFilters.monatsschritt;
-    if (ms && ms.size > 0) {
-      list = list.filter((a) => {
-        // Check step-label matches
-        if (ms.has(`step:${a.monatsSchritt.label}`)) return true;
-        // Check meta filters
-        if (ms.has("meta:ueberfaellig") && a.monatsSchritt.ueberfaellig)
-          return true;
-        if (ms.has("meta:abgeschlossen") && a.monatsSchritt.abgeschlossen)
-          return true;
-        return false;
-      });
-    }
-
-    // Pflegefachkraft chip
-    const pf = chipFilters.pflegefachkraft;
-    if (pf && pf.size > 0) {
-      list = list.filter((a) => {
-        if (pf.has("__nicht_zugewiesen") && a.pflegefachkraft === "—") return true;
-        if (pf.has(a.pflegefachkraft)) return true;
-        return false;
-      });
-    }
-
-    // SRK status
-    const srk = chipFilters.srk_status;
-    if (srk && srk.size > 0) {
-      list = list.filter((a) => {
-        if (srk.has("ausstehend") && a.qualifikation === "ohne_srk" && !a.srkKursDatum) return true;
-        if (srk.has("absolviert") && a.srkKursDatum) return true;
-        if (srk.has("nicht_erforderlich") && a.qualifikation !== "ohne_srk" && !a.srkKursDatum) return true;
-        return false;
-      });
-    }
-
-    // Text search
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (a) =>
-          `${a.vorname} ${a.nachname}`.toLowerCase().includes(q) ||
-          `${a.nachname} ${a.vorname}`.toLowerCase().includes(q) ||
-          a.obNummer.toLowerCase().includes(q) ||
-          a.id.toLowerCase().includes(q) ||
-          a.zugeordnetePatientenList.some((p) =>
-            p.name.toLowerCase().includes(q)
-          )
-      );
-    }
+    const qf = chipFilters.qualifikation; if (qf?.size) list = list.filter(a => qf.has(a.qualifikation));
+    const pf = chipFilters.pflegefachkraft; if (pf?.size) list = list.filter(a => pf.has(a.pflegefachkraft));
+    const srk = chipFilters.srk_status; if (srk?.size) list = list.filter(a => {
+      if (srk.has("ausstehend") && a.qualifikation === "ohne_srk" && !a.srkKursDatum) return true;
+      if (srk.has("absolviert") && a.srkKursDatum) return true;
+      return false;
+    });
+    if (search.trim()) { const q = search.toLowerCase(); list = list.filter(a => `${a.vorname} ${a.nachname}`.toLowerCase().includes(q) || a.zugeordnetePatientenList.some(p => p.name.toLowerCase().includes(q))); }
     return list;
   }, [activeView, search, chipFilters]);
 
+  const viewCounts = useMemo(() => {
+    const counts: Record<ViewKey, number> = { alle: 0, meine: 0, aufmerksamkeit: 0, srk_offen: 0, im_onboarding: 0 };
+    for (const k of Object.keys(counts) as ViewKey[]) counts[k] = viewFilter(angehoerige, k).length;
+    return counts;
+  }, []);
+
+  const annaContext = useMemo(() => buildAnnaContext(angehoerige, role), [role]);
+  const viewOrder = getViewOrder(role);
+
   return (
-    <>
-      <div className="flex flex-col lg:flex-row h-full overflow-hidden">
-        {/* ── LEFT: Views-Rail (desktop) ───── */}
-        <div className="hidden lg:block w-[200px] shrink-0 border-r border-border-light bg-[#FAFBFC] overflow-y-auto" style={{ padding: "20px 12px" }}>
-          <div className="text-[10.5px] text-muted-foreground uppercase tracking-wider px-2 pb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>
-            Ansichten
+    <div className="flex flex-col h-full min-h-0">
+      {/* ═══════════════════════════════════════
+         HEADER
+         ═══════════════════════════════════════ */}
+      <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0" }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+          <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Angehörige</h1>
+          <button onClick={() => navigate("/onboarding/neu")} className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
+            style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
+            onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
+            <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neuen Angehörigen anlegen</span>
+          </button>
+        </div>
+
+        {/* Anna */}
+        <div style={{ marginBottom: "var(--space-4)" }}>
+          <AnnaListenEinordnung context={annaContext} />
+        </div>
+
+        {/* Search + filter */}
+        <div className="flex items-center" style={{ gap: 8, marginBottom: "var(--space-3)" }}>
+          <div className="flex items-center flex-1" style={{ maxWidth: 300, gap: "var(--space-2)", padding: "8px 14px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
+            <Search style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Angehörige suchen…" className="flex-1 bg-transparent outline-none" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }} />
+            {search && <button onClick={() => setSearch("")} className="cursor-pointer" style={{ background: "transparent", border: "none" }}><X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} /></button>}
           </div>
-          {viewTabs.map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeView === tab.id;
-            const cnt = viewFilter(angehoerige, tab.id).length;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setView(tab.id)}
-                className={`w-full flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] text-left mb-0.5 transition-colors cursor-pointer ${
-                  isActive ? "bg-primary-light text-primary" : "text-foreground hover:bg-muted/40"
-                }`}
-                style={{ fontWeight: isActive ? 500 : 400 }}
-              >
-                <Icon className={`w-[15px] h-[15px] shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                <span className="flex-1 truncate">{tab.label}</span>
-                <span className="text-[11px] text-muted-foreground" style={{ fontWeight: 500 }}>{cnt}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Mobile views tabs */}
-        <div className="lg:hidden flex items-center gap-1 px-3 py-2 border-b border-border-light bg-[#FAFBFC] overflow-x-auto shrink-0">
-          {viewTabs.map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeView === tab.id;
-            const cnt = viewFilter(angehoerige, tab.id).length;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setView(tab.id)}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                  isActive ? "bg-primary-light text-primary" : "text-muted-foreground hover:bg-muted/40"
-                }`}
-                style={{ fontWeight: isActive ? 500 : 400 }}
-              >
-                <Icon className="w-[14px] h-[14px]" />
-                {tab.label}
-                <span className="text-[10px] opacity-70">{cnt}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* ── MAIN: Content area ─────────── */}
-        <div className="flex-1 min-w-0 flex flex-col">
-          {/* Page header + filter */}
-          <div className="border-b border-border-light" style={{ padding: "14px 16px 10px" }}>
-            <div className="flex items-start justify-between gap-4 mb-3">
-              <div>
-                <h1 className="text-foreground" style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.015em" }}>
-                  Angehörige
-                </h1>
-                <div className="text-[12.5px] text-muted-foreground mt-[3px]">
-                  {filtered.length} von {angehoerige.length} Angehörige
+          <div className="relative" ref={filterRef}>
+            <button onClick={() => setFilterPopoverOpen(o => !o)} className="inline-flex items-center cursor-pointer transition-colors"
+              style={{ gap: 6, padding: "6px 14px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: 13, fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
+              <SlidersHorizontal style={{ width: 14, height: 14, color: "var(--text-secondary)" }} /> Filter
+              {activeFilterTags.length > 0 && <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "var(--brand-primary)" }} />}
+            </button>
+            {filterPopoverOpen && (
+              <div className="absolute z-50" style={{ top: "calc(100% + 6px)", left: 0, width: 300, padding: 14, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)" }}>
+                <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+                  <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Filter</span>
+                  <button onClick={() => setFilterPopoverOpen(false)} className="cursor-pointer" style={{ background: "transparent", border: "none" }}><X style={{ width: 14, height: 14, color: "var(--text-secondary)" }} /></button>
                 </div>
-              </div>
-              <button
-                onClick={() => navigate("/onboarding/neu")}
-                className="inline-flex items-center gap-1.5 shrink-0 rounded-[10px] bg-primary text-primary-foreground hover:bg-primary-hover transition-colors cursor-pointer"
-                style={{ padding: "8px 13px", fontSize: 12.5, fontWeight: 500 }}
-              >
-                <Plus className="w-[13px] h-[13px]" />
-                <span className="hidden sm:inline">Neuen Angehörigen anlegen</span>
-              </button>
-            </div>
-
-            {/* Filter bar */}
-            <div className="flex items-center gap-2 flex-wrap relative">
-              <div className="flex items-center gap-2 bg-background rounded-xl px-3 py-[6px] border border-border-light flex-1 sm:flex-none sm:min-w-[220px] sm:max-w-[300px]">
-                <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Angehörige suchen…"
-                  className="bg-transparent outline-none text-[12px] flex-1 placeholder:text-muted-foreground/50"
-                  style={{ fontWeight: 400 }}
-                />
-                {search && (
-                  <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-
-              <div className="relative" ref={filterRef}>
-                <button
-                  onClick={() => setFilterPopoverOpen(o => !o)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-[6px] rounded-full border text-[12px] transition-colors cursor-pointer ${
-                    filterPopoverOpen ? "border-primary/30 bg-primary-light text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
-                  }`}
-                  style={{ fontWeight: 500 }}
-                >
-                  <ChevronDown className="w-3 h-3" />
-                  Filter
-                  {activeFilterTags.length > 0 && (
-                    <span className="w-[5px] h-[5px] rounded-full bg-primary" />
-                  )}
-                </button>
-
-                {filterPopoverOpen && (
-                  <div className="absolute top-[calc(100%+6px)] left-0 z-50 bg-card border border-border rounded-xl w-[300px]" style={{ padding: 14, boxShadow: "0 8px 24px rgba(17,24,39,0.08)" }}>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-[12px] text-foreground" style={{ fontWeight: 600 }}>Filter</span>
-                      <button onClick={() => setFilterPopoverOpen(false)} className="text-muted-foreground cursor-pointer"><X className="w-[14px] h-[14px]" /></button>
-                    </div>
-                    <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                      {filterDefs.map((def) => (
-                        <div key={def.id}>
-                          <div className="text-[10.5px] text-muted-foreground uppercase mb-2" style={{ fontWeight: 500, letterSpacing: "0.08em" }}>{def.label}</div>
-                          <div className="flex flex-wrap gap-1">
-                            {def.options.map((opt) => {
-                              const sel = chipFilters[def.id] || new Set();
-                              const active = sel.has(opt.value);
-                              return (
-                                <button
-                                  key={opt.value}
-                                  onClick={() => {
-                                    const next = new Set(sel);
-                                    if (active) next.delete(opt.value);
-                                    else next.add(opt.value);
-                                    updateChipFilter(def.id, next);
-                                  }}
-                                  className={`rounded-full text-[11.5px] border transition-colors cursor-pointer ${
-                                    active ? "border-primary bg-primary-light text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
-                                  }`}
-                                  style={{ padding: "4px 10px", fontWeight: active ? 500 : 400 }}
-                                >
-                                  {opt.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {activeFilterTags.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-border-light flex justify-end">
-                        <button onClick={clearAllChipFilters} className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer" style={{ fontWeight: 500 }}>
-                          Alle zurücksetzen
-                        </button>
+                <div className="flex flex-col" style={{ gap: 14 }}>
+                  {filterDefs.map(def => (
+                    <div key={def.id}>
+                      <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 8, fontWeight: "var(--weight-medium)" }}>{def.label}</div>
+                      <div className="flex flex-wrap" style={{ gap: 4 }}>
+                        {def.options.map(opt => {
+                          const sel = chipFilters[def.id] || new Set();
+                          const isActive = sel.has(opt.value);
+                          return (
+                            <button key={opt.value} onClick={() => { const n = new Set(sel); if (isActive) n.delete(opt.value); else n.add(opt.value); updateChipFilter(def.id, n); }} className="cursor-pointer transition-colors"
+                              style={{ padding: "4px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)", background: isActive ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: isActive ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", color: isActive ? "var(--brand-primary)" : "var(--text-secondary)" }}>
+                              {opt.label}
+                            </button>
+                          );
+                        })}
                       </div>
-                    )}
+                    </div>
+                  ))}
+                </div>
+                {activeFilterTags.length > 0 && (
+                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "var(--border-thin) solid var(--border-default)", textAlign: "right" }}>
+                    <button onClick={clearAllFilters} className="cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)" }}>Alle zurücksetzen</button>
                   </div>
                 )}
               </div>
-
-              {activeFilterTags.map((tag) => (
-                <button
-                  key={`${tag.filterId}-${tag.value}`}
-                  onClick={() => removeFilterTag(tag.filterId, tag.value)}
-                  className="inline-flex items-center gap-1 rounded-full bg-primary-light text-primary text-[11.5px] cursor-pointer"
-                  style={{ padding: "5px 10px", fontWeight: 500 }}
-                >
-                  {tag.filterLabel}: {tag.displayLabel} <X className="w-[11px] h-[11px]" />
-                </button>
-              ))}
-              {activeFilterTags.length > 0 && (
-                <button onClick={clearAllChipFilters} className="text-[11.5px] text-muted-foreground cursor-pointer" style={{ padding: "5px 6px", fontWeight: 500 }}>
-                  Alle zurücksetzen
-                </button>
-              )}
-            </div>
+            )}
           </div>
+          {activeFilterTags.map(tag => (
+            <button key={`${tag.filterId}-${tag.value}`} onClick={() => removeFilterTag(tag.filterId, tag.value)} className="inline-flex items-center cursor-pointer"
+              style={{ gap: 4, padding: "4px 10px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary-light)", color: "var(--brand-primary)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", border: "none" }}>
+              {tag.displayLabel} <X style={{ width: 10, height: 10 }} />
+            </button>
+          ))}
+          {activeFilterTags.length > 0 && (
+            <button onClick={clearAllFilters} className="cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", padding: "4px 6px" }}>Alle zurücksetzen</button>
+          )}
+        </div>
 
-          {/* ── Table ───────────────────────── */}
-          <div className="flex-1 overflow-y-auto">
-      <div className="px-4 md:px-8 pb-10 pt-4">
-        <div className="bg-card rounded-2xl border border-border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
+        {/* View pills */}
+        <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-4)" }}>
+          {viewOrder.map(vk => {
+            const def = VIEW_DEFS.find(d => d.key === vk)!;
+            const isActive = activeView === vk;
+            const count = viewCounts[vk];
+            return (
+              <button key={vk} onClick={() => setView(vk)} className="inline-flex items-center cursor-pointer transition-colors"
+                style={{ gap: 8, padding: "6px 14px", borderRadius: "var(--radius-pill)", fontSize: 13, fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)", background: isActive ? "var(--brand-primary-light)" : "transparent", border: isActive ? "var(--border-thin) solid transparent" : "var(--border-thin) solid var(--border-default)", color: isActive ? "var(--brand-primary)" : "var(--text-primary)" }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "var(--bg-secondary)"; }} onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = isActive ? "var(--brand-primary-light)" : "transparent"; }}>
+                {def.label}
+                <span className="inline-flex items-center justify-center" style={{ minWidth: 18, padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: 11, fontWeight: "var(--weight-medium)", background: isActive ? "var(--brand-primary)" : "var(--bg-secondary)", color: isActive ? "var(--text-on-dark)" : "var(--text-secondary)" }}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════
+         TABLE
+         ═══════════════════════════════════════ */}
+      <div className="flex-1 overflow-y-auto" style={{ padding: "0 var(--space-6) var(--space-4)" }}>
+        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
               <thead>
-                <tr className="bg-primary/[0.03]">
-                  {[
-                    "Name",
-                    "Zugeordnete Patienten",
-                    "Pflegefachkraft",
-                    "Qualifikation",
-                    "SRK Kurs Datum",
-                    "Monatsschritt",
-                    "Letzte Mutation",
-                  ].map((col) => (
-                    <th key={col} className="px-3 py-2.5 text-left">
-                      <button
-                        className="inline-flex items-center gap-1 text-[10.5px] text-primary/70 uppercase tracking-wider whitespace-nowrap"
-                        style={{ fontWeight: 600 }}
-                      >
-                        {col}
-                        <ArrowUpDown className="w-3 h-3 opacity-30" />
-                      </button>
+                <tr style={{ background: "var(--bg-secondary)" }}>
+                  {["Name", "Zugeordnete Patienten", "Pflegefachkraft", "Qualifikation", "SRK Kurs", "Monatsschritt", "Letzte Mutation"].map(col => (
+                    <th key={col} style={{ padding: "8px 12px", textAlign: "left" }}>
+                      <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>{col}</span>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-12 text-center text-[13px] text-muted-foreground"
-                    >
-                      Keine Angehörigen für diesen Filter gefunden.
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map((a) => {
-                    const qc = qualifikationConfig[a.qualifikation];
-                    const hrIssue = hasHRIssue(a);
-                    const blocked = isBillingBlocked(a);
-
-                    return (
-                      <tr
-                        key={a.id}
-                        onClick={() => navigate(`/angehoerige/${a.id}`)}
-                        className={`border-t border-border-light hover:bg-primary/[0.02] transition-colors cursor-pointer group ${
-                          blocked
-                            ? "bg-error-light/20"
-                            : hrIssue
-                            ? "bg-warning-light/20"
-                            : ""
-                        }`}
-                      >
-                        {/* ── 1. Name ─────────────── */}
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                                blocked
-                                  ? "bg-error-light border border-error/20"
-                                  : hrIssue
-                                  ? "bg-warning-light border border-warning/20"
-                                  : "bg-gradient-to-br from-primary/10 to-primary/5"
-                              }`}
-                            >
-                              <span
-                                className={`text-[11px] ${
-                                  blocked
-                                    ? "text-error"
-                                    : hrIssue
-                                    ? "text-warning"
-                                    : "text-primary"
-                                }`}
-                                style={{ fontWeight: 600 }}
-                              >
-                                {a.vorname[0]}
-                                {a.nachname[0]}
-                              </span>
-                            </div>
-                            <div>
-                              <span
-                                className="text-[13px] text-foreground group-hover:text-primary transition-colors"
-                                style={{ fontWeight: 500 }}
-                              >
-                                {a.nachname}, {a.vorname}
-                              </span>
-                            </div>
+                  <tr><td colSpan={7} style={{ padding: "48px 16px", textAlign: "center", fontSize: "var(--text-body)", color: "var(--text-tertiary)" }}>Keine Angehörigen für diesen Filter gefunden.</td></tr>
+                ) : filtered.map(a => {
+                  const qs = QUAL_STYLE[a.qualifikation] || QUAL_STYLE.ohne_srk;
+                  const blocked = isBillingBlocked(a);
+                  return (
+                    <tr key={a.id} onClick={() => navigate(`/angehoerige/${a.id}`)} className="cursor-pointer transition-colors"
+                      style={{ borderTop: "var(--border-thin) solid var(--border-default)" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                      {/* Name */}
+                      <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+                        <div className="flex items-center" style={{ gap: 8 }}>
+                          <div className="shrink-0 flex items-center justify-center" style={{ width: 28, height: 28, borderRadius: "var(--radius-card)", background: blocked ? "var(--status-danger-bg)" : "var(--brand-primary-light)" }}>
+                            <span style={{ fontSize: 10, fontWeight: "var(--weight-semibold)", color: blocked ? "var(--status-danger)" : "var(--brand-primary)" }}>{a.vorname[0]}{a.nachname[0]}</span>
                           </div>
-                        </td>
-
-                        {/* ── 2. Zugeordnete Patienten ── */}
-                        <td className="px-3 py-3">
-                          {a.zugeordnetePatientenList.length === 0 ? (
-                            <span className="text-[11px] text-muted-foreground italic">
-                              Keine Zuordnung
-                            </span>
-                          ) : (
-                            <div className="flex flex-col gap-0.5">
-                              {a.zugeordnetePatientenList
-                                .slice(0, 2)
-                                .map((p) => (
-                                  <button
-                                    key={p.id}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      navigate(`/patienten/${p.id}`);
-                                    }}
-                                    className="inline-flex items-center gap-1 text-[12px] text-primary/80 hover:text-primary transition-colors text-left"
-                                    style={{ fontWeight: 400 }}
-                                  >
-                                    <ExternalLink className="w-3 h-3 shrink-0 opacity-50" />
-                                    {p.name}
-                                  </button>
-                                ))}
-                              {a.zugeordnetePatientenList.length > 2 && (
-                                <span
-                                  className="text-[10.5px] text-muted-foreground"
-                                  style={{ fontWeight: 500 }}
-                                >
-                                  +{a.zugeordnetePatientenList.length - 2}{" "}
-                                  weitere
-                                </span>
+                          <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{a.nachname}, {a.vorname}</span>
+                        </div>
+                      </td>
+                      {/* Patienten */}
+                      <td style={{ padding: "10px 12px" }}>
+                        {a.zugeordnetePatientenList.length === 0 ? (
+                          <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontStyle: "italic" }}>Keine Zuordnung</span>
+                        ) : (
+                          <div className="flex flex-col" style={{ gap: 2 }}>
+                            {a.zugeordnetePatientenList.slice(0, 2).map(p => (
+                              <button key={p.id} onClick={e => { e.stopPropagation(); navigate(`/patienten/${p.id}`); }} className="inline-flex items-center cursor-pointer"
+                                style={{ gap: 4, fontSize: "var(--text-small)", color: "var(--brand-primary)", background: "transparent", border: "none", textAlign: "left", padding: 0 }}>
+                                <ExternalLink style={{ width: 10, height: 10, opacity: 0.5 }} />{p.name}
+                              </button>
+                            ))}
+                            {a.zugeordnetePatientenList.length > 2 && <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>+{a.zugeordnetePatientenList.length - 2} weitere</span>}
+                          </div>
+                        )}
+                      </td>
+                      {/* Pflegefachkraft */}
+                      <td style={{ padding: "10px 12px" }}>
+                        <div className="flex items-center" style={{ gap: 6 }}>
+                          <div className="shrink-0 flex items-center justify-center" style={{ width: 20, height: 20, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
+                            <span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{a.pflegefachkraftInitialen}</span>
+                          </div>
+                          <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{a.pflegefachkraft}</span>
+                        </div>
+                      </td>
+                      {/* Qualifikation */}
+                      <td style={{ padding: "10px 12px" }}>
+                        <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: qs.bg, color: qs.color }}>{qs.label}</span>
+                      </td>
+                      {/* SRK */}
+                      <td style={{ padding: "10px 12px" }}>
+                        {a.srkKursDatum ? (
+                          <div className="flex items-center" style={{ gap: 4 }}>
+                            <GraduationCap style={{ width: 14, height: 14, color: "var(--status-success)" }} />
+                            <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{new Date(a.srkKursDatum).toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
+                          </div>
+                        ) : a.qualifikation === "ohne_srk" ? (
+                          <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
+                            <AlertCircle style={{ width: 14, height: 14 }} /> Ausstehend
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>n/a</span>
+                        )}
+                      </td>
+                      {/* Monatsschritt */}
+                      <td style={{ padding: "10px 12px" }}>
+                        {(() => {
+                          const ms = a.monatsSchritt;
+                          const pct = Math.round(((ms.abgeschlossen ? ms.total : ms.aktuell - 1) / ms.total) * 100);
+                          const barColor = ms.abgeschlossen ? "var(--status-success)" : ms.ueberfaellig ? "var(--status-danger)" : "var(--brand-primary)";
+                          const textColor = ms.abgeschlossen ? "var(--status-success-text)" : ms.ueberfaellig ? "var(--status-danger)" : "var(--text-primary)";
+                          return (
+                            <div style={{ minWidth: 120 }}>
+                              <div className="flex items-center" style={{ gap: 4, marginBottom: 4 }}>
+                                {ms.abgeschlossen ? <CheckCircle2 style={{ width: 12, height: 12, color: "var(--status-success)", flexShrink: 0 }} />
+                                  : ms.ueberfaellig ? <AlertTriangle style={{ width: 12, height: 12, color: "var(--status-danger)", flexShrink: 0 }} />
+                                  : <Clock style={{ width: 12, height: 12, color: "var(--brand-primary)", flexShrink: 0 }} />}
+                                <span className="truncate" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: textColor }}>{ms.label}</span>
+                              </div>
+                              <div className="flex items-center" style={{ gap: 6 }}>
+                                <div style={{ flex: 1, height: 4, background: "var(--bg-secondary)", borderRadius: "var(--radius-pill)", overflow: "hidden" }}>
+                                  <div style={{ height: "100%", width: `${pct}%`, background: barColor, borderRadius: "var(--radius-pill)" }} />
+                                </div>
+                                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontWeight: "var(--weight-medium)" }}>{ms.abgeschlossen ? ms.total : ms.aktuell}/{ms.total}</span>
+                              </div>
+                              {ms.faellig && !ms.abgeschlossen && (
+                                <div style={{ fontSize: "var(--text-micro)", marginTop: 2, color: ms.ueberfaellig ? "var(--status-danger)" : "var(--text-tertiary)" }}>
+                                  {ms.ueberfaellig ? "Überfällig" : `Fällig ${ms.faellig}`}
+                                </div>
                               )}
                             </div>
-                          )}
-                        </td>
-
-                        {/* ── 3. Pflegefachkraft ─────── */}
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                              <span
-                                className="text-[9px] text-muted-foreground"
-                                style={{ fontWeight: 600 }}
-                              >
-                                {a.pflegefachkraftInitialen}
-                              </span>
-                            </div>
-                            <span
-                              className="text-[12px] text-foreground"
-                              style={{ fontWeight: 400 }}
-                            >
-                              {a.pflegefachkraft}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* ── 4. Qualifikation ─────── */}
-                        <td className="px-3 py-3">
-                          <span
-                            className={`inline-flex items-center px-2 py-[2px] rounded-md text-[11px] ${qc.bg} ${qc.text}`}
-                            style={{ fontWeight: 500 }}
-                          >
-                            {qc.label}
-                          </span>
-                        </td>
-
-                        {/* ── 5. SRK Kurs Datum ────── */}
-                        <td className="px-3 py-3">
-                          {a.srkKursDatum ? (
-                            <div className="flex items-center gap-1.5">
-                              <GraduationCap className="w-3.5 h-3.5 text-success shrink-0" />
-                              <span
-                                className="text-[12px] text-foreground"
-                                style={{ fontWeight: 400 }}
-                              >
-                                {new Date(
-                                  a.srkKursDatum
-                                ).toLocaleDateString("de-CH", {
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
-                                })}
-                              </span>
-                            </div>
-                          ) : a.qualifikation === "ohne_srk" ? (
-                            <span
-                              className="inline-flex items-center gap-1 text-[11px] text-warning"
-                              style={{ fontWeight: 500 }}
-                            >
-                              <AlertCircle className="w-3.5 h-3.5" />
-                              Ausstehend
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-muted-foreground italic">
-                              n/a
-                            </span>
-                          )}
-                        </td>
-
-                        {/* ── 6. Monatsschritt ─────── */}
-                        <td className="px-3 py-3">
-                          {(() => {
-                            const ms = a.monatsSchritt;
-                            const pct = Math.round(
-                              ((ms.abgeschlossen
-                                ? ms.total
-                                : ms.aktuell - 1) /
-                                ms.total) *
-                                100
-                            );
-                            return (
-                              <div className="min-w-[130px]">
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  {ms.abgeschlossen ? (
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
-                                  ) : ms.ueberfaellig ? (
-                                    <AlertTriangle className="w-3.5 h-3.5 text-error shrink-0" />
-                                  ) : (
-                                    <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
-                                  )}
-                                  <span
-                                    className={`text-[12px] truncate ${
-                                      ms.abgeschlossen
-                                        ? "text-success-foreground"
-                                        : ms.ueberfaellig
-                                        ? "text-error"
-                                        : "text-foreground"
-                                    }`}
-                                    style={{ fontWeight: 500 }}
-                                  >
-                                    {ms.label}
-                                  </span>
-                                </div>
-                                {/* Progress bar */}
-                                <div className="flex items-center gap-2">
-                                  <div className="flex-1 h-[4px] bg-muted rounded-full overflow-hidden">
-                                    <div
-                                      className={`h-full rounded-full transition-all ${
-                                        ms.abgeschlossen
-                                          ? "bg-success"
-                                          : ms.ueberfaellig
-                                          ? "bg-error"
-                                          : "bg-primary"
-                                      }`}
-                                      style={{ width: `${pct}%` }}
-                                    />
-                                  </div>
-                                  <span
-                                    className="text-[10px] text-muted-foreground shrink-0 tabular-nums"
-                                    style={{ fontWeight: 500 }}
-                                  >
-                                    {ms.abgeschlossen ? ms.total : ms.aktuell}/
-                                    {ms.total}
-                                  </span>
-                                </div>
-                                {ms.faellig && !ms.abgeschlossen && (
-                                  <div
-                                    className={`text-[10px] mt-0.5 ${
-                                      ms.ueberfaellig
-                                        ? "text-error"
-                                        : "text-muted-foreground"
-                                    }`}
-                                    style={{ fontWeight: 400 }}
-                                  >
-                                    {ms.ueberfaellig
-                                      ? "Überfällig"
-                                      : `Fällig ${ms.faellig}`}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-                        </td>
-
-                        {/* ── 7. Letzte Mutation ───── */}
-                        <td className="px-3 py-3">
-                          <div>
-                            <span
-                              className="text-[12px] text-foreground"
-                              style={{ fontWeight: 400 }}
-                            >
-                              {a.letzteMutationDatum}
-                            </span>
-                            <div
-                              className="text-[10.5px] text-muted-foreground"
-                              style={{ fontWeight: 400 }}
-                            >
-                              {a.letzteMutationUser}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                          );
+                        })()}
+                      </td>
+                      {/* Letzte Mutation */}
+                      <td style={{ padding: "10px 12px" }}>
+                        <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{a.letzteMutationDatum}</div>
+                        <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{a.letzteMutationUser}</div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-
-          {/* ── Pagination ─────────────────── */}
-          <div className="flex items-center justify-between px-5 py-3 border-t border-border-light text-[12px] text-muted-foreground">
-            <span>
-              1–{filtered.length} von {filtered.length} Angehörige
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                className="p-1.5 rounded-lg border border-border hover:bg-secondary transition-colors opacity-40 cursor-not-allowed"
-                disabled
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <button
-                className="min-w-[28px] h-[28px] rounded-lg text-[12px] bg-primary text-primary-foreground"
-                style={{ fontWeight: 500 }}
-              >
-                1
-              </button>
-              <button
-                className="p-1.5 rounded-lg border border-border hover:bg-secondary transition-colors opacity-40 cursor-not-allowed"
-                disabled
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
+          <div className="flex items-center justify-between" style={{ padding: "8px 16px", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+            <span>{filtered.length} von {angehoerige.length} Angehörige</span>
           </div>
         </div>
       </div>
-      </div>
-        </div>
-      </div>
-    </>
+    </div>
   );
 }
