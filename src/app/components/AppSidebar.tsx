@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import {
   Sparkles,
+  ClipboardList,
   UserPlus,
   Users,
   GitBranch,
@@ -8,6 +9,7 @@ import {
   Settings,
   HelpCircle,
   HeartHandshake,
+  LayoutDashboard,
 } from "lucide-react";
 import { unifiedEntries, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
 
@@ -15,6 +17,8 @@ const myOpenCount = unifiedEntries.filter(e => e.verantwortlich.initialen === CU
 
 const navItems = [
   { id: "dashboard", label: "Startseite", icon: Sparkles },
+  { id: "kennzahlen", label: "Dashboard", icon: LayoutDashboard },
+  { id: "interrai", label: "InterRAI", icon: ClipboardList },
   { id: "onboarding", label: "Onboarding", icon: UserPlus, badge: 3 },
   { id: "patienten", label: "Patienten", icon: Users },
   { id: "angehoerige", label: "Angehörige", icon: HeartHandshake },

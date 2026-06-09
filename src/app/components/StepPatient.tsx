@@ -42,14 +42,46 @@ import {
   ChevronRight,
   Download,
   Layers,
+  AlertTriangle,
+  ChevronUp,
+  Plus,
+  Search,
+  Sparkles,
+  Clock,
+  Send,
 } from "lucide-react";
 
 /* ══════════════════════════════════════════
    TYPES
    ══════════════════════════════════════════ */
 
+import { useNavigate } from "react-router";
 import { TabPersonalienV2, TabSteuerV2, TabAnamneseV2 } from "./form/MigratedPatientForms";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
+import { Mic } from "lucide-react";
+import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, MOCK_ARZT_DIAGNOSEN, DEMO_SCALES, DEMO_CAPS, ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import { KLV_STATUS_PIPELINE, SEKTIONEN } from "../../types/klinische-artefakte";
+import { Arbeitsbereich } from "./interrai/Arbeitsbereich";
+import { getAntwortText, getKonfidenzColor } from "../../lib/interrai/helpers";
+import { useRecording } from "../recording/RecordingContext";
+import type { KLVLeistung, KLVEinheit, Pflegediagnose, Massnahme, Pflegeziel, AerztlicheDiagnose } from "../../types/klinische-artefakte";
+import { NANDA_KATALOG } from "../../lib/mocks/nanda-enp-katalog";
+import { ReviewBlock } from "./ui/ReviewBlock";
+import { InlineSelect } from "./ui/InlineSelect";
+import { TabHeader, HeaderMeta } from "./ui/TabHeader";
+import { WorkflowChecklist } from "./workflow/WorkflowChecklist";
+import { SectionAccordion, SektionBadge } from "./ui/SectionAccordion";
+import { ItemRow } from "./ui/ItemRow";
+import { hProWoche, einmaligeMin, istPeriodisch, einheitLabel, werLabel, berechnungsText, kompaktParams, berechneSummen, getSimultanPartner } from "../../lib/klv/berechnung";
+import { SPITEX_LEISTUNGSKATALOG_2025 } from "../../lib/klv/spitex-leistungskatalog-2025";
+import { toast } from "sonner";
+import { pruefeInklusiv } from "../../lib/klv/inklusiv-regeln";
+import { pruefeKassenregeln } from "../../lib/klv/kassenregeln";
+import { erzeugeWZWAuswertung, type WZWErgebnis } from "../../lib/klv/wzw-auswertung";
+import { useEinwilligung } from "./EinwilligungContext";
+import { useArztAnfrage, ArztAnfrageFlowInline } from "./ArztAnfrageContext";
+import { SectionAction } from "./ui/SectionAction";
+import { patients } from "./patientData";
 
 export interface ATLEntry {
   ja: boolean | null;
@@ -322,9 +354,13 @@ function isTabComplete(tabKey: string, data: PatientFormData): boolean {
 /* ── Tab definitions ───────────────────── */
 const tabDefs = [
   { key: "personalien", label: "Personalien", icon: User },
-  { key: "steuer", label: "Steuer & Sozialversicherungen", icon: ShieldCheck },
+  { key: "steuer", label: "Soziales & Steuer", icon: ShieldCheck },
   { key: "anamnese", label: "Anamnese", icon: Stethoscope },
   { key: "aktivitaeten", label: "Aktivitäten", icon: Activity },
+  { key: "interrai", label: "InterRAI", icon: ClipboardList },
+  { key: "pflegeplanung", label: "Pflegeplanung", icon: ClipboardList },
+  { key: "klv", label: "KLV", icon: FileText },
+  { key: "workflow", label: "Workflow", icon: ClipboardList },
   { key: "dokumente", label: "Dokumente", icon: FileText },
 ];
 
@@ -335,14 +371,27 @@ interface StepPatientProps {
   data: PatientFormData;
   onChange: (data: PatientFormData) => void;
   onValidityChange?: (isValid: boolean) => void;
+  onboardingId?: string;
+  /** External tab-switch request (e.g. from header pill click) */
+  requestedTab?: number | null;
+  onTabSwitched?: () => void;
 }
 
 /* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
-export function StepPatient({ data, onChange, onValidityChange }: StepPatientProps) {
+export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched }: StepPatientProps) {
   const [activeTab, setActiveTab] = useState(0);
+
+  // External tab-switch request
+  useEffect(() => {
+    if (requestedTab != null && requestedTab !== activeTab) {
+      setActiveTab(requestedTab);
+      onTabSwitched?.();
+    }
+  }, [requestedTab]);
   const [touched, setTouched] = useState<Set<string>>(new Set());
+  const recording = useRecording();
 
   /* Compute overall validity (tabs 1-3 must be complete) */
   const requiredTabs = ["personalien", "steuer", "anamnese"];
@@ -387,46 +436,14 @@ export function StepPatient({ data, onChange, onValidityChange }: StepPatientPro
 
   return (
     <div className="space-y-0">
-      {/* ═══════════════════════════════════════
-         TOP HEADER (compact)
-         ═══════════════════════════════════════ */}
-      <div style={{ background: "var(--bg-elevated)", borderTopLeftRadius: "var(--radius-card)", borderTopRightRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", padding: "16px 20px 12px" }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center" style={{ gap: "var(--space-3)" }}>
-            <div className="shrink-0 flex items-center justify-center" style={{
-              width: 32, height: 32, borderRadius: "var(--radius-card)",
-              background: allRequiredComplete ? "var(--status-success-bg)" : "var(--brand-primary-light)",
-            }}>
-              {allRequiredComplete ? (
-                <CheckCircle2 style={{ width: 16, height: 16, color: "var(--status-success)" }} />
-              ) : (
-                <HeartPulse style={{ width: 16, height: 16, color: "var(--brand-primary)" }} />
-              )}
-            </div>
-            <div>
-              <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-                <span style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Patientendaten</span>
-                <span className="inline-flex items-center" style={{
-                  gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
-                  background: allRequiredComplete ? "var(--status-success-bg)" : completedTabCount > 0 ? "var(--brand-primary-light)" : "var(--bg-secondary)",
-                  color: allRequiredComplete ? "var(--status-success-text)" : completedTabCount > 0 ? "var(--brand-primary)" : "var(--text-tertiary)",
-                }}>
-                  <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "currentColor" }} />
-                  {status}
-                </span>
-              </div>
-              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 2 }}>
-                {tabDefs[activeTab].label}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Workspace-Kopf entfernt — Tab-Leiste rückt direkt unter den Onboarding-Header.
+         Recording-Button sitzt jetzt rechtsbündig in der Tab-Zeile. */}
 
       {/* ═══════════════════════════════════════
-         HORIZONTAL TAB NAVIGATION
+         HORIZONTAL TAB NAVIGATION + Recording-Button
          ═══════════════════════════════════════ */}
-      <div className="overflow-x-auto" style={{ background: "var(--bg-elevated)", borderLeft: "var(--border-thin) solid var(--border-default)", borderRight: "var(--border-thin) solid var(--border-default)", padding: "0 20px" }}>
+      <div className="flex items-center" style={{ background: "var(--bg-elevated)", borderTopLeftRadius: "var(--radius-card)", borderTopRightRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", borderBottom: "none", padding: "0 20px" }}>
+        <div className="flex-1 overflow-x-auto">
         <div className="flex min-w-max" style={{ gap: 0, borderBottom: "var(--border-thin) solid var(--border-default)" }}>
           {tabDefs.map((tab, idx) => {
             const isActive = activeTab === idx;
@@ -458,6 +475,33 @@ export function StepPatient({ data, onChange, onValidityChange }: StepPatientPro
             );
           })}
         </div>
+        </div>
+        {/* Recording-Button — rechtsbündig in der Tab-Zeile, Anna-Akzent per styleguide 9 */}
+        {onboardingId && (() => {
+          const isActive = recording.phase === "recording" && recording.session?.onboardingId === onboardingId;
+          const isBusy = recording.phase === "recording" || recording.phase === "processing";
+          return (
+            <button
+              onClick={() => isActive ? recording.stopRecording() : recording.startRecording(null, `${data.vorname || "Patient"} ${data.name || ""}`, onboardingId)}
+              disabled={isBusy && !isActive}
+              className="inline-flex items-center cursor-pointer transition-colors shrink-0"
+              style={{
+                gap: 6, padding: "8px 18px 8px 14px", borderRadius: 999, marginLeft: 8,
+                background: isActive ? "var(--bg-elevated)" : (isBusy ? "var(--bg-secondary)" : "linear-gradient(135deg, var(--brand-primary), var(--brand-accent))"),
+                color: isActive ? "var(--text-primary)" : (isBusy ? "var(--text-tertiary)" : "var(--text-on-dark)"),
+                fontSize: "var(--text-small)", fontWeight: 500,
+                border: isActive ? "0.5px solid var(--border-default)" : "none",
+                minHeight: 36, opacity: isBusy && !isActive ? 0.5 : 1,
+              }}
+            >
+              {isActive ? (
+                <><span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--status-danger)", animation: "rec-pulse 1.5s ease-in-out infinite", flexShrink: 0 }} /><style>{`@keyframes rec-pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }`}</style> Stoppen</>
+              ) : (
+                <><Mic style={{ width: 14, height: 14 }} /> Aufzeichnen</>
+              )}
+            </button>
+          );
+        })()}
       </div>
 
       {/* ═══════════════════════════════════════
@@ -477,7 +521,11 @@ export function StepPatient({ data, onChange, onValidityChange }: StepPatientPro
           {activeTab === 3 && (
             <TabAktivitaetenV2 data={data} onUpdateATL={updateATL} />
           )}
-          {activeTab === 4 && <TabDokumente data={data} onChange={onChange} />}
+          {activeTab === 4 && onboardingId && <OnboardingTabBA onboardingId={onboardingId} />}
+          {activeTab === 5 && onboardingId && <OnboardingTabPP onboardingId={onboardingId} />}
+          {activeTab === 6 && onboardingId && <OnboardingTabKLV onboardingId={onboardingId} />}
+          {activeTab === 7 && onboardingId && <WorkflowChecklist onboardingId={onboardingId} />}
+          {activeTab === 8 && <TabDokumente data={data} onChange={onChange} onboardingId={onboardingId || null} />}
         </div>
       </div>
 
@@ -488,6 +536,8 @@ export function StepPatient({ data, onChange, onValidityChange }: StepPatientPro
           Navigieren Sie zwischen den Tabs, um alle Patientendaten zu erfassen. Pflichtfelder sind mit * markiert.
         </span>
       </div>
+
+      {/* Recording handled globally via RecordingContext + GlobalRecordingBar */}
     </div>
   );
 }
@@ -1649,8 +1699,13 @@ const PATIENT_DOC_ITEMS: PatientDocItemDef[] = [
   { key: "einkaufsliste", label: "Einkaufsliste", group: "Sonstiges", icon: ShoppingCart, mandatory: false },
 ];
 
-function getPatientRequiredDocKeys(): string[] {
+export function getPatientRequiredDocKeys(): string[] {
   return PATIENT_DOC_ITEMS.filter((i) => i.mandatory).map((i) => i.key);
+}
+
+/** Returns labels of missing mandatory documents */
+export function getFehlendePflichtdokumente(scans: Record<string, unknown>): string[] {
+  return PATIENT_DOC_ITEMS.filter(i => i.mandatory && !scans[i.key]).map(i => i.label);
 }
 
 /* Group items for rendering */
@@ -2354,8 +2409,10 @@ function PatientScanUploadButtonSmall({
   );
 }
 
+
 /* ── TabDokumente main ──────────────────── */
-function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d: PatientFormData) => void }) {
+function TabDokumente({ data, onChange, onboardingId }: { data: PatientFormData; onChange: (d: PatientFormData) => void; onboardingId: string | null }) {
+  const einwilligung = useEinwilligung();
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraDocKey, setCameraDocKey] = useState("");
   const [cameraDocLabel, setCameraDocLabel] = useState("");
@@ -2363,8 +2420,16 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
   const [previewOpen, setPreviewOpen] = useState<string | null>(null);
   // Pflicht-Dokumente view only (Ordnerstruktur entfernt – erst nach Onboarding-Abschluss relevant)
 
+  // Sync: Einwilligung scan upload → shared context
+  useEffect(() => {
+    if (data.scans["einwilligung_datenschutz"] && !einwilligung.status.signiert) {
+      einwilligung.signScan(data.scans["einwilligung_datenschutz"].timestamp);
+    }
+  }, [data.scans["einwilligung_datenschutz"]]);
+
   const requiredKeys = getPatientRequiredDocKeys();
-  const uploadedRequired = requiredKeys.filter((k) => !!data.scans[k]).length;
+  // Count einwilligung as uploaded if signiert (via any path)
+  const uploadedRequired = requiredKeys.filter((k) => k === "einwilligung_datenschutz" ? (!!data.scans[k] || einwilligung.status.signiert) : !!data.scans[k]).length;
   const totalRequired = requiredKeys.length;
   const allComplete = uploadedRequired === totalRequired && totalRequired > 0;
   const docGroups = getDocGroups();
@@ -2377,6 +2442,10 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
 
   const handleCameraCapture = (file: PatientScanFile) => {
     onChange({ ...data, scans: { ...data.scans, [cameraDocKey]: file } });
+    // Einwilligung scanned → update shared context
+    if (cameraDocKey === "einwilligung_datenschutz") {
+      einwilligung.signScan(new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }));
+    }
     setCameraOpen(false);
     setSharePointToasts((prev) => new Set(prev).add(cameraDocKey));
     setTimeout(() => {
@@ -2471,7 +2540,9 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
               <div className="space-y-2.5">
                 {group.items.map((item) => {
                   const scan = data.scans[item.key] ?? null;
-                  const isUploaded = !!scan;
+                  const isEinwilligungItem = item.key === "einwilligung_datenschutz";
+                  const einwilligungDigital = isEinwilligungItem && einwilligung.status.signiert && !scan;
+                  const isUploaded = !!scan || einwilligungDigital;
                   const isRequired = item.mandatory;
                   const showToast = sharePointToasts.has(item.key);
                   const Icon = item.icon;
@@ -2539,7 +2610,9 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
                               }`}
                               style={{ fontWeight: 600 }}
                             >
-                              {isUploaded ? (
+                              {einwilligungDigital ? (
+                                <><CheckCircle2 className="w-3 h-3" /> Signiert digital · {einwilligung.status.datum}</>
+                              ) : isUploaded ? (
                                 <><CheckCircle2 className="w-3 h-3" /> Hochgeladen</>
                               ) : isRequired ? (
                                 <><AlertCircle className="w-3 h-3" /> Fehlend</>
@@ -2549,8 +2622,25 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
                             </span>
                           </div>
 
+                          {/* Digital signature info (no scan file) */}
+                          {einwilligungDigital && (
+                            <div className="mt-3 p-3 rounded-lg bg-success-light/30 border border-success/10">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                                <div>
+                                  <p className="text-[12px] text-foreground" style={{ fontWeight: 500 }}>
+                                    Digital signiert in Vertragsunterzeichnung
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {einwilligung.status.datum}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {/* Uploaded file details */}
-                          {isUploaded && scan && (
+                          {isUploaded && scan && !einwilligungDigital && (
                             <div className="mt-3 p-3 rounded-lg bg-success-light/30 border border-success/10">
                               <div className="flex items-center justify-between gap-2 flex-wrap">
                                 <div className="flex items-center gap-2 min-w-0">
@@ -2608,6 +2698,20 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
                           {/* Action buttons */}
                           {!isUploaded && (
                             <div className="mt-3 flex items-center gap-2 flex-wrap">
+                              {/*
+                               * Einwilligung: zusätzlich "Digital signieren"-Aktion.
+                               * Die Einwilligung ist die Rechtsgrundlage der Arzt-Anfrage und wird
+                               * real beim Erstkontakt signiert, nicht am Onboarding-Ende.
+                               */}
+                              {isEinwilligungItem && (
+                                <button
+                                  onClick={() => einwilligung.signDigital(new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }))}
+                                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] bg-primary text-primary-foreground hover:bg-primary-hover transition-colors cursor-pointer"
+                                  style={{ fontWeight: 500, border: "none" }}
+                                >
+                                  <Check className="w-3.5 h-3.5" /> Digital signieren
+                                </button>
+                              )}
                               <PatientScanUploadButton
                                 scanKey={item.key}
                                 docLabel={item.label}
@@ -2681,6 +2785,1073 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
         onCapture={handleCameraCapture}
         onClose={() => setCameraOpen(false)}
       />
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   ONBOARDING CLINICAL TABS (read by onboardingId)
+   ══════════════════════════════════════════ */
+
+function OnboardingTabBA({ onboardingId }: { onboardingId: string }) {
+  const ba = MOCK_ASSESSMENTS.find(a => a.onboardingId === onboardingId);
+
+  // Empty state: no assessment yet
+  if (!ba) return (
+    <div style={{ padding: "var(--space-8)", textAlign: "center" }}>
+      <div style={{ width: 48, height: 48, borderRadius: "var(--radius-card)", background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+        <ClipboardList style={{ width: 22, height: 22, color: "var(--text-tertiary)" }} />
+      </div>
+      <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>Noch kein InterRAI</div>
+      <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 16, maxWidth: 320, margin: "0 auto 16px" }}>
+        Starte ein Gespräch über den Recording-Button im Header oder erfasse die Items manuell.
+      </div>
+      <button onClick={() => alert("InterRAI starten – erstellt neues Assessment (Demo)")} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}>
+        <ClipboardList style={{ width: 14, height: 14 }} /> InterRAI starten
+      </button>
+    </div>
+  );
+
+  // In-progress: embed the full Arbeitsbereich directly
+  if (ba.status === "in-bearbeitung") {
+    return (
+      <Arbeitsbereich
+        assessmentId={ba.id}
+        patientName={ba.patientName}
+        typ={ba.typ}
+        startDatum={ba.startDatum}
+        initialItems={ba.items}
+        onboardingId={ba.onboardingId}
+      />
+    );
+  }
+
+  // Completed: read-only summary with Scales, CAPs, and Items
+  const scales = ba.outcomeScales;
+  const caps = ba.getriggerteCaps;
+  const sectionItems = SEKTIONEN.map(s => ({ ...s, items: ba.items.filter(i => i.sektion === s.id) })).filter(s => s.items.length > 0);
+
+  return (
+    <div style={{ padding: "var(--space-4)" }}>
+      <TabHeader
+        titel="InterRAI"
+        statusPill={<span className="inline-flex items-center" style={{ gap: 4, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--status-success-bg)", color: "var(--status-success-text)" }}><Check style={{ width: 11, height: 11 }} /> Abgeschlossen</span>}
+        meta={<HeaderMeta modus="zusammenfassung" text={`${ba.items.length} Items erfasst`} />}
+      />
+      <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: -8, marginBottom: 12 }}>{ba.startDatum}</div>
+
+      {/* Outcome-Scales */}
+      {scales.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 6, fontWeight: "var(--weight-medium)" }}>Outcome-Scales</div>
+          <div className="grid grid-cols-2 sm:grid-cols-3" style={{ gap: 6 }}>
+            {scales.map(s => {
+              const pct = s.maxWert > 0 ? s.wert / s.maxWert : 0;
+              const color = s.richtung === "hoeher-schlechter" ? (pct > 0.5 ? "var(--status-danger)" : pct > 0.25 ? "var(--status-warning)" : "var(--status-success)") : (pct > 0.5 ? "var(--status-success)" : "var(--status-warning)");
+              return (
+                <div key={s.id} style={{ padding: "8px 12px", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)" }}>{s.abkuerzung}</div>
+                  <div className="flex items-end" style={{ gap: 3, marginTop: 2 }}><span style={{ fontSize: 16, fontWeight: "var(--weight-medium)", color }}>{s.wert}</span><span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>/{s.maxWert}</span></div>
+                  <div style={{ height: 3, background: "var(--bg-secondary)", borderRadius: "var(--radius-pill)", marginTop: 4, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.max(5, pct * 100)}%`, background: color, borderRadius: "var(--radius-pill)" }} /></div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* CAPs */}
+      {caps.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 6, fontWeight: "var(--weight-medium)" }}>Aktive CAPs ({caps.length})</div>
+          {caps.map(cap => (
+            <div key={cap.id} style={{ padding: "8px 12px", background: cap.prioritaet === "hoch" ? "rgba(168,50,31,0.04)" : "var(--bg-elevated)", border: `var(--border-thin) solid ${cap.prioritaet === "hoch" ? "var(--status-danger)" : "var(--border-default)"}`, borderRadius: "var(--radius-card)", marginBottom: 4 }}>
+              <div className="flex items-center" style={{ gap: 6 }}>
+                <AlertTriangle style={{ width: 12, height: 12, color: cap.prioritaet === "hoch" ? "var(--status-danger)" : "var(--status-warning)" }} />
+                <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{cap.name}</span>
+                <span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: cap.prioritaet === "hoch" ? "var(--status-danger-bg)" : "var(--status-warning-bg)", color: cap.prioritaet === "hoch" ? "var(--status-danger)" : "var(--status-warning-text)" }}>{cap.prioritaet === "hoch" ? "Hoch" : "Mittel"}</span>
+              </div>
+              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 3 }}>{cap.beschreibung}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Items by section (compact read-only) */}
+      {sectionItems.length > 0 && (
+        <div>
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 6, fontWeight: "var(--weight-medium)" }}>Erfasste Items ({ba.items.length})</div>
+          <div className="flex flex-col" style={{ gap: 4 }}>
+            {sectionItems.map(s => (
+              <div key={s.id} style={{ padding: "8px 12px", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+                <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 3 }}>Sektion {s.id} – {s.name}</div>
+                {s.items.map(item => (
+                  <div key={item.id} className="flex items-center" style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", padding: "1px 0", gap: 5 }}>
+                    <span style={{ padding: "0 4px", borderRadius: 3, fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--brand-primary-light)", color: "var(--brand-primary)" }}>{item.code}</span>
+                    <span className="truncate" style={{ color: "var(--text-primary)" }}>{item.frageKurz}</span>
+                    <span className="truncate" style={{ flex: 1 }}>{getAntwortText(item) || "–"}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 12 }}>
+        Folgt dem Schema InterRAI HC Schweiz. Item-Texte sinngemäss formuliert.
+      </div>
+    </div>
+  );
+}
+
+function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {
+  const pp = MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === onboardingId);
+  const [diagnosen, setDiagnosen] = useState<Pflegediagnose[]>([]);
+  const [massnahmen, setMassnahmen] = useState<Massnahme[]>([]);
+  const [ziele, setZiele] = useState<Pflegeziel[]>([]);
+  const [expandedDiag, setExpandedDiag] = useState<string | null>(null);
+  const [showAddDiagnose, setShowAddDiagnose] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
+
+  // Ärztliche Diagnosen (eigenes Artefakt, nicht Kopie)
+  const [arztDiagnosen, setArztDiagnosen] = useState<AerztlicheDiagnose[]>([]);
+  const [showAddArztDiag, setShowAddArztDiag] = useState(false);
+  const [showArztAnfrage, setShowArztAnfrage] = useState(false);
+  const [addArztIcd, setAddArztIcd] = useState("");
+  const [addArztBez, setAddArztBez] = useState("");
+  const arztAnfrage = useArztAnfrage();
+
+  useEffect(() => {
+    if (pp) {
+      setDiagnosen(pp.pflegediagnosen.map(d => ({ ...d })));
+      setMassnahmen(pp.massnahmen.map(m => ({ ...m })));
+      setZiele(pp.ziele.map(z => ({ ...z })));
+    }
+    // Load ärztliche Diagnosen for this onboarding
+    const ad = MOCK_ARZT_DIAGNOSEN.filter(d => d.onboardingId === onboardingId);
+    setArztDiagnosen(ad.map(d => ({ ...d })));
+  }, [pp?.id, onboardingId]);
+
+  if (!pp) return (
+    <div style={{ padding: "var(--space-6)", textAlign: "center", color: "var(--text-tertiary)" }}>
+      <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>Noch keine Pflegeplanung</div>
+      <div style={{ fontSize: "var(--text-small)" }}>Wird aus dem Gespräch oder manuell erstellt.</div>
+    </div>
+  );
+
+  const statusLabel = pp.status === "entwurf" ? "Entwurf" : pp.status === "in-bearbeitung" ? "In Bearbeitung" : pp.status === "validiert" ? "Validiert" : "Abgeschlossen";
+
+  const deleteDiagnose = (id: string) => {
+    setDiagnosen(prev => prev.filter(d => d.id !== id));
+    setMassnahmen(prev => prev.filter(m => m.bezugDiagnoseId !== id));
+    setZiele(prev => prev.filter(z => z.bezugDiagnoseId !== id));
+    if (expandedDiag === id) setExpandedDiag(null);
+    toast("Diagnose entfernt");
+  };
+
+  const addMassnahme = (diagId: string, m: { titel: string; beschreibung: string; haeufigkeit: string }) => {
+    setMassnahmen(prev => [...prev, { id: `MA-new-${Date.now()}`, titel: m.titel, bezugDiagnoseId: diagId, beschreibung: m.beschreibung, haeufigkeit: m.haeufigkeit, status: "vorschlag" }]);
+  };
+
+  const removeMassnahme = (id: string) => setMassnahmen(prev => prev.filter(m => m.id !== id));
+
+  const addZiel = (diagId: string, z: { titel: string; zeithorizont: string; messbar: string }) => {
+    setZiele(prev => [...prev, { id: `Z-new-${Date.now()}`, titel: z.titel, bezugDiagnoseId: diagId, zeithorizont: z.zeithorizont, messbar: z.messbar, status: "vorschlag" }]);
+  };
+
+  const removeZiel = (id: string) => setZiele(prev => prev.filter(z => z.id !== id));
+
+  const addDiagnoseFromKatalog = (opt: typeof NANDA_KATALOG[number]) => {
+    const diagId = `PD-new-${Date.now()}`;
+    setDiagnosen(prev => [...prev, { id: diagId, nandaCode: opt.nandaCode, titel: opt.titel, bezugCap: null, begruendung: "", status: "vorschlag", icdIds: [] }]);
+    // Auto-add first suggested massnahme + ziel
+    if (opt.massnahmenVorschlaege[0]) addMassnahme(diagId, opt.massnahmenVorschlaege[0]);
+    if (opt.zieleVorschlaege[0]) addZiel(diagId, opt.zieleVorschlaege[0]);
+    setShowAddDiagnose(false);
+    setAddSearch("");
+    setExpandedDiag(diagId);
+  };
+
+  const filteredKatalog = addSearch.trim()
+    ? NANDA_KATALOG.filter(k => k.titel.toLowerCase().includes(addSearch.toLowerCase()) || k.nandaCode.includes(addSearch) || k.domäne.toLowerCase().includes(addSearch.toLowerCase()))
+    : NANDA_KATALOG;
+
+  // Already used codes
+  const usedCodes = new Set(diagnosen.map(d => d.nandaCode));
+
+  // Count all unbestätigte Anna-Entwürfe (ärztliche + pflege)
+  const vorschlaegeCount = arztDiagnosen.filter(d => d.status === "entwurf").length + diagnosen.filter(d => d.status === "vorschlag").length;
+  const ppContainerRef = React.useRef<HTMLDivElement>(null);
+
+  /** Scroll to first ungeprüfter Vorschlag and expand it if needed */
+  const scrollToFirstVorschlag = useCallback(() => {
+    if (!ppContainerRef.current) return;
+    // Ärztliche Entwürfe come first in DOM order
+    const firstEntwurf = ppContainerRef.current.querySelector("[data-vorschlag]") as HTMLElement | null;
+    if (firstEntwurf) {
+      firstEntwurf.scrollIntoView({ behavior: "smooth", block: "center" });
+      // If it's a Pflegediagnose ReviewBlock, expand it
+      const diagId = firstEntwurf.dataset.vorschlag;
+      if (diagId && diagId.startsWith("PD")) setExpandedDiag(diagId);
+      // If it's an ärztliche Diagnose, open the anfrage panel for visibility
+      if (diagId && diagId.startsWith("AD")) setShowArztAnfrage(false);
+    }
+  }, []);
+
+  return (
+    <div ref={ppContainerRef} style={{ padding: "var(--space-4)" }}>
+      <TabHeader
+        titel="Pflegeplanung"
+        statusPill={<span className="inline-flex items-center" style={{ gap: 4, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}><Clock style={{ width: 11, height: 11 }} /> {statusLabel}</span>}
+        meta={vorschlaegeCount > 0 ? (
+          <button
+            onClick={scrollToFirstVorschlag}
+            className="inline-flex items-center cursor-pointer"
+            style={{ gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--status-warning-bg)", color: "var(--status-warning-text)", border: "none" }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
+            onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+          >
+            <Clock style={{ width: 10, height: 10 }} />
+            {vorschlaegeCount} {vorschlaegeCount === 1 ? "Vorschlag" : "Vorschläge"} zu prüfen
+          </button>
+        ) : undefined}
+        aktion={<button onClick={() => setShowAddDiagnose(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 22px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}><Plus style={{ width: 14, height: 14 }} /> Pflegediagnose hinzufügen</button>}
+      />
+
+      {/* ═══ Sektion: Ärztliche Diagnosen (eine Sektion, alle Zustände) ═══ */}
+      <div style={{ marginBottom: 16 }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+          <span style={{ fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ärztliche Diagnosen</span>
+          <div className="flex items-center" style={{ gap: 2 }}>
+            {/* Flow-Status ersetzt die Anfrage-Aktion nur bei "gesendet" (stille Statuszeile).
+               antwort_erhalten hat eigenen prominenten ReviewBlock — keine Ghost-Aktion nötig. */}
+            {arztAnfrage && arztAnfrage.anfrage.status === "gesendet" && !showArztAnfrage ? (
+              <SectionAction
+                icon={<Stethoscope style={{ width: 10, height: 10 }} />}
+                label="Beim Arzt anfragen"
+                statusText={`${arztAnfrage.anfrage.empfaengerName} · ${arztAnfrage.tageSeitVersand} Tage`}
+                onClick={() => { setShowArztAnfrage(true); setShowAddArztDiag(false); }}
+              />
+            ) : (
+              <SectionAction
+                icon={<Stethoscope style={{ width: 10, height: 10 }} />}
+                label="Beim Arzt anfragen"
+                onClick={() => { setShowArztAnfrage(!showArztAnfrage); setShowAddArztDiag(false); }}
+                active={showArztAnfrage}
+              />
+            )}
+            <SectionAction
+              icon={<Plus style={{ width: 10, height: 10 }} />}
+              label="Erfassen"
+              onClick={() => { setShowAddArztDiag(!showAddArztDiag); setShowArztAnfrage(false); }}
+              active={showAddArztDiag}
+            />
+          </div>
+        </div>
+
+        {/* Arzt-Anfrage-Flow (kanonisches Zuhause).
+           antwort_erhalten: immer sichtbar (Handlungsbedarf → ReviewBlock-Prominenz).
+           Andere Zustände: nur wenn explizit aufgeklappt. */}
+        {(showArztAnfrage || arztAnfrage?.anfrage.status === "antwort_erhalten") && (
+          <div style={{ padding: arztAnfrage?.anfrage.status === "antwort_erhalten" ? "0" : "8px 12px", background: arztAnfrage?.anfrage.status === "antwort_erhalten" ? "transparent" : "var(--bg-secondary)", borderRadius: 8, marginBottom: 6 }}>
+            <ArztAnfrageFlowInline />
+          </div>
+        )}
+
+        {/* Inline manual entry */}
+        {showAddArztDiag && (
+          <div style={{ padding: "8px 12px", background: "var(--bg-secondary)", borderRadius: 8, marginBottom: 6 }}>
+            <div className="flex items-end" style={{ gap: 8 }}>
+              <div style={{ flex: "0 0 80px" }}>
+                <label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>ICD-Code</label>
+                <input value={addArztIcd} onChange={e => setAddArztIcd(e.target.value)} placeholder="I10" style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "monospace" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Bezeichnung</label>
+                <input value={addArztBez} onChange={e => setAddArztBez(e.target.value)} placeholder="Arterielle Hypertonie" style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "inherit" }} />
+              </div>
+              <button
+                onClick={() => {
+                  if (!addArztIcd.trim() || !addArztBez.trim()) return;
+                  setArztDiagnosen(prev => [...prev, {
+                    id: `AD-manual-${Date.now()}`,
+                    onboardingId,
+                    patientId: null,
+                    icdCode: addArztIcd.trim(),
+                    bezeichnung: addArztBez.trim(),
+                    quelle: "Manuell erfasst, " + new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }),
+                    status: "bestaetigt",
+                  }]);
+                  setAddArztIcd(""); setAddArztBez(""); setShowAddArztDiag(false);
+                  toast("Ärztliche Diagnose erfasst");
+                }}
+                className="inline-flex items-center cursor-pointer"
+                style={{ gap: 4, padding: "6px 14px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-meta)", fontWeight: 500, border: "none", whiteSpace: "nowrap" }}
+              >
+                <Plus style={{ width: 10, height: 10 }} /> Erfassen
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Alle Diagnosen als kompakte einzeilige Zeilen — Entwürfe mit Ocker-Akzent + Aktionen, Bestätigte still */}
+        {arztDiagnosen.map(ad => (
+          <div
+            key={ad.id}
+            {...(ad.status === "entwurf" ? { "data-vorschlag": ad.id } : {})}
+            className="flex items-center"
+            style={{
+              gap: 8,
+              padding: "5px 8px 5px 0",
+              borderBottom: "0.5px solid var(--border-default)",
+              borderLeft: ad.status === "entwurf" ? "3px solid var(--status-warning)" : "3px solid transparent",
+              paddingLeft: 10,
+            }}
+          >
+            {/* Anna-Provenienz (nur Entwürfe) */}
+            {ad.status === "entwurf" && <Sparkles style={{ width: 11, height: 11, color: "var(--brand-primary)", flexShrink: 0 }} />}
+            {/* ICD-Code */}
+            <span style={{ fontFamily: "monospace", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-tertiary)", minWidth: 44, flexShrink: 0 }}>{ad.icdCode}</span>
+            {/* Bezeichnung */}
+            <span className="flex-1 min-w-0 truncate" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{ad.bezeichnung}</span>
+            {/* Quelle (Desktop, gekürzt einzeilig, vollständig als Tooltip) */}
+            <span className="hidden sm:inline shrink-0" title={ad.quelle} style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+              {ad.quelle.replace(/^Arzt-Antwort\s+/, "").replace(/^Manuell erfasst,\s*/, "Manuell · ")}
+            </span>
+            {/* Status-Pill + Aktionen */}
+            {ad.status === "entwurf" ? (
+              <div className="flex items-center shrink-0" style={{ gap: 2 }}>
+                <span className="inline-flex items-center" style={{ gap: 3, padding: "1px 8px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}>
+                  <Clock style={{ width: 9, height: 9 }} /> Vorschlag
+                </span>
+                <button
+                  onClick={() => setArztDiagnosen(prev => prev.map(d => d.id === ad.id ? { ...d, status: "bestaetigt" as const } : d))}
+                  className="cursor-pointer"
+                  title="Bestätigen"
+                  style={{ background: "none", border: "none", color: "var(--status-success-text)", padding: 6, minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
+                  <Check style={{ width: 14, height: 14 }} />
+                </button>
+                <button
+                  onClick={() => setArztDiagnosen(prev => prev.filter(d => d.id !== ad.id))}
+                  className="cursor-pointer"
+                  title="Verwerfen"
+                  style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 6, minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center", marginRight: 4 }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}
+                >
+                  <X style={{ width: 14, height: 14 }} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setArztDiagnosen(prev => prev.filter(d => d.id !== ad.id))}
+                className="cursor-pointer shrink-0"
+                title="Löschen"
+                style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 6, minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}
+              >
+                <Trash2 style={{ width: 12, height: 12 }} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* ═══ Sektion: Pflegediagnosen ═══ */}
+      <div className="flex items-center" style={{ marginBottom: 6 }}>
+        <span style={{ fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Pflegediagnosen</span>
+      </div>
+
+      {/* Pflegediagnosen — ReviewBlock per styleguide 8.10 */}
+      {diagnosen.map(d => {
+        const dMassnahmen = massnahmen.filter(m => m.bezugDiagnoseId === d.id);
+        const dZiele = ziele.filter(z => z.bezugDiagnoseId === d.id);
+        const katalogEntry = NANDA_KATALOG.find(k => k.nandaCode === d.nandaCode);
+        return (
+          <div key={d.id} {...(d.status === "vorschlag" ? { "data-vorschlag": d.id } : {})}>
+          <ReviewBlock
+            titel={<><span style={{ color: "var(--brand-primary)" }}>{d.nandaCode}</span> {d.titel}</>}
+            untertitel={`${dMassnahmen.length} Massnahmen · ${dZiele.length} Ziele`}
+            status={d.status === "akzeptiert" ? "bestaetigt" : "vorschlag"}
+            herkunft="anna"
+            defaultOffen={d.status === "vorschlag"}
+            onBestaetigen={() => setDiagnosen(prev => prev.map(x => x.id === d.id ? { ...x, status: "akzeptiert" as const } : x))}
+            onLoeschen={() => deleteDiagnose(d.id)}
+          >
+            {/* Begründung */}
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Begründung</label>
+              <textarea value={d.begruendung} onChange={e => setDiagnosen(prev => prev.map(x => x.id === d.id ? { ...x, begruendung: e.target.value } : x))} rows={2} style={{ width: "100%", padding: "11px 16px", fontSize: 14, borderRadius: 12, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "inherit", resize: "vertical" }} />
+            </div>
+
+            {/* Massnahmen */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, color: "var(--text-tertiary)", letterSpacing: "0.05em", textTransform: "uppercase" as const, marginBottom: 4 }}>Massnahmen</div>
+              {dMassnahmen.map(m => (
+                <div key={m.id} className="flex items-start" style={{ gap: 6, padding: "5px 8px", background: "var(--bg-secondary)", borderRadius: 12, marginBottom: 3, fontSize: "var(--text-small)" }}>
+                  <div className="flex-1">
+                    <span style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{m.titel}</span>
+                    <span style={{ color: "var(--text-tertiary)" }}> · {m.haeufigkeit}</span>
+                    <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 1 }}>{m.beschreibung}</div>
+                  </div>
+                  <button onClick={() => removeMassnahme(m.id)} className="cursor-pointer" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 2, flexShrink: 0 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 12, height: 12 }} /></button>
+                </div>
+              ))}
+              {katalogEntry && katalogEntry.massnahmenVorschlaege.filter(mv => !dMassnahmen.some(m => m.titel === mv.titel)).length > 0 && (
+                <div className="flex flex-wrap" style={{ gap: 4, marginTop: 4 }}>
+                  {katalogEntry.massnahmenVorschlaege.filter(mv => !dMassnahmen.some(m => m.titel === mv.titel)).map(mv => (
+                    <button key={mv.titel} onClick={() => addMassnahme(d.id, mv)} className="inline-flex items-center cursor-pointer" style={{ gap: 3, padding: "3px 8px", borderRadius: 999, background: "transparent", border: "0.5px dashed var(--border-default)", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                      <Plus style={{ width: 10, height: 10 }} /> {mv.titel}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Ziele */}
+            <div>
+              <div style={{ fontSize: 9, color: "var(--text-tertiary)", letterSpacing: "0.05em", textTransform: "uppercase" as const, marginBottom: 4 }}>Ziele</div>
+              {dZiele.map(z => (
+                <div key={z.id} className="flex items-start" style={{ gap: 6, padding: "5px 8px", background: "var(--brand-primary-light)", borderRadius: 12, marginBottom: 3, fontSize: "var(--text-small)" }}>
+                  <div className="flex-1">
+                    <span style={{ fontWeight: "var(--weight-medium)", color: "var(--brand-primary)" }}>{z.titel}</span>
+                    <span style={{ color: "var(--text-secondary)" }}> · {z.zeithorizont}</span>
+                    <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 1 }}>{z.messbar}</div>
+                  </div>
+                  <button onClick={() => removeZiel(z.id)} className="cursor-pointer" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 2, flexShrink: 0 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 12, height: 12 }} /></button>
+                </div>
+              ))}
+              {katalogEntry && katalogEntry.zieleVorschlaege.filter(zv => !dZiele.some(z => z.titel === zv.titel)).length > 0 && (
+                <div className="flex flex-wrap" style={{ gap: 4, marginTop: 4 }}>
+                  {katalogEntry.zieleVorschlaege.filter(zv => !dZiele.some(z => z.titel === zv.titel)).map(zv => (
+                    <button key={zv.titel} onClick={() => addZiel(d.id, zv)} className="inline-flex items-center cursor-pointer" style={{ gap: 3, padding: "3px 8px", borderRadius: 999, background: "transparent", border: "0.5px dashed var(--border-default)", fontSize: "var(--text-meta)", color: "var(--brand-primary)" }}>
+                      <Plus style={{ width: 10, height: 10 }} /> {zv.titel}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </ReviewBlock>
+          </div>
+        );
+      })}
+
+      {diagnosen.length === 0 && !showAddDiagnose && (
+        <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)", padding: "12px 0" }}>Noch keine Diagnosen — starte ein Gespräch oder füge manuell hinzu.</div>
+      )}
+
+      {/* Diagnose-Suche — Overlay, triggered from TabHeader */}
+      {showAddDiagnose && (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center" style={{ background: "rgba(19,19,20,0.3)", paddingTop: 80 }} onClick={() => { setShowAddDiagnose(false); setAddSearch(""); }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-elevated)", borderRadius: 12, border: "0.5px solid var(--border-default)", boxShadow: "0 8px 32px rgba(0,0,0,0.12)", width: "92%", maxWidth: 520, maxHeight: "60vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div className="flex items-center" style={{ padding: "12px 16px", gap: 8, borderBottom: "0.5px solid var(--border-default)" }}>
+              <Search style={{ width: 16, height: 16, color: "var(--text-tertiary)", flexShrink: 0 }} />
+              <input type="text" value={addSearch} onChange={e => setAddSearch(e.target.value)} placeholder="NANDA-Code, Titel oder Domäne…" autoFocus style={{ flex: 1, border: "none", outline: "none", fontSize: 14, background: "transparent", color: "var(--text-primary)", fontFamily: "inherit" }} />
+              <button onClick={() => { setShowAddDiagnose(false); setAddSearch(""); }} className="cursor-pointer" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 2 }}><X style={{ width: 16, height: 16 }} /></button>
+            </div>
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              {filteredKatalog.filter(k => !usedCodes.has(k.nandaCode)).map(opt => (
+                <div key={opt.nandaCode} onClick={() => addDiagnoseFromKatalog(opt)} className="cursor-pointer" style={{ padding: "10px 16px", borderBottom: "0.5px solid var(--border-default)" }} onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                  <div className="flex items-center" style={{ gap: 6 }}>
+                    <span style={{ fontSize: 14, fontWeight: 500, color: "var(--brand-primary)", flexShrink: 0 }}>{opt.nandaCode}</span>
+                    <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>{opt.titel}</span>
+                  </div>
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2 }}>{opt.domäne} · {opt.massnahmenVorschlaege.length} Massnahmen · {opt.zieleVorschlaege.length} Ziele</div>
+                </div>
+              ))}
+              {filteredKatalog.filter(k => !usedCodes.has(k.nandaCode)).length === 0 && (
+                <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 14, color: "var(--text-tertiary)" }}>Keine weiteren Diagnosen verfügbar</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
+  const navigate = useNavigate();
+  const klv = MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === onboardingId);
+  const pp = MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === onboardingId);
+  const verfuegbareDiagnosen = pp?.pflegediagnosen || [];
+  // Krankenkasse: from patient (if konvertiert) or mock default
+  const patient = klv?.patientId ? patients.find(p => p.id === klv.patientId) : null;
+  const krankenkasse = patient?.krankenkasse || "Groupe Mutuel"; // Demo-Default für Onboarding
+
+  // Pflegeplanung data for WZW
+  const ppDiagnosen = pp?.pflegediagnosen || [];
+  const ppMassnahmen = pp?.massnahmen || [];
+  const ppZiele = pp?.ziele || [];
+
+  // Local in-memory editor state
+  const [leistungen, setLeistungen] = useState<KLVLeistung[]>([]);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [katalogOpen, setKatalogOpen] = useState(false);
+  const [katalogSuche, setKatalogSuche] = useState("");
+  const [showWZW, setShowWZW] = useState(false);
+  const [wzwErgebnisse, setWzwErgebnisse] = useState<WZWErgebnis[]>([]);
+
+  // Initialize leistungen from KLV mock data
+  useEffect(() => {
+    if (klv) {
+      setLeistungen(klv.leistungspositionen.map(lp => ({ ...lp })));
+      // Auto-expand niedrig confidence or unvalidated items
+      const autoExpand = new Set<string>();
+      for (const lp of klv.leistungspositionen) {
+        if (!lp.validiert && (lp.annaKonfidenz === "niedrig" || lp.annaKonfidenz === null)) {
+          autoExpand.add(lp.id);
+        }
+      }
+      setExpandedIds(autoExpand);
+    }
+  }, [klv?.id]);
+
+  const katBg = (k: string) => k === "a" ? "var(--status-info-bg)" : k === "b" ? "var(--status-warning-bg)" : "var(--status-success-bg)";
+  const katColor = (k: string) => k === "a" ? "var(--status-info)" : k === "b" ? "var(--status-warning-text)" : "var(--status-success-text)";
+  const katLabel = (k: string) => k === "a" ? "a – Abklärung und Beratung" : k === "b" ? "b – Untersuchung und Behandlung" : "c – Grundpflege";
+
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds(prev => {
+      const next = new Set<string>();
+      if (!prev.has(id)) next.add(id); // only one open at a time
+      return next;
+    });
+  };
+
+  const validateLeistung = (id: string) => {
+    setLeistungen(prev => prev.map(l => l.id === id ? { ...l, validiert: true } : l));
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const updateLeistung = (id: string, patch: Partial<KLVLeistung>) => {
+    setLeistungen(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+  };
+
+  const removeLeistung = (id: string) => {
+    setLeistungen(prev => prev.filter(l => l.id !== id));
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  // ─── WZW-Auswertung ─────────────────────────────────
+  const startWZWAuswertung = () => {
+    if (showWZW) { setShowWZW(false); return; }
+    const ergebnisse = erzeugeWZWAuswertung(leistungen, ppDiagnosen, ppMassnahmen, ppZiele, krankenkasse);
+    setWzwErgebnisse(ergebnisse);
+    setShowWZW(true);
+  };
+
+  /** Bestätigen: setzt diagnoseIds (falls Vorschlag) + wzwBegruendung */
+  const wzwBestaetigen = (erg: WZWErgebnis) => {
+    const text = erg.status === "vorschlag" ? erg.vorschlagWzwText : erg.wzwText;
+    const diagIds = erg.status === "vorschlag" && erg.vorschlagDiagnose
+      ? [erg.vorschlagDiagnose.diagnoseId]
+      : undefined;
+
+    setLeistungen(prev => prev.map(l => {
+      if (l.id !== erg.leistungId) return l;
+      return {
+        ...l,
+        wzwBegruendung: text,
+        ...(diagIds ? { diagnoseIds: diagIds } : {}),
+      };
+    }));
+    // Update local WZW results to reflect confirmation
+    setWzwErgebnisse(prev => prev.map(e =>
+      e.leistungId === erg.leistungId ? { ...e, status: "begruendbar" as const, wzwText: text } : e
+    ));
+    toast("Begründung bestätigt");
+  };
+
+  /** Verwerfen: entfernt den WZW-Entwurf aus der Auswertungs-Liste */
+  const wzwVerwerfen = (leistungId: string) => {
+    setWzwErgebnisse(prev => prev.filter(e => e.leistungId !== leistungId));
+  };
+
+  const addFromKatalog = (pos: typeof SPITEX_LEISTUNGSKATALOG_2025[number]) => {
+    const newId = `klv-new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const newLeistung: KLVLeistung = {
+      id: newId,
+      klvNummer: pos.nr,
+      bezeichnung: pos.bezeichnung,
+      kategorie: pos.klvKategorie ?? "c",
+      wer: "S",
+      training: "N",
+      anzahl: 1,
+      einheit: "w",
+      zeitMin: pos.zeitMin ?? 15,
+      ausAnna: false,
+      annaKonfidenz: null,
+      validiert: false,
+      simultanGruppe: null,
+      bezugMassnahmeId: null,
+      diagnoseIds: [],
+      wzwBegruendung: null,
+    };
+    setLeistungen(prev => [...prev, newLeistung]);
+    setExpandedIds(prev => new Set(prev).add(newId));
+    setKatalogOpen(false);
+    setKatalogSuche("");
+  };
+
+  // Group leistungen by kategorie
+  const grouped: Record<"a" | "b" | "c", KLVLeistung[]> = { a: [], b: [], c: [] };
+  for (const l of leistungen) {
+    grouped[l.kategorie].push(l);
+  }
+
+  const summen = berechneSummen(leistungen);
+  const alleErfasstenNummern = leistungen.map(l => l.klvNummer);
+
+  // Filtered catalog for search overlay
+  const katalogFiltered = katalogSuche.trim().length > 0
+    ? SPITEX_LEISTUNGSKATALOG_2025.filter(p =>
+        p.klvKategorie !== null && (
+          p.bezeichnung.toLowerCase().includes(katalogSuche.toLowerCase()) ||
+          p.nr.includes(katalogSuche) ||
+          p.bereich.toLowerCase().includes(katalogSuche.toLowerCase())
+        )
+      )
+    : SPITEX_LEISTUNGSKATALOG_2025.filter(p => p.klvKategorie !== null);
+
+  // ─── Empty state ─────────────────────────────────────
+  if (!klv) return (
+    <div style={{ padding: "var(--space-6)", textAlign: "center", color: "var(--text-tertiary)" }}>
+      <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>Noch keine KLV-Verordnung</div>
+      <div style={{ fontSize: "var(--text-small)", marginBottom: 16 }}>Wird aus dem Gespräch oder manuell erstellt.</div>
+      <button onClick={() => navigate("/klv/neu")} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}>
+        <FileText style={{ width: 14, height: 14 }} /> KLV anlegen
+      </button>
+    </div>
+  );
+
+  // ─── KLV exists — full inline editor ──────────────────
+  return (
+    <div style={{ padding: "var(--space-4)" }}>
+      <TabHeader
+        titel="KLV-Leistungen"
+        meta={<HeaderMeta modus="zusammenfassung" text={`${summen.total.toFixed(1)} h/Woche`} />}
+        aktion={
+          <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
+            <button
+              onClick={startWZWAuswertung}
+              className="inline-flex items-center cursor-pointer"
+              style={{
+                gap: 5,
+                padding: "7px 14px",
+                borderRadius: "var(--radius-pill)",
+                background: showWZW ? "var(--brand-primary)" : "var(--bg-elevated)",
+                border: showWZW ? "none" : "0.5px solid var(--border-default)",
+                color: showWZW ? "var(--text-on-dark)" : "var(--text-primary)",
+                fontSize: "var(--text-small)",
+                fontWeight: 500,
+                minHeight: 34,
+              }}
+            >
+              <Sparkles style={{ width: 13, height: 13 }} /> {showWZW ? "WZW schliessen" : "WZW-Auswertung"}
+            </button>
+            <button onClick={() => navigate(`/klv/${klv.id}`)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "9.5px 22px", borderRadius: 999, background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: 14, fontWeight: 500, border: "0.5px solid var(--text-primary)" }}><Send style={{ width: 13, height: 13 }} /> Verordnung &amp; Versand</button>
+            <button onClick={() => setKatalogOpen(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 22px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}><Plus style={{ width: 14, height: 14 }} /> Leistung hinzufügen</button>
+          </div>
+        }
+      />
+
+      {/* Diagnosen summary — sourced from ärztliche Diagnosen-Artefakt (nur bestätigte) */}
+      {(() => {
+        const bestaetigteArztDiag = MOCK_ARZT_DIAGNOSEN.filter(d => d.onboardingId === onboardingId && d.status === "bestaetigt");
+        return bestaetigteArztDiag.length > 0 ? (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Ärztliche Diagnosen
+            </div>
+            {bestaetigteArztDiag.map(d => (
+              <div key={d.id} style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", padding: "2px 0" }}>
+                <span style={{ fontFamily: "monospace", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginRight: 6 }}>{d.icdCode}</span>
+                {d.bezeichnung}
+              </div>
+            ))}
+          </div>
+        ) : null;
+      })()}
+
+      {/* Leistungen grouped by Kategorie — SectionAccordion (8.12) + ItemRow (8.13) */}
+      {leistungen.length > 0 ? (
+        <div>
+          {(["a", "b", "c"] as const).map(kat => {
+            const items = grouped[kat];
+            if (items.length === 0) return null;
+            const katSubtotal = items.reduce((s, l) => s + (istPeriodisch(l) ? hProWoche(l) : 0), 0);
+            const katStatus = items.every(l => l.validiert) ? "vollstaendig" as const : items.some(l => l.validiert) ? "teilweise" as const : "leer" as const;
+            return (
+              <SectionAccordion
+                key={kat}
+                id={kat}
+                titel={katLabel(kat)}
+                marker={<SektionBadge buchstabe={kat} status={katStatus} />}
+                count={`${items.length} Positionen · ${katSubtotal.toFixed(2)} h/Wo.`}
+                status={katStatus}
+                defaultOffen
+              >
+                {items.map((l, idx) => {
+                  const isExpanded = expandedIds.has(l.id);
+                  const partners = getSimultanPartner(l, leistungen);
+                  const hW = hProWoche(l);
+                  const isPer = istPeriodisch(l);
+                  const inklusivTreffer = pruefeInklusiv(l.klvNummer, alleErfasstenNummern);
+                  const kassenTreffer = pruefeKassenregeln(l, krankenkasse);
+                  return (
+                    <ItemRow
+                      key={l.id}
+                      marker={<span style={{ fontSize: "var(--text-meta)", fontFamily: "monospace", fontWeight: 500, color: "var(--text-tertiary)", minWidth: 40, display: "inline-block" }}>{l.klvNummer}</span>}
+                      titel={l.bezeichnung}
+                      hilfstext={`${werLabel(l.wer)} · ${l.anzahl}× ${einheitLabel(l.einheit)}${partners.length > 0 ? " · ⟂ simultan" : ""}${l.diagnoseIds.length > 0 ? ` · ${verfuegbareDiagnosen.find(d => d.id === l.diagnoseIds[0])?.nandaCode || ""}` : ""}`}
+                      last={idx === items.length - 1}
+                      onClick={() => toggleExpand(l.id)}
+                    >
+                      {/* Inklusiv-Hinweis (Anna, regelbasiert) */}
+                      {inklusivTreffer && (
+                        <div className="flex items-center" style={{ gap: 6, marginBottom: 6, padding: "4px 8px", background: "var(--status-warning-bg)", borderRadius: 8 }}>
+                          <Sparkles style={{ width: 12, height: 12, color: "var(--brand-primary)", flexShrink: 0 }} />
+                          <span style={{ fontSize: 9, fontWeight: 500, color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" as const }}>Anna</span>
+                          <span className="inline-flex items-center" style={{ gap: 3, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+                            <AlertTriangle style={{ width: 10, height: 10 }} />
+                            inklusive in {inklusivTreffer.hauptBezeichnung}
+                          </span>
+                        </div>
+                      )}
+                      {/* Kassenregel-Hinweis (Anna, regelbasiert, warn-only) */}
+                      {kassenTreffer.length > 0 && kassenTreffer.map((t, ti) => (
+                        <div key={ti} className="flex items-center" style={{ gap: 6, marginBottom: 6, padding: "4px 8px", background: "var(--status-warning-bg)", borderRadius: 8 }}>
+                          <Sparkles style={{ width: 12, height: 12, color: "var(--brand-primary)", flexShrink: 0 }} />
+                          <span style={{ fontSize: 9, fontWeight: 500, color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" as const }}>Anna</span>
+                          <span className="inline-flex items-center" style={{ gap: 3, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+                            <AlertTriangle style={{ width: 10, height: 10 }} />
+                            {t.hinweis}
+                          </span>
+                        </div>
+                      ))}
+                      {/* Compact info */}
+                      <div className="flex items-center justify-between" style={{ gap: 8 }}>
+                        <div className="flex items-center" style={{ gap: 6 }}>
+                          {l.ausAnna && <div className="flex items-center" style={{ gap: 3 }}><Sparkles style={{ width: 12, height: 12, color: "var(--brand-primary)" }} /><span style={{ fontSize: 9, fontWeight: 500, color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" as const }}>Anna</span></div>}
+                          <span className="inline-flex items-center" style={{ gap: 3, padding: "1px 8px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: l.validiert ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: l.validiert ? "var(--status-success-text)" : "var(--status-warning-text)" }}>
+                            {l.validiert ? <Check style={{ width: 10, height: 10 }} /> : <Clock style={{ width: 10, height: 10 }} />}
+                            {l.validiert ? "Bestätigt" : "Vorschlag"}
+                          </span>
+                        </div>
+                        <div className="flex items-center" style={{ gap: 8 }}>
+                          <span className="hidden sm:inline" style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{l.zeitMin} min</span>
+                          <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: isPer ? "var(--text-primary)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", minWidth: 56, textAlign: "right" }}>
+                            {isPer ? `${hW.toFixed(2)}` : l.einheit === "e" ? "einm." : "n. B."}
+                          </span>
+                          <button onClick={e => { e.stopPropagation(); removeLeistung(l.id); }} className="cursor-pointer" title="Löschen" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 2, flexShrink: 0 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 14, height: 14 }} /></button>
+                          <ChevronDown style={{ width: 14, height: 14, color: "var(--text-tertiary)", transition: "transform 0.15s", transform: isExpanded ? "rotate(180deg)" : "none" }} />
+                        </div>
+                      </div>
+
+                      {/* Expanded edit body */}
+                      {isExpanded && (() => {
+                        const rhythmus = l.einheit === "e" ? "einmalig" : l.einheit === "nB" ? "nachBedarf" : l.einheit === "m" ? "monatlich" : l.einheit === "w" ? "wöchentlich" : "täglich";
+                        const tage = l.einheit.startsWith("t") ? parseInt(l.einheit.slice(1)) : (l.einheit === "w" ? 1 : 7);
+                        const tageDisabled = rhythmus !== "täglich";
+                        const anzahlDisabled = rhythmus === "einmalig" || rhythmus === "nachBedarf";
+                        const liveHW = hW;
+                        const setRhythmus = (r: string) => {
+                          if (r === "einmalig") updateLeistung(l.id, { einheit: "e" as KLVEinheit, anzahl: 1 });
+                          else if (r === "nachBedarf") updateLeistung(l.id, { einheit: "nB" as KLVEinheit, anzahl: 1 });
+                          else if (r === "monatlich") updateLeistung(l.id, { einheit: "m" as KLVEinheit });
+                          else if (r === "wöchentlich") updateLeistung(l.id, { einheit: "w" as KLVEinheit });
+                          else updateLeistung(l.id, { einheit: `t${tage}` as KLVEinheit });
+                        };
+                        const setTage = (t: number) => { const c = Math.max(1, Math.min(7, t)); updateLeistung(l.id, { einheit: (c === 1 ? "w" : `t${c}`) as KLVEinheit }); };
+                        const calcText = rhythmus === "täglich" ? `${tage} Tage × ${l.anzahl} × ${l.zeitMin} min` : rhythmus === "wöchentlich" ? `${l.anzahl} Einsätze/Woche × ${l.zeitMin} min` : rhythmus === "monatlich" ? `${l.anzahl}× pro Monat × ${l.zeitMin} min ÷ 4.33` : "";
+                        const ss = { width: "100%", padding: "8px 12px", fontSize: 14, borderRadius: 12, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "inherit" } as const;
+                        const ssDis = { ...ss, opacity: 0.4, pointerEvents: "none" as const, background: "var(--bg-secondary)", color: "var(--text-tertiary)", cursor: "not-allowed" as const };
+                        return (
+                          <div style={{ marginTop: 8, paddingTop: 10, borderTop: "0.5px solid var(--border-default)", borderLeft: `4px solid ${l.validiert ? "var(--status-success)" : "var(--status-warning)"}`, paddingLeft: 12 }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginBottom: 10 }}>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Wer</label><InlineSelect value={l.wer} onChange={v => updateLeistung(l.id, { wer: v as KLVLeistung["wer"] })} options={[{ value: "S", label: werLabel("S") }, { value: "A", label: werLabel("A") }, { value: "S+A", label: werLabel("S+A") }]} /></div>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Rhythmus</label><InlineSelect value={rhythmus} onChange={v => setRhythmus(v)} options={[{ value: "täglich", label: "Täglich" }, { value: "wöchentlich", label: "Wöchentlich" }, { value: "monatlich", label: "Monatlich" }, { value: "einmalig", label: "Einmalig" }, { value: "nachBedarf", label: "Nach Bedarf" }]} /></div>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>an wie vielen Tagen</label><input type="number" min={1} max={7} value={tage} onChange={e => setTage(parseInt(e.target.value) || 1)} disabled={tageDisabled} style={tageDisabled ? ssDis : ss} /></div>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Anzahl</label><input type="number" min={1} value={l.anzahl} onChange={e => updateLeistung(l.id, { anzahl: Math.max(1, parseInt(e.target.value) || 1) })} disabled={anzahlDisabled} style={anzahlDisabled ? ssDis : ss} /></div>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Zeit pro Einsatz</label><div className="flex items-center" style={{ gap: 4 }}><input type="number" min={1} value={l.zeitMin} onChange={e => updateLeistung(l.id, { zeitMin: Math.max(1, parseInt(e.target.value) || 1) })} style={{ ...ss, flex: 1 }} /><span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>min</span></div></div>
+                            </div>
+                            {/* Pflegediagnose-Zuordnung */}
+                            {verfuegbareDiagnosen.length > 0 && (
+                              <div style={{ marginBottom: 10 }}>
+                                <label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Pflegediagnose</label>
+                                <InlineSelect
+                                  value={l.diagnoseIds[0] || ""}
+                                  onChange={v => updateLeistung(l.id, { diagnoseIds: v ? [v] : [] })}
+                                  options={[
+                                    { value: "", label: "Keine Diagnose zugeordnet" },
+                                    ...verfuegbareDiagnosen.map(d => ({ value: d.id, label: `${d.nandaCode} – ${d.titel}` })),
+                                  ]}
+                                />
+                              </div>
+                            )}
+                            {!l.validiert && (
+                              <div className="flex items-center" style={{ gap: 8 }}>
+                                <button onClick={e => { e.stopPropagation(); validateLeistung(l.id); }} className="inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "10px 22px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}><Check style={{ width: 14, height: 14 }} /> Bestätigen</button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </ItemRow>
+                  );
+                })}
+              </SectionAccordion>
+            );
+          })}
+
+          {/* Summen */}
+          <div style={{ borderTop: "2px solid var(--border-default)", paddingTop: 10, marginTop: 8 }}>
+            {(["a","b","c"] as const).map(k => { const v = k === "a" ? summen.kategorieA : k === "b" ? summen.kategorieB : summen.kategorieC; return v > 0 ? (
+              <div key={k} className="flex items-center justify-between" style={{ padding: "2px 0", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+                <span>Kategorie {k}:</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{v.toFixed(2)} h/Wo.</span>
+              </div>
+            ) : null; })}
+            <div style={{ borderTop: "0.5px solid var(--border-default)", margin: "4px 0" }} />
+            <div className="flex items-center justify-between" style={{ padding: "2px 0", fontWeight: 500, color: "var(--text-primary)", fontSize: "var(--text-body)" }}>
+              <span>Total</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{summen.total.toFixed(2)} h/Wo.</span>
+            </div>
+            {summen.einmaligMin > 0 && (
+              <div className="flex items-center justify-between" style={{ padding: "2px 0", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+                <span>Einmalige Leistungen</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{summen.einmaligMin} min ({summen.einmaligH.toFixed(2)} h)</span>
+              </div>
+            )}
+          </div>
+
+          {/* Dokument-Aktionen (Output, getrennt vom Editieren) */}
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: "0.5px solid var(--border-default)" }}>
+            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginBottom: 6 }}>Dokumente</div>
+            <div className="flex flex-wrap" style={{ gap: 8 }}>
+              <button onClick={() => toast("Dokument-Generierung folgt")} className="inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "6px 14px", borderRadius: 999, background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}><FileText style={{ width: 13, height: 13 }} /> Leistungsplanungsblatt</button>
+              <button onClick={() => toast("Dokument-Generierung folgt")} className="inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "6px 14px", borderRadius: 999, background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}><FileText style={{ width: 13, height: 13 }} /> Bedarfsmeldeformular (KLV Art. 7)</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)", padding: "12px 0" }}>
+          Noch keine Leistungspositionen – starte ein Gespräch oder öffne den KLV-Arbeitsbereich.
+        </div>
+      )}
+
+      {/* ── WZW-Auswertung — Overlay (Pattern: InterRAI Auswerten) ── */}
+      {showWZW && (
+        <div className="fixed inset-0 z-[55] flex items-end sm:items-center justify-center" style={{ background: "rgba(19,19,20,0.4)" }}>
+          <div style={{ background: "var(--bg-primary)", borderRadius: "12px 12px 0 0", maxWidth: 680, width: "100%", maxHeight: "85vh", overflow: "auto", boxShadow: "var(--shadow-overlay)" }} className="sm:rounded-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between" style={{ padding: "16px 20px", borderBottom: "0.5px solid var(--border-default)", position: "sticky", top: 0, background: "var(--bg-primary)", zIndex: 1 }}>
+              <div className="flex items-center" style={{ gap: 8 }}>
+                <Sparkles style={{ width: 16, height: 16, color: "var(--brand-primary)" }} />
+                <span style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)" }}>WZW-Auswertung</span>
+                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Begründung (Entwurf)</span>
+              </div>
+              <button onClick={() => setShowWZW(false)} className="cursor-pointer" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 4 }}><X style={{ width: 16, height: 16 }} /></button>
+            </div>
+
+            {/* Zusammenfassung */}
+            <div style={{ padding: "12px 20px", borderBottom: "0.5px solid var(--border-default)", background: "var(--bg-secondary)" }}>
+              <div className="flex items-center flex-wrap" style={{ gap: 12, fontSize: "var(--text-small)" }}>
+                <span style={{ color: "var(--text-secondary)" }}>{wzwErgebnisse.length} Positionen</span>
+                <span style={{ color: "var(--status-success-text)" }}>{wzwErgebnisse.filter(e => e.status === "begruendbar").length} begründbar</span>
+                <span style={{ color: "var(--status-warning-text)" }}>{wzwErgebnisse.filter(e => e.status === "vorschlag").length} mit Vorschlag</span>
+                {wzwErgebnisse.filter(e => e.status === "luecke").length > 0 && (
+                  <span style={{ color: "var(--status-danger)" }}>{wzwErgebnisse.filter(e => e.status === "luecke").length} Lücken</span>
+                )}
+              </div>
+            </div>
+
+            {/* Positionen als ReviewBlock-Liste */}
+            <div style={{ padding: "12px 20px" }}>
+              {wzwErgebnisse.length === 0 ? (
+                <div style={{ padding: "24px 0", textAlign: "center", fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>
+                  Keine Leistungspositionen vorhanden.
+                </div>
+              ) : wzwErgebnisse.map(erg => {
+                const istBestaetigt = leistungen.find(l => l.id === erg.leistungId)?.wzwBegruendung != null;
+
+                // Fall C: Lücke — kein ReviewBlock, sondern Warn-Hinweis
+                if (erg.status === "luecke") {
+                  return (
+                    <div key={erg.leistungId} style={{ marginBottom: 6 }}>
+                      <div style={{
+                        display: "flex",
+                        background: "var(--bg-elevated)",
+                        border: "0.5px solid var(--border-default)",
+                        borderRadius: 12,
+                        overflow: "hidden",
+                      }}>
+                        <div style={{ width: 4, flexShrink: 0, background: "var(--status-danger)", borderRadius: "2px 0 0 2px" }} />
+                        <div style={{ flex: 1, padding: "12px 16px" }}>
+                          <div className="flex items-center" style={{ gap: 6, marginBottom: 6 }}>
+                            <span style={{ fontSize: "var(--text-meta)", fontFamily: "monospace", fontWeight: 500, color: "var(--text-tertiary)" }}>{erg.klvNummer}</span>
+                            <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>{erg.bezeichnung}</span>
+                          </div>
+                          <div className="flex items-start" style={{ gap: 6, padding: "8px 10px", background: "rgba(168,50,31,0.04)", borderRadius: 8 }}>
+                            <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
+                            <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                              Keine passende Pflegediagnose vorhanden – Zweckmässigkeit nicht begründbar. Pflegeplanung ergänzen.
+                            </div>
+                          </div>
+                          {erg.zeitAbweichung && (
+                            <div style={{ marginTop: 6, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+                              {erg.zeitMin} min statt Richtwert {erg.katalogZeitMin} min
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Fall A & B: ReviewBlock
+                const wzwTextAnzeige = erg.status === "vorschlag"
+                  ? erg.vorschlagWzwText
+                  : erg.wzwText;
+
+                return (
+                  <ReviewBlock
+                    key={erg.leistungId}
+                    titel={<><span style={{ fontFamily: "monospace", color: "var(--text-tertiary)", marginRight: 6 }}>{erg.klvNummer}</span> {erg.bezeichnung}</>}
+                    untertitel={
+                      erg.status === "vorschlag" && erg.vorschlagDiagnose
+                        ? `Vorschlag: über ${erg.vorschlagDiagnose.nandaCode} ${erg.vorschlagDiagnose.titel} begründen`
+                        : erg.diagnose
+                          ? `${erg.diagnose.nandaCode} ${erg.diagnose.titel}`
+                          : undefined
+                    }
+                    status={istBestaetigt ? "bestaetigt" : "vorschlag"}
+                    herkunft="anna"
+                    defaultOffen={erg.status === "vorschlag" || !istBestaetigt}
+                    aktionen={!istBestaetigt}
+                    onBestaetigen={() => wzwBestaetigen(erg)}
+                    onVerwerfen={() => wzwVerwerfen(erg.leistungId)}
+                  >
+                    {/* WZW-Dreisatz */}
+                    {wzwTextAnzeige && (
+                      <div style={{ whiteSpace: "pre-line", fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 8 }}>
+                        {wzwTextAnzeige}
+                      </div>
+                    )}
+
+                    {/* Hinweise */}
+                    {erg.zeitAbweichung && (
+                      <div className="flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginBottom: 4 }}>
+                        <AlertTriangle style={{ width: 10, height: 10 }} />
+                        Zeitabweichung: {erg.zeitMin} min statt Richtwert {erg.katalogZeitMin} min
+                      </div>
+                    )}
+                    {erg.inklusivHinweis && (
+                      <div className="flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginBottom: 4 }}>
+                        <AlertTriangle style={{ width: 10, height: 10 }} />
+                        {erg.inklusivHinweis}
+                      </div>
+                    )}
+                    {erg.kassenregelTreffer.map((t, i) => (
+                      <div key={i} className="flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginBottom: 4 }}>
+                        <AlertTriangle style={{ width: 10, height: 10 }} />
+                        {t.hinweis}
+                      </div>
+                    ))}
+
+                    {/* Zugeordnete Massnahmen + Ziele (Kontext) */}
+                    {(erg.massnahmen.length > 0 || (erg.status === "vorschlag" && erg.vorschlagDiagnose)) && (() => {
+                      const relevanteMassnahmen = erg.status === "vorschlag" && erg.vorschlagDiagnose
+                        ? ppMassnahmen.filter(m => m.bezugDiagnoseId === erg.vorschlagDiagnose!.diagnoseId)
+                        : erg.massnahmen;
+                      const relevanteZiele = erg.status === "vorschlag" && erg.vorschlagDiagnose
+                        ? ppZiele.filter(z => z.bezugDiagnoseId === erg.vorschlagDiagnose!.diagnoseId)
+                        : erg.ziele;
+                      return (
+                        <div style={{ marginTop: 6, paddingTop: 6, borderTop: "0.5px solid var(--border-default)" }}>
+                          {relevanteMassnahmen.length > 0 && (
+                            <div style={{ marginBottom: 4 }}>
+                              <span style={{ fontSize: 9, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Massnahmen</span>
+                              {relevanteMassnahmen.map(m => (
+                                <div key={m.id} style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", padding: "1px 0" }}>· {m.titel}</div>
+                              ))}
+                            </div>
+                          )}
+                          {relevanteZiele.length > 0 && (
+                            <div>
+                              <span style={{ fontSize: 9, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ziele</span>
+                              {relevanteZiele.map(z => (
+                                <div key={z.id} style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", padding: "1px 0" }}>· {z.titel} ({z.zeithorizont})</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </ReviewBlock>
+                );
+              })}
+
+              {/* Haftungs-Hinweis (Footer) */}
+              <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--bg-secondary)", borderRadius: 8, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
+                Diese Auswertung stellt Begründungs-Entwürfe bereit und zeigt Lücken. Sie bescheinigt keine Konformität und ersetzt nicht die fachliche Prüfung.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Leistungssuche — Overlay, triggered from TabHeader ── */}
+      {katalogOpen && (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center" style={{ background: "rgba(19,19,20,0.3)", paddingTop: 80 }} onClick={() => { setKatalogOpen(false); setKatalogSuche(""); }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-elevated)", borderRadius: 12, border: "0.5px solid var(--border-default)", boxShadow: "0 8px 32px rgba(0,0,0,0.12)", width: "92%", maxWidth: 520, maxHeight: "60vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {/* Pill search field (8.2) */}
+            <div className="flex items-center" style={{ padding: "12px 16px", gap: 8, borderBottom: "0.5px solid var(--border-default)" }}>
+              <Search style={{ width: 16, height: 16, color: "var(--text-tertiary)", flexShrink: 0 }} />
+              <input
+                type="text"
+                value={katalogSuche}
+                onChange={e => setKatalogSuche(e.target.value)}
+                placeholder="Leistung suchen (Nr., Bezeichnung oder Bereich)…"
+                autoFocus
+                style={{ flex: 1, border: "none", outline: "none", fontSize: 14, background: "transparent", color: "var(--text-primary)", fontFamily: "inherit" }}
+              />
+              <button onClick={() => { setKatalogOpen(false); setKatalogSuche(""); }} className="cursor-pointer" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 2 }}><X style={{ width: 16, height: 16 }} /></button>
+            </div>
+            {/* Results — ItemRow pattern */}
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              {katalogFiltered.length === 0 ? (
+                <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 14, color: "var(--text-tertiary)" }}>Keine Ergebnisse</div>
+              ) : katalogFiltered.slice(0, 40).map(pos => (
+                <div
+                  key={pos.nr}
+                  onClick={() => addFromKatalog(pos)}
+                  className="flex items-center cursor-pointer"
+                  style={{ padding: "10px 16px", gap: 10, borderBottom: "0.5px solid var(--border-default)" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                >
+                  <span style={{ fontSize: "var(--text-meta)", fontFamily: "monospace", fontWeight: 500, color: "var(--text-tertiary)", minWidth: 40 }}>{pos.nr}</span>
+                  <span className="flex-1 truncate" style={{ fontSize: 14, color: "var(--text-primary)" }}>{pos.bezeichnung}</span>
+                  <span style={{ padding: "1px 8px", borderRadius: 999, fontSize: "var(--text-micro)", fontWeight: 500, background: katBg(pos.klvKategorie!), color: katColor(pos.klvKategorie!), flexShrink: 0 }}>{pos.klvKategorie}</span>
+                  {pos.zeitMin && <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{pos.zeitMin} min</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

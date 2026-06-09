@@ -52,6 +52,8 @@ import {
   Info,
   CalendarOff,
   MessageSquare,
+  Mic,
+  Trash2,
 } from "lucide-react";
 import {
   patients,
@@ -63,11 +65,22 @@ import {
 import { StatusModal } from "./StatusModal";
 import { TabDokumente } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
+import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, DEMO_SCALES, DEMO_CAPS, ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import { KLV_STATUS_PIPELINE, getArtefaktContainer, type KLVVerordnung } from "../../types/klinische-artefakte";
+import { hProWoche, berechneSummen, einheitLabel } from "../../lib/klv/berechnung";
+import { toast } from "sonner";
+import { useRecording } from "../recording/RecordingContext";
+import { TabHeader, HeaderMeta } from "./ui/TabHeader";
+import { ItemRow } from "./ui/ItemRow";
+import { WorkflowChecklist } from "./workflow/WorkflowChecklist";
 
 /* ── Tab definitions ─────────────────────── */
 const profileTabs = [
   { id: "ueberblick", label: "Überblick", icon: LayoutDashboard },
   { id: "anamnese", label: "Anamnese", icon: Stethoscope },
+  { id: "interrai", label: "InterRAI", icon: ClipboardList },
+  { id: "pflegeplanung", label: "Pflegeplanung", icon: ListChecks },
+  { id: "klv", label: "KLV", icon: FileText },
   { id: "atl", label: "Aktivitäten (ATL)", icon: ClipboardList },
   { id: "workflow", label: "Workflow / Action Plan", icon: ListChecks },
   { id: "dokumente", label: "Dokumente", icon: FileText },
@@ -446,6 +459,9 @@ export function Patient360Page() {
       <div style={{ padding: "20px var(--space-6) 40px" }}>
         {activeTab === "ueberblick" && <TabUeberblick patient={patient} onNavigateTab={setActiveTab} />}
         {activeTab === "anamnese" && <TabAnamnese patient={patient} />}
+        {activeTab === "interrai" && <TabInterRAI patientId={patient.id} patientName={`${patient.nachname}, ${patient.vorname}`} navigate={navigate} />}
+        {activeTab === "pflegeplanung" && <TabPflegeplanung patientId={patient.id} navigate={navigate} />}
+        {activeTab === "klv" && <TabKLV patientId={patient.id} />}
         {activeTab === "atl" && <TabATL patient={patient} />}
         {activeTab === "workflow" && <TabWorkflow patient={patient} />}
         {activeTab === "dokumente" && <TabDokumente patient={patient} />}
@@ -1006,21 +1022,13 @@ function nowTimestamp(): string {
   return `${d.toLocaleDateString("de-CH")}, ${d.toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" })}`;
 }
 
-/* ── Reusable Workflow Section ──────────── */
+/* ── Reusable Workflow Section — uses TabHeader (8.11) + ItemRow (8.13) ──── */
 function WorkflowSection({
   title,
-  icon: Icon,
-  iconBg,
-  accentColor,
-  barColor,
   tasks,
   onUpdate,
 }: {
   title: string;
-  icon: React.ElementType;
-  iconBg: string;
-  accentColor: string;
-  barColor: string;
   tasks: WorkflowTask[];
   onUpdate: (id: string, patch: Partial<WorkflowTask>) => void;
 }) {
@@ -1031,7 +1039,6 @@ function WorkflowSection({
   const doneTasks = tasks.filter((t) => t.status === "abgeschlossen");
   const doneCount = doneTasks.length;
   const total = tasks.length;
-  const pct = Math.round((doneCount / total) * 100);
 
   const handleToggleComplete = (task: WorkflowTask) => {
     if (task.status === "offen") {
@@ -1042,11 +1049,7 @@ function WorkflowSection({
   };
 
   const handleDateChange = (task: WorkflowTask, iso: string) => {
-    onUpdate(task.id, {
-      dueDate: iso,
-      dueDateDisplay: isoToChDate(iso),
-      overdue: task.status === "offen" && isOverdue(iso),
-    });
+    onUpdate(task.id, { dueDate: iso, dueDateDisplay: isoToChDate(iso), overdue: task.status === "offen" && isOverdue(iso) });
   };
 
   const handleAssigneeChange = (task: WorkflowTask, assignee: string) => {
@@ -1054,220 +1057,112 @@ function WorkflowSection({
     setOpenDropdown(null);
   };
 
-  const renderRow = (task: WorkflowTask) => {
+  const renderTask = (task: WorkflowTask, idx: number, arr: WorkflowTask[]) => {
     const isDone = task.status === "abgeschlossen";
     const isDropdownOpen = openDropdown === task.id;
 
     return (
-      <div
+      <ItemRow
         key={task.id}
-        className={`flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all ${
-          isDone
-            ? "bg-success-light/40"
-            : task.overdue
-            ? "bg-error-light/30"
-            : "hover:bg-muted/30"
-        }`}
-      >
-        {/* Completion checkbox — fixed width */}
-        <button
-          onClick={() => handleToggleComplete(task)}
-          className="shrink-0 w-5 group"
-          title={isDone ? "Als offen markieren" : "Als erledigt markieren"}
-        >
-          {isDone ? (
-            <CheckCircle2 className="w-5 h-5 text-success" />
-          ) : (
-            <div className="w-5 h-5 rounded-full border-2 border-border group-hover:border-success transition-colors flex items-center justify-center">
-              <Check className="w-3 h-3 text-transparent group-hover:text-success/50 transition-colors" />
-            </div>
-          )}
-        </button>
-
-        {/* Nr + Label — flexible, truncates */}
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-muted-foreground shrink-0" style={{ fontWeight: 500 }}>
-              {task.nr}.
-            </span>
-            <span
-              className={`text-[13px] truncate ${
-                isDone
-                  ? "text-muted-foreground line-through decoration-muted-foreground/40"
-                  : "text-foreground"
-              }`}
-              style={{ fontWeight: isDone ? 400 : 450 }}
-            >
-              {task.label}
-            </span>
-            {task.overdue && !isDone && (
-              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-error/10 text-error shrink-0" style={{ fontWeight: 500 }}>
-                <AlertTriangle className="w-2.5 h-2.5" />
-                Überfällig
-              </span>
-            )}
-          </div>
-          {isDone && task.completedAt && (
-            <p className="text-[10px] text-success-foreground/70 mt-0.5 pl-5 truncate">
-              Abgeschlossen: {task.completedAt}
-            </p>
-          )}
-        </div>
-
-        {/* Due date — fixed width column */}
-        <div className="hidden sm:flex items-center gap-1" style={{ width: "120px", minWidth: "120px" }}>
-          <Calendar className={`w-3 h-3 shrink-0 ${task.overdue && !isDone ? "text-error" : "text-muted-foreground/50"}`} />
-          <input
-            type="date"
-            value={task.dueDate}
-            onChange={(e) => handleDateChange(task, e.target.value)}
-            disabled={isDone}
-            className={`text-[11px] bg-transparent border-none outline-none cursor-pointer disabled:cursor-default disabled:opacity-60 tabular-nums w-full ${
-              task.overdue && !isDone ? "text-error" : "text-muted-foreground"
-            }`}
-            style={{ fontWeight: 500 }}
-          />
-        </div>
-
-        {/* Assignee — fixed width column */}
-        <div className="hidden md:block relative" style={{ width: "140px", minWidth: "140px" }}>
-          <button
-            onClick={() => setOpenDropdown(isDropdownOpen ? null : task.id)}
-            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors w-full"
-            title={task.assignee || "Person zuweisen"}
-          >
-            {task.assignee ? (
-              <>
-                <div className="w-5 h-5 rounded-md bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center shrink-0">
-                  <span className="text-[8px] text-primary" style={{ fontWeight: 600 }}>
-                    {getInitials(task.assignee)}
-                  </span>
-                </div>
-                <span className="text-[11px] text-muted-foreground truncate" style={{ fontWeight: 450 }}>
-                  {task.assignee}
-                </span>
-              </>
+        marker={
+          <button onClick={() => handleToggleComplete(task)} className="cursor-pointer" style={{ background: "none", border: "none", padding: 0 }} title={isDone ? "Als offen markieren" : "Als erledigt markieren"}>
+            {isDone ? (
+              <span style={{ width: 20, height: 20, borderRadius: 999, background: "var(--status-success)", display: "flex", alignItems: "center", justifyContent: "center" }}><Check style={{ width: 12, height: 12, color: "var(--text-on-dark)" }} /></span>
             ) : (
-              <>
-                <UserCircle className="w-4 h-4 text-muted-foreground/40 shrink-0" />
-                <span className="text-[11px] text-muted-foreground/50">Zuweisen</span>
-              </>
+              <span style={{ width: 20, height: 20, borderRadius: 999, border: "1.5px solid var(--border-default)", display: "flex", alignItems: "center", justifyContent: "center" }} />
             )}
           </button>
-
-          {/* Assignee dropdown */}
-          {isDropdownOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
-              <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-card rounded-xl border border-border shadow-lg py-1 max-h-52 overflow-y-auto">
-                {task.assignee && (
-                  <button
-                    onClick={() => handleAssigneeChange(task, "")}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
-                  >
-                    <span className="text-[12px] text-muted-foreground italic">Zuweisung entfernen</span>
-                  </button>
-                )}
-                {TEAM_MEMBERS.map((name) => (
-                  <button
-                    key={name}
-                    onClick={() => handleAssigneeChange(task, name)}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/40 transition-colors ${
-                      task.assignee === name ? "bg-primary-light" : ""
-                    }`}
-                  >
-                    <div className="w-5 h-5 rounded-md bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center shrink-0">
-                      <span className="text-[8px] text-primary" style={{ fontWeight: 600 }}>
-                        {getInitials(name)}
-                      </span>
-                    </div>
-                    <span className="text-[12px] text-foreground" style={{ fontWeight: task.assignee === name ? 500 : 400 }}>
-                      {name}
-                    </span>
-                    {task.assignee === name && (
-                      <CheckCircle2 className="w-3 h-3 text-primary ml-auto shrink-0" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Status pill — fixed width column */}
-        <div className="flex justify-end" style={{ width: "72px", minWidth: "72px" }}>
-          {isDone ? (
-            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-[2px] rounded-full bg-success-light text-success-foreground" style={{ fontWeight: 500 }}>
-              <CheckCircle2 className="w-2.5 h-2.5" />
-              Erledigt
-            </span>
-          ) : (
-            <span className="inline-flex items-center text-[10px] px-2 py-[2px] rounded-full bg-muted text-muted-foreground" style={{ fontWeight: 500 }}>
-              Offen
+        }
+        titel={`${task.nr}. ${task.label}`}
+        hilfstext={isDone && task.completedAt ? `Erledigt: ${task.completedAt}` : undefined}
+        last={idx === arr.length - 1}
+      >
+        <div className="flex items-center flex-wrap" style={{ gap: 8, marginTop: -2 }}>
+          {/* Überfällig — only status shown per 8.12 rule */}
+          {task.overdue && !isDone && (
+            <span className="inline-flex items-center" style={{ gap: 3, padding: "1px 8px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--status-danger-bg)", color: "var(--status-danger)" }}>
+              <AlertTriangle style={{ width: 10, height: 10 }} /> Überfällig
             </span>
           )}
+
+          {/* Due date */}
+          <div className="hidden sm:flex items-center" style={{ gap: 4 }}>
+            <Calendar style={{ width: 12, height: 12, color: task.overdue && !isDone ? "var(--status-danger)" : "var(--text-tertiary)" }} />
+            <input
+              type="date"
+              value={task.dueDate}
+              onChange={e => handleDateChange(task, e.target.value)}
+              disabled={isDone}
+              style={{ fontSize: "var(--text-meta)", color: task.overdue && !isDone ? "var(--status-danger)" : "var(--text-secondary)", background: "transparent", border: "none", outline: "none", fontFamily: "inherit", fontVariantNumeric: "tabular-nums", cursor: isDone ? "default" : "pointer", opacity: isDone ? 0.5 : 1 }}
+            />
+          </div>
+
+          {/* Assignee */}
+          <div className="hidden md:block relative">
+            <button
+              onClick={() => setOpenDropdown(isDropdownOpen ? null : task.id)}
+              className="inline-flex items-center cursor-pointer"
+              style={{ gap: 4, padding: "2px 8px", borderRadius: 999, background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}
+            >
+              {task.assignee ? (
+                <>
+                  <span style={{ width: 18, height: 18, borderRadius: 999, background: "var(--brand-primary-light)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600, color: "var(--brand-primary)" }}>{getInitials(task.assignee)}</span>
+                  <span className="truncate" style={{ maxWidth: 100 }}>{task.assignee}</span>
+                </>
+              ) : (
+                <><UserCircle style={{ width: 14, height: 14, color: "var(--text-tertiary)" }} /> <span style={{ color: "var(--text-tertiary)" }}>Zuweisen</span></>
+              )}
+            </button>
+            {isDropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
+                <div className="absolute right-0 top-full z-50" style={{ marginTop: 4, width: 200, background: "var(--bg-elevated)", borderRadius: 12, border: "0.5px solid var(--border-default)", boxShadow: "0 4px 16px rgba(0,0,0,0.08)", padding: "4px 0", maxHeight: 220, overflowY: "auto" }}>
+                  {task.assignee && (
+                    <button onClick={() => handleAssigneeChange(task, "")} className="w-full text-left cursor-pointer" style={{ padding: "8px 12px", fontSize: 12, color: "var(--text-tertiary)", background: "none", border: "none", fontStyle: "italic" }}>Zuweisung entfernen</button>
+                  )}
+                  {TEAM_MEMBERS.map(name => (
+                    <button key={name} onClick={() => handleAssigneeChange(task, name)} className="w-full flex items-center cursor-pointer" style={{ gap: 8, padding: "8px 12px", fontSize: 12, color: task.assignee === name ? "var(--brand-primary)" : "var(--text-primary)", fontWeight: task.assignee === name ? 500 : 400, background: task.assignee === name ? "var(--brand-primary-light)" : "transparent", border: "none" }} onMouseEnter={e => { if (task.assignee !== name) e.currentTarget.style.background = "var(--bg-secondary)"; }} onMouseLeave={e => { if (task.assignee !== name) e.currentTarget.style.background = "transparent"; }}>
+                      <span style={{ width: 18, height: 18, borderRadius: 999, background: "var(--brand-primary-light)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 600, color: "var(--brand-primary)", flexShrink: 0 }}>{getInitials(name)}</span>
+                      <span className="flex-1 truncate">{name}</span>
+                      {task.assignee === name && <Check style={{ width: 12, height: 12, color: "var(--brand-primary)", flexShrink: 0 }} />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      </ItemRow>
     );
   };
 
   return (
-    <div className="rounded-2xl overflow-hidden">
-      {/* Section header */}
-      <div className="px-5 py-4 border-b border-border-light">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
-              <Icon className={`w-[18px] h-[18px] ${accentColor}`} />
-            </div>
-            <div>
-              <h5 className="text-foreground">{title}</h5>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                {doneCount} von {total} Schritten abgeschlossen
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-32 h-2 bg-muted rounded-full overflow-hidden hidden sm:block">
-              <div className={`h-full ${barColor} rounded-full transition-all`} style={{ width: `${pct}%` }} />
-            </div>
-            <span className="text-[12px] text-muted-foreground" style={{ fontWeight: 500 }}>
-              {pct}%
-            </span>
-          </div>
-        </div>
+    <div>
+      <TabHeader
+        titel={title}
+        meta={<HeaderMeta modus="fortschritt" text={`${doneCount} von ${total} erledigt`} prozent={total > 0 ? (doneCount / total) * 100 : 0} />}
+      />
+
+      {/* Open tasks */}
+      <div style={{ background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 12, overflow: "hidden" }}>
+        {openTasks.map((t, i) => renderTask(t, i, openTasks))}
+        {openTasks.length === 0 && <div style={{ padding: "16px", fontSize: "var(--text-small)", color: "var(--text-tertiary)", textAlign: "center" }}>Alle Schritte erledigt</div>}
       </div>
 
-      <div className="p-3 md:p-4">
-        {/* Open tasks */}
-        <div className="space-y-0.5">
-          {openTasks.map(renderRow)}
+      {/* Completed tasks — collapsible */}
+      {doneTasks.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <button onClick={() => setShowCompleted(!showCompleted)} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "10px 18px", borderRadius: 999, background: "transparent", border: "none", fontSize: 14, fontWeight: 500, color: "var(--text-secondary)" }}>
+            {showCompleted ? <ChevronUp style={{ width: 14, height: 14 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />}
+            {showCompleted ? "Erledigte ausblenden" : "Erledigte anzeigen"} ({doneTasks.length})
+          </button>
+          {showCompleted && (
+            <div style={{ background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 12, overflow: "hidden", marginTop: 4 }}>
+              {doneTasks.map((t, i) => renderTask(t, i, doneTasks))}
+            </div>
+          )}
         </div>
-
-        {/* Completed tasks — collapsible */}
-        {doneTasks.length > 0 && (
-          <div className="mt-3">
-            <button
-              onClick={() => setShowCompleted(!showCompleted)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted/30 transition-colors w-full text-left"
-            >
-              {showCompleted ? (
-                <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-              )}
-              <span className="text-[12px] text-muted-foreground" style={{ fontWeight: 500 }}>
-                {showCompleted ? "Abgeschlossene ausblenden" : "Abgeschlossene anzeigen"} ({doneTasks.length})
-              </span>
-            </button>
-            {showCompleted && (
-              <div className="space-y-0.5 mt-1">
-                {doneTasks.map(renderRow)}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -1971,40 +1866,10 @@ function TabATL({ patient }: { patient: Patient }) {
 }
 
 function TabWorkflow({ patient }: { patient: Patient }) {
-  const patientProzess = getPatientProzess(patient.status);
-  const angehSchritte = getAngehoerigerSchritte();
-
-  const [pTasks, setPTasks] = useState<WorkflowTask[]>(() => buildWorkflowTasks(patientProzess, "p"));
-  const [aTasks, setATasks] = useState<WorkflowTask[]>(() => buildWorkflowTasks(angehSchritte, "a"));
-
-  const updatePTask = useCallback((id: string, patch: Partial<WorkflowTask>) => {
-    setPTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  }, []);
-
-  const updateATask = useCallback((id: string, patch: Partial<WorkflowTask>) => {
-    setATasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  }, []);
-
   return (
-    <div className="space-y-6">
-      <WorkflowSection
-        title="Patient Prozess"
-        icon={ClipboardList}
-        iconBg="bg-primary-light"
-        accentColor="text-primary"
-        barColor="bg-primary"
-        tasks={pTasks}
-        onUpdate={updatePTask}
-      />
-      <WorkflowSection
-        title="Angehöriger Monatsschritte"
-        icon={CalendarDays}
-        iconBg="bg-warning-light"
-        accentColor="text-warning"
-        barColor="bg-warning"
-        tasks={aTasks}
-        onUpdate={updateATask}
-      />
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <WorkflowChecklist patientId={patient.id} typ="patient-prozess" />
+      <WorkflowChecklist patientId={patient.id} typ="angehoeriger-monate" />
     </div>
   );
 }
@@ -2827,6 +2692,388 @@ function TabHistorie({ patient }: { patient: Patient }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   TAB: INTERRAI
+   ══════════════════════════════════════════ */
+function TabInterRAI({ patientId, patientName, navigate }: { patientId: string; patientName: string; navigate: (p: string) => void }) {
+  const recording = useRecording();
+  const [, forceUpdate] = useState(0);
+  const assessments = MOCK_ASSESSMENTS.filter(a => a.patientId === patientId);
+
+  const deleteAssessment = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const idx = MOCK_ASSESSMENTS.findIndex(a => a.id === id);
+    if (idx >= 0) { MOCK_ASSESSMENTS.splice(idx, 1); forceUpdate(n => n + 1); toast("InterRAI-Entwurf gelöscht"); }
+  };
+  const last = assessments.find(a => a.status === "abgeschlossen");
+  const inProgress = assessments.find(a => a.status === "in-bearbeitung");
+  const scales = last?.outcomeScales || [];
+  const caps = last?.getriggerteCaps || [];
+  const isRecordingThis = (recording.phase === "recording" || recording.phase === "processing") && recording.session?.patientId === patientId;
+  const canStartRecording = recording.phase === "idle" || recording.phase === "result";
+
+  return (
+    <div>
+      {/* Recording CTA — primary action for new InterRAI */}
+      <div style={{ padding: "14px 18px", background: isRecordingThis ? "rgba(168,50,31,0.06)" : "var(--bg-elevated)", border: `var(--border-thin) solid ${isRecordingThis ? "var(--status-danger)" : "var(--border-default)"}`, borderRadius: "var(--radius-card)", marginBottom: 16 }}>
+        {isRecordingThis ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center" style={{ gap: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--status-danger)", animation: "pulse 1.5s ease-in-out infinite" }} />
+              <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Aufnahme läuft…</span>
+              <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Stopp über die Leiste oben.</span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between flex-wrap" style={{ gap: 8 }}>
+            <div>
+              <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+                {inProgress ? "Laufendes Re-Assessment ergänzen" : last ? "Neues Re-Assessment starten" : "Erstes InterRAI starten"}
+              </div>
+              <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>
+                Gespräch aufzeichnen — Anna erstellt InterRAI, Pflegeplanung und KLV-Entwürfe.
+              </div>
+            </div>
+            <button
+              onClick={() => recording.startRecording(patientId, patientName)}
+              disabled={!canStartRecording}
+              className="inline-flex items-center cursor-pointer"
+              style={{ gap: 6, padding: "8px 18px", borderRadius: "var(--radius-pill)", background: !canStartRecording ? "var(--bg-secondary)" : "var(--status-danger)", color: !canStartRecording ? "var(--text-tertiary)" : "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none", opacity: !canStartRecording ? 0.5 : 1 }}
+            >
+              <Mic style={{ width: 14, height: 14 }} /> Gespräch aufzeichnen
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* In-progress assessment hint */}
+      {inProgress && (
+        <button onClick={() => navigate(`/interrai/${inProgress.id}`)} className="w-full flex items-center text-left cursor-pointer" style={{ padding: "10px 14px", borderRadius: "var(--radius-card)", background: "var(--status-warning-bg)", border: "var(--border-thin) solid var(--status-warning)", marginBottom: 16, gap: 8 }} onMouseEnter={e => e.currentTarget.style.opacity = "0.9"} onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
+          <Activity style={{ width: 14, height: 14, color: "var(--status-warning-text)" }} />
+          <div className="flex-1">
+            <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--status-warning-text)" }}>Re-Assessment in Bearbeitung ({inProgress.erfassungsgrad}%)</div>
+            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Gestartet am {inProgress.startDatum} — Klicken zum Weiterarbeiten</div>
+          </div>
+          <ChevronRight style={{ width: 14, height: 14, color: "var(--status-warning-text)" }} />
+        </button>
+      )}
+
+      {/* Last completed assessment summary */}
+      {last && (
+        <>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 4 }}>Letztes InterRAI: {last.startDatum} <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>(vor ca. 7 Monaten)</span></div>
+            {last.onboardingId && <div style={{ fontSize: "var(--text-meta)", color: "var(--status-info)", marginTop: 2 }}>aus Onboarding</div>}
+            <div className="inline-flex items-center" style={{ gap: 4, marginTop: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", background: "var(--status-warning-bg)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--status-warning-text)" }}>
+              <AlertTriangle style={{ width: 12, height: 12 }} /> Re-Assessment fällig
+            </div>
+          </div>
+          {scales.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 8, fontWeight: "var(--weight-medium)" }}>Outcome-Scales</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" style={{ gap: 8 }}>
+                {scales.map(s => {
+                  const pct = s.maxWert > 0 ? s.wert / s.maxWert : 0;
+                  const color = s.richtung === "hoeher-schlechter" ? (pct > 0.5 ? "var(--status-danger)" : pct > 0.25 ? "var(--status-warning)" : "var(--status-success)") : (pct > 0.5 ? "var(--status-success)" : "var(--status-warning)");
+                  return (<div key={s.id} style={{ padding: "10px 14px", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+                    <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", marginBottom: 4 }}>{s.abkuerzung}</div>
+                    <div className="flex items-end" style={{ gap: 3 }}><span style={{ fontSize: 18, fontWeight: "var(--weight-medium)", color }}>{s.wert}</span><span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>/{s.maxWert}</span></div>
+                  </div>);
+                })}
+              </div>
+            </div>
+          )}
+          {caps.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 8, fontWeight: "var(--weight-medium)" }}>Aktive CAPs ({caps.length})</div>
+              {caps.map(cap => (
+                <div key={cap.id} style={{ padding: "10px 14px", background: cap.prioritaet === "hoch" ? "rgba(168,50,31,0.04)" : "var(--bg-elevated)", border: `var(--border-thin) solid ${cap.prioritaet === "hoch" ? "var(--status-danger)" : "var(--border-default)"}`, borderRadius: "var(--radius-card)", marginBottom: 6 }}>
+                  <div className="flex items-center" style={{ gap: 6 }}><AlertTriangle style={{ width: 12, height: 12, color: cap.prioritaet === "hoch" ? "var(--status-danger)" : "var(--status-warning)" }} /><span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{cap.name}</span></div>
+                  <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 4 }}>{cap.beschreibung}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Empty state */}
+      {!last && !inProgress && (
+        <div style={{ padding: "var(--space-6)", textAlign: "center", color: "var(--text-tertiary)", marginBottom: 20 }}>
+          <ClipboardList style={{ width: 32, height: 32, margin: "0 auto 8px", color: "var(--text-tertiary)" }} />
+          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 4 }}>Noch kein InterRAI</div>
+          <div style={{ fontSize: "var(--text-small)" }}>Starte ein Gespräch — Anna erstellt automatisch die Entwürfe.</div>
+        </div>
+      )}
+
+      {/* Verlauf */}
+      <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12 }}>Verlauf</div>
+      {assessments.length === 0 ? <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Keine Einträge</div> : assessments.map(a => (
+        <div key={a.id} onClick={() => navigate(`/interrai/${a.id}`)} className="flex items-center cursor-pointer transition-colors" style={{ padding: "10px 14px", borderRadius: "var(--radius-card)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", marginBottom: 6 }} onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
+          <div className="flex-1"><div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}><span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{a.startDatum}</span><span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", background: a.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: a.status === "abgeschlossen" ? "var(--status-success-text)" : "var(--status-warning-text)" }}>{a.status === "abgeschlossen" ? "Abgeschlossen" : `${a.erfassungsgrad}%`}</span>{a.onboardingId && <span style={{ fontSize: "var(--text-micro)", color: "var(--status-info)" }}>aus Onboarding</span>}{a.getriggerteCaps.length > 0 && <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{a.getriggerteCaps.length} CAPs</span>}</div></div>
+          {a.status !== "abgeschlossen" && (
+            <button onClick={e => deleteAssessment(a.id, e)} className="cursor-pointer" title="Entwurf löschen" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 4, marginRight: 4 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 14, height: 14 }} /></button>
+          )}
+          <ChevronRight style={{ width: 14, height: 14, color: "var(--text-tertiary)" }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   TAB: PFLEGEPLANUNG
+   ══════════════════════════════════════════ */
+function TabPflegeplanung({ patientId, navigate }: { patientId: string; navigate: (p: string) => void }) {
+  const [, forceUpdate] = useState(0);
+  const plans = MOCK_PFLEGEPLANUNGEN.filter(p => p.patientId === patientId);
+
+  const deletePlan = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const idx = MOCK_PFLEGEPLANUNGEN.findIndex(p => p.id === id);
+    if (idx >= 0) { MOCK_PFLEGEPLANUNGEN.splice(idx, 1); forceUpdate(n => n + 1); toast("Pflegeplanungs-Entwurf gelöscht"); }
+  };
+  const current = plans.find(p => p.status === "abgeschlossen" || p.status === "validiert") || plans[0];
+  const baRef = current?.interRAIAssessmentId ? MOCK_ASSESSMENTS.find(a => a.id === current.interRAIAssessmentId) : null;
+
+  return (
+    <div>
+      {current ? (
+        <>
+          <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Aktuelle Pflegeplanung vom {current.erstellDatum}</div>
+              {baRef && <button onClick={() => navigate(`/interrai/${baRef.id}`)} className="cursor-pointer" style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", background: "transparent", border: "none", padding: 0, marginTop: 2 }}>Aus InterRAI vom {baRef.startDatum} →</button>}
+              {current.onboardingId && <div style={{ fontSize: "var(--text-micro)", color: "var(--status-info)", marginTop: 2 }}>aus Onboarding</div>}
+            </div>
+            <button onClick={() => navigate(`/pflegeplanung/${current?.id || "neu"}`)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> Neue Planung</button>
+          </div>
+          {current.pflegediagnosen.filter(d => d.status === "akzeptiert").map(d => (
+            <div key={d.id} style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "14px 18px", marginBottom: 8 }}>
+              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--brand-primary)", marginBottom: 4 }}>NANDA {d.nandaCode} – {d.titel}</div>
+              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 6 }}>{d.begruendung}</div>
+              {current.massnahmen.filter(m => m.bezugDiagnoseId === d.id && m.status === "akzeptiert").map(m => (<div key={m.id} style={{ padding: "5px 10px", background: "var(--bg-secondary)", borderRadius: "var(--radius-card)", fontSize: "var(--text-small)", marginBottom: 3 }}><span style={{ fontWeight: "var(--weight-medium)" }}>{m.titel}</span> · {m.haeufigkeit}</div>))}
+              {current.ziele.filter(z => z.bezugDiagnoseId === d.id && z.status === "akzeptiert").map(z => (<div key={z.id} style={{ padding: "5px 10px", background: "var(--brand-primary-light)", borderRadius: "var(--radius-card)", fontSize: "var(--text-small)", color: "var(--brand-primary)", marginTop: 3 }}>{z.titel} ({z.zeithorizont})</div>))}
+            </div>
+          ))}
+        </>
+      ) : (
+        <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", marginBottom: 20 }}>
+          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>Noch keine Pflegeplanung</div>
+          <button onClick={() => navigate("/pflegeplanung/neu")} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> Pflegeplanung starten</button>
+        </div>
+      )}
+      <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12, marginTop: 20 }}>Verlauf</div>
+      {plans.length === 0 ? <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Keine Einträge</div> : plans.map(p => (
+        <div key={p.id} className="flex items-center" style={{ padding: "10px 14px", borderRadius: "var(--radius-card)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", marginBottom: 6 }}>
+          <div className="flex-1 flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
+            <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{p.erstellDatum}</span>
+            <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: p.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: p.status === "abgeschlossen" ? "var(--status-success-text)" : "var(--status-warning-text)" }}>{p.status}</span>
+            {p.onboardingId && <span style={{ fontSize: "var(--text-micro)", color: "var(--status-info)" }}>aus Onboarding</span>}
+          </div>
+          {p.status !== "abgeschlossen" && (
+            <button onClick={e => deletePlan(p.id, e)} className="cursor-pointer" title="Entwurf löschen" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 4 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 14, height: 14 }} /></button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   TAB: KLV-VERORDNUNG
+   ══════════════════════════════════════════ */
+function TabKLV({ patientId }: { patientId: string }) {
+  const navigate = useNavigate();
+  const [, forceUpdate] = useState(0);
+  const klvs = MOCK_KLV_VERORDNUNGEN.filter(k => k.patientId === patientId);
+  const current = klvs.find(k => k.status === "kostengutsprache-erhalten") || klvs[0];
+  const daysUntil = current?.endDatum ? (() => { const [d, m, y] = current.endDatum!.split("."); return Math.round((new Date(+y, +m - 1, +d).getTime() - new Date("2026-03-03").getTime()) / 86400000); })() : null;
+  const katBg = (k: string) => k === "a" ? "var(--status-info-bg)" : k === "b" ? "var(--status-warning-bg)" : "var(--status-success-bg)";
+  const katColor = (k: string) => k === "a" ? "var(--status-info)" : k === "b" ? "var(--status-warning-text)" : "var(--status-success-text)";
+
+  const deleteKLV = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const idx = MOCK_KLV_VERORDNUNGEN.findIndex(k => k.id === id);
+    if (idx >= 0) { MOCK_KLV_VERORDNUNGEN.splice(idx, 1); forceUpdate(n => n + 1); toast("KLV-Entwurf gelöscht"); }
+  };
+
+  const [showNeueKLV, setShowNeueKLV] = useState(false);
+  const [neuBeginn, setNeuBeginn] = useState("");
+  const [neuEnde, setNeuEnde] = useState("");
+  const [neuVorlage, setNeuVorlage] = useState(true);
+
+  const handleCreateKLV = () => {
+    const newId = `KLV-${Date.now()}`;
+    const patientName = current?.patientName || klvs[0]?.patientName || "Patient";
+    const heute = new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+    // Format dates from ISO to dd.mm.yyyy for display
+    const formatDate = (iso: string) => { if (!iso) return null; const [y, m, d] = iso.split("-"); return `${d}.${m}.${y}`; };
+
+    const neueKLV: KLVVerordnung = {
+      id: newId,
+      onboardingId: null,
+      patientId,
+      patientName,
+      pflegeplanungId: current?.pflegeplanungId || null,
+      status: "entwurf",
+      erstelltVon: "Maria Keller",
+      erstellDatum: heute,
+      beginnDatum: neuBeginn ? formatDate(neuBeginn) : null,
+      endDatum: neuEnde ? formatDate(neuEnde) : null,
+      diagnosen: current && neuVorlage ? current.diagnosen.map(d => ({ ...d, id: `${d.id}-${newId}` })) : [],
+      leistungspositionen: current && neuVorlage
+        ? current.leistungspositionen.map(lp => ({ ...lp, id: `${lp.id}-${newId}`, validiert: false }))
+        : [],
+      zielformulierungen: current && neuVorlage ? [...current.zielformulierungen] : [],
+      arztAngeordnetAm: null,
+      krankenkasseGutspracheAm: null,
+      ablehnungsgrund: null,
+    };
+
+    // Push into the shared mock array so KLVArbeitsbereich can find it
+    MOCK_KLV_VERORDNUNGEN.push(neueKLV);
+
+    const leistungenText = neuVorlage && current ? ` — ${neueKLV.leistungspositionen.length} Leistungen übernommen` : "";
+    toast(`Neue KLV erstellt${leistungenText}`);
+    setShowNeueKLV(false);
+    setNeuBeginn("");
+    setNeuEnde("");
+
+    // Navigate to the new KLV Arbeitsbereich
+    navigate(`/klv/${newId}`);
+  };
+
+  return (
+    <div>
+      {current ? (
+        <>
+          <div className="flex items-center justify-between flex-wrap" style={{ gap: 8, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Aktuelle KLV vom {current.erstellDatum}</div>
+              {current.onboardingId && <div style={{ fontSize: "var(--text-micro)", color: "var(--status-info)", marginTop: 2 }}>aus Onboarding</div>}
+            </div>
+            <div className="flex items-center" style={{ gap: 8 }}>
+              <button onClick={() => navigate(`/klv/${current.id}`)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>KLV-Arbeitsbereich öffnen</button>
+              <button onClick={() => setShowNeueKLV(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> Neue KLV</button>
+            </div>
+          </div>
+
+          {/* Neue KLV erstellen — inline dialog */}
+          {showNeueKLV && (
+            <div style={{ padding: "16px 20px", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--brand-primary)", borderRadius: "var(--radius-card)", marginBottom: 16 }}>
+              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12 }}>Neue KLV-Verordnung erstellen</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Beginn</label>
+                  <input type="date" value={neuBeginn} onChange={e => setNeuBeginn(e.target.value)} style={{ width: "100%", padding: "8px 12px", fontSize: "var(--text-small)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Ende</label>
+                  <input type="date" value={neuEnde} onChange={e => setNeuEnde(e.target.value)} style={{ width: "100%", padding: "8px 12px", fontSize: "var(--text-small)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
+                </div>
+              </div>
+              {current && (
+                <label className="flex items-center cursor-pointer" style={{ gap: 8, fontSize: "var(--text-small)", color: "var(--text-primary)", marginBottom: 12 }}>
+                  <input type="checkbox" checked={neuVorlage} onChange={e => setNeuVorlage(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--brand-primary)" }} />
+                  Leistungen aus aktueller KLV ({current.leistungspositionen.length} Positionen, {berechneSummen(current.leistungspositionen).total.toFixed(2)} h/Wo.) übernehmen
+                </label>
+              )}
+              <div className="flex items-center" style={{ gap: 8 }}>
+                <button onClick={handleCreateKLV} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> KLV erstellen</button>
+                <button onClick={() => setShowNeueKLV(false)} className="cursor-pointer" style={{ padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Abbrechen</button>
+              </div>
+            </div>
+          )}
+          {/* Status tracker */}
+          <div style={{ padding: "14px 18px", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", marginBottom: 16 }}>
+            <div className="flex items-center overflow-x-auto" style={{ gap: 0 }}>
+              {KLV_STATUS_PIPELINE.map((step, i) => {
+                const isCurrent = current.status === step.status;
+                const isPast = KLV_STATUS_PIPELINE.findIndex(s => s.status === current.status) > i;
+                return (<div key={step.status} className="flex items-center shrink-0">{i > 0 && <div style={{ width: 16, height: 2, background: isPast ? "var(--brand-primary)" : "var(--border-default)" }} />}
+                  <div className="flex flex-col items-center" style={{ gap: 3, minWidth: 56 }}>
+                    <div style={{ width: 18, height: 18, borderRadius: "var(--radius-pill)", background: isPast || isCurrent ? "var(--brand-primary)" : "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>{(isPast || isCurrent) && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}</div>
+                    <span style={{ fontSize: 9, color: isCurrent ? "var(--brand-primary)" : "var(--text-tertiary)", fontWeight: isCurrent ? "var(--weight-medium)" : "var(--weight-regular)", textAlign: "center", whiteSpace: "nowrap" }}>{step.label}</span>
+                  </div></div>);
+              })}
+            </div>
+          </div>
+          {current.beginnDatum && <div className="flex flex-wrap" style={{ gap: 8, marginBottom: 12, fontSize: "var(--text-small)" }}>
+            <span style={{ padding: "6px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius-card)" }}>Beginn: <b>{current.beginnDatum}</b></span>
+            {current.endDatum && <span style={{ padding: "6px 12px", background: daysUntil !== null && daysUntil < 30 ? "var(--status-warning-bg)" : "var(--bg-secondary)", borderRadius: "var(--radius-card)", color: daysUntil !== null && daysUntil < 30 ? "var(--status-warning-text)" : "var(--text-primary)" }}>Ende: <b>{current.endDatum}</b>{daysUntil !== null && daysUntil < 30 && ` (${daysUntil < 0 ? "abgelaufen" : `${daysUntil}d`})`}</span>}
+          </div>}
+          {current.leistungspositionen.length > 0 && <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden", marginBottom: 16 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr style={{ background: "var(--bg-secondary)" }}>
+                <th style={{ padding: "6px 10px", textAlign: "left", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Kat.</th>
+                <th style={{ padding: "6px 10px", textAlign: "left", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Nr.</th>
+                <th style={{ padding: "6px 10px", textAlign: "left", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Bezeichnung</th>
+                <th className="hidden sm:table-cell" style={{ padding: "6px 10px", textAlign: "right", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Min.</th>
+                <th className="hidden sm:table-cell" style={{ padding: "6px 10px", textAlign: "left", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Häufigkeit</th>
+                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>h/Wo.</th>
+              </tr></thead>
+              <tbody>{current.leistungspositionen.map(lp => (
+                <tr key={lp.id} style={{ borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                  <td style={{ padding: "8px 10px", fontSize: "var(--text-small)" }}><span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: katBg(lp.kategorie), color: katColor(lp.kategorie) }}>{lp.kategorie}</span></td>
+                  <td style={{ padding: "8px 10px", fontSize: "var(--text-small)", color: "var(--text-tertiary)", fontFamily: "monospace" }}>{lp.klvNummer}</td>
+                  <td style={{ padding: "8px 10px", fontSize: "var(--text-small)" }}>{lp.bezeichnung}</td>
+                  <td className="hidden sm:table-cell" style={{ padding: "8px 10px", fontSize: "var(--text-small)", textAlign: "right", color: "var(--text-secondary)" }}>{lp.zeitMin}′</td>
+                  <td className="hidden sm:table-cell" style={{ padding: "8px 10px", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{lp.anzahl}× {einheitLabel(lp.einheit)}</td>
+                  <td style={{ padding: "8px 10px", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", textAlign: "right" }}>{hProWoche(lp).toFixed(2)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+            <div className="flex items-center justify-between flex-wrap" style={{ padding: "8px 10px", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+              <div className="flex flex-wrap" style={{ gap: 10 }}>{(["a", "b", "c"] as const).map(k => { const sum = current.leistungspositionen.filter(l => l.kategorie === k).reduce((s, l) => s + hProWoche(l), 0); return sum > 0 ? <span key={k}><span style={{ padding: "1px 5px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: katBg(k), color: katColor(k), marginRight: 3 }}>{k}</span>{sum.toFixed(2)}h</span> : null; })}</div>
+              <span style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Total: {berechneSummen(current.leistungspositionen).total.toFixed(2)} h/Wo.</span>
+            </div>
+          </div>}
+        </>
+      ) : (
+        <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", marginBottom: 20 }}>
+          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>Noch keine KLV-Verordnung</div>
+          <button onClick={() => setShowNeueKLV(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> KLV erstellen</button>
+          {showNeueKLV && (
+            <div style={{ padding: "16px 20px", background: "var(--bg-primary)", border: "var(--border-thin) solid var(--brand-primary)", borderRadius: "var(--radius-card)", marginTop: 12, textAlign: "left" }}>
+              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12 }}>Neue KLV-Verordnung erstellen</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Beginn</label>
+                  <input type="date" value={neuBeginn} onChange={e => setNeuBeginn(e.target.value)} style={{ width: "100%", padding: "8px 12px", fontSize: "var(--text-small)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Ende</label>
+                  <input type="date" value={neuEnde} onChange={e => setNeuEnde(e.target.value)} style={{ width: "100%", padding: "8px 12px", fontSize: "var(--text-small)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
+                </div>
+              </div>
+              <div className="flex items-center" style={{ gap: 8 }}>
+                <button onClick={handleCreateKLV} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> KLV erstellen</button>
+                <button onClick={() => setShowNeueKLV(false)} className="cursor-pointer" style={{ padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Abbrechen</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12, marginTop: 20 }}>Verlauf</div>
+      {klvs.length === 0 ? <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Keine Einträge</div> : klvs.map(k => (
+        <div key={k.id} onClick={() => navigate(`/klv/${k.id}`)} className="flex items-center cursor-pointer transition-colors" style={{ padding: "10px 14px", borderRadius: "var(--radius-card)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", marginBottom: 6 }} onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
+          <div className="flex-1 flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
+            <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)" }}>{k.beginnDatum || k.erstellDatum}</span>
+            <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: k.status === "kostengutsprache-erhalten" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: k.status === "kostengutsprache-erhalten" ? "var(--status-success-text)" : "var(--status-warning-text)" }}>{k.status}</span>
+            {k.onboardingId && <span style={{ fontSize: "var(--text-micro)", color: "var(--status-info)" }}>aus Onboarding</span>}
+            <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{berechneSummen(k.leistungspositionen).total.toFixed(2)} h/Wo.</span>
+          </div>
+          {k.status !== "kostengutsprache-erhalten" && (
+            <button onClick={e => deleteKLV(k.id, e)} className="cursor-pointer" title="Entwurf löschen" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 4, marginRight: 4 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 14, height: 14 }} /></button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

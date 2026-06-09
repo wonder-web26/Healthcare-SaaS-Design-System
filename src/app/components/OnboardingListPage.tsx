@@ -198,7 +198,11 @@ export function OnboardingListPage() {
       {/* ═══════════════════════════════════════
          HEADER
          ═══════════════════════════════════════ */}
-      <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0" }}>
+      <style>{`
+        .ob-list-pad { padding-left: var(--mobile-page-padding); padding-right: var(--mobile-page-padding); }
+        @media (min-width: 640px) { .ob-list-pad { padding-left: var(--space-6); padding-right: var(--space-6); } }
+      `}</style>
+      <div className="shrink-0 ob-list-pad" style={{ paddingTop: "var(--space-4)" }}>
         {/* Title row */}
         <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
           <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Onboarding</h1>
@@ -279,17 +283,17 @@ export function OnboardingListPage() {
           )}
         </div>
 
-        {/* View pills */}
-        <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-4)" }}>
+        {/* View pills — horizontal scroll on mobile */}
+        <div className="flex items-center overflow-x-auto" style={{ gap: 8, marginBottom: "var(--space-4)", paddingBottom: 2 }}>
           {viewOrder.map(vk => {
             const def = VIEW_DEFS.find(d => d.key === vk)!;
             const isActive = activeView === vk;
             const count = viewCounts[vk];
             return (
               <button key={vk} onClick={() => setView(vk)}
-                className="inline-flex items-center cursor-pointer transition-colors"
+                className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
                 style={{
-                  gap: 8, padding: "6px 14px", borderRadius: "var(--radius-pill)",
+                  gap: 8, padding: "8px 14px", borderRadius: "var(--radius-pill)", whiteSpace: "nowrap",
                   fontSize: 13, fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",
                   background: isActive ? "var(--brand-primary-light)" : "transparent",
                   border: isActive ? "var(--border-thin) solid transparent" : "var(--border-thin) solid var(--border-default)",
@@ -313,7 +317,7 @@ export function OnboardingListPage() {
       {/* ═══════════════════════════════════════
          TABLE
          ═══════════════════════════════════════ */}
-      <div className="flex-1 overflow-y-auto" style={{ padding: "0 var(--space-6) var(--space-4)" }}>
+      <div className="flex-1 overflow-y-auto ob-list-pad" style={{ paddingTop: 0, paddingBottom: "var(--space-4)" }}>
         <div style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", overflow: "hidden" }}>
           <div className="overflow-x-auto">
             <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>

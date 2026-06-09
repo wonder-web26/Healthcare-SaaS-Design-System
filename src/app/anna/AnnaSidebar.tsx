@@ -170,16 +170,19 @@ export function AnnaSidebar({ open, onClose }: AnnaSidebarProps) {
 
   return (
     <>
-      {/* Mobile backdrop */}
-      <div className="fixed inset-0 z-50 lg:hidden" style={{ background: "rgba(19,19,20,0.2)", backdropFilter: "blur(1px)" }} onClick={onClose} />
+      {/* Desktop backdrop (dim only) */}
+      <div className="hidden sm:block fixed inset-0 z-50" style={{ background: "rgba(19,19,20,0.1)" }} onClick={onClose} />
 
-      {/* Sidebar */}
-      <div className="fixed top-0 right-0 bottom-0 z-50 flex flex-col" style={{
-        width: 420, maxWidth: "100vw",
+      {/* Container: full-screen on mobile, sidebar on desktop */}
+      <div className="fixed z-50 flex flex-col inset-0 sm:inset-auto sm:top-0 sm:right-0 sm:bottom-0" style={{
+        width: undefined,
         background: "var(--bg-elevated)",
-        borderLeft: "var(--border-thin) solid var(--border-default)",
+        borderLeft: "none",
         boxShadow: "-4px 0 12px rgba(0,0,0,0.04)",
       }}>
+        {/* On sm+ constrain width */}
+        <style>{`.anna-sidebar-inner { width: 100%; } @media (min-width: 640px) { .anna-sidebar-inner { width: 420px; } }`}</style>
+        <div className="anna-sidebar-inner h-full flex flex-col sm:ml-auto" style={{ borderLeft: "var(--border-thin) solid var(--border-default)" }}>
         {/* Header */}
         <div className="shrink-0 flex items-center" style={{ padding: "20px 24px", borderBottom: "var(--border-thin) solid var(--border-default)", gap: 12 }}>
           <div className="shrink-0 flex items-center justify-center" style={{
@@ -343,7 +346,8 @@ export function AnnaSidebar({ open, onClose }: AnnaSidebarProps) {
             Anna kann lesen, aber nichts ändern · ⌘J
           </div>
         </div>
-      </div>
+        </div>{/* close anna-sidebar-inner */}
+      </div>{/* close outer container */}
 
       {/* Context switch confirmation modal */}
       {showContextSwitch && (

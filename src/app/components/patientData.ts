@@ -42,6 +42,8 @@ export interface Patient {
   letzteAktivitaet: string; // date string or description
   abrechnungsstoppGrund: string; // reason for billing stop
   medlinkSync: "synced" | "pending" | "error";
+  /** Krankenkasse des Patienten (für kassenspezifische Abrechnungsregeln) */
+  krankenkasse: string;
   /* ── Prozessstatus / Workflow ──────────── */
   prozessStatus: {
     naechsteAufgabe: string;
@@ -191,6 +193,7 @@ export const patients: Patient[] = [
     letzteAktivitaet: "24.02.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
+    krankenkasse: "Groupe Mutuel",
     /* ── Prozessstatus / Workflow ──────────── */
     prozessStatus: {
       naechsteAufgabe: "Dokumentation überprüfen",
@@ -223,6 +226,7 @@ export const patients: Patient[] = [
     letzteAktivitaet: "20.02.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "pending",
+    krankenkasse: "CSS",
     /* ── Prozessstatus / Workflow ──────────── */
     prozessStatus: {
       naechsteAufgabe: "Kostengutsprache einholen",

@@ -12,7 +12,6 @@ import {
   Sparkles,
   Square,
   CheckSquare,
-  LayoutDashboard,
 } from "lucide-react";
 import {
   unifiedEntries,
@@ -26,7 +25,6 @@ import { useCurrentRole } from "../auth";
 import { AnnaListenEinordnung, type ListenKontext } from "../anna/AnnaListenEinordnung";
 import { AnnaPendenzVorschlag } from "../anna/AnnaPendenzVorschlag";
 import { AnnaDemoMockModal } from "../anna/AnnaDemoMockModal";
-import { PendenzenManagementUebersicht } from "./PendenzenManagementUebersicht";
 import { toast } from "sonner";
 import type { UserRole } from "../../types/user";
 
@@ -178,24 +176,9 @@ function buildAnnaContext(entries: UnifiedEntry[], role: UserRole): ListenKontex
    MAIN COMPONENT
    ══════════════════════════════════════════ */
 
-const MGMT_VIEW_KEY = "pendenzen-view:management";
-
 export function ServiceDeskPage() {
   const role = useCurrentRole();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [mgmtView, setMgmtViewState] = useState<"dashboard" | "list">(() => {
-    if (role !== "management") return "dashboard";
-    const stored = sessionStorage.getItem(MGMT_VIEW_KEY);
-    return stored === "list" ? "list" : "dashboard";
-  });
-
-  const setMgmtView = (v: "dashboard" | "list") => {
-    setMgmtViewState(v);
-    sessionStorage.setItem(MGMT_VIEW_KEY, v);
-  };
-
-  // Management sees dashboard by default; toggle to list
-  const showManagementDashboard = role === "management" && mgmtView === "dashboard";
 
   const defaultView = getDefaultView(role);
   const view = (searchParams.get("view") || defaultView) as ViewKey;
@@ -217,13 +200,11 @@ export function ServiceDeskPage() {
     setSearchParams(next, { replace: true });
   }
 
-  // Reset view, selection, and management toggle on role switch
+  // Reset view and selection on role switch
   useEffect(() => {
     if (prevRole.current !== role) {
       prevRole.current = role;
       setParam({ view: null, id: null });
-      setMgmtViewState("dashboard");
-      sessionStorage.removeItem(MGMT_VIEW_KEY);
       setBulkSelected(new Set());
     }
   }, [role]);
@@ -344,80 +325,26 @@ export function ServiceDeskPage() {
     else setParam({ id });
   };
 
-  const isBulkMode = role === "backoffice" || (role === "management" && mgmtView === "list");
-
-  // Management dashboard view
-  if (showManagementDashboard) {
-    return (
-      <div className="flex h-full min-h-0">
-        <div className="flex-1 min-w-0">
-          <PendenzenManagementUebersicht
-            onSwitchToList={() => setMgmtView("list")}
-            onSelectPendenz={id => setParam({ id })}
-          />
-        </div>
-        {selected && (
-          <div className="hidden xl:flex shrink-0 flex-col min-h-0" style={{
-            width: 520, background: "var(--bg-elevated)",
-            border: "var(--border-thin) solid var(--border-default)",
-            borderRadius: "var(--radius-card)", overflow: "hidden",
-          }}>
-            <DetailPanel
-              entry={selected}
-              comments={comments[selected.id] || []}
-              draftComment={draftComment}
-              onDraftChange={setDraftComment}
-              onAddComment={() => handleAddComment(selected.id)}
-              onStatusChange={s => handleStatusChange(selected.id, s)}
-              onClose={() => setParam({ id: null })}
-              onDemoAction={handleDemoAction}
-            />
-          </div>
-        )}
-        {selected && (
-          <AnnaDemoMockModal
-            isOpen={demoModal.open}
-            onClose={() => setDemoModal({ open: false, mockType: "", pendenzId: "" })}
-            onConfirm={handleDemoConfirm}
-            mockType={demoModal.mockType}
-            pendenz={selected}
-          />
-        )}
-      </div>
-    );
-  }
+  const isBulkMode = role === "backoffice" || role === "management";
 
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* ═══════════════════════════════════════
          HEADER (densified)
          ═══════════════════════════════════════ */}
-      <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0" }}>
+      <div className="shrink-0" style={{ padding: "var(--space-4) var(--mobile-page-padding) 0" }}>
+        <style>{`@media (min-width: 640px) { .pendenzen-header { padding-left: var(--space-6) !important; padding-right: var(--space-6) !important; } }`}</style>
+        <div className="pendenzen-header" style={{ padding: "0" }}>
         {/* Title row */}
         <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
           <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>
-            Pendenzenliste
+            Pendenzen
           </h1>
           <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-            {role === "management" && (
-              <button
-                onClick={() => setMgmtView("dashboard")}
-                className="inline-flex items-center cursor-pointer transition-colors"
-                style={{
-                  gap: 6, padding: "7px 16px", borderRadius: "var(--radius-pill)",
-                  background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
-                  fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)",
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
-                onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}
-              >
-                <LayoutDashboard style={{ width: 14, height: 14 }} /> Zur Übersicht
-              </button>
-            )}
             <button
               className="inline-flex items-center cursor-pointer transition-colors"
               style={{
-                gap: "var(--space-2)", padding: "10px 22px",
+                gap: "var(--space-2)", padding: "10px 16px",
                 borderRadius: "var(--radius-pill)",
                 background: "var(--brand-primary)", color: "var(--text-on-dark)",
                 fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none",
@@ -425,18 +352,18 @@ export function ServiceDeskPage() {
               onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"}
               onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
             >
-              <Plus style={{ width: 16, height: 16 }} /> Neues Ticket
+              <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neues Ticket</span>
             </button>
           </div>
         </div>
 
         {/* Anna einordnung */}
-        <div style={{ marginBottom: "var(--space-4)" }}>
+        <div style={{ marginBottom: "var(--space-3)" }}>
           <AnnaListenEinordnung context={annaContext} />
         </div>
 
-        {/* View pills + filter button */}
-        <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-4)" }}>
+        {/* View pills + filter button — horizontal scroll on mobile */}
+        <div className="flex items-center overflow-x-auto" style={{ gap: 8, marginBottom: "var(--space-3)", paddingBottom: 2 }}>
           {viewOrder.map(vk => {
             const def = VIEW_DEFS.find(d => d.key === vk)!;
             const isActive = view === vk;
@@ -445,14 +372,15 @@ export function ServiceDeskPage() {
               <button
                 key={vk}
                 onClick={() => setParam({ view: vk === defaultView ? null : vk, id: null })}
-                className="inline-flex items-center cursor-pointer transition-colors"
+                className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
                 style={{
-                  gap: 8, padding: "6px 14px",
+                  gap: 8, padding: "8px 14px",
                   borderRadius: "var(--radius-pill)",
                   fontSize: 13, fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",
                   background: isActive ? "var(--brand-primary-light)" : "transparent",
                   border: isActive ? "var(--border-thin) solid transparent" : "var(--border-thin) solid var(--border-default)",
                   color: isActive ? "var(--brand-primary)" : "var(--text-primary)",
+                  whiteSpace: "nowrap",
                 }}
                 onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "var(--bg-secondary)"; }}
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = isActive ? "var(--brand-primary-light)" : "transparent"; }}
@@ -473,9 +401,9 @@ export function ServiceDeskPage() {
 
           {/* Filter button */}
           <button
-            className="inline-flex items-center cursor-pointer transition-colors"
+            className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
             style={{
-              gap: "var(--space-2)", padding: "6px 14px",
+              gap: "var(--space-2)", padding: "8px 14px",
               borderRadius: "var(--radius-pill)",
               background: "var(--bg-elevated)",
               border: "var(--border-thin) solid var(--border-default)",
@@ -498,12 +426,14 @@ export function ServiceDeskPage() {
             )}
           </button>
         </div>
+        </div>{/* close pendenzen-header */}
       </div>
 
       {/* ═══════════════════════════════════════
          LIST + DYNAMIC DETAIL PANEL
          ═══════════════════════════════════════ */}
-      <div className="flex-1 flex min-h-0 overflow-hidden" style={{ padding: "0 var(--space-6) var(--space-4)" }}>
+      <div className="flex-1 flex min-h-0 overflow-hidden" style={{ padding: "0 var(--mobile-page-padding) var(--space-4)" }}>
+        <style>{`@media (min-width: 640px) { .pendenzen-list-area { padding-left: var(--space-6) !important; padding-right: var(--space-6) !important; } }`}</style>
         {/* ── LIST ── */}
         <div className="flex-1 min-w-0 overflow-y-auto" style={{ paddingRight: selected ? "var(--space-4)" : 0 }}>
           {/* Bulk action bar */}
@@ -602,7 +532,7 @@ export function ServiceDeskPage() {
                         onClick={() => handleCardClick(entry.id)}
                         style={{
                           position: "relative",
-                          padding: "10px 14px",
+                          padding: "12px 14px",
                           borderRadius: "var(--radius-card)",
                           background: isBulkChecked ? "var(--brand-primary-light)" : isSelected ? "var(--brand-primary-light)" : isEntryOverdue ? "rgba(168,50,31,0.04)" : "var(--bg-elevated)",
                           border: isSelected ? "1px solid var(--brand-primary)" : isBulkChecked ? "1px solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
@@ -703,11 +633,11 @@ export function ServiceDeskPage() {
       {/* ── MOBILE / TABLET: Detail overlay ── */}
       {selected && (
         <div className="fixed inset-0 z-50 xl:hidden flex flex-col" style={{ background: "var(--bg-elevated)" }}>
-          <div className="shrink-0 flex items-center" style={{ padding: "var(--space-3) var(--space-4)", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+          <div className="shrink-0 flex items-center" style={{ padding: "12px var(--space-4)", borderBottom: "var(--border-thin) solid var(--border-default)", minHeight: 48 }}>
             <button
               onClick={() => setParam({ id: null })}
               className="flex items-center cursor-pointer"
-              style={{ gap: "var(--space-2)", background: "transparent", border: "none", fontSize: "var(--text-body)", color: "var(--text-secondary)" }}
+              style={{ gap: "var(--space-2)", background: "transparent", border: "none", fontSize: "var(--text-body)", color: "var(--text-secondary)", minHeight: 44, padding: "0 8px" }}
             >
               <ArrowLeft style={{ width: 18, height: 18 }} /> Zurück
             </button>
@@ -889,7 +819,7 @@ function DetailPanel({ entry, comments, draftComment, onDraftChange, onAddCommen
       </div>
 
       {/* Footer */}
-      <div className="shrink-0" style={{ padding: "16px 24px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+      <div className="shrink-0" style={{ padding: "12px 16px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
         <div className="flex items-start" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
           <textarea
             value={draftComment}
@@ -897,31 +827,32 @@ function DetailPanel({ entry, comments, draftComment, onDraftChange, onAddCommen
             placeholder="Kommentar schreiben…"
             rows={2}
             style={{
-              flex: 1, resize: "none", padding: "8px 12px",
+              flex: 1, resize: "none", padding: "10px 12px",
               borderRadius: "var(--radius-card)",
               border: "var(--border-thin) solid var(--border-default)",
               background: "var(--bg-elevated)",
-              fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit",
+              fontSize: 16, color: "var(--text-primary)", fontFamily: "inherit",
             }}
           />
           <button
             onClick={onAddComment}
             disabled={!draftComment.trim()}
             className="shrink-0 flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ width: 36, height: 36, borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none" }}
+            style={{ width: 44, height: 44, borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none" }}
           >
-            <Send style={{ width: 14, height: 14, color: "var(--text-on-dark)" }} />
+            <Send style={{ width: 16, height: 16, color: "var(--text-on-dark)" }} />
           </button>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between" style={{ gap: "var(--space-2)" }}>
           <select
             value={entry.status}
             onChange={e => onStatusChange(e.target.value)}
             style={{
-              padding: "6px 12px", borderRadius: "var(--radius-pill)",
+              padding: "10px 14px", borderRadius: "var(--radius-pill)",
               border: "var(--border-thin) solid var(--border-default)",
               background: "var(--bg-elevated)",
-              fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit", cursor: "pointer",
+              fontSize: 16, color: "var(--text-primary)", fontFamily: "inherit", cursor: "pointer",
+              minHeight: 44,
             }}
           >
             <option value="offen">Offen</option>
@@ -932,10 +863,11 @@ function DetailPanel({ entry, comments, draftComment, onDraftChange, onAddCommen
             onClick={() => onStatusChange("erledigt")}
             className="inline-flex items-center cursor-pointer transition-colors"
             style={{
-              gap: "var(--space-1)", padding: "6px 14px",
+              gap: "var(--space-1)", padding: "10px 16px",
               borderRadius: "var(--radius-pill)",
               background: "transparent", border: "none",
-              fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)",
+              fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)",
+              minHeight: 44,
             }}
             onMouseEnter={e => e.currentTarget.style.background = "var(--status-success-bg)"}
             onMouseLeave={e => e.currentTarget.style.background = "transparent"}

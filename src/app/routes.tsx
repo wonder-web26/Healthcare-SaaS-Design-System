@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import { AppShell } from "./components/AppShell";
 import { DashboardPage } from "./components/DashboardPage";
+import { StrategicDashboard } from "./components/StrategicDashboard";
 import { PatientenPage } from "./components/PatientenPage";
 import { Patient360Page } from "./components/Patient360Page";
 import { OnboardingListPage } from "./components/OnboardingListPage";
@@ -10,6 +11,10 @@ import { ServiceDeskPage } from "./components/ServiceDeskPage";
 import { AngehoerigePage } from "./components/AngehoerigePage";
 import { Angehoerige360Page } from "./components/Angehoerige360Page";
 import { FormShowcase } from "./components/FormShowcase";
+import { InterRAIListPage } from "./components/interrai/InterRAIListPage";
+import { InterRAIDetailPage } from "./components/interrai/InterRAIDetailPage";
+import { PflegeplanungArbeitsbereich } from "./components/PflegeplanungArbeitsbereich";
+import { KLVArbeitsbereich } from "./components/KLVArbeitsbereich";
 
 export const router = createBrowserRouter([
   {
@@ -17,6 +22,11 @@ export const router = createBrowserRouter([
     Component: AppShell,
     children: [
       { index: true, Component: DashboardPage },
+      { path: "dashboard", Component: StrategicDashboard },
+      { path: "interrai", Component: InterRAIListPage },
+      { path: "interrai/:assessmentId", Component: InterRAIDetailPage },
+      { path: "pflegeplanung/:planungId", Component: PflegeplanungArbeitsbereich },
+      { path: "klv/:klvId", Component: KLVArbeitsbereich },
       { path: "patienten", Component: PatientenPage },
       { path: "patienten/:patientId", Component: Patient360Page },
       { path: "angehoerige", Component: AngehoerigePage },

@@ -5,6 +5,8 @@ import { AppTopbar } from "./AppTopbar";
 import { AnnaSidebar } from "../anna/AnnaSidebar";
 import { Sparkles } from "lucide-react";
 import { Toaster } from "sonner";
+import { GlobalRecordingBar } from "../recording/GlobalRecordingBar";
+import { RecordingProvider } from "../recording/RecordingContext";
 
 export function AppShell() {
   const navigate = useNavigate();
@@ -32,6 +34,8 @@ export function AppShell() {
   }, [isDashboard]);
 
   const getActiveNav = () => {
+    if (location.pathname.startsWith("/dashboard")) return "kennzahlen";
+    if (location.pathname.startsWith("/interrai")) return "interrai";
     if (location.pathname.startsWith("/patienten")) return "patienten";
     if (location.pathname.startsWith("/angehoerige")) return "angehoerige";
     if (location.pathname.startsWith("/onboarding")) return "onboarding";
@@ -43,6 +47,8 @@ export function AppShell() {
   const handleNavChange = (id: string) => {
     const routeMap: Record<string, string> = {
       dashboard: "/",
+      kennzahlen: "/dashboard",
+      interrai: "/interrai",
       onboarding: "/onboarding",
       patienten: "/patienten",
       angehoerige: "/angehoerige",
@@ -54,6 +60,7 @@ export function AppShell() {
   };
 
   return (
+    <RecordingProvider>
     <div
       className="h-screen flex overflow-hidden"
       style={{ background: "var(--bg-primary)", fontFamily: "var(--font-family)", color: "var(--text-primary)", fontSize: "var(--text-body)", fontWeight: "var(--weight-regular)" }}
@@ -75,6 +82,7 @@ export function AppShell() {
 
       <div className="flex-1 flex flex-col lg:ml-[56px] min-h-0 min-w-0">
         <AppTopbar onMenuToggle={() => setSidebarOpen(o => !o)} />
+        <GlobalRecordingBar />
         <div className="flex-1 overflow-y-auto">
           <Outlet />
         </div>
@@ -107,5 +115,6 @@ export function AppShell() {
 
       <Toaster position="bottom-right" richColors />
     </div>
+    </RecordingProvider>
   );
 }

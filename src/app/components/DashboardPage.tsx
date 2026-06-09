@@ -147,7 +147,7 @@ export function DashboardPage() {
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full" style={{ maxWidth: 720, padding: "0 var(--space-4)" }}>
           {/* Greeting */}
-          <div className="text-center" style={{ paddingTop: 80 }}>
+          <div className="text-center" style={{ paddingTop: 40 }}>
             <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)", marginBottom: "var(--space-2)" }}>
               Dienstag, 3. März 2026
             </div>
@@ -157,7 +157,7 @@ export function DashboardPage() {
           </div>
 
           {/* Messages */}
-          <div style={{ marginTop: 64, paddingBottom: 200 }} className="flex flex-col">
+          <div style={{ marginTop: 32, paddingBottom: 24 }} className="flex flex-col">
             {/* Initial loading */}
             {isLoading && messages.length === 0 && (
               <div className="flex flex-col items-center" style={{ gap: "var(--space-3)" }}>

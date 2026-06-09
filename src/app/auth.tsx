@@ -44,8 +44,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.removeItem(key);
       }
     }
-    // Reset management view toggle
-    sessionStorage.removeItem("pendenzen-view:management");
   }, []);
 
   const user = MOCK_USERS[role];

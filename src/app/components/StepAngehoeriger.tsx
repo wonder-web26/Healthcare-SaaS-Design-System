@@ -494,51 +494,12 @@ export function StepAngehoeriger({
 
   return (
     <div className="space-y-0">
-      {/* ═══════════════════════════════════════
-         TOP HEADER (compact)
-         ═══════════════════════════════════════ */}
-      <div style={{ background: "var(--bg-elevated)", borderTopLeftRadius: "var(--radius-card)", borderTopRightRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", padding: "16px 20px 12px" }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center" style={{ gap: "var(--space-3)" }}>
-            <div className="shrink-0 flex items-center justify-center" style={{
-              width: 32, height: 32, borderRadius: "var(--radius-card)",
-              background: allComplete ? "var(--status-success-bg)" : "var(--brand-primary-light)",
-            }}>
-              {allComplete ? (
-                <CheckCircle2 style={{ width: 16, height: 16, color: "var(--status-success)" }} />
-              ) : (
-                <User style={{ width: 16, height: 16, color: "var(--brand-primary)" }} />
-              )}
-            </div>
-            <div>
-              <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-                <span style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Angehörigendaten</span>
-                <span className="inline-flex items-center" style={{
-                  gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
-                  background: allComplete ? "var(--status-success-bg)" : completedCount > 0 ? "var(--brand-primary-light)" : "var(--bg-secondary)",
-                  color: allComplete ? "var(--status-success-text)" : completedCount > 0 ? "var(--brand-primary)" : "var(--text-tertiary)",
-                }}>
-                  <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "currentColor" }} />
-                  {statusLabel}
-                </span>
-              </div>
-              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 2 }}>
-                {subSteps[activeTab].label}
-              </div>
-            </div>
-          </div>
-          {showSaved && (
-            <span className="flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", color: "var(--status-success-text)" }}>
-              <CheckCircle2 style={{ width: 12, height: 12 }} /> Gespeichert
-            </span>
-          )}
-        </div>
-      </div>
+      {/* Workspace-Kopf entfernt — Tab-Leiste rückt direkt unter den Onboarding-Header */}
 
-      {/* ═══════════════════════��═══════════════
+      {/* ═══════════════════════════════════════
          HORIZONTAL TAB NAVIGATION
          ═══════════════════════════════════════ */}
-      <div className="overflow-x-auto" style={{ background: "var(--bg-elevated)", borderLeft: "var(--border-thin) solid var(--border-default)", borderRight: "var(--border-thin) solid var(--border-default)", padding: "0 20px" }}>
+      <div className="overflow-x-auto" style={{ background: "var(--bg-elevated)", borderTopLeftRadius: "var(--radius-card)", borderTopRightRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", borderBottom: "none", padding: "0 20px" }}>
         <div className="flex min-w-max" style={{ gap: 0, borderBottom: "var(--border-thin) solid var(--border-default)" }}>
           {subSteps.map((tab, idx) => {
             const isActive = activeTab === idx;

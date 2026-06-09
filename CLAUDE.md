@@ -215,6 +215,38 @@ Reihenfolge, die sich bewährt hat:
 
 ---
 
+## Mobile-Responsiveness
+
+Die Mobile-Konventionen sind in styleguide.md Sektion 12 dokumentiert. Hier die architektonischen Entscheidungen:
+
+### Breakpoints (verbindlich)
+
+- Mobile: < 640px (Tailwind default)
+- Tablet: >= 640px (sm:)
+- Desktop: >= 1024px (lg:)
+- Wide: >= 1280px (xl:)
+
+### Architektur-Entscheidungen
+
+- **Tabellen auf Mobile**: Card-Ansicht (Option A). Jede Zeile wird eine Card. Reusable über `<MobileCardList>` in `components/ui/MobileCardList.tsx`. Pattern: `hidden sm:block` für Tabelle, `sm:hidden` für Cards.
+- **Modale Dialoge**: `<BottomSheet>` in `components/ui/BottomSheet.tsx`. Auf Mobile: Bottom-Sheet mit Swipe-down. Auf Desktop: zentriertes Modal. Komponente entscheidet automatisch via `sm:` Breakpoint.
+- **Navigation**: Bottom Tab-Bar (`<MobileBottomNav>`) in `components/MobileBottomNav.tsx`. Nur auf Mobile sichtbar (lg:hidden). 5 Items: Start, Pendenzen, Patienten, Angehörige, Onboarding.
+- **Anna-Sidebar**: Vollbild auf Mobile, 420px Sidebar auf Desktop. Floating-Button nur auf Desktop sichtbar.
+- **Touch-Targets**: Global via `@media (pointer: coarse)` in theme.css. Minimum 44×44px.
+- **Tap-Delay**: Eliminiert via `touch-action: manipulation` auf html.
+- **iOS-Zoom-Prevention**: Inputs haben mindestens `font-size: 16px` auf Mobile.
+
+### Beim Bauen neuer Komponenten
+
+Punkt 8 in der Checkliste ("Layout auf Desktop, iPad und Smartphone-Breite durchschauen") ist **verbindlich**. Jede neue Komponente muss auf 375px Breite funktionieren. Verwende die etablierten Mobile-Patterns:
+
+- Mehrspaltige Grids: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`
+- Tabellen: Desktop-Tabelle + MobileCardList-Alternative
+- Modals: `<BottomSheet>` statt eigene Modal-Implementierung
+- Padding: `var(--mobile-page-padding)` (16px) auf Mobile, `var(--space-6)` (24px) auf Desktop
+
+---
+
 ## Was bewusst nicht in diesem Projekt landet
 
 - Leistungserfassung (KLV A/B/C) – lebt in MedLink, nicht hier
@@ -249,3 +281,35 @@ Annas visuelle Signatur (Malachit-Cerulean-Gradient, Sparkle-Icon, Anna-Empfehlu
 - Code-Kommentare und Dokumentation: Englisch oder Deutsch, konsistent innerhalb einer Datei
 - Commit-Messages: Englisch, imperativ ("add klient list filter" statt "added filter")
 - Fachbegriffe bleiben deutsch: Klient, Angehöriger, Pflegefachkraft, Onboarding, Schweregrad, Zuteilung. Nicht übersetzen in "Patient" oder "Caregiver", auch wenn ein englischer Code-Kontext das nahelegt
+
+---
+
+## TODO: InterRAI-Lizenz
+
+InterRAI ist eine markenrechtlich geschützte Bezeichnung. Vor produktiver Nutzung muss eine formale Lizenz-Klärung mit Spitex Schweiz und/oder interRAI.org erfolgen. Im Prototyp gilt:
+
+- Item-Texte sind sinngemäss formuliert, nicht aus lizenzierter InterRAI-Vorlage übernommen
+- Keine Verwendung des Logos "©InterRAI HC" oder "© interRAI HC 1994-2019"
+- Im Footer der Read-only-Report-Ansicht: "Folgt dem Schema InterRAI HC Schweiz"
+- Die Umbenennung von "Bedarfsabklärung" zu "InterRAI" ist bewusst für den Prototyp vorgenommen worden, um den etablierten Schweizer Spitex-Fachbegriff zu verwenden
+
+
+
+## Migrations-Verifikation (verbindlich)
+
+Wenn ein Tab, eine Seite oder eine Komponente auf ein gemeinsames Muster oder eine geteilte Komponente migriert wird, ist die Migration erst abgeschlossen, wenn sie verifiziert wurde. Visuelle Gleichheit ist kein Beweis – zwei unabhängig gebaute Komponenten können identisch aussehen und trotzdem getrennt gepflegt werden müssen.
+
+### Pflicht-Checks nach jeder Migration
+
+1. **Geteilter Import:** Importieren alle Verwender tatsächlich dieselbe Komponente? Nenne die Datei-Pfade. Wenn zwei Verwender aus unterschiedlichen Dateien importieren, ist die Migration nicht abgeschlossen.
+2. **Keine Verwaisung:** Existiert noch eine alte, lokal gebaute oder inline implementierte Variante des Musters? Wenn ja, wird sie entfernt – oder, falls sie noch anderweitig referenziert wird, als bekannter offener Posten dokumentiert (mit Pfad und Grund).
+3. **Erweitert statt dupliziert:** Falls der neue Anwendungsfall etwas brauchte, das die gemeinsame Komponente noch nicht konnte – wurde die gemeinsame Komponente erweitert (neuer Slot, neuer Typ), oder wurde eine parallele Variante gebaut? Eine parallele Variante ist ein Fehler.
+4. **Erhaltene Logik:** Funktioniert die fachliche Logik nach dem Umbau unverändert (Berechnungen, Sammel-Aktionen, Navigation, Bestätigen-Vorgänge)? Konkret benennen, was geprüft wurde.
+
+### Berichtspflicht
+
+Am Ende einer Migration wird kurz berichtet: welche Komponente jetzt von wem importiert wird, welche alten Implementierungen entfernt oder als offen markiert wurden, und welche fachliche Logik geprüft wurde. Ohne diesen Bericht gilt die Migration als nicht verifiziert.
+
+### Hintergrund
+
+Diese Konvention existiert, weil Muster-Migrationen wiederholt nur teilweise ausgeführt wurden: ein Tab wurde migriert, ein zweiter behielt seinen Eigenbau, eine alte Komponente blieb verwaist liegen. Das Ergebnis sah korrekt aus, war aber doppelt gepflegt – und brach beim nächsten Änderungswunsch. Die verbindliche Referenz für die Muster selbst ist die styleguide.md, Sektion 8.10 bis 8.15.
