@@ -81,6 +81,9 @@ import { erzeugeWZWAuswertung, type WZWErgebnis } from "../../lib/klv/wzw-auswer
 import { useEinwilligung } from "./EinwilligungContext";
 import { useArztAnfrage, ArztAnfrageFlowInline } from "./ArztAnfrageContext";
 import { SectionAction } from "./ui/SectionAction";
+import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
+import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/krankenkassen";
+import { Combobox } from "./form/Combobox";
 import { patients } from "./patientData";
 
 export interface ATLEntry {
@@ -106,6 +109,7 @@ export interface PatientFormData {
   heimatort: string;
   zivilstand: string;
   aufenthaltsstatus: string;
+  /** SP-02: Krankenkasse als Code (Picklist-Wert) */
   krankenkasse: string;
   ahvNummer: string;
   hausarztName: string;
@@ -119,7 +123,10 @@ export interface PatientFormData {
   notfallkontaktTelefon: string;
   notfallkontaktBeziehung: string;
   spezialAerzte: string;
-  versicherungsNr: string;
+  /** SP-03: umbenannt von "versicherungsNr" zu "kartennummer" */
+  kartennummer: string;
+  /** SP-03: BAG-Nr. der Kasse (vorbefuellt aus Krankenkasse-Picklist) */
+  bagNr: string;
 
   /* Tab 2 – Steuer & Sozialversicherungen */
   sozialamtKontakt: string;
@@ -207,7 +214,8 @@ export const emptyPatientForm: PatientFormData = {
   notfallkontaktTelefon: "",
   notfallkontaktBeziehung: "",
   spezialAerzte: "",
-  versicherungsNr: "",
+  kartennummer: "",
+  bagNr: "",
 
   sozialamtKontakt: "nein",
   sozialamtKontaktDetail: "",
@@ -1023,26 +1031,26 @@ function TabPersonalien({ data, touched, onUpdate, onBlur }: FieldProps) {
           </span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-          <FormField
-            label="Krankenkasse"
-            required
-            error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : null}
-          >
+          {/* SP-02: Durchsuchbare Krankenkasse-Picklist */}
+          <Combobox label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { onUpdate("krankenkasse", v || ""); const bag = getBagNummer(v || ""); if (bag) onUpdate("bagNr", bag); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse waehlen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} />
+
+          {/* SP-03: Kartennummer (umbenannt von Versicherungsnr.) */}
+          <FormField label="Kartennummer" required error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : null}>
             <TextInput
-              value={data.krankenkasse}
-              onChange={(v) => onUpdate("krankenkasse", v)}
-              onBlur={() => onBlur("krankenkasse")}
-              placeholder="z.B. CSS, Helsana, Swica"
-              hasError={t("krankenkasse") && !filled(data.krankenkasse)}
-              isValid={filled(data.krankenkasse)}
+              value={data.kartennummer}
+              onChange={(v) => onUpdate("kartennummer", v)}
+              onBlur={() => onBlur("kartennummer")}
+              placeholder="Nummer auf der Versichertenkarte"
+              hasError={t("kartennummer") && !filled(data.kartennummer)}
             />
           </FormField>
 
-          <FormField label="Versicherungsnr.">
+          {/* SP-03: BAG-Nr. (vorbefuellt, manuell ueberschreibbar) */}
+          <FormField label="BAG-Nr. der Kasse">
             <TextInput
-              value={data.versicherungsNr}
-              onChange={(v) => onUpdate("versicherungsNr", v)}
-              placeholder="Versicherungsnummer"
+              value={data.bagNr}
+              onChange={(v) => onUpdate("bagNr", v)}
+              placeholder="z.B. 0271"
             />
           </FormField>
 

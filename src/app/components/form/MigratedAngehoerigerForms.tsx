@@ -11,9 +11,12 @@ import { NumberInput } from "./NumberInput";
 import { AHVNummerInput } from "./AHVNummerInput";
 import { IBANInput } from "./IBANInput";
 import { SegmentedControl } from "./SegmentedControl";
-import { Select as FormSelect } from "./Select";
+import { Combobox as FormSelect } from "./Combobox";
 import { Combobox } from "./Combobox";
 import type { AngehoerigerFormData } from "../StepAngehoeriger";
+import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
+import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
+import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
 
 function filled(v: string | undefined | null): boolean {
   return typeof v === "string" && v.trim().length > 0;
@@ -37,17 +40,10 @@ const AUFENTHALTSSTATUS = [
 
 const GESCHLECHT = [{ value: "maennlich", label: "Männlich" }, { value: "weiblich", label: "Weiblich" }, { value: "divers", label: "Divers" }];
 
-const ZIVILSTAND = [
-  { value: "ledig", label: "Ledig" }, { value: "verheiratet", label: "Verheiratet" },
-  { value: "geschieden", label: "Geschieden" }, { value: "verwitwet", label: "Verwitwet" },
-  { value: "eingetragene_partnerschaft", label: "Eingetragene Partnerschaft" },
-];
+// Zivilstand aus shared stammdaten
+const ZIVILSTAND = ZIVILSTAND_OPTIONS;
 
-const KONFESSION = [
-  { value: "reformiert", label: "Evangelisch-reformiert" }, { value: "katholisch", label: "Römisch-katholisch" },
-  { value: "christkatholisch", label: "Christkatholisch" }, { value: "andere", label: "Andere" },
-  { value: "konfessionslos", label: "Konfessionslos" },
-];
+// SP-01: Konfession aus shared stammdaten (ersetzt die alte lokale Liste)
 
 const QS_TARIF = [
   { value: "A", label: "A – Alleinstehend" }, { value: "B", label: "B – Verheiratet" },
@@ -130,11 +126,15 @@ export function PersonalienFormV2({
         <TextInput label="Telefon" required value={data.telefon} onChange={v => set("telefon", v)} onBlur={() => touch("telefon")} placeholder="+41 79 123 45 67" />
       </div>
 
-      {/* Krankenkasse */}
+      {/* Krankenkasse (SP-02, SP-03) */}
       <SectionHeader icon={Shield} label="Krankenkasse" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
-        <TextInput label="Krankenkasse" required value={data.krankenkasseName} onChange={v => set("krankenkasseName", v)} onBlur={() => touch("krankenkasseName")} placeholder="z.B. CSS, Helsana" error={touched.krankenkasseName && !filled(data.krankenkasseName) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Versicherungsnummer" value={data.versicherungsnummer} onChange={v => set("versicherungsnummer", v)} placeholder="Optional" />
+        {/* SP-02: Picklist statt Freitext */}
+        <FormSelect label="Krankenkasse" required value={data.krankenkasseName || null} onChange={v => { set("krankenkasseName", v || ""); touch("krankenkasseName"); const bag = getBagNummer(v || ""); if (bag) set("bagNr", bag); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse waehlen" error={touched.krankenkasseName && !filled(data.krankenkasseName) ? "Pflichtfeld" : undefined} />
+        {/* SP-03: Kartennummer (umbenannt von Versicherungsnummer) */}
+        <TextInput label="Kartennummer" required value={data.kartennummer} onChange={v => set("kartennummer", v)} onBlur={() => touch("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={touched.kartennummer && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} />
+        {/* SP-03: BAG-Nr. (vorbefuellt aus Krankenkasse, manuell ueberschreibbar) */}
+        <TextInput label="BAG-Nr. der Kasse" value={data.bagNr} onChange={v => set("bagNr", v)} placeholder="z.B. 0271" />
       </div>
     </div>
   );
@@ -158,7 +158,7 @@ export function SteuerFormV2({
       <SectionHeader icon={Receipt} label="Quellensteuer" first />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
         <SegmentedControl label="Quellensteuerpflichtig?" required value={data.quellensteuer} onChange={v => { if (v === "nein") onChange({ ...data, quellensteuer: v, quellensteuerTarif: "" }); else set("quellensteuer", v); }} options={JA_NEIN} hint="Nicht-CH-Bürger mit B/L sind i.d.R. quellensteuerpflichtig" />
-        <FormSelect label="Konfession" required value={data.konfession || null} onChange={v => { set("konfession", v || ""); touch("konfession"); }} options={KONFESSION} placeholder="Konfession wählen" hint="Relevant für Kirchensteuer" error={touched.konfession && !filled(data.konfession) ? "Pflichtfeld" : undefined} />
+        <FormSelect label="Konfession" required value={data.konfession || null} onChange={v => { set("konfession", v || ""); touch("konfession"); }} options={KONFESSION_OPTIONS} placeholder="Konfession wählen" hint="Relevant für Kirchensteuer" error={touched.konfession && !filled(data.konfession) ? "Pflichtfeld" : undefined} />
       </div>
       {data.quellensteuer === "ja" && (
         <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>

@@ -116,7 +116,7 @@ function runValidation(
   s2("pat_notfalltelefon", "Notfallkontakt Telefon", isValidPhone(pat.notfallkontaktTelefon), "Gültige Telefonnummer");
   s2("pat_hausarzt", "Hausarzt", filled(pat.hausarztName), "Pflichtfeld leer");
   s2("pat_krankenkasse", "Krankenkasse", filled(pat.krankenkasse), "Pflichtfeld leer");
-  s2("pat_versicherung", "Versicherungsnr.", filled(pat.versicherungsNr), "Pflichtfeld leer");
+  s2("pat_kartennummer", "Kartennummer", filled(pat.kartennummer), "Pflichtfeld leer");
   s2("pat_adresse", "Adresse Patient", filled(pat.adresseStrasse) && filled(pat.adressePlz) && filled(pat.adresseOrt), "Strasse, PLZ, Ort");
   s2("pat_groesse", "Grösse (cm)", filled(pat.groesse), "Pflichtfeld leer");
   s2("pat_gewicht", "Gewicht (kg)", filled(pat.gewicht), "Pflichtfeld leer");
@@ -170,8 +170,8 @@ function checkBillingReadiness(
     issues.push({ label: "Kostengutsprache fehlt", severity: "blocker" });
   if (!dok.documents.pflegevertrag)
     issues.push({ label: "Pflegevertrag nicht unterschrieben", severity: "blocker" });
-  if (!filled(pat.krankenkasse) || !filled(pat.versicherungsNr))
-    issues.push({ label: "Krankenkassenangaben unvollständig", severity: "blocker" });
+  if (!filled(pat.krankenkasse) || !filled(pat.kartennummer))
+    issues.push({ label: "Krankenkassenangaben unvollstaendig", severity: "blocker" });
 
   // Warnings
   if (!(ang.scans.id_scan && ang.scans.krankenkassenkarte && ang.scans.bankkarte))

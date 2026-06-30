@@ -809,7 +809,10 @@ export function OnboardingPage() {
                       if (wf) (wf as Record<string, unknown>).abschlussOverride = auditNote;
                       console.info("[Audit] Abschluss mit Override:", auditNote);
                     }
-                    konvertiereOnboarding(caseId, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: MOCK_KLV_VERORDNUNGEN, workflows: MOCK_WORKFLOWS });
+                    konvertiereOnboarding(caseId, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: MOCK_KLV_VERORDNUNGEN, workflows: MOCK_WORKFLOWS }, {
+                      name: `${angehoerigerData.vorname || ""} ${angehoerigerData.name || ""}`.trim(),
+                      quellensteuerpflichtig: angehoerigerData.quellensteuer === "ja",
+                    });
                   }
                   setShowAbschlussDialog(false);
                   const overrideHint = abschlussPruefung.fehlendePflichtdokumente.length > 0 ? " (mit ausstehenden Dokumenten)" : "";

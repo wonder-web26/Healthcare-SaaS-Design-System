@@ -87,7 +87,7 @@ export function FormShowcase() {
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-5)" }}>
         <TextInput label="Krankenkasse" required value="" onChange={() => {}} placeholder="z.B. CSS, Helsana" />
-        <TextInput label="Versicherungsnummer" value="" onChange={() => {}} placeholder="Optional" />
+        <TextInput label="Kartennummer" value="" onChange={() => {}} placeholder="Nummer auf der Versichertenkarte" />
       </div>
 
       {/* ── Section: Number Inputs ── */}

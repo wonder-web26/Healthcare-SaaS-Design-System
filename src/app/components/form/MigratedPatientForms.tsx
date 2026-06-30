@@ -10,10 +10,12 @@ import { TextareaInput } from "./TextareaInput";
 import { NumberInput } from "./NumberInput";
 import { AHVNummerInput } from "./AHVNummerInput";
 import { SegmentedControl } from "./SegmentedControl";
-import { Select as FormSelect } from "./Select";
-import { Combobox } from "./Combobox";
+import { Combobox as FormSelect } from "./Combobox";
 import { FormField } from "./FormField";
 import type { PatientFormData } from "../StepPatient";
+import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
+import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
+import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
 
 function filled(v: string | undefined | null): boolean {
   return typeof v === "string" && v.trim().length > 0;
@@ -22,7 +24,7 @@ function filled(v: string | undefined | null): boolean {
 const JA_NEIN = [{ value: "ja", label: "Ja" }, { value: "nein", label: "Nein" }];
 const JA_NEIN_UNB = [{ value: "ja", label: "Ja" }, { value: "nein", label: "Nein" }, { value: "unbekannt", label: "Unbekannt" }];
 const GESCHLECHT = [{ value: "weiblich", label: "Weiblich" }, { value: "maennlich", label: "Männlich" }, { value: "divers", label: "Divers" }];
-const KONFESSION = [{ value: "reformiert", label: "Reformiert" }, { value: "roemisch-katholisch", label: "Römisch-Katholisch" }, { value: "christkatholisch", label: "Christkatholisch" }, { value: "konfessionslos", label: "Konfessionslos" }, { value: "andere", label: "Andere" }];
+// SP-01: Konfession aus shared stammdaten (ersetzt die alte lokale Liste)
 const WOHNSITUATION = [{ value: "wohnung", label: "Eigene Wohnung" }, { value: "haus", label: "Eigenheim" }, { value: "betreut", label: "Betreutes Wohnen" }, { value: "heim", label: "Pflegeheim" }, { value: "sonstige", label: "Sonstige" }];
 const STIMMUNG = [{ value: "stabil", label: "Stabil" }, { value: "gedrueckt", label: "Gedrückt" }, { value: "wechselhaft", label: "Wechselhaft" }, { value: "belastet", label: "Sehr belastet" }];
 const PERSONEN = [{ value: "1", label: "1 (alleinlebend)" }, { value: "2", label: "2 Personen" }, { value: "3", label: "3 Personen" }, { value: "4+", label: "4+ Personen" }];
@@ -60,7 +62,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
           <FormSelect label="Aufenthaltsstatus" value={data.aufenthaltsstatus || null} onChange={v => onUpdate("aufenthaltsstatus", v || "")}
             options={[{ value: "B", label: "B" }, { value: "C", label: "C" }, { value: "L", label: "L" }, { value: "G", label: "G" }, { value: "F", label: "F" }, { value: "N", label: "N" }]} placeholder="Status wählen" />
         )}
-        <FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={[{ value: "ledig", label: "Ledig" }, { value: "verheiratet", label: "Verheiratet" }, { value: "geschieden", label: "Geschieden" }, { value: "verwitwet", label: "Verwitwet" }]} placeholder="Wählen" />
+        <FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand waehlen" />
       </div>
 
       <SectionHeader icon={MapPin} label="Adresse" />
@@ -72,9 +74,14 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
         <TextInput label="Ort" required value={data.adresseOrt} onChange={v => onUpdate("adresseOrt", v)} onBlur={() => onBlur("adresseOrt")} placeholder="Zürich" error={t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined} />
       </div>
 
-      <SectionHeader icon={Shield} label="Krankenkasse & Ärzte" />
-      <div style={{ marginBottom: "var(--space-5)" }}>
-        <TextInput label="Krankenkasse" required value={data.krankenkasse} onChange={v => onUpdate("krankenkasse", v)} onBlur={() => onBlur("krankenkasse")} placeholder="z.B. CSS, Helsana" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} />
+      <SectionHeader icon={Shield} label="Krankenkasse & Aerzte" />
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
+        {/* SP-02: Picklist statt Freitext */}
+        <FormSelect label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { onUpdate("krankenkasse", v || ""); const bag = getBagNummer(v || ""); if (bag) onUpdate("bagNr", bag); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse waehlen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} />
+        {/* SP-03: Kartennummer (umbenannt) */}
+        <TextInput label="Kartennummer" required value={data.kartennummer} onChange={v => onUpdate("kartennummer", v)} onBlur={() => onBlur("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} />
+        {/* SP-03: BAG-Nr. */}
+        <TextInput label="BAG-Nr. der Kasse" value={data.bagNr} onChange={v => onUpdate("bagNr", v)} placeholder="z.B. 0271" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
         <TextInput label="Hausarzt Name" required value={data.hausarztName} onChange={v => onUpdate("hausarztName", v)} onBlur={() => onBlur("hausarztName")} placeholder="Dr. Müller" error={t("hausarztName") && !filled(data.hausarztName) ? "Pflichtfeld" : undefined} />
@@ -128,7 +135,7 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
       </div>
 
       <SectionHeader icon={Receipt} label="Konfession & Steuer" />
-      <FormSelect label="Konfession" required value={data.konfession || null} onChange={v => onUpdate("konfession", v || "")} options={KONFESSION} placeholder="Bitte wählen" />
+      <FormSelect label="Konfession" required value={data.konfession || null} onChange={v => onUpdate("konfession", v || "")} options={KONFESSION_OPTIONS} placeholder="Bitte wählen" />
       <div style={{ marginTop: "var(--space-4)" }}>
         <TextareaInput label="Quellensteuer-Hinweise" value={data.quellensteuerHinweise} onChange={v => onUpdate("quellensteuerHinweise", v)} placeholder="Optionale Hinweise zur Quellensteuer-Situation" hint="Wird nur an die Lohnbuchhaltung weitergeleitet" />
       </div>

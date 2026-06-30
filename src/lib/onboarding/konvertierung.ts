@@ -8,6 +8,7 @@
  * Currently a stub — will be called from the Onboarding-Abschluss-Dialog in Prompt B.
  */
 import type { InterRAIAssessment, Pflegeplanung, KLVVerordnung, WorkflowPlan } from "../../types/klinische-artefakte";
+import { verwalteQuellensteuerPendenz } from "../stammdaten/quellensteuer-automatik";
 
 export interface KonvertierungsErgebnis {
   patientId: string;
@@ -38,7 +39,9 @@ export function konvertiereOnboarding(
     pflegeplanungen: Pflegeplanung[];
     klvVerordnungen: KLVVerordnung[];
     workflows: WorkflowPlan[];
-  }
+  },
+  /** SP-07: Angehoerigen-Stammdaten fuer Pendenz-Erzeugung bei Quellensteuer */
+  angehoerigenDaten?: { name: string; quellensteuerpflichtig: boolean },
 ): KonvertierungsErgebnis {
   // 1. Generate new patient ID (in production: server-generated)
   const patientId = `P-${Date.now()}`;
@@ -75,6 +78,12 @@ export function konvertiereOnboarding(
       wf.patientId = patientId;
       konvertierteWF.push(wf.id);
     }
+  }
+
+  // SP-07: Bei Quellensteuerpflicht Pendenz fuer Buchhaltung erzeugen
+  // Erst jetzt, weil der Angehoerige als Mitarbeiter erst nach Konvertierung existiert.
+  if (angehoerigenDaten?.quellensteuerpflichtig) {
+    verwalteQuellensteuerPendenz("erstellen", angehoerigenDaten.name, angehoerigerId);
   }
 
   return {

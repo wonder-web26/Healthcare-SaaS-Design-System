@@ -51,6 +51,10 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { PersonalienFormV2, SteuerFormV2, AnstellungFormV2 } from "./form/MigratedAngehoerigerForms";
 import { PartnerFormV2, KinderFormV2, DokumenteFormV2 } from "./form/MigratedAngehoerigerForms2";
+import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
+import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/krankenkassen";
+import { ZIVILSTAND_OPTIONS } from "../../lib/stammdaten/zivilstand";
+import { Combobox } from "./form/Combobox";
 
 /* ══════════════════════════════════════════
    TYPES (unchanged export contract)
@@ -77,9 +81,12 @@ export interface AngehoerigerFormData {
   ort: string;
   email: string;
   telefon: string;
-  /* 1. Personalien – Krankenkasse */
+  /* 1. Personalien – Krankenkasse (SP-02, SP-03) */
   krankenkasseName: string;
-  versicherungsnummer: string;
+  /** SP-03: umbenannt von "Versicherungsnummer" zu "Kartennummer" (Nummer auf der Versichertenkarte) */
+  kartennummer: string;
+  /** SP-03: BAG-Nr. der Kasse (wird aus Krankenkasse-Picklist vorbefuellt, manuell ueberschreibbar) */
+  bagNr: string;
   /* 2. Steuer & Sozialversicherung */
   quellensteuer: string;
   konfession: string;
@@ -90,13 +97,20 @@ export interface AngehoerigerFormData {
   sozialamtInvolviert: string;
   sozialamtKontakt: string;
   lohnabtretung: string;
-  /* 3. Partner */
-  partnerName: string;
+  /* 3. Partner (SP-06: 3-Zustandslogik) */
+  /** Manueller Toggle: User will Partner erfassen, obwohl Bedingung nicht erfuellt */
+  partnerManualToggle: boolean;
   partnerVorname: string;
+  partnerName: string;
   partnerGeburtsdatum: string;
+  partnerNationalitaet: string;
+  /** SP-06: Aufenthaltsbewilligung des Partners (Schweizer/C/B/andere) — Basis fuer SP-07 */
+  partnerAufenthaltsstatus: string;
+  /** SP-06: Erwerbstaetig (Ja/Nein) */
+  partnerErwerbstaetig: string;
+  /* Legacy-Felder (beibehalten fuer Datenkonsistenz) */
   partnerAhvNummer: string;
   partnerZemisNummer: string;
-  partnerAufenthaltsstatus: string;
   partnerFbAusweisAngemeldet: string;
   partnerAnmeldungDatum: string;
   partnerBerufstaetig: string;
@@ -203,7 +217,8 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   email: "",
   telefon: "",
   krankenkasseName: "",
-  versicherungsnummer: "",
+  kartennummer: "",
+  bagNr: "",
   quellensteuer: "nein",
   konfession: "",
   quellensteuerTarif: "",
@@ -213,12 +228,15 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   sozialamtInvolviert: "nein",
   sozialamtKontakt: "",
   lohnabtretung: "nein",
-  partnerName: "",
+  partnerManualToggle: false,
   partnerVorname: "",
+  partnerName: "",
   partnerGeburtsdatum: "",
+  partnerNationalitaet: "",
+  partnerAufenthaltsstatus: "",
+  partnerErwerbstaetig: "",
   partnerAhvNummer: "",
   partnerZemisNummer: "",
-  partnerAufenthaltsstatus: "",
   partnerFbAusweisAngemeldet: "nein",
   partnerAnmeldungDatum: "",
   partnerBerufstaetig: "nein",
@@ -353,9 +371,9 @@ function getSubStepStatus(
         filled(data.ort),
         filled(data.email),
         filled(data.telefon),
-        /* Krankenkasse */
+        /* Krankenkasse (SP-02: Pflicht, SP-03: Kartennummer Pflicht) */
         filled(data.krankenkasseName),
-        // versicherungsnummer is optional
+        filled(data.kartennummer),
       ];
       // Conditional: Heimatort only for Swiss, Aufenthaltsstatus only for non-Swiss
       if (isSwiss) checks.push(filled(data.heimatort));
@@ -385,33 +403,47 @@ function getSubStepStatus(
       return "empty";
     }
     case "partner": {
-      const needsPartner =
-        data.zivilstand === "verheiratet" ||
-        data.zivilstand === "eingetragene_partnerschaft" ||
-        data.quellensteuer === "ja";
-      if (!needsPartner) return "complete"; // not applicable → auto-complete
-      const isFbAngemeldet = data.partnerFbAusweisAngemeldet === "ja";
+      // SP-06: 3-Zustandslogik
+      // SP-06: "eingetragene Partnerschaft" ist der Ehe steuerlich gleichgestellt (DBG Art. 9 Abs. 1bis)
+      const pflichtBedingung = (data.zivilstand === "verheiratet" || data.zivilstand === "eingetragene_partnerschaft") && data.quellensteuer === "ja";
+      const manuellesToggle = data.partnerManualToggle;
+      const partnerSichtbar = pflichtBedingung || manuellesToggle;
+      if (!partnerSichtbar) return "complete"; // not applicable → auto-complete
+      // Bei manuellem Toggle (optional) zaehlt vorhandene Daten als "partial" aber nie als Fehler
       const checks = [
         filled(data.partnerName),
         filled(data.partnerVorname),
-        isValidDate(data.partnerGeburtsdatum),
-        isValidAHV(data.partnerAhvNummer),
+        filled(data.partnerGeburtsdatum),
         filled(data.partnerAufenthaltsstatus),
+        filled(data.partnerErwerbstaetig),
       ];
-      if (isFbAngemeldet) checks.push(isValidDate(data.partnerAnmeldungDatum));
       const done = checks.filter(Boolean).length;
+      if (!pflichtBedingung) {
+        // Manuell eingeblendet: alles optional → gilt als complete wenn irgendwas gefuellt
+        return done > 0 ? "complete" : "complete";
+      }
+      // Pflicht: alle Checks muessen bestehen
       if (done === checks.length) return "complete";
       if (done > 0) return "partial";
       return "empty";
     }
     case "kinder": {
+      // SP-08: zweistufiges Gating
       const hasKids = data.hatUnterhaltspflichtigeKinder === "ja";
-      if (!hasKids) return "complete"; // no children → auto-complete
-      if (data.kinder.length === 0) return "empty";
-      const allKidsComplete = data.kinder.every(isKindComplete);
-      if (allKidsComplete && filled(data.kinderzulagenUeberSpitex))
-        return "complete";
-      return "partial";
+      if (!hasKids) return "complete"; // Frage 1 = Nein → auto-complete
+      // Stufe 1: Anzahl Kinder muss gefuellt sein (Pflicht)
+      const anzahlOk = filled(data.anzahlKinder) && data.anzahlKinder !== "0";
+      if (!anzahlOk) return "empty";
+      // Frage 2 muss beantwortet sein
+      if (!filled(data.kinderzulagenUeberSpitex)) return "partial";
+      // Stufe 2: Wenn Zulagen ueber Spitex → Detail-Block Pflicht
+      if (data.kinderzulagenUeberSpitex === "ja") {
+        if (data.kinder.length === 0) return "partial";
+        const allKidsComplete = data.kinder.every(k => filled(k.vorname) && filled(k.name) && filled(k.geburtsdatum));
+        return allKidsComplete ? "complete" : "partial";
+      }
+      // Frage 2 = Nein → nur Anzahl noetig, schon geprueft
+      return "complete";
     }
     case "anstellung": {
       const checks = [
@@ -1000,20 +1032,7 @@ function PersonalienForm({
             </FormField>
           )}
 
-          <FormField label="Zivilstand" required>
-            <Select value={data.zivilstand} onValueChange={(v) => set("zivilstand", v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Zivilstand wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ledig">Ledig</SelectItem>
-                <SelectItem value="verheiratet">Verheiratet</SelectItem>
-                <SelectItem value="geschieden">Geschieden</SelectItem>
-                <SelectItem value="verwitwet">Verwitwet</SelectItem>
-                <SelectItem value="eingetragene_partnerschaft">Eingetragene Partnerschaft</SelectItem>
-              </SelectContent>
-            </Select>
-          </FormField>
+          <Combobox label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand waehlen" />
 
           <FormField
             label="Zivilstand seit"
@@ -1154,34 +1173,39 @@ function PersonalienForm({
 
       <div className="border-t border-border-light" />
 
-      {/* ── Section 3: Krankenkasse ─────────── */}
+      {/* ── Section 3: Krankenkasse (SP-02, SP-03) ─────────── */}
       <div>
         <h5 className="text-foreground mb-3 flex items-center gap-2">
           <Cross className="w-4 h-4 text-primary" />
           Krankenkasse
         </h5>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
+          {/* SP-02: Durchsuchbare Picklist */}
+          <Combobox label="Krankenkasse" required value={data.krankenkasseName || null} onChange={v => { set("krankenkasseName", v || ""); touch("krankenkasseName"); const bag = getBagNummer(v || ""); if (bag) set("bagNr", bag); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse waehlen" error={touched.krankenkasseName && !filled(data.krankenkasseName) ? "Pflichtfeld" : undefined} />
+
+          {/* SP-03: Kartennummer (umbenannt von Versicherungsnummer) */}
           <FormField
-            label="Krankenkasse Name"
+            label="Kartennummer"
             required
-            error={touched.krankenkasseName && !filled(data.krankenkasseName) ? "Pflichtfeld" : undefined}
+            hint="Nummer auf der Versichertenkarte"
+            error={touched.kartennummer && !filled(data.kartennummer) ? "Pflichtfeld" : undefined}
           >
             <Input
-              value={data.krankenkasseName}
-              onChange={(e) => set("krankenkasseName", e.target.value)}
-              onBlur={() => touch("krankenkasseName")}
-              placeholder="z.B. CSS, Helsana, Swica"
+              value={data.kartennummer}
+              onChange={(e) => set("kartennummer", e.target.value)}
+              onBlur={() => touch("kartennummer")}
+              placeholder="Kartennummer"
             />
           </FormField>
 
+          {/* SP-03: BAG-Nr. der Kasse (vorbefuellt, manuell ueberschreibbar) */}
           <FormField
-            label="Versicherungsnummer"
-            hint="Optional – falls auf der Karte ersichtlich"
+            label="BAG-Nr. der Kasse"
           >
             <Input
-              value={data.versicherungsnummer}
-              onChange={(e) => set("versicherungsnummer", e.target.value)}
-              placeholder="Versicherungsnummer"
+              value={data.bagNr}
+              onChange={(e) => set("bagNr", e.target.value)}
+              placeholder="z.B. 0271"
             />
           </FormField>
         </div>
@@ -1227,7 +1251,7 @@ function SteuerForm({
           Quellensteuer
         </h5>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
-          <FormField label="Quellensteuerpflichtig?" required hint="Nicht-CH-Bürger mit B/L-Bewilligung sind i.d.R. quellensteuerpflichtig">
+          <FormField label="Quellensteuerpflichtig?" required hint="Nicht-CH-Buerger mit B/L-Bewilligung sind i.d.R. quellensteuerpflichtig">
             <JaNeinToggle
               value={data.quellensteuer}
               onValueChange={(v) => {
@@ -1236,32 +1260,13 @@ function SteuerForm({
                 } else {
                   set("quellensteuer", v);
                 }
+                // SP-07: Pendenz-Erstellung erfolgt erst bei Onboarding-Konvertierung,
+                // nicht waehrend der Erfassung (Mitarbeiter existiert noch nicht).
               }}
             />
           </FormField>
 
-          <FormField
-            label="Konfession"
-            required
-            hint="Relevant für Kirchensteuer"
-            error={touched.konfession && !filled(data.konfession) ? "Pflichtfeld" : undefined}
-          >
-            <Select
-              value={data.konfession}
-              onValueChange={(v) => { set("konfession", v); touch("konfession"); }}
-            >
-              <SelectTrigger className={!filled(data.konfession) ? "text-muted-foreground" : ""}>
-                <SelectValue placeholder="Konfession wählen" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="reformiert">Evangelisch-reformiert</SelectItem>
-                <SelectItem value="katholisch">Römisch-katholisch</SelectItem>
-                <SelectItem value="christkatholisch">Christkatholisch</SelectItem>
-                <SelectItem value="andere">Andere Konfession</SelectItem>
-                <SelectItem value="konfessionslos">Konfessionslos</SelectItem>
-              </SelectContent>
-            </Select>
-          </FormField>
+          <Combobox label="Konfession" value={data.konfession || null} onChange={v => { set("konfession", v || ""); touch("konfession"); }} options={KONFESSION_OPTIONS} placeholder="Konfession waehlen" hint="Optional — relevant fuer Kirchensteuer" />
 
           {isQuellensteuer && (
             <FormField
