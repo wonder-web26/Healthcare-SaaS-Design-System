@@ -30,15 +30,6 @@ import {
   RotateCcw,
   Circle,
   Shield,
-  Handshake,
-  Pill,
-  Key,
-  ScrollText,
-  Megaphone,
-  Lock as LockIcon,
-  ShoppingCart,
-  Folder,
-  FolderOpen,
   ChevronRight,
   Download,
   Layers,
@@ -69,7 +60,8 @@ import { NANDA_KATALOG } from "../../lib/mocks/nanda-enp-katalog";
 import { ReviewBlock } from "./ui/ReviewBlock";
 import { InlineSelect } from "./ui/InlineSelect";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
-import { WorkflowChecklist } from "./workflow/WorkflowChecklist";
+import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
+import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
 import { SectionAccordion, SektionBadge } from "./ui/SectionAccordion";
 import { ItemRow } from "./ui/ItemRow";
 import { hProWoche, einmaligeMin, istPeriodisch, einheitLabel, werLabel, berechnungsText, kompaktParams, berechneSummen, getSimultanPartner } from "../../lib/klv/berechnung";
@@ -84,20 +76,18 @@ import { SectionAction } from "./ui/SectionAction";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/krankenkassen";
 import { Combobox } from "./form/Combobox";
+import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import { patients } from "./patientData";
+import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext, type DokumentTypDefinition } from "../../lib/stammdaten/dokumenttypen";
+import { DokumentScanUpload, type ScanFile } from "./form/DokumentScanUpload";
 
 export interface ATLEntry {
   ja: boolean | null;
   bemerkungen: string;
 }
 
-export interface PatientScanFile {
-  name: string;
-  type: string;
-  size: string;
-  timestamp: string;
-  previewUrl: string | null;
-}
+/** Alias — identisch mit ScanFile aus DokumentScanUpload */
+export type PatientScanFile = ScanFile;
 
 export interface PatientFormData {
   /* Tab 1 – Personalien */
@@ -134,6 +124,8 @@ export interface PatientFormData {
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
+  /** PA-01: IV-Assistenzbeitrag */
+  assistenzbeitrag: string;
   konfession: string;
   quellensteuerHinweise: string;
 
@@ -153,6 +145,11 @@ export interface PatientFormData {
   treppen: string;
   personenImHaushalt: string;
   anamneseText: string;
+  /** PA-03: Sturz-Assessment */
+  sturzLetzte12m: string;
+  sturzAnzahl: string;
+  sturzKommentar: string;
+  /* Legacy (beibehalten für Kompatibilität) */
   sturzLetzte6Monate: string;
   sturzVorEinemJahr: string;
   stimmungAktuell: string;
@@ -222,6 +219,7 @@ export const emptyPatientForm: PatientFormData = {
   ivBezug: "nein",
   ivBezugProzent: "",
   hilflosenentschaedigung: "nein",
+  assistenzbeitrag: "nein",
   konfession: "",
   quellensteuerHinweise: "",
 
@@ -240,6 +238,9 @@ export const emptyPatientForm: PatientFormData = {
   treppen: "nein",
   personenImHaushalt: "1",
   anamneseText: "",
+  sturzLetzte12m: "kein_sturz",
+  sturzAnzahl: "",
+  sturzKommentar: "",
   sturzLetzte6Monate: "nein",
   sturzVorEinemJahr: "nein",
   stimmungAktuell: "",
@@ -363,6 +364,7 @@ function isTabComplete(tabKey: string, data: PatientFormData): boolean {
 const tabDefs = [
   { key: "personalien", label: "Personalien", icon: User },
   { key: "steuer", label: "Soziales & Steuer", icon: ShieldCheck },
+  { key: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
   { key: "anamnese", label: "Anamnese", icon: Stethoscope },
   { key: "aktivitaeten", label: "Aktivitäten", icon: Activity },
   { key: "interrai", label: "InterRAI", icon: ClipboardList },
@@ -523,17 +525,22 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {activeTab === 1 && (
             <TabSteuerV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
-          {activeTab === 2 && (
+          {activeTab === 2 && <VitaldatenTab patientId={onboardingId || "new"} />}
+          {activeTab === 3 && (
             <TabAnamneseV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
-          {activeTab === 3 && (
+          {activeTab === 4 && (
             <TabAktivitaetenV2 data={data} onUpdateATL={updateATL} />
           )}
-          {activeTab === 4 && onboardingId && <OnboardingTabBA onboardingId={onboardingId} />}
-          {activeTab === 5 && onboardingId && <OnboardingTabPP onboardingId={onboardingId} />}
-          {activeTab === 6 && onboardingId && <OnboardingTabKLV onboardingId={onboardingId} />}
-          {activeTab === 7 && onboardingId && <WorkflowChecklist onboardingId={onboardingId} />}
-          {activeTab === 8 && <TabDokumente data={data} onChange={onChange} onboardingId={onboardingId || null} />}
+          {activeTab === 5 && onboardingId && <OnboardingTabBA onboardingId={onboardingId} />}
+          {activeTab === 6 && onboardingId && <OnboardingTabPP onboardingId={onboardingId} />}
+          {activeTab === 7 && onboardingId && <OnboardingTabKLV onboardingId={onboardingId} />}
+          {activeTab === 8 && onboardingId && (() => {
+            // Patient-Workflow: Tickets ab Aufnahmedatum (= heute im Onboarding-Kontext)
+            generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, new Date().toISOString().slice(0, 10));
+            return <RhythmusTimeline subjektTyp="patient" subjektId={onboardingId} />;
+          })()}
+          {activeTab === 9 && <TabDokumente data={data} onChange={onChange} />}
         </div>
       </div>
 
@@ -1032,7 +1039,7 @@ function TabPersonalien({ data, touched, onUpdate, onBlur }: FieldProps) {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
           {/* SP-02: Durchsuchbare Krankenkasse-Picklist */}
-          <Combobox label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { onUpdate("krankenkasse", v || ""); const bag = getBagNummer(v || ""); if (bag) onUpdate("bagNr", bag); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse waehlen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} />
+          <Combobox label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { const bag = getBagNummer(v || ""); onChange({ ...data, krankenkasse: v || "", ...(bag ? { bagNr: bag } : {}) }); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} />
 
           {/* SP-03: Kartennummer (umbenannt von Versicherungsnr.) */}
           <FormField label="Kartennummer" required error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : null}>
@@ -1668,83 +1675,49 @@ function TabAktivitaeten({
 }
 
 /* ══════════════════════════════════════════
-   TAB 5 – DOKUMENTE (Pflicht-Dokumente Stil)
+   TAB 5 – DOKUMENTE (PA-07: stammdaten-gesteuert)
    ══════════════════════════════════════════ */
 
-interface PatientDocItemDef {
-  key: string;
-  label: string;
-  group: string;
-  icon: React.ElementType;
-  mandatory: boolean;
-}
-
-const PATIENT_DOC_ITEMS: PatientDocItemDef[] = [
-  /* 1) Identität */
-  { key: "pass_id", label: "Pass oder ID", group: "Identität", icon: Shield, mandatory: true },
-  { key: "auslaenderausweis", label: "Ausländerausweis", group: "Identität", icon: Shield, mandatory: false },
-  /* 2) Vereinbarung */
-  { key: "leistungsvereinbarung", label: "Leistungsvereinbarung", group: "Vereinbarung", icon: Handshake, mandatory: true },
-  { key: "leistungsplanungsblatt", label: "Leistungsplanungsblatt", group: "Vereinbarung", icon: Handshake, mandatory: true },
-  { key: "agb", label: "AGB", group: "Vereinbarung", icon: Handshake, mandatory: true },
-  { key: "tarifblatt", label: "Tarifblatt", group: "Vereinbarung", icon: Handshake, mandatory: true },
-  /* 3) Medikamente und Mittel */
-  { key: "medikationsplan", label: "Medikationsplan", group: "Medikamente und Mittel", icon: Pill, mandatory: true },
-  { key: "kontrolle_btm", label: "Kontrolle Betäubungsmittel", group: "Medikamente und Mittel", icon: Pill, mandatory: true },
-  { key: "rezepte_pflegematerial", label: "Rezepte Pflegematerial", group: "Medikamente und Mittel", icon: Pill, mandatory: false },
-  /* 4) Schlüssel */
-  { key: "quittung_schluessel", label: "Quittung Schlüssel-Safe-Code", group: "Schlüssel", icon: Key, mandatory: true },
-  { key: "offerte_schluesselsafe", label: "Offerte Schlüsselsafe", group: "Schlüssel", icon: Key, mandatory: false },
-  /* 5) Verfügbarkeit */
-  { key: "patientenverfuegung", label: "Patientenverfügung", group: "Verfügbarkeit", icon: ScrollText, mandatory: true },
-  { key: "vorsorgeauftrag", label: "Vorsorgeauftrag", group: "Verfügbarkeit", icon: ScrollText, mandatory: true },
-  /* 6) Aufsicht und Beschwerde */
-  { key: "beschwerdeinformationsblatt", label: "Beschwerdeinformationsblatt", group: "Aufsicht und Beschwerde", icon: Megaphone, mandatory: true },
-  { key: "beschwerdeeingabeblatt", label: "Beschwerdeeingabeblatt", group: "Aufsicht und Beschwerde", icon: Megaphone, mandatory: true },
-  /* 7) Einwilligung */
-  { key: "einwilligung_datenschutz", label: "Einwilligungserklärung Datenschutz", group: "Einwilligung", icon: LockIcon, mandatory: true },
-  /* 8) Sonstiges */
-  { key: "einkaufsliste", label: "Einkaufsliste", group: "Sonstiges", icon: ShoppingCart, mandatory: false },
-];
+/**
+ * Pflicht-Prüfung über die Dokument-Engine (stammdaten/dokumenttypen.ts).
+ * Kontext: Im Onboarding sind alle Bedingungsfelder vorerst auf Defaults,
+ * weil sichtbarWenn=IMMER für alle 4 Patient-Seeds gilt.
+ */
+const PATIENT_DOK_KONTEXT: DokumentKontext = {
+  partnerErforderlich: false,
+  hatKinder: false,
+  kinderzulagenUeberSpitex: false,
+  unterhaltspflicht: false,
+  zertifikatDeutschVorhanden: false,
+  srkZertifikatVorhanden: false,
+  assistenzbeitragJa: false,
+};
 
 export function getPatientRequiredDocKeys(): string[] {
-  return PATIENT_DOC_ITEMS.filter((i) => i.mandatory).map((i) => i.key);
+  return sichtbareDokumenttypen(PATIENT_DOK_KONTEXT, "patient")
+    .filter(d => d.pflicht && !d.mehrfach)
+    .map(d => {
+      if (d.modus === "unterschrift") return d.code;
+      if (d.beidseitig) return d.code; // Vollständigkeit prüft _vorne + _hinten intern
+      return d.code;
+    });
 }
 
-/** Returns labels of missing mandatory documents */
+/** Fehlende Pflicht-Dokumente (Labels) für Abschluss-Sperre */
 export function getFehlendePflichtdokumente(scans: Record<string, unknown>): string[] {
-  return PATIENT_DOC_ITEMS.filter(i => i.mandatory && !scans[i.key]).map(i => i.label);
-}
-
-/* Group items for rendering */
-function getDocGroups(): { group: string; items: PatientDocItemDef[] }[] {
-  const groupMap = new Map<string, PatientDocItemDef[]>();
-  for (const item of PATIENT_DOC_ITEMS) {
-    if (!groupMap.has(item.group)) groupMap.set(item.group, []);
-    groupMap.get(item.group)!.push(item);
-  }
-  return Array.from(groupMap.entries()).map(([group, items]) => ({ group, items }));
+  return sichtbareDokumenttypen(PATIENT_DOK_KONTEXT, "patient")
+    .filter(d => d.pflicht && !d.mehrfach && !istDokumentVollstaendig(d, scans))
+    .map(d => d.label);
 }
 
 /* ── SharePoint folder structure mapping ── */
-interface SPFolder {
-  id: string;
-  label: string;
-  docKeys: string[];
-}
+/* ── ARCHIV: Alte lokale Upload-Infrastruktur (SP-22 / Append-only) ──
+   usePatientFileUpload, PatientCameraModal, PatientScanUploadButton,
+   SPFolder, SP_FOLDERS, SharePointFolderView, PatientScanUploadButtonSmall
+   — ersetzt durch gemeinsame DokumentScanUpload-Komponente.
+── Ende ARCHIV ── */
 
-const SP_FOLDERS: SPFolder[] = [
-  { id: "01_identitaet", label: "01_Identitaet", docKeys: ["pass_id", "auslaenderausweis"] },
-  { id: "02_vereinbarung", label: "02_Vereinbarung", docKeys: ["leistungsvereinbarung", "leistungsplanungsblatt", "agb", "tarifblatt"] },
-  { id: "03_medikamente", label: "03_Medikamente_Mittel", docKeys: ["medikationsplan", "kontrolle_btm", "rezepte_pflegematerial"] },
-  { id: "04_schluessel", label: "04_Schluessel", docKeys: ["quittung_schluessel", "offerte_schluesselsafe"] },
-  { id: "05_verfuegbarkeit", label: "05_Verfuegbarkeit", docKeys: ["patientenverfuegung", "vorsorgeauftrag"] },
-  { id: "06_aufsicht_beschwerde", label: "06_Aufsicht_Beschwerde", docKeys: ["beschwerdeinformationsblatt", "beschwerdeeingabeblatt"] },
-  { id: "07_einwilligung", label: "07_Einwilligung", docKeys: ["einwilligung_datenschutz"] },
-  { id: "08_sonstiges", label: "08_Sonstiges", docKeys: ["einkaufsliste"] },
-];
-
-/* ── Patient file upload hook ──────────── */
+/* ── Patient file upload hook (ARCHIV — wird nicht mehr verwendet) ── */
 function usePatientFileUpload(
   scanKey: string,
   docLabel: string,
@@ -2026,452 +1999,63 @@ function PatientScanUploadButton({
   );
 }
 
-/* ── SharePoint Folder Tree View ────────── */
-function SharePointFolderView({
-  data,
-  onChange,
-  onOpenCamera,
-}: {
-  data: PatientFormData;
-  onChange: (d: PatientFormData) => void;
-  onOpenCamera: (key: string, label: string) => void;
-}) {
-  const [activeFolder, setActiveFolder] = useState(SP_FOLDERS[0].id);
-  const [expandedRoot, setExpandedRoot] = useState(true);
-  const [previewKey, setPreviewKey] = useState<string | null>(null);
+/* ── ARCHIV: SharePointFolderView + PatientScanUploadButtonSmall (SP-22) ──
+   Alte Ordnerstruktur- und Tabellenansicht — durch stammdaten-Engine ersetzt.
+   Code archiviert, nicht gelöscht (Append-only-Konvention).
+── Ende ARCHIV ── */
 
-  const patientLabel = data.name && data.vorname
-    ? `${data.name}_${data.vorname}`
-    : "Patient_Neu";
-
-  const currentFolder = SP_FOLDERS.find((f) => f.id === activeFolder);
-  const currentItems = currentFolder
-    ? PATIENT_DOC_ITEMS.filter((d) => currentFolder.docKeys.includes(d.key))
-    : [];
-  const uploadedInFolder = currentItems.filter((i) => !!data.scans[i.key]).length;
-
-  const totalUploaded = PATIENT_DOC_ITEMS.filter((i) => !!data.scans[i.key]).length;
-
-  const removeScan = (key: string) => {
-    onChange({ ...data, scans: { ...data.scans, [key]: null } });
-  };
-
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-primary-light flex items-center justify-center">
-            <CloudUpload className="w-4 h-4 text-primary" />
-          </div>
-          <div>
-            <h5 className="text-foreground">SharePoint Dokumentenablage</h5>
-            <p className="text-[11px] text-muted-foreground">
-              {totalUploaded} von {PATIENT_DOC_ITEMS.length} Dokumenten hochgeladen · {SP_FOLDERS.length} Ordner
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Split layout */}
-      <div className="flex gap-4 items-start">
-        {/* Left: Folder tree */}
-        <div className="w-[30%] shrink-0">
-          <div className="bg-card rounded-2xl border border-border overflow-hidden">
-            <div className="px-4 py-3 border-b border-border-light bg-muted/20">
-              <span
-                className="text-[11px] text-muted-foreground uppercase tracking-wider"
-                style={{ fontWeight: 500 }}
-              >
-                Ordnerstruktur
-              </span>
-            </div>
-            <div className="p-2">
-              {/* Root folder */}
-              <button
-                onClick={() => setExpandedRoot(!expandedRoot)}
-                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl hover:bg-muted/40 transition-colors text-left"
-              >
-                {expandedRoot ? (
-                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                ) : (
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                )}
-                <FolderOpen className="w-4 h-4 text-primary shrink-0" />
-                <span className="text-[13px] text-foreground truncate" style={{ fontWeight: 500 }}>
-                  {patientLabel}
-                </span>
-              </button>
-
-              {/* Subfolders */}
-              {expandedRoot && (
-                <div className="ml-4 mt-0.5 space-y-0.5">
-                  {SP_FOLDERS.map((folder) => {
-                    const isActive = activeFolder === folder.id;
-                    const folderItems = PATIENT_DOC_ITEMS.filter((d) => folder.docKeys.includes(d.key));
-                    const folderUploaded = folderItems.filter((i) => !!data.scans[i.key]).length;
-                    const folderTotal = folderItems.length;
-                    const folderComplete = folderUploaded === folderTotal && folderTotal > 0;
-
-                    return (
-                      <button
-                        key={folder.id}
-                        onClick={() => setActiveFolder(folder.id)}
-                        className={`w-full flex items-center gap-2 px-2.5 py-[7px] rounded-xl text-left transition-all ${
-                          isActive
-                            ? "bg-primary-light ring-1 ring-primary/15"
-                            : "hover:bg-muted/40"
-                        }`}
-                      >
-                        {isActive ? (
-                          <FolderOpen className="w-4 h-4 text-primary shrink-0" />
-                        ) : (
-                          <Folder className="w-4 h-4 text-muted-foreground shrink-0" />
-                        )}
-                        <span
-                          className={`text-[12px] truncate flex-1 ${
-                            isActive ? "text-primary" : "text-foreground"
-                          }`}
-                          style={{ fontWeight: isActive ? 500 : 400 }}
-                        >
-                          {folder.label}
-                        </span>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span
-                            className={`text-[10px] px-[5px] py-[1px] rounded-md ${
-                              folderComplete
-                                ? "bg-success-light text-success"
-                                : isActive
-                                ? "bg-primary/10 text-primary"
-                                : "bg-muted text-muted-foreground"
-                            }`}
-                            style={{ fontWeight: 600 }}
-                          >
-                            {folderUploaded}/{folderTotal}
-                          </span>
-                          {folderComplete && (
-                            <CheckCircle2 className="w-2.5 h-2.5 text-success" />
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: File list for selected folder */}
-        <div className="flex-1 min-w-0">
-          <div className="bg-card rounded-2xl border border-border overflow-hidden">
-            {/* Folder header */}
-            <div className="px-5 py-3 border-b border-border-light bg-muted/20 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-primary" />
-                <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>
-                  {currentFolder?.label ?? "—"}
-                </span>
-                <span
-                  className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground"
-                  style={{ fontWeight: 500 }}
-                >
-                  <FolderSync className="w-2.5 h-2.5" />
-                  SharePoint
-                </span>
-              </div>
-              <span className="text-[11px] text-muted-foreground">
-                {uploadedInFolder} von {currentItems.length} hochgeladen
-              </span>
-            </div>
-
-            {/* File table */}
-            {currentItems.length === 0 ? (
-              <div className="px-5 py-14 text-center">
-                <p className="text-[13px] text-muted-foreground">Keine Dokumente in diesem Ordner.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-muted/20">
-                      {["Dokument", "Pflicht", "Status", "Dateiname", "Grösse"].map((col) => (
-                        <th key={col} className="px-4 py-2.5 text-left">
-                          <span
-                            className="text-[10.5px] text-muted-foreground uppercase tracking-wider"
-                            style={{ fontWeight: 500 }}
-                          >
-                            {col}
-                          </span>
-                        </th>
-                      ))}
-                      <th className="w-24" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentItems.map((item) => {
-                      const scan = data.scans[item.key] ?? null;
-                      const isUploaded = !!scan;
-                      const Icon = item.icon;
-
-                      return (
-                        <tr
-                          key={item.key}
-                          className="border-t border-border-light hover:bg-primary/[0.02] transition-colors group"
-                        >
-                          {/* Dokument */}
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2.5">
-                              <div
-                                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                  isUploaded ? "bg-success-light" : "bg-muted"
-                                }`}
-                              >
-                                {isUploaded ? (
-                                  <FileCheck className={`w-4 h-4 text-success`} />
-                                ) : (
-                                  <Icon className="w-4 h-4 text-muted-foreground" />
-                                )}
-                              </div>
-                              <span
-                                className="text-[13px] text-foreground truncate"
-                                style={{ fontWeight: 500 }}
-                              >
-                                {item.label}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* Pflicht */}
-                          <td className="px-4 py-3">
-                            {item.mandatory ? (
-                              <span
-                                className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-md bg-error/10 text-error"
-                                style={{ fontWeight: 600 }}
-                              >
-                                Pflicht
-                              </span>
-                            ) : (
-                              <span
-                                className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground"
-                                style={{ fontWeight: 500 }}
-                              >
-                                Optional
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Status */}
-                          <td className="px-4 py-3">
-                            {isUploaded ? (
-                              <span
-                                className="inline-flex items-center gap-1 text-[11px] text-success"
-                                style={{ fontWeight: 500 }}
-                              >
-                                <CheckCircle2 className="w-3 h-3" /> Hochgeladen
-                              </span>
-                            ) : item.mandatory ? (
-                              <span
-                                className="inline-flex items-center gap-1 text-[11px] text-error"
-                                style={{ fontWeight: 500 }}
-                              >
-                                <AlertCircle className="w-3 h-3" /> Fehlend
-                              </span>
-                            ) : (
-                              <span
-                                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
-                                style={{ fontWeight: 500 }}
-                              >
-                                <Circle className="w-3 h-3" /> Ausstehend
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Dateiname */}
-                          <td className="px-4 py-3">
-                            {isUploaded && scan ? (
-                              <div className="min-w-0">
-                                <p className="text-[12px] text-foreground truncate" style={{ fontWeight: 400 }}>
-                                  {scan.name}
-                                </p>
-                                <p className="text-[10px] text-muted-foreground">{scan.timestamp}</p>
-                              </div>
-                            ) : (
-                              <span className="text-[12px] text-muted-foreground">—</span>
-                            )}
-                          </td>
-
-                          {/* Grösse */}
-                          <td className="px-4 py-3 text-[12px] text-muted-foreground">
-                            {isUploaded && scan ? scan.size : "—"}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1 justify-end">
-                              {isUploaded ? (
-                                <>
-                                  {scan?.previewUrl && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setPreviewKey(previewKey === item.key ? null : item.key)}
-                                      className="p-1 rounded-lg hover:bg-secondary transition-colors opacity-0 group-hover:opacity-100"
-                                    >
-                                      <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                                    </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => removeScan(item.key)}
-                                    className="p-1 rounded-lg hover:bg-error/5 transition-colors opacity-0 group-hover:opacity-100"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5 text-error" />
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => onOpenCamera(item.key, item.label)}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary text-primary-foreground text-[11px] hover:bg-primary/90 transition-colors opacity-0 group-hover:opacity-100"
-                                    style={{ fontWeight: 500 }}
-                                  >
-                                    <Camera className="w-3 h-3" />
-                                    Scan
-                                  </button>
-                                  <PatientScanUploadButtonSmall
-                                    scanKey={item.key}
-                                    docLabel={item.label}
-                                    data={data}
-                                    onChange={onChange}
-                                  />
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                {/* Preview row (expandable under table) */}
-                {previewKey && (() => {
-                  const scan = data.scans[previewKey];
-                  if (!scan || !scan.previewUrl) return null;
-                  return (
-                    <div className="px-5 py-4 border-t border-border-light bg-muted/10">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[12px] text-muted-foreground" style={{ fontWeight: 500 }}>
-                          Vorschau: {scan.name}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setPreviewKey(null)}
-                          className="p-1 rounded-lg hover:bg-secondary"
-                        >
-                          <X className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
-                      </div>
-                      <div className="rounded-lg overflow-hidden border border-border-light">
-                        <img src={scan.previewUrl} alt="Vorschau" className="w-full max-h-40 object-contain bg-white" />
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Small upload-only button for folder table rows ── */
-function PatientScanUploadButtonSmall({
-  scanKey,
-  docLabel,
-  data,
-  onChange,
-}: {
-  scanKey: string;
-  docLabel: string;
-  data: PatientFormData;
-  onChange: (d: PatientFormData) => void;
-}) {
-  const { trigger, InputEl } = usePatientFileUpload(scanKey, docLabel, data, onChange);
-  return (
-    <>
-      {InputEl}
-      <button
-        type="button"
-        onClick={trigger}
-        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-border text-[11px] text-muted-foreground hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
-        style={{ fontWeight: 500 }}
-      >
-        <Upload className="w-3 h-3" />
-        Datei
-      </button>
-    </>
-  );
-}
-
-
-/* ── TabDokumente main ──────────────────── */
-function TabDokumente({ data, onChange, onboardingId }: { data: PatientFormData; onChange: (d: PatientFormData) => void; onboardingId: string | null }) {
+/* ── TabDokumente main (PA-07: stammdaten-gesteuert) ── */
+function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d: PatientFormData) => void }) {
   const einwilligung = useEinwilligung();
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const [cameraDocKey, setCameraDocKey] = useState("");
-  const [cameraDocLabel, setCameraDocLabel] = useState("");
-  const [sharePointToasts, setSharePointToasts] = useState<Set<string>>(new Set());
   const [previewOpen, setPreviewOpen] = useState<string | null>(null);
-  // Pflicht-Dokumente view only (Ordnerstruktur entfernt – erst nach Onboarding-Abschluss relevant)
+  // Mehrfach-Dokumente: dynamisch hinzugefügte Einträge
+  const [mehrfachEintraege, setMehrfachEintraege] = useState<Record<string, { id: string; label: string }[]>>({});
+  const [mehrfachNeuesLabel, setMehrfachNeuesLabel] = useState<Record<string, string>>({});
 
-  // Sync: Einwilligung scan upload → shared context
+  // Sync: Einwilligung-Status → scans["patient_einwilligung"], damit
+  // getFehlendePflichtdokumente und istDokumentVollstaendig korrekt rechnen.
   useEffect(() => {
-    if (data.scans["einwilligung_datenschutz"] && !einwilligung.status.signiert) {
-      einwilligung.signScan(data.scans["einwilligung_datenschutz"].timestamp);
+    if (einwilligung.status.signiert && data.scans["patient_einwilligung"] !== "unterschrieben") {
+      onChange({ ...data, scans: { ...data.scans, patient_einwilligung: "unterschrieben" as unknown as PatientScanFile } });
     }
-  }, [data.scans["einwilligung_datenschutz"]]);
+  }, [einwilligung.status.signiert]);
 
-  const requiredKeys = getPatientRequiredDocKeys();
-  // Count einwilligung as uploaded if signiert (via any path)
-  const uploadedRequired = requiredKeys.filter((k) => k === "einwilligung_datenschutz" ? (!!data.scans[k] || einwilligung.status.signiert) : !!data.scans[k]).length;
-  const totalRequired = requiredKeys.length;
-  const allComplete = uploadedRequired === totalRequired && totalRequired > 0;
-  const docGroups = getDocGroups();
+  const sichtbar = sichtbareDokumenttypen(PATIENT_DOK_KONTEXT, "patient");
+  const pflichtDocs = sichtbar.filter(d => d.pflicht && !d.mehrfach);
+  const vollstaendig = pflichtDocs.filter(d => {
+    if (d.modus === "unterschrift") return einwilligung.status.signiert;
+    return istDokumentVollstaendig(d, data.scans);
+  }).length;
+  const totalPflicht = pflichtDocs.length;
+  const allComplete = vollstaendig === totalPflicht && totalPflicht > 0;
 
-  const openCamera = (key: string, label: string) => {
-    setCameraDocKey(key);
-    setCameraDocLabel(label);
-    setCameraOpen(true);
-  };
-
-  const handleCameraCapture = (file: PatientScanFile) => {
-    onChange({ ...data, scans: { ...data.scans, [cameraDocKey]: file } });
-    // Einwilligung scanned → update shared context
-    if (cameraDocKey === "einwilligung_datenschutz") {
-      einwilligung.signScan(new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }));
-    }
-    setCameraOpen(false);
-    setSharePointToasts((prev) => new Set(prev).add(cameraDocKey));
-    setTimeout(() => {
-      setSharePointToasts((prev) => {
-        const next = new Set(prev);
-        next.delete(cameraDocKey);
-        return next;
-      });
-    }, 4000);
+  /** Gemeinsamer Handler: Scan oder Datei → in scans ablegen */
+  const handleScanFile = (key: string, file: ScanFile) => {
+    onChange({ ...data, scans: { ...data.scans, [key]: file } });
   };
 
   const removeScan = (key: string) => {
     onChange({ ...data, scans: { ...data.scans, [key]: null } });
   };
+
+  const addMehrfachEintrag = (docCode: string) => {
+    const label = (mehrfachNeuesLabel[docCode] || "").trim();
+    if (!label) return;
+    const id = `${docCode}_${Date.now()}`;
+    setMehrfachEintraege(prev => ({ ...prev, [docCode]: [...(prev[docCode] || []), { id, label }] }));
+    setMehrfachNeuesLabel(prev => ({ ...prev, [docCode]: "" }));
+  };
+
+  const removeMehrfachEintrag = (docCode: string, id: string) => {
+    setMehrfachEintraege(prev => ({ ...prev, [docCode]: (prev[docCode] || []).filter(e => e.id !== id) }));
+    removeScan(id);
+  };
+
+  /* ── RENDERING ── */
 
   return (
     <div className="space-y-5">
-      {/* View toggle + Summary bar */}
+      {/* ── Summary bar ── */}
       <div className="flex items-center justify-between p-4 rounded-xl bg-muted/20 border border-border flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div
@@ -2487,16 +2071,14 @@ function TabDokumente({ data, onChange, onboardingId }: { data: PatientFormData;
           </div>
           <div>
             <p className="text-[13px] text-foreground" style={{ fontWeight: 600 }}>
-              Pflicht-Dokumente
+              Patienten-Dokumente
             </p>
             <p className="text-[12px] text-muted-foreground">
-              {uploadedRequired} von {totalRequired} hochgeladen
+              {vollstaendig} von {totalPflicht} Pflichtdokumente vollständig
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-
-          {/* Status badge */}
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] ${
               allComplete
@@ -2518,7 +2100,7 @@ function TabDokumente({ data, onChange, onboardingId }: { data: PatientFormData;
               <circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" strokeWidth="3" className="text-muted/30" />
               <circle
                 cx="24" cy="24" r="20" fill="none" stroke="currentColor" strokeWidth="3"
-                strokeDasharray={`${(uploadedRequired / Math.max(totalRequired, 1)) * 125.6} 125.6`}
+                strokeDasharray={`${(vollstaendig / Math.max(totalPflicht, 1)) * 125.6} 125.6`}
                 strokeLinecap="round"
                 className={allComplete ? "text-success" : "text-primary"}
                 style={{ transition: "stroke-dasharray 0.5s ease" }}
@@ -2530,269 +2112,415 @@ function TabDokumente({ data, onChange, onboardingId }: { data: PatientFormData;
               }`}
               style={{ fontWeight: 700 }}
             >
-              {totalRequired > 0 ? `${Math.round((uploadedRequired / totalRequired) * 100)}%` : "–"}
+              {totalPflicht > 0 ? `${Math.round((vollstaendig / totalPflicht) * 100)}%` : "–"}
             </span>
           </div>
         </div>
       </div>
 
-      {/* ═══ Pflicht-Dokumente ═══ */}
-      {(
-        <>
-          {/* Grouped document items */}
-          {docGroups.map((group) => (
-            <div key={group.group}>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2 px-1" style={{ fontWeight: 600 }}>
-                {group.group}
-              </p>
-              <div className="space-y-2.5">
-                {group.items.map((item) => {
-                  const scan = data.scans[item.key] ?? null;
-                  const isEinwilligungItem = item.key === "einwilligung_datenschutz";
-                  const einwilligungDigital = isEinwilligungItem && einwilligung.status.signiert && !scan;
-                  const isUploaded = !!scan || einwilligungDigital;
-                  const isRequired = item.mandatory;
-                  const showToast = sharePointToasts.has(item.key);
-                  const Icon = item.icon;
-
-                  return (
-                    <div
-                      key={item.key}
-                      className={`rounded-xl border transition-all ${
-                        isUploaded
-                          ? "border-success/25 bg-success-light/10"
-                          : isRequired
-                          ? "border-warning/20 bg-warning-light/5"
-                          : "border-border bg-card"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3.5 p-4">
-                        {/* Status icon */}
-                        <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                            isUploaded
-                              ? "bg-success text-white"
-                              : isRequired
-                              ? "bg-warning-light text-warning"
-                              : "bg-muted text-muted-foreground"
-                          }`}
+      {/* ── Dokumentenliste aus Stammdaten-Engine ── */}
+      <div className="space-y-3">
+        {sichtbar.map(doc => {
+          /* ── modus=unterschrift: Status-Anzeige (Einwilligung) ── */
+          if (doc.modus === "unterschrift") {
+            const istSigniert = einwilligung.status.signiert;
+            return (
+              <div
+                key={doc.code}
+                className={`rounded-xl border transition-all ${
+                  istSigniert
+                    ? "border-success/25 bg-success-light/10"
+                    : doc.pflicht
+                    ? "border-warning/20 bg-warning-light/5"
+                    : "border-border bg-card"
+                }`}
+              >
+                <div className="flex items-start gap-3.5 p-4">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                      istSigniert ? "bg-success text-white" : "bg-warning-light text-warning"
+                    }`}
+                  >
+                    {istSigniert ? <Check className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{doc.label}</p>
+                        {doc.pflicht && !istSigniert && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[9px] bg-error/10 text-error shrink-0" style={{ fontWeight: 600 }}>Pflicht</span>
+                        )}
+                      </div>
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] shrink-0 ${
+                          istSigniert ? "bg-success-light text-success-foreground" : "bg-error/10 text-error"
+                        }`}
+                        style={{ fontWeight: 600 }}
+                      >
+                        {istSigniert ? (
+                          <><CheckCircle2 className="w-3 h-3" /> Unterschrieben{einwilligung.status.datum ? ` · ${einwilligung.status.datum}` : ""}</>
+                        ) : (
+                          <><AlertCircle className="w-3 h-3" /> Offen</>
+                        )}
+                      </span>
+                    </div>
+                    {/* Unterschriften-Aktionen */}
+                    {!istSigniert && (
+                      <div className="mt-3 flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => einwilligung.signDigital(new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }))}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
+                          style={{ fontWeight: 500, border: "none" }}
                         >
-                          {isUploaded ? <Check className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>
-                                  {item.label}
-                                </p>
-                                {isRequired && !isUploaded && (
-                                  <span
-                                    className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[9px] bg-error/10 text-error shrink-0"
-                                    style={{ fontWeight: 600 }}
-                                  >
-                                    Pflicht
-                                  </span>
-                                )}
-                                {!isRequired && (
-                                  <span
-                                    className="inline-flex items-center px-1.5 py-[1px] rounded text-[9px] bg-muted text-muted-foreground shrink-0"
-                                    style={{ fontWeight: 600 }}
-                                  >
-                                    Optional
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Status badge */}
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] shrink-0 ${
-                                isUploaded
-                                  ? "bg-success-light text-success-foreground"
-                                  : isRequired
-                                  ? "bg-error/10 text-error"
-                                  : "bg-muted text-muted-foreground"
-                              }`}
-                              style={{ fontWeight: 600 }}
-                            >
-                              {einwilligungDigital ? (
-                                <><CheckCircle2 className="w-3 h-3" /> Signiert digital · {einwilligung.status.datum}</>
-                              ) : isUploaded ? (
-                                <><CheckCircle2 className="w-3 h-3" /> Hochgeladen</>
-                              ) : isRequired ? (
-                                <><AlertCircle className="w-3 h-3" /> Fehlend</>
-                              ) : (
-                                <><Circle className="w-3 h-3" /> Nicht vorhanden</>
-                              )}
-                            </span>
+                          <Check className="w-3.5 h-3.5" /> Digital signieren
+                        </button>
+                      </div>
+                    )}
+                    {istSigniert && einwilligung.status.herkunft && (
+                      <div className="mt-3 p-3 rounded-lg bg-success-light/30 border border-success/10">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                          <div>
+                            <p className="text-[12px] text-foreground" style={{ fontWeight: 500 }}>
+                              {einwilligung.status.herkunft === "digital" ? "Digital signiert" : "Scan hochgeladen"}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">{einwilligung.status.datum}</p>
                           </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          }
 
-                          {/* Digital signature info (no scan file) */}
-                          {einwilligungDigital && (
-                            <div className="mt-3 p-3 rounded-lg bg-success-light/30 border border-success/10">
-                              <div className="flex items-center gap-2">
-                                <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                                <div>
-                                  <p className="text-[12px] text-foreground" style={{ fontWeight: 500 }}>
-                                    Digital signiert in Vertragsunterzeichnung
-                                  </p>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    {einwilligung.status.datum}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
+          /* ── mehrfach=true: Sammelbehälter (Sonstige) ── */
+          if (doc.mehrfach) {
+            const eintraege = mehrfachEintraege[doc.code] || [];
+            return (
+              <div key={doc.code} className="rounded-xl border border-border bg-card">
+                <div className="flex items-start gap-3.5 p-4">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 bg-muted text-muted-foreground">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{doc.label}</p>
+                      <span className="inline-flex items-center px-1.5 py-[1px] rounded text-[9px] bg-muted text-muted-foreground shrink-0" style={{ fontWeight: 600 }}>
+                        Optional · beliebig viele
+                      </span>
+                    </div>
 
-                          {/* Uploaded file details */}
-                          {isUploaded && scan && !einwilligungDigital && (
-                            <div className="mt-3 p-3 rounded-lg bg-success-light/30 border border-success/10">
-                              <div className="flex items-center justify-between gap-2 flex-wrap">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <FileCheck className="w-4 h-4 text-success shrink-0" />
-                                  <div className="min-w-0">
-                                    <p className="text-[12px] text-foreground truncate" style={{ fontWeight: 500 }}>
-                                      {scan.name}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground">
-                                      {scan.size} · {scan.timestamp}
-                                    </p>
+                    {/* Bestehende Einträge */}
+                    {eintraege.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {eintraege.map(eintrag => {
+                          const scan = data.scans[eintrag.id] ?? null;
+                          return (
+                            <div key={eintrag.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/30 border border-border/50">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[12px] text-foreground" style={{ fontWeight: 500 }}>{eintrag.label}</p>
+                                {scan ? (
+                                  <p className="text-[10px] text-muted-foreground">{scan.name} · {scan.size}</p>
+                                ) : (
+                                  <div className="mt-1.5 flex items-center gap-2">
+                                    <DokumentScanUpload scanKey={eintrag.id} docLabel={eintrag.label} onFile={handleScanFile} />
                                   </div>
-                                </div>
-                                <div className="flex items-center gap-1.5">
+                                )}
+                              </div>
+                              {scan && (
+                                <div className="flex items-center gap-1 shrink-0">
                                   {scan.previewUrl && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setPreviewOpen(previewOpen === item.key ? null : item.key)}
-                                      className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-muted border border-border transition-colors"
-                                      title="Vorschau"
-                                    >
+                                    <button type="button" onClick={() => setPreviewOpen(previewOpen === eintrag.id ? null : eintrag.id)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-muted border border-border transition-colors" title="Vorschau">
                                       <Eye className="w-3.5 h-3.5 text-muted-foreground" />
                                     </button>
                                   )}
-                                  <button
-                                    type="button"
-                                    onClick={() => removeScan(item.key)}
-                                    className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors"
-                                    title="Entfernen"
-                                  >
+                                  <button type="button" onClick={() => removeScan(eintrag.id)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors" title="Entfernen">
                                     <Trash2 className="w-3.5 h-3.5 text-error" />
                                   </button>
                                 </div>
-                              </div>
-
-                              {/* Image preview */}
-                              {previewOpen === item.key && scan.previewUrl && (
-                                <div className="mt-2.5 rounded-lg overflow-hidden border border-success/10">
-                                  <img src={scan.previewUrl} alt={item.label} className="w-full max-h-40 object-contain bg-white" />
-                                </div>
                               )}
-                            </div>
-                          )}
-
-                          {/* SharePoint toast */}
-                          {showToast && (
-                            <div className="mt-2.5 flex items-center gap-2 p-2.5 rounded-lg bg-success-light border border-success/15 animate-in fade-in slide-in-from-bottom-2">
-                              <FolderSync className="w-4 h-4 text-success shrink-0" />
-                              <p className="text-[12px] text-success-foreground" style={{ fontWeight: 500 }}>
-                                Dokument im SharePoint gespeichert.
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Action buttons */}
-                          {!isUploaded && (
-                            <div className="mt-3 flex items-center gap-2 flex-wrap">
-                              {/*
-                               * Einwilligung: zusätzlich "Digital signieren"-Aktion.
-                               * Die Einwilligung ist die Rechtsgrundlage der Arzt-Anfrage und wird
-                               * real beim Erstkontakt signiert, nicht am Onboarding-Ende.
-                               */}
-                              {isEinwilligungItem && (
-                                <button
-                                  onClick={() => einwilligung.signDigital(new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }))}
-                                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] bg-primary text-primary-foreground hover:bg-primary-hover transition-colors cursor-pointer"
-                                  style={{ fontWeight: 500, border: "none" }}
-                                >
-                                  <Check className="w-3.5 h-3.5" /> Digital signieren
+                              {!scan && (
+                                <button type="button" onClick={() => removeMehrfachEintrag(doc.code, eintrag.id)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors shrink-0" title="Eintrag entfernen">
+                                  <Trash2 className="w-3.5 h-3.5 text-error" />
                                 </button>
                               )}
-                              <PatientScanUploadButton
-                                scanKey={item.key}
-                                docLabel={item.label}
-                                data={data}
-                                onChange={onChange}
-                                onCameraOpen={() => openCamera(item.key, item.label)}
-                              />
                             </div>
-                          )}
-                        </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Neuen Eintrag hinzufügen */}
+                    <div className="mt-3 flex items-center gap-2">
+                      <input
+                        value={mehrfachNeuesLabel[doc.code] || ""}
+                        onChange={e => setMehrfachNeuesLabel(prev => ({ ...prev, [doc.code]: e.target.value }))}
+                        placeholder="Bezeichnung eingeben"
+                        className="flex-1 px-3 py-2 rounded-lg border border-border text-[12px] bg-card text-foreground"
+                        style={{ fontFamily: "inherit" }}
+                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addMehrfachEintrag(doc.code); } }}
+                      />
+                      <button
+                        onClick={() => addMehrfachEintrag(doc.code)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-[12px] text-foreground hover:bg-muted transition-colors cursor-pointer"
+                        style={{ fontWeight: 500 }}
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Hinzufügen
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          /* ── modus=upload + beidseitig (ID, KK-Karte) ── */
+          if (doc.beidseitig) {
+            const scanVorne = data.scans[`${doc.code}_vorne`] ?? null;
+            const scanHinten = data.scans[`${doc.code}_hinten`] ?? null;
+            const isComplete = !!scanVorne && !!scanHinten;
+            return (
+              <div
+                key={doc.code}
+                className={`rounded-xl border transition-all ${
+                  isComplete
+                    ? "border-success/25 bg-success-light/10"
+                    : doc.pflicht
+                    ? "border-warning/20 bg-warning-light/5"
+                    : "border-border bg-card"
+                }`}
+              >
+                <div className="flex items-start gap-3.5 p-4">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                      isComplete ? "bg-success text-white" : doc.pflicht ? "bg-warning-light text-warning" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {isComplete ? <Check className="w-5 h-5" /> : <Shield className="w-5 h-5" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{doc.label}</p>
+                        {doc.pflicht && !isComplete && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[9px] bg-error/10 text-error shrink-0" style={{ fontWeight: 600 }}>Pflicht</span>
+                        )}
+                      </div>
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] shrink-0 ${
+                          isComplete ? "bg-success-light text-success-foreground" : "bg-error/10 text-error"
+                        }`}
+                        style={{ fontWeight: 600 }}
+                      >
+                        {isComplete ? (
+                          <><CheckCircle2 className="w-3 h-3" /> Vollständig</>
+                        ) : (
+                          <><AlertCircle className="w-3 h-3" /> {scanVorne || scanHinten ? "1 von 2" : "Fehlend"}</>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Zwei Scan-Slots: Vorderseite + Rückseite */}
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Vorderseite */}
+                      <div className={`p-3 rounded-lg border ${scanVorne ? "border-success/20 bg-success-light/20" : "border-border bg-muted/20"}`}>
+                        <p className="text-[11px] text-muted-foreground mb-2" style={{ fontWeight: 500 }}>Vorderseite</p>
+                        {scanVorne ? (
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-[12px] text-foreground truncate" style={{ fontWeight: 500 }}>{scanVorne.name}</p>
+                              <p className="text-[10px] text-muted-foreground">{scanVorne.size} · {scanVorne.timestamp}</p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {scanVorne.previewUrl && (
+                                <button type="button" onClick={() => setPreviewOpen(previewOpen === `${doc.code}_vorne` ? null : `${doc.code}_vorne`)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-muted border border-border transition-colors" title="Vorschau">
+                                  <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                                </button>
+                              )}
+                              <button type="button" onClick={() => removeScan(`${doc.code}_vorne`)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors" title="Entfernen">
+                                <Trash2 className="w-3.5 h-3.5 text-error" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <DokumentScanUpload scanKey={`${doc.code}_vorne`} docLabel={`${doc.label} — Vorderseite`} onFile={handleScanFile} />
+                          </div>
+                        )}
+                        {previewOpen === `${doc.code}_vorne` && scanVorne?.previewUrl && (
+                          <div className="mt-2 rounded-lg overflow-hidden border border-success/10">
+                            <img src={scanVorne.previewUrl} alt="Vorderseite" className="w-full max-h-32 object-contain bg-white" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Rückseite */}
+                      <div className={`p-3 rounded-lg border ${scanHinten ? "border-success/20 bg-success-light/20" : "border-border bg-muted/20"}`}>
+                        <p className="text-[11px] text-muted-foreground mb-2" style={{ fontWeight: 500 }}>Rückseite</p>
+                        {scanHinten ? (
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-[12px] text-foreground truncate" style={{ fontWeight: 500 }}>{scanHinten.name}</p>
+                              <p className="text-[10px] text-muted-foreground">{scanHinten.size} · {scanHinten.timestamp}</p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {scanHinten.previewUrl && (
+                                <button type="button" onClick={() => setPreviewOpen(previewOpen === `${doc.code}_hinten` ? null : `${doc.code}_hinten`)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-muted border border-border transition-colors" title="Vorschau">
+                                  <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                                </button>
+                              )}
+                              <button type="button" onClick={() => removeScan(`${doc.code}_hinten`)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors" title="Entfernen">
+                                <Trash2 className="w-3.5 h-3.5 text-error" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <DokumentScanUpload scanKey={`${doc.code}_hinten`} docLabel={`${doc.label} — Rückseite`} onFile={handleScanFile} />
+                          </div>
+                        )}
+                        {previewOpen === `${doc.code}_hinten` && scanHinten?.previewUrl && (
+                          <div className="mt-2 rounded-lg overflow-hidden border border-success/10">
+                            <img src={scanHinten.previewUrl} alt="Rückseite" className="w-full max-h-32 object-contain bg-white" />
+                          </div>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          }
 
-          {/* Missing mandatory warning */}
-          {!allComplete && uploadedRequired > 0 && (
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-warning-light/40 border border-warning/15">
-              <div className="w-9 h-9 rounded-lg bg-warning-light flex items-center justify-center shrink-0 mt-0.5">
-                <AlertCircle className="w-[18px] h-[18px] text-warning" />
-              </div>
-              <div>
-                <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>
-                  {totalRequired - uploadedRequired} Pflicht-Dokument{totalRequired - uploadedRequired !== 1 ? "e" : ""} fehlen
-                </p>
-                <p className="text-[12px] text-muted-foreground mt-0.5 leading-relaxed">
-                  {PATIENT_DOC_ITEMS.filter((i) => i.mandatory && !data.scans[i.key]).map((i) => i.label).join(", ")}
-                  . Dieser Abschnitt kann erst als vollständig markiert werden, wenn alle Pflichtdokumente hochgeladen sind.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* All complete celebration */}
-          {allComplete && (
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-success-light/40 border border-success/15">
-              <div className="w-9 h-9 rounded-lg bg-success-light flex items-center justify-center shrink-0 mt-0.5">
-                <FileCheck className="w-[18px] h-[18px] text-success" />
-              </div>
-              <div>
-                <p className="text-[13px] text-success-foreground" style={{ fontWeight: 500 }}>
-                  Alle Pflichtdokumente vollständig
-                </p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <FolderSync className="w-3.5 h-3.5 text-success" />
-                  <p className="text-[12px] text-muted-foreground">
-                    Alle Dokumente wurden im SharePoint-Unterordner des Patienten gespeichert.
-                  </p>
+          /* ── modus=upload + einseitig (Standard) ── */
+          const scan = data.scans[doc.code] ?? null;
+          const isUploaded = !!scan;
+          return (
+            <div
+              key={doc.code}
+              className={`rounded-xl border transition-all ${
+                isUploaded
+                  ? "border-success/25 bg-success-light/10"
+                  : doc.pflicht
+                  ? "border-warning/20 bg-warning-light/5"
+                  : "border-border bg-card"
+              }`}
+            >
+              <div className="flex items-start gap-3.5 p-4">
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                    isUploaded ? "bg-success text-white" : doc.pflicht ? "bg-warning-light text-warning" : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {isUploaded ? <Check className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{doc.label}</p>
+                      {doc.pflicht && !isUploaded && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[9px] bg-error/10 text-error shrink-0" style={{ fontWeight: 600 }}>Pflicht</span>
+                      )}
+                      {!doc.pflicht && (
+                        <span className="inline-flex items-center px-1.5 py-[1px] rounded text-[9px] bg-muted text-muted-foreground shrink-0" style={{ fontWeight: 600 }}>Optional</span>
+                      )}
+                    </div>
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] shrink-0 ${
+                        isUploaded ? "bg-success-light text-success-foreground" : doc.pflicht ? "bg-error/10 text-error" : "bg-muted text-muted-foreground"
+                      }`}
+                      style={{ fontWeight: 600 }}
+                    >
+                      {isUploaded ? (
+                        <><CheckCircle2 className="w-3 h-3" /> Hochgeladen</>
+                      ) : doc.pflicht ? (
+                        <><AlertCircle className="w-3 h-3" /> Fehlend</>
+                      ) : (
+                        <><Circle className="w-3 h-3" /> Ausstehend</>
+                      )}
+                    </span>
+                  </div>
+                  {/* Uploaded file details */}
+                  {isUploaded && scan && (
+                    <div className="mt-3 p-3 rounded-lg bg-success-light/30 border border-success/10">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileCheck className="w-4 h-4 text-success shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-[12px] text-foreground truncate" style={{ fontWeight: 500 }}>{scan.name}</p>
+                            <p className="text-[10px] text-muted-foreground">{scan.size} · {scan.timestamp}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {scan.previewUrl && (
+                            <button type="button" onClick={() => setPreviewOpen(previewOpen === doc.code ? null : doc.code)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-muted border border-border transition-colors" title="Vorschau">
+                              <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                            </button>
+                          )}
+                          <button type="button" onClick={() => removeScan(doc.code)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors" title="Entfernen">
+                            <Trash2 className="w-3.5 h-3.5 text-error" />
+                          </button>
+                        </div>
+                      </div>
+                      {previewOpen === doc.code && scan.previewUrl && (
+                        <div className="mt-2.5 rounded-lg overflow-hidden border border-success/10">
+                          <img src={scan.previewUrl} alt={doc.label} className="w-full max-h-40 object-contain bg-white" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Upload actions */}
+                  {!isUploaded && (
+                    <div className="mt-3 flex items-center gap-2 flex-wrap">
+                      <DokumentScanUpload scanKey={doc.code} docLabel={doc.label} onFile={handleScanFile} />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-          )}
-        </>
+          );
+        })}
+      </div>
+
+      {/* Missing mandatory warning */}
+      {!allComplete && vollstaendig > 0 && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-warning-light/40 border border-warning/15">
+          <div className="w-9 h-9 rounded-lg bg-warning-light flex items-center justify-center shrink-0 mt-0.5">
+            <AlertCircle className="w-[18px] h-[18px] text-warning" />
+          </div>
+          <div>
+            <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>
+              {totalPflicht - vollstaendig} Pflicht-Dokument{totalPflicht - vollstaendig !== 1 ? "e" : ""} fehlen
+            </p>
+            <p className="text-[12px] text-muted-foreground mt-0.5 leading-relaxed">
+              {getFehlendePflichtdokumente(data.scans).join(", ")}
+            </p>
+          </div>
+        </div>
       )}
 
-      {/* Info callout */}
+      {/* All complete */}
+      {allComplete && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-success-light/40 border border-success/15">
+          <div className="w-9 h-9 rounded-lg bg-success-light flex items-center justify-center shrink-0 mt-0.5">
+            <FileCheck className="w-[18px] h-[18px] text-success" />
+          </div>
+          <p className="text-[13px] text-success-foreground" style={{ fontWeight: 500 }}>
+            Alle Pflichtdokumente vollständig
+          </p>
+        </div>
+      )}
+
+      {/* Info */}
       <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-info-light/50 border border-info/10">
         <Info className="w-4 h-4 text-info mt-0.5 shrink-0" />
         <p className="text-[12px] text-info-foreground leading-relaxed">
-          Dokumente werden als PDF konvertiert und automatisch im SharePoint-Unterordner des Patienten abgelegt. Auf dem Tablet können Sie die Kamerafunktion nutzen, um Dokumente direkt abzufotografieren. Alternativ laden Sie bestehende Dateien über «Datei wählen» hoch.
+          Dokumente werden als PDF konvertiert und automatisch im SharePoint abgelegt. Auf dem Tablet können Sie die Kamerafunktion nutzen, um Dokumente direkt abzufotografieren.
         </p>
       </div>
 
-      {/* Camera modal */}
-      <PatientCameraModal
-        open={cameraOpen}
-        docLabel={cameraDocLabel}
-        onCapture={handleCameraCapture}
-        onClose={() => setCameraOpen(false)}
-      />
     </div>
   );
 }

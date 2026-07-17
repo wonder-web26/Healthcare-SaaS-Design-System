@@ -17,6 +17,11 @@ import type { AngehoerigerFormData } from "../StepAngehoeriger";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
 import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
+import { leiteTarifcodeAb } from "../../../lib/stammdaten/quellensteuer-tarif";
+import { FUNKTIONEN_OPTIONS } from "../../../lib/stammdaten/funktionen";
+import { DEUTSCH_NIVEAU_OPTIONS } from "../../../lib/stammdaten/sprachkenntnisse";
+import { FIRMEN_DEFAULT_FERIENWOCHEN, berechneFerienzuschlagProzent, pruefeFerienMinimum } from "../../../lib/stammdaten/ferien";
+// BVG-Schwellen-Logik entfernt: bvg_anbindung_gewuenscht wird immer angezeigt (im Externe-Anstellung-Block)
 
 function filled(v: string | undefined | null): boolean {
   return typeof v === "string" && v.trim().length > 0;
@@ -50,13 +55,8 @@ const QS_TARIF = [
   { value: "C", label: "C – Doppelverdiener" }, { value: "H", label: "H – Alleinerziehend" },
 ];
 
-const FUNKTIONEN = [
-  { value: "pflegefachperson_hf", label: "Pflegefachperson HF" }, { value: "pflegefachperson_fh", label: "Pflegefachperson FH (BSc)" },
-  { value: "fage", label: "Fachperson Gesundheit (FaGe)" }, { value: "age", label: "Assistent/in Gesundheit (AGS)" },
-  { value: "pflegehilfe", label: "Pflegehelfer/in SRK" }, { value: "hauswirtschaft", label: "Hauswirtschaft" },
-  { value: "sozialbetreuung", label: "Sozialbetreuung" }, { value: "administration", label: "Administration" },
-  { value: "teamleitung", label: "Teamleitung" }, { value: "andere", label: "Andere Funktion" },
-];
+// Funktionen aus shared stammdaten (ersetzt lokale Liste)
+const FUNKTIONEN = FUNKTIONEN_OPTIONS;
 
 /* ══════════════════════════════════════════
    TAB 1: PERSONALIEN (migrated)
@@ -109,6 +109,21 @@ export function PersonalienFormV2({
 
       {/* Spezialbewilligung alerts remain in original StepAngehoeriger — they reference onOpenSpezialbewilligung */}
 
+      {/* Bewilligungs-Felder: nur bei ausländischer Bewilligung (nicht CH/C) */}
+      {filled(data.aufenthaltsstatus) && data.aufenthaltsstatus !== "CH" && data.aufenthaltsstatus !== "C" && (
+        <div style={{ marginTop: "var(--space-4)", padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+          <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>
+            Angaben zur Aufenthaltsbewilligung
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+            <TextInput label="Einreisedatum" required value={data.einreisedatum} onChange={v => set("einreisedatum", v)} onBlur={() => touch("einreisedatum")} placeholder="01.03.2025" hint="Datum der Einreise in die Schweiz (TT.MM.JJJJ)" error={touched.einreisedatum && !filled(data.einreisedatum) ? "Bitte ausfüllen" : undefined} />
+            <TextInput label="ZEMIS-Nummer" required value={data.zemisNummer} onChange={v => set("zemisNummer", v)} onBlur={() => touch("zemisNummer")} placeholder="ZEMIS-Nummer" hint="Zentrales Migrationsinformationssystem" error={touched.zemisNummer && !filled(data.zemisNummer) ? "Bitte ausfüllen" : undefined} />
+            <TextInput label="Einreichungsdatum Migrationsamt" required value={data.einreichungsdatumMigrationsamt} onChange={v => set("einreichungsdatumMigrationsamt", v)} onBlur={() => touch("einreichungsdatumMigrationsamt")} placeholder="15.02.2026" hint="Datum des Antrags beim Migrationsamt (TT.MM.JJJJ)" error={touched.einreichungsdatumMigrationsamt && !filled(data.einreichungsdatumMigrationsamt) ? "Bitte ausfüllen" : undefined} />
+            <TextInput label="Ablaufdatum Bewilligung" value={data.bewilligungAblaufdatum} onChange={v => set("bewilligungAblaufdatum", v)} placeholder="31.12.2027" hint="Optional — bei Eingabe wird 30 Tage vor Ablauf eine Erneuerungs-Pendenz erstellt" />
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <FormSelect label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND} placeholder="Zivilstand wählen" />
         <TextInput label="Zivilstand seit" required value={data.zivilstandSeit} onChange={v => set("zivilstandSeit", v)} onBlur={() => touch("zivilstandSeit")} placeholder="01.06.2020" hint="Format: TT.MM.JJJJ" />
@@ -130,12 +145,33 @@ export function PersonalienFormV2({
       <SectionHeader icon={Shield} label="Krankenkasse" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
         {/* SP-02: Picklist statt Freitext */}
-        <FormSelect label="Krankenkasse" required value={data.krankenkasseName || null} onChange={v => { set("krankenkasseName", v || ""); touch("krankenkasseName"); const bag = getBagNummer(v || ""); if (bag) set("bagNr", bag); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse waehlen" error={touched.krankenkasseName && !filled(data.krankenkasseName) ? "Pflichtfeld" : undefined} />
+        <FormSelect label="Krankenkasse" required value={data.krankenkasseName || null} onChange={v => { const bag = getBagNummer(v || ""); onChange({ ...data, krankenkasseName: v || "", ...(bag ? { bagNr: bag } : {}) }); touch("krankenkasseName"); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={touched.krankenkasseName && !filled(data.krankenkasseName) ? "Pflichtfeld" : undefined} />
         {/* SP-03: Kartennummer (umbenannt von Versicherungsnummer) */}
         <TextInput label="Kartennummer" required value={data.kartennummer} onChange={v => set("kartennummer", v)} onBlur={() => touch("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={touched.kartennummer && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} />
         {/* SP-03: BAG-Nr. (vorbefuellt aus Krankenkasse, manuell ueberschreibbar) */}
         <TextInput label="BAG-Nr. der Kasse" value={data.bagNr} onChange={v => set("bagNr", v)} placeholder="z.B. 0271" />
       </div>
+
+      {/* Qualifikation */}
+      <SectionHeader icon={User} label="Qualifikation" />
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+        <FormSelect label="Deutschkenntnisse" required value={data.deutschNiveau || null} onChange={v => { set("deutschNiveau", v || ""); touch("deutschNiveau"); }} options={DEUTSCH_NIVEAU_OPTIONS} placeholder="Niveau wählen" error={touched.deutschNiveau && !filled(data.deutschNiveau) ? "Bitte ausfüllen" : undefined} />
+        {data.deutschNiveau && data.deutschNiveau !== "muttersprache" && (
+          <SegmentedControl label="Sprachzertifikat vorhanden?" value={data.zertifikatVorhanden} onChange={v => set("zertifikatVorhanden", v)} options={JA_NEIN} />
+        )}
+        <SegmentedControl label="SRK-Pflegehelfer-Zertifikat vorhanden?" required value={data.srkZertifikatVorhanden} onChange={v => set("srkZertifikatVorhanden", v)} options={JA_NEIN} />
+      </div>
+      {/* Konsistenz Funktion ↔ SRK */}
+      {data.funktion === "ph_srk" && data.srkZertifikatVorhanden === "nein" && (
+        <div style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
+          Funktion «Pflegehelfer/in SRK» setzt SRK-Kurs voraus — Zertifikat fehlt.
+        </div>
+      )}
+      {data.funktion === "ph_ohne_srk" && data.srkZertifikatVorhanden === "ja" && (
+        <div style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-info-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+          SRK-Zertifikat vorhanden — Funktion ggf. auf «Pflegehelfer/in SRK» anpassen?
+        </div>
+      )}
     </div>
   );
 }
@@ -150,6 +186,7 @@ export function SteuerFormV2({
   onChange: (d: AngehoerigerFormData) => void;
 }) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [tarifOverrideOpen, setTarifOverrideOpen] = useState(false);
   const touch = (f: string) => setTouched(p => ({ ...p, [f]: true }));
   const set = (f: keyof AngehoerigerFormData, v: string) => onChange({ ...data, [f]: v });
 
@@ -160,11 +197,88 @@ export function SteuerFormV2({
         <SegmentedControl label="Quellensteuerpflichtig?" required value={data.quellensteuer} onChange={v => { if (v === "nein") onChange({ ...data, quellensteuer: v, quellensteuerTarif: "" }); else set("quellensteuer", v); }} options={JA_NEIN} hint="Nicht-CH-Bürger mit B/L sind i.d.R. quellensteuerpflichtig" />
         <FormSelect label="Konfession" required value={data.konfession || null} onChange={v => { set("konfession", v || ""); touch("konfession"); }} options={KONFESSION_OPTIONS} placeholder="Konfession wählen" hint="Relevant für Kirchensteuer" error={touched.konfession && !filled(data.konfession) ? "Pflichtfeld" : undefined} />
       </div>
-      {data.quellensteuer === "ja" && (
-        <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
-          <FormSelect label="Quellensteuer-Tarif" required value={data.quellensteuerTarif || null} onChange={v => { set("quellensteuerTarif", v || ""); touch("quellensteuerTarif"); }} options={QS_TARIF} placeholder="Tarif wählen" hint="A=Alleinstehend, B=Verheiratet, C=Doppelverdiener, H=Alleinerziehend" error={touched.quellensteuerTarif && !filled(data.quellensteuerTarif) ? "Pflichtfeld" : undefined} />
-        </div>
-      )}
+      {/* SP-10: QSt-Tarifcode — abgeleitet, read-only + kontrollierter Override */}
+      {data.quellensteuer === "ja" && (() => {
+        const hatKinder = data.hatUnterhaltspflichtigeKinder === "ja";
+        const anzahlKinder = parseInt(data.anzahlKinder) || 0;
+        const tarifErgebnis = leiteTarifcodeAb({
+          zivilstand: data.zivilstand,
+          hatKinder,
+          anzahlKinder,
+          partnerErwerbstaetig: data.partnerErwerbstaetig || data.partnerBerufstaetig,
+          konfession: data.konfession,
+        });
+        // Auto-Update wenn abgeleitet
+        if (data.tarifcodeQuelle !== "manuell_ueberschrieben" && tarifErgebnis.code !== data.quellensteuerTarif) {
+          setTimeout(() => set("quellensteuerTarif", tarifErgebnis.code), 0);
+        }
+        const istOverride = data.tarifcodeQuelle === "manuell_ueberschrieben";
+        const hatAbweichung = istOverride && data.quellensteuerTarif !== tarifErgebnis.code;
+
+        return (
+          <div style={{ marginTop: "var(--space-4)" }}>
+            <div style={{ padding: "12px 16px", background: "var(--status-info-bg)", borderRadius: 10 }}>
+              <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 2 }}>
+                Ermittelter QSt-Tarifcode: {istOverride ? data.quellensteuerTarif : tarifErgebnis.code}
+              </div>
+              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                {istOverride
+                  ? `Manuell festgelegt. Ermittlung wäre: ${tarifErgebnis.code} (${tarifErgebnis.begruendung})`
+                  : tarifErgebnis.begruendung}
+              </div>
+              {!tarifOverrideOpen && (
+                <button onClick={() => setTarifOverrideOpen(true)} style={{ marginTop: 6, background: "none", border: "none", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", padding: 0, cursor: "pointer" }}>
+                  Abweichend festlegen…
+                </button>
+              )}
+            </div>
+
+            {hatAbweichung && !tarifOverrideOpen && (
+              <div style={{ marginTop: "var(--space-2)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
+                Abweichung: gespeichert «{data.quellensteuerTarif}», aktuell ermittelt «{tarifErgebnis.code}».
+                {data.tarifcodeOverrideBegruendung && <> Begründung: {data.tarifcodeOverrideBegruendung}</>}
+              </div>
+            )}
+
+            {tarifOverrideOpen && (
+              <div style={{ marginTop: "var(--space-3)", padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+                <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>Tarifcode abweichend festlegen</div>
+                <TextInput label="Tarifcode" required value={data.quellensteuerTarif} onChange={v => set("quellensteuerTarif", v)} placeholder="z.B. B2Y, A0N, H1Y" />
+                <div style={{ marginTop: "var(--space-3)" }}>
+                  <TextInput label="Begründung der Abweichung" required value={data.tarifcodeOverrideBegruendung} onChange={v => set("tarifcodeOverrideBegruendung", v)} placeholder="z.B. Grenzgänger Tarif G, gemäss Verfügung Steueramt" hint="Pflichtfeld — wird an die Buchhaltung zur Prüfung weitergeleitet" />
+                </div>
+                <div className="flex items-center" style={{ gap: 8, marginTop: "var(--space-3)" }}>
+                  <button
+                    onClick={() => {
+                      if (!filled(data.tarifcodeOverrideBegruendung)) return;
+                      set("tarifcodeQuelle", "manuell_ueberschrieben");
+                      setTarifOverrideOpen(false);
+                      console.info(`[SP-10 Audit] Override QSt-Tarifcode: ${tarifErgebnis.code} → ${data.quellensteuerTarif}, Begründung: ${data.tarifcodeOverrideBegruendung}`);
+                    }}
+                    disabled={!filled(data.tarifcodeOverrideBegruendung)}
+                    className="inline-flex items-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ gap: 4, padding: "8px 16px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
+                  >
+                    Abweichung speichern
+                  </button>
+                  <button
+                    onClick={() => {
+                      set("quellensteuerTarif", tarifErgebnis.code);
+                      set("tarifcodeQuelle", "abgeleitet");
+                      set("tarifcodeOverrideBegruendung", "");
+                      setTarifOverrideOpen(false);
+                    }}
+                    className="cursor-pointer"
+                    style={{ background: "none", border: "none", fontSize: "var(--text-small)", color: "var(--text-secondary)", padding: "8px 12px" }}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <SectionHeader icon={Shield} label="Sozialversicherungen" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
@@ -197,14 +311,40 @@ export function AnstellungFormV2({
 
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
-      <SectionHeader icon={Briefcase} label="Anstellung" first />
+      {/* Externe Anstellung */}
+      <SectionHeader icon={Briefcase} label="Externe Anstellung" first />
+      <SegmentedControl label="Bereits bei einem anderen Arbeitgeber angestellt?" required value={data.arbeitetExtern} onChange={v => set("arbeitetExtern", v)} options={JA_NEIN} />
+      {data.arbeitetExtern === "ja" && (
+        <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+          <TextInput label="Funktion extern" required value={data.externeFunktion} onChange={v => set("externeFunktion", v)} onBlur={() => touch("externeFunktion")} placeholder="z.B. Pflegehelferin" error={touched.externeFunktion && !filled(data.externeFunktion) ? "Bitte ausfüllen" : undefined} />
+          <NumberInput label="Pensum extern" required value={data.externesPensumProzent} onChange={v => set("externesPensumProzent", v)} suffix="%" placeholder="50" />
+          <TextInput label="Eintritt extern" required value={data.externerEintritt} onChange={v => set("externerEintritt", v)} onBlur={() => touch("externerEintritt")} placeholder="01.01.2024" error={touched.externerEintritt && !filled(data.externerEintritt) ? "Bitte ausfüllen" : undefined} />
+          <SegmentedControl label="BVG-Anbindung gewünscht?" value={data.bvgAnbindungGewuenscht} onChange={v => set("bvgAnbindungGewuenscht", v)} options={JA_NEIN} />
+        </div>
+      )}
+      {/* Anstellung Spitex — Lohnart ist immer Stundenlohn in der Angehörigenpflege */}
+      <SectionHeader icon={Briefcase} label="Anstellung" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
-        <FormSelect label="Funktion / Rolle" required value={data.funktion || null} onChange={v => { set("funktion", v || ""); touch("funktion"); }} options={FUNKTIONEN} placeholder="Funktion wählen" hint="Haupttätigkeit im Spitex-Betrieb" error={touched.funktion && !filled(data.funktion) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Eintrittsdatum" required value={data.eintrittsdatum} onChange={v => set("eintrittsdatum", v)} onBlur={() => touch("eintrittsdatum")} placeholder="01.03.2026" hint="Format: TT.MM.JJJJ" />
+        <FormSelect label="Funktion" required value={data.funktion || null} onChange={v => { set("funktion", v || ""); touch("funktion"); }} options={FUNKTIONEN} placeholder="Funktion wählen" error={touched.funktion && !filled(data.funktion) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Eintrittsdatum" required value={data.eintrittsdatum} onChange={v => set("eintrittsdatum", v)} onBlur={() => touch("eintrittsdatum")} placeholder="01.03.2026" />
+        <NumberInput label="Stundenlohn" required value={data.stundenlohn} onChange={v => set("stundenlohn", v)} suffix="CHF" placeholder="32.00" />
+        <NumberInput label="Ferienanspruch" required value={data.ferienanspruchWochen} onChange={v => set("ferienanspruchWochen", v)} suffix="Wochen" placeholder="5" />
+        {/* Ferienzuschlag abgeleitet aus Wochen */}
+        {parseFloat(data.ferienanspruchWochen) > 0 && (
+          <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", alignSelf: "end", paddingBottom: 10 }}>
+            Ferienzuschlag: {berechneFerienzuschlagProzent(parseFloat(data.ferienanspruchWochen))}%
+          </div>
+        )}
       </div>
-      <div style={{ marginTop: "var(--space-4)" }}>
-        <NumberInput label="Stundenlohn" required value={data.stundenlohn} onChange={v => set("stundenlohn", v)} suffix="CHF" placeholder="32.00" hint="Brutto-Stundenlohn in Schweizer Franken" />
-      </div>
+      {/* Warnung nur bei echtem Problem: unter gesetzlichem Minimum */}
+      {(() => {
+        const wochen = parseFloat(data.ferienanspruchWochen) || 0;
+        const gebParts = (data.geburtsdatum || "").split(".");
+        let alter = 30;
+        if (gebParts.length === 3) { const j = parseInt(gebParts[2]); if (!isNaN(j)) alter = new Date().getFullYear() - j; }
+        const w = pruefeFerienMinimum(wochen, alter);
+        return w ? <div style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>{w}</div> : null;
+      })()}
 
       <SectionHeader icon={CreditCard} label="Auszahlung" />
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>

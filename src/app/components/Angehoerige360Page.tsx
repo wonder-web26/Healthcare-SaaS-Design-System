@@ -61,7 +61,8 @@ import {
 import { TabDokumenteGeneric, type DocFolder } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
 import { AnnaAngehoerigeSummary } from "../anna/AnnaAngehoerigeSummary";
-import { WorkflowChecklist } from "./workflow/WorkflowChecklist";
+import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
+import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
 
 /* ══════════════════════════════════════════
    EXTENDED MOCK DATA — HR detail fields
@@ -249,7 +250,7 @@ const statusConfig: Record<string, { label: string; bg: string; text: string; do
 /* ── Tab definitions ─────────────────────── */
 const profileTabs = [
   { id: "ueberblick", label: "Überblick", icon: LayoutDashboard },
-  { id: "workflow", label: "Workflow / Action Plan", icon: ListChecks },
+  { id: "workflow", label: "Workflow", icon: ListChecks },
   { id: "dokumente", label: "Dokumente", icon: FileText },
   { id: "related", label: "Related Lists", icon: Table2 },
   { id: "tickets", label: "Tickets", icon: Headphones },
@@ -439,6 +440,15 @@ export function Angehoerige360Page() {
   }
 
   const detail = getDetail(a.id);
+
+  // WF-01: Rhythmus-Tickets generieren (idempotent) wenn aktiv + eintrittsdatum gesetzt
+  if (a.status === "aktiv" && detail.eintrittsdatum) {
+    // eintrittsdatum ist im Format "DD.MM.YYYY" → ISO konvertieren
+    const parts = detail.eintrittsdatum.split(".");
+    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : detail.eintrittsdatum;
+    generiereRhythmusTickets("angehoeriger", a.id, `${a.vorname} ${a.nachname}`, isoAnker, a.pflegefachkraft);
+  }
+
   const st = statusConfig[a.status];
   const br = billingReadinessConfig[a.billingReadiness];
   const qual = qualifikationConfig[a.qualifikation];
@@ -1189,11 +1199,7 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
    ══════════════════════════════════════════ */
 function TabWorkflow({ a }: { a: Angehoeriger }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {/* Onboarding Prozess */}
-      <WorkflowChecklist angehoerigerId={a.id} typ="angehoeriger-onboarding" titel="Onboarding Prozess" />
-      <WorkflowChecklist angehoerigerId={a.id} typ="angehoeriger-monatsschritte" titel="Monatliche Schritte" />
-    </div>
+    <RhythmusTimeline subjektTyp="angehoeriger" subjektId={a.id} aktuellerBenutzer={a.pflegefachkraft} />
   );
 }
 

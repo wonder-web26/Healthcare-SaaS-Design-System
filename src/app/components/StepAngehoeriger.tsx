@@ -55,6 +55,7 @@ import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/krankenkassen";
 import { ZIVILSTAND_OPTIONS } from "../../lib/stammdaten/zivilstand";
 import { Combobox } from "./form/Combobox";
+import { leiteTarifcodeAb } from "../../lib/stammdaten/quellensteuer-tarif";
 
 /* ══════════════════════════════════════════
    TYPES (unchanged export contract)
@@ -69,6 +70,11 @@ export interface AngehoerigerFormData {
   nationalitaet: string;
   heimatort: string;
   aufenthaltsstatus: string;
+  /** Bewilligungs-Felder (nur bei ausländischer Bewilligung, nicht CH/C) */
+  einreisedatum: string;
+  zemisNummer: string;
+  einreichungsdatumMigrationsamt: string;
+  bewilligungAblaufdatum: string;
   spezialbewilligungStatus: "nicht_erforderlich" | "ausstehend" | "eingereicht" | "bewilligt";
   spezialbewilligungDokument: { name: string; size: string } | null;
   spezialbewilligungEinreichungsDatum: string;
@@ -90,7 +96,12 @@ export interface AngehoerigerFormData {
   /* 2. Steuer & Sozialversicherung */
   quellensteuer: string;
   konfession: string;
+  /** SP-10: Abgeleiteter oder manuell überschriebener QSt-Tarifcode (z.B. "B2Y") */
   quellensteuerTarif: string;
+  /** SP-10: Quelle des Tarifcodes */
+  tarifcodeQuelle: string;
+  /** SP-10: Begründung bei manuellem Override */
+  tarifcodeOverrideBegruendung: string;
   steuergemeinde: string;
   bvgVersichert: string;
   uvgVersichert: string;
@@ -126,6 +137,20 @@ export interface AngehoerigerFormData {
   funktion: string;
   eintrittsdatum: string;
   stundenlohn: string;
+  /** Externe Zweitanstellung (Mehrfacharbeitgeber) */
+  arbeitetExtern: string;
+  externeFunktion: string;
+  externesPensumProzent: string;
+  externerEintritt: string;
+  bvgAnbindungGewuenscht: string;
+  /** Lohnart: stundenlohn oder monatslohn */
+  lohnart: string;
+  /** Ferienanspruch in Wochen (Dezimalzahl) */
+  ferienanspruchWochen: string;
+  /** Qualifikation */
+  deutschNiveau: string;
+  zertifikatVorhanden: string;
+  srkZertifikatVorhanden: string;
   bankname: string;
   iban: string;
   /* 6. Dokumente */
@@ -134,27 +159,40 @@ export interface AngehoerigerFormData {
 
 export interface KindEntry {
   id: string;
-  name: string;
   vorname: string;
+  name: string;
   geburtsdatum: string;
-  ahvNummer: string;
   geschlecht: string;
-  zulagenart: string;
-  ausbildungsstatus: string;
+  ahvNummer: string;
+  /** SP-09: "ja" / "nein" — nachobligatorische Ausbildung */
+  inAusbildung: string;
   ausbildungsbeginn: string;
+  ausbildungsstatus: string;
+  /** SP-09: Zulagentyp (kinderzulage / ausbildungszulage / keine_zulage) */
+  zulagenart: string;
+  /** SP-09: Quelle des Zulagentyps ("abgeleitet" / "manuell_ueberschrieben") */
+  typQuelle: string;
+  /** SP-09: Begründung bei manuellem Override (Pflichtfeld) */
+  overrideBegruendung: string;
+  /** SP-09: Doppelbezugs-Check ("ja" / "nein" / "unbekannt") */
+  doppelbezug: string;
 }
 
 function createEmptyKind(): KindEntry {
   return {
     id: crypto.randomUUID(),
-    name: "",
     vorname: "",
+    name: "",
     geburtsdatum: "",
-    ahvNummer: "",
     geschlecht: "",
-    zulagenart: "K",
-    ausbildungsstatus: "",
+    ahvNummer: "",
+    inAusbildung: "",
     ausbildungsbeginn: "",
+    ausbildungsstatus: "",
+    zulagenart: "",
+    typQuelle: "abgeleitet",
+    overrideBegruendung: "",
+    doppelbezug: "",
   };
 }
 
@@ -205,6 +243,10 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   nationalitaet: "",
   heimatort: "",
   aufenthaltsstatus: "",
+  einreisedatum: "",
+  zemisNummer: "",
+  einreichungsdatumMigrationsamt: "",
+  bewilligungAblaufdatum: "",
   spezialbewilligungStatus: "nicht_erforderlich",
   spezialbewilligungDokument: null,
   spezialbewilligungEinreichungsDatum: "",
@@ -222,6 +264,8 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   quellensteuer: "nein",
   konfession: "",
   quellensteuerTarif: "",
+  tarifcodeQuelle: "abgeleitet",
+  tarifcodeOverrideBegruendung: "",
   steuergemeinde: "",
   bvgVersichert: "ja",
   uvgVersichert: "ja",
@@ -250,6 +294,16 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   funktion: "",
   eintrittsdatum: "",
   stundenlohn: "",
+  arbeitetExtern: "nein",
+  externeFunktion: "",
+  externesPensumProzent: "",
+  externerEintritt: "",
+  bvgAnbindungGewuenscht: "",
+  deutschNiveau: "",
+  zertifikatVorhanden: "nein",
+  srkZertifikatVorhanden: "nein",
+  lohnart: "stundenlohn",
+  ferienanspruchWochen: "5.0",
   bankname: "",
   iban: "",
   scans: {
@@ -1032,7 +1086,7 @@ function PersonalienForm({
             </FormField>
           )}
 
-          <Combobox label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand waehlen" />
+          <Combobox label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" />
 
           <FormField
             label="Zivilstand seit"
@@ -1181,7 +1235,7 @@ function PersonalienForm({
         </h5>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
           {/* SP-02: Durchsuchbare Picklist */}
-          <Combobox label="Krankenkasse" required value={data.krankenkasseName || null} onChange={v => { set("krankenkasseName", v || ""); touch("krankenkasseName"); const bag = getBagNummer(v || ""); if (bag) set("bagNr", bag); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse waehlen" error={touched.krankenkasseName && !filled(data.krankenkasseName) ? "Pflichtfeld" : undefined} />
+          <Combobox label="Krankenkasse" required value={data.krankenkasseName || null} onChange={v => { const bag = getBagNummer(v || ""); onChange({ ...data, krankenkasseName: v || "", ...(bag ? { bagNr: bag } : {}) }); touch("krankenkasseName"); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={touched.krankenkasseName && !filled(data.krankenkasseName) ? "Pflichtfeld" : undefined} />
 
           {/* SP-03: Kartennummer (umbenannt von Versicherungsnummer) */}
           <FormField
@@ -1233,6 +1287,7 @@ function SteuerForm({
   onChange: (d: AngehoerigerFormData) => void;
 }) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [tarifOverrideOpen, setTarifOverrideOpen] = useState(false);
   const touch = (field: string) =>
     setTouched((prev) => ({ ...prev, [field]: true }));
 
@@ -1251,7 +1306,7 @@ function SteuerForm({
           Quellensteuer
         </h5>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
-          <FormField label="Quellensteuerpflichtig?" required hint="Nicht-CH-Buerger mit B/L-Bewilligung sind i.d.R. quellensteuerpflichtig">
+          <FormField label="Quellensteuerpflichtig?" required hint="Nicht-CH-Bürger mit B/L-Bewilligung sind i.d.R. quellensteuerpflichtig">
             <JaNeinToggle
               value={data.quellensteuer}
               onValueChange={(v) => {
@@ -1266,31 +1321,98 @@ function SteuerForm({
             />
           </FormField>
 
-          <Combobox label="Konfession" value={data.konfession || null} onChange={v => { set("konfession", v || ""); touch("konfession"); }} options={KONFESSION_OPTIONS} placeholder="Konfession waehlen" hint="Optional — relevant fuer Kirchensteuer" />
+          <Combobox label="Konfession" value={data.konfession || null} onChange={v => { set("konfession", v || ""); touch("konfession"); }} options={KONFESSION_OPTIONS} placeholder="Konfession wählen" hint="Optional — relevant für Kirchensteuer" />
 
-          {isQuellensteuer && (
-            <FormField
-              label="Quellensteuer-Tarif"
-              required
-              error={touched.quellensteuerTarif && !filled(data.quellensteuerTarif) ? "Pflichtfeld bei Quellensteuerpflicht" : undefined}
-              hint="A=Alleinstehend, B=Verheiratet, C=Doppelverdiener, H=Alleinerziehend"
-            >
-              <Select
-                value={data.quellensteuerTarif}
-                onValueChange={(v) => { set("quellensteuerTarif", v); touch("quellensteuerTarif"); }}
-              >
-                <SelectTrigger className={!filled(data.quellensteuerTarif) ? "text-muted-foreground" : ""}>
-                  <SelectValue placeholder="Tarif wählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="A">A – Alleinstehend</SelectItem>
-                  <SelectItem value="B">B – Verheiratet, Alleinverdiener</SelectItem>
-                  <SelectItem value="C">C – Doppelverdiener</SelectItem>
-                  <SelectItem value="H">H – Alleinerziehend</SelectItem>
-                </SelectContent>
-              </Select>
-            </FormField>
-          )}
+          {/* SP-10: QSt-Tarifcode — abgeleitet, read-only + kontrollierter Override */}
+          {isQuellensteuer && (() => {
+            const hatKinder = data.hatUnterhaltspflichtigeKinder === "ja";
+            const anzahlKinder = parseInt(data.anzahlKinder) || 0;
+            const tarifErgebnis = leiteTarifcodeAb({
+              zivilstand: data.zivilstand,
+              hatKinder,
+              anzahlKinder,
+              partnerErwerbstaetig: data.partnerErwerbstaetig || data.partnerBerufstaetig,
+              konfession: data.konfession,
+            });
+            // Auto-Update wenn abgeleitet und Code sich ändert
+            if (data.tarifcodeQuelle !== "manuell_ueberschrieben" && tarifErgebnis.code !== data.quellensteuerTarif) {
+              setTimeout(() => set("quellensteuerTarif", tarifErgebnis.code), 0);
+            }
+            const istOverride = data.tarifcodeQuelle === "manuell_ueberschrieben";
+            const hatAbweichung = istOverride && data.quellensteuerTarif !== tarifErgebnis.code;
+
+            return (
+              <div style={{ gridColumn: "1 / -1" }}>
+                {/* Ermittelte Vorgabe */}
+                <div style={{ padding: "12px 16px", background: "var(--status-info-bg)", borderRadius: 10 }}>
+                  <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 2 }}>
+                    Ermittelter QSt-Tarifcode: {istOverride ? data.quellensteuerTarif : tarifErgebnis.code}
+                  </div>
+                  <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    {istOverride ? `Manuell festgelegt. Ermittlung wäre: ${tarifErgebnis.code} (${tarifErgebnis.begruendung})` : tarifErgebnis.begruendung}
+                  </div>
+                  {/* Sekundäraktion: Override */}
+                  {!tarifOverrideOpen && (
+                    <button onClick={() => setTarifOverrideOpen(true)} style={{ marginTop: 6, background: "none", border: "none", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", padding: 0, cursor: "pointer" }}>
+                      Abweichend festlegen…
+                    </button>
+                  )}
+                </div>
+
+                {/* Abweichungs-Hinweis */}
+                {hatAbweichung && !tarifOverrideOpen && (
+                  <div style={{ marginTop: "var(--space-2)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
+                    Abweichung: gespeichert «{data.quellensteuerTarif}», aktuell ermittelt «{tarifErgebnis.code}».
+                    {data.tarifcodeOverrideBegruendung && <> Begründung: {data.tarifcodeOverrideBegruendung}</>}
+                  </div>
+                )}
+
+                {/* Override-Formular */}
+                {tarifOverrideOpen && (
+                  <div style={{ marginTop: "var(--space-3)", padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+                    <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>Tarifcode abweichend festlegen</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+                      <FormField label="Tarifcode" required>
+                        <Input value={data.quellensteuerTarif} onChange={e => set("quellensteuerTarif", e.target.value)} placeholder="z.B. B2Y, A0N, H1Y" />
+                      </FormField>
+                    </div>
+                    <div style={{ marginTop: "var(--space-3)" }}>
+                      <FormField label="Begründung der Abweichung" required hint="Pflichtfeld — wird an die Buchhaltung zur Prüfung weitergeleitet">
+                        <Input value={data.tarifcodeOverrideBegruendung} onChange={e => set("tarifcodeOverrideBegruendung", e.target.value)} placeholder="z.B. Grenzgänger Tarif G, gemäss Verfügung Steueramt" />
+                      </FormField>
+                    </div>
+                    <div className="flex items-center" style={{ gap: 8, marginTop: "var(--space-3)" }}>
+                      <button
+                        onClick={() => {
+                          if (!filled(data.tarifcodeOverrideBegruendung)) return;
+                          set("tarifcodeQuelle", "manuell_ueberschrieben");
+                          setTarifOverrideOpen(false);
+                          console.info(`[SP-10 Audit] Override QSt-Tarifcode: ${tarifErgebnis.code} → ${data.quellensteuerTarif}, Begründung: ${data.tarifcodeOverrideBegruendung}`);
+                        }}
+                        disabled={!filled(data.tarifcodeOverrideBegruendung)}
+                        className="inline-flex items-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ gap: 4, padding: "8px 16px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
+                      >
+                        Abweichung speichern
+                      </button>
+                      <button
+                        onClick={() => {
+                          set("quellensteuerTarif", tarifErgebnis.code);
+                          set("tarifcodeQuelle", "abgeleitet");
+                          set("tarifcodeOverrideBegruendung", "");
+                          setTarifOverrideOpen(false);
+                        }}
+                        className="cursor-pointer"
+                        style={{ background: "none", border: "none", fontSize: "var(--text-small)", color: "var(--text-secondary)", padding: "8px 12px" }}
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 

@@ -16,10 +16,10 @@ export interface KonfessionDefinition {
 }
 
 export const KONFESSIONEN: KonfessionDefinition[] = [
-  { value: "roemisch_katholisch", label: "Roemisch-katholisch", kirchensteuerRelevant: true },
+  { value: "roemisch_katholisch", label: "Römisch-katholisch", kirchensteuerRelevant: true },
   { value: "evangelisch_reformiert", label: "Evangelisch-reformiert", kirchensteuerRelevant: true },
   { value: "christkatholisch", label: "Christkatholisch", kirchensteuerRelevant: true },
-  { value: "juedisch", label: "Juedisch / Israelitisch", kirchensteuerRelevant: true },
+  { value: "juedisch", label: "Jüdisch / Israelitisch", kirchensteuerRelevant: true },
   // * israelitisch nur in einzelnen Kantonen oeffentlich-rechtlich anerkannt
   { value: "konfessionslos", label: "Konfessionslos / keine", kirchensteuerRelevant: false },
   { value: "muslimisch", label: "Muslimisch", kirchensteuerRelevant: false },

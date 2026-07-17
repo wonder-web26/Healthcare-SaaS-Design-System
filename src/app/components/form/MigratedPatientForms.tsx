@@ -62,7 +62,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
           <FormSelect label="Aufenthaltsstatus" value={data.aufenthaltsstatus || null} onChange={v => onUpdate("aufenthaltsstatus", v || "")}
             options={[{ value: "B", label: "B" }, { value: "C", label: "C" }, { value: "L", label: "L" }, { value: "G", label: "G" }, { value: "F", label: "F" }, { value: "N", label: "N" }]} placeholder="Status wählen" />
         )}
-        <FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand waehlen" />
+        <FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" />
       </div>
 
       <SectionHeader icon={MapPin} label="Adresse" />
@@ -77,7 +77,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
       <SectionHeader icon={Shield} label="Krankenkasse & Aerzte" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
         {/* SP-02: Picklist statt Freitext */}
-        <FormSelect label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { onUpdate("krankenkasse", v || ""); const bag = getBagNummer(v || ""); if (bag) onUpdate("bagNr", bag); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse waehlen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} />
+        <FormSelect label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { const bag = getBagNummer(v || ""); onUpdate("krankenkasse", v || ""); if (bag) setTimeout(() => onUpdate("bagNr", bag), 0); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} />
         {/* SP-03: Kartennummer (umbenannt) */}
         <TextInput label="Kartennummer" required value={data.kartennummer} onChange={v => onUpdate("kartennummer", v)} onBlur={() => onBlur("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} />
         {/* SP-03: BAG-Nr. */}
@@ -130,8 +130,9 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
           <NumberInput label="IV-Bezug" required value={data.ivBezugProzent} onChange={v => onUpdate("ivBezugProzent", v)} suffix="%" placeholder="z.B. 100" />
         </div>
       )}
-      <div style={{ marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <SegmentedControl label="Hilflosenentschädigung?" required value={data.hilflosenentschaedigung} onChange={v => onUpdate("hilflosenentschaedigung", v)} options={JA_NEIN} />
+        <SegmentedControl label="Bezieht der Patient einen IV-Assistenzbeitrag?" required value={data.assistenzbeitrag} onChange={v => onUpdate("assistenzbeitrag", v)} options={JA_NEIN} />
       </div>
 
       <SectionHeader icon={Receipt} label="Konfession & Steuer" />
@@ -150,22 +151,13 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
   const t = (f: string) => touched.has(f);
   const [expandedAnamnese, setExpandedAnamnese] = useState(false);
 
-  const bmi = filled(data.groesse) && filled(data.gewicht)
-    ? (parseFloat(data.gewicht) / Math.pow(parseFloat(data.groesse) / 100, 2)).toFixed(1)
-    : "";
-
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={Stethoscope} label="Basisanamnese" first />
 
-      <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
         <NumberInput label="Grösse" required value={data.groesse} onChange={v => onUpdate("groesse", v)} suffix="cm" placeholder="170" error={t("groesse") && !filled(data.groesse) ? "Pflichtfeld" : undefined} />
         <NumberInput label="Gewicht" required value={data.gewicht} onChange={v => onUpdate("gewicht", v)} suffix="kg" placeholder="72" error={t("gewicht") && !filled(data.gewicht) ? "Pflichtfeld" : undefined} />
-        <FormField label="BMI" hint="Automatisch berechnet">
-          <div style={{ padding: "11px 16px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-secondary)", fontSize: "var(--text-body)", color: bmi ? "var(--text-primary)" : "var(--text-tertiary)", fontWeight: "var(--weight-medium)" }}>
-            {bmi || "—"}
-          </div>
-        </FormField>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
@@ -180,7 +172,7 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <SegmentedControl label="Spitalaufenthalte (letzte 90 Tage)" value={data.spitalaufenthalte} onChange={v => onUpdate("spitalaufenthalte", v)} options={JA_NEIN} />
-        <TextInput label="Operationen" value={data.operationen} onChange={v => onUpdate("operationen", v)} placeholder="z.B. Hüft-TEP 2024" hint="Relevante Eingriffe" />
+        <TextareaInput label="Operationen" value={data.operationen} onChange={v => onUpdate("operationen", v)} placeholder="z.B. Hüft-TEP rechts (2024), Knie-TEP links (2022), Appendektomie (2018)" rows={4} />
       </div>
 
       <div style={{ marginTop: "var(--space-4)" }}>
@@ -211,7 +203,24 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
         {expandedAnamnese && (
           <div className="flex flex-col" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
             <TextareaInput label="Ausführliche Anamnese" value={data.anamneseText} onChange={v => onUpdate("anamneseText", v)} placeholder="Detaillierte medizinische Vorgeschichte" />
-            <TextareaInput label="Sturz-Assessment" value={data.sturzLetzte6Monate === "ja" ? "Sturzrisiko vorhanden" : ""} onChange={v => onUpdate("sturzLetzte6Monate", v ? "ja" : "nein")} placeholder="Sturzrisiko und entsprechende Massnahmen" />
+
+            {/* PA-03: Sturz-Assessment */}
+            <SectionHeader icon={HeartPulse} label="Sturz-Assessment" />
+            <FormSelect label="Stürze in den letzten 12 Monaten?" required value={data.sturzLetzte12m || null} onChange={v => {
+              const val = v || "kein_sturz";
+              onUpdate("sturzLetzte12m", val);
+              if (val === "kein_sturz") { onUpdate("sturzAnzahl", ""); onUpdate("sturzKommentar", ""); }
+            }} options={[
+              { value: "kein_sturz", label: "Kein Sturz" },
+              { value: "innerhalb_6_monate", label: "Ja, innerhalb 6 Monate" },
+              { value: "7_bis_12_monate", label: "Ja, vor 7–12 Monaten" },
+            ]} placeholder="Bitte wählen" />
+            {data.sturzLetzte12m && data.sturzLetzte12m !== "kein_sturz" && (
+              <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-3)" }}>
+                <NumberInput label="Anzahl Stürze" value={data.sturzAnzahl} onChange={v => onUpdate("sturzAnzahl", v)} placeholder="z.B. 2" />
+                <TextareaInput label="Bemerkungen (Umstände, Verletzungen, Ort)" value={data.sturzKommentar} onChange={v => onUpdate("sturzKommentar", v)} placeholder="z.B. Sturz im Bad, Prellung am Arm" />
+              </div>
+            )}
             <FormSelect label="Stimmung" value={data.stimmungAktuell || null} onChange={v => onUpdate("stimmungAktuell", v || "")} options={STIMMUNG} placeholder="Stimmung einschätzen" />
             <TextareaInput label="Behandlungsziel" value={data.behandlungszielFokus} onChange={v => onUpdate("behandlungszielFokus", v)} placeholder="Hauptziel der Pflege und Betreuung" />
           </div>

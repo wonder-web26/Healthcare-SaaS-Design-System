@@ -16,7 +16,8 @@ export type PendenzTyp =
   | "schluessel"
   | "meldung"
   | "re-assessment"
-  | "kinderzulagen";
+  | "kinderzulagen"
+  | "betreuungs-rhythmus";
 
 export type AnnaActionType = "open-url" | "copy-data" | "download-file" | "open-mailto" | "internal-action" | "demo-mock";
 
@@ -253,5 +254,15 @@ export const pendenzTypen: Record<PendenzTyp, PendenzTypDefinition> = {
     isDemoMock: false,
     pillBg: "var(--bg-secondary)",
     pillColor: "var(--text-secondary)",
+  },
+  "betreuungs-rhythmus": {
+    id: "betreuungs-rhythmus",
+    label: "Betreuungs-Rhythmus",
+    description: "Wiederkehrender Betreuungsschritt aus dem Workflow (Schulung, Kontrolle, Assessment)",
+    responsibleRole: "diplomiert",
+    annaStage: "A",
+    isDemoMock: false,
+    pillBg: "var(--brand-primary-light)",
+    pillColor: "var(--brand-primary)",
   },
 };

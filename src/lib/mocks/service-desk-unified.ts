@@ -1,9 +1,10 @@
 import { workflowTasks, workflowTypLabel, CURRENT_USER, MY_TEAM, type WorkflowTask, type WorkflowTyp, type Person, type Prioritaet } from "./workflow-tasks";
 import { serviceTickets, ticketTypLabel, type ServiceTicket, type TicketTyp } from "./service-tickets";
 import { generateWorkflowBeschreibung } from "./workflow-task-beschreibungen";
+import { getAlleTickets, type RhythmusTicket } from "../rhythmus/engine";
 import type { PendenzTyp } from "../../types/pendenz";
 
-export type Quelle = "workflow" | "ticket";
+export type Quelle = "workflow" | "ticket" | "rhythmus";
 
 export interface UnifiedEntry {
   id: string;
@@ -95,6 +96,36 @@ function toUnifiedTicket(t: ServiceTicket): UnifiedEntry {
   };
 }
 
+function toUnifiedRhythmus(t: RhythmusTicket): UnifiedEntry {
+  const subjektLabel = t.subjektTyp === "angehoeriger" ? "Angehörige/r" : "Patient/in";
+  return {
+    id: t.id,
+    quelle: "rhythmus",
+    typ: "RE_ASSESSMENT" as WorkflowTyp, // closest existing type for routing
+    typLabel: t.label,
+    pendenzTyp: "betreuungs-rhythmus",
+    person: { name: t.subjektName, initialen: t.subjektName.split(/[\s,]+/).filter(w => w.length > 0).map(w => w[0]).join("").toUpperCase().slice(0, 2) },
+    kontext: `${subjektLabel}: ${t.subjektName} · ${t.label}`,
+    erstellt: t.faelligAm, // best available
+    faellig: t.faelligAm,
+    status: t.status === "erledigt" ? "erledigt" : "offen",
+    verantwortlich: { name: t.zugewiesenAn || "Nicht zugewiesen", initialen: (t.zugewiesenAn || "??").split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2), color: "#1F5C4D" },
+    prioritaet: t.status === "ueberfaellig" ? "hoch" : "mittel",
+    beschreibung: `Betreuungs-Rhythmus: ${t.label} für ${t.subjektName} (${subjektLabel}), fällig am ${t.faelligAm}.`,
+  };
+}
+
+/** Dynamisch: enthält Rhythmus-Tickets die zur Laufzeit generiert werden */
+export function getUnifiedEntries(): UnifiedEntry[] {
+  const rhythmusTickets = getAlleTickets().filter(t => t.status !== "erledigt");
+  return [
+    ...workflowTasks.map(toUnifiedWorkflow),
+    ...serviceTickets.map(toUnifiedTicket),
+    ...rhythmusTickets.map(toUnifiedRhythmus),
+  ];
+}
+
+/** Statisch (Legacy-Kompatibilität) — enthält KEINE Rhythmus-Tickets */
 export const unifiedEntries: UnifiedEntry[] = [
   ...workflowTasks.map(toUnifiedWorkflow),
   ...serviceTickets.map(toUnifiedTicket),

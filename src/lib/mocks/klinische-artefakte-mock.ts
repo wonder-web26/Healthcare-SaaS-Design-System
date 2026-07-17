@@ -393,5 +393,6 @@ export const MOCK_ASSESSMENTS: InterRAIAssessment[] = [ANNA_BA, ANNA_RE, HUBER_B
 export const MOCK_PFLEGEPLANUNGEN: Pflegeplanung[] = [ANNA_PP, HUBER_PP];
 export const MOCK_KLV_VERORDNUNGEN: KLVVerordnung[] = [ANNA_KLV, HUBER_KLV];
 export const MOCK_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [...ANNA_ARZT_DIAGNOSEN, ...HUBER_ARZT_DIAGNOSEN];
-export const MOCK_WORKFLOWS: WorkflowPlan[] = [ANNA_WORKFLOW, HUBER_WORKFLOW, ANNA_ANGEH_WORKFLOW, TOCHTER_OB_WORKFLOW, TOCHTER_MONAT_WORKFLOW];
+/** @deprecated Ersetzt durch Rhythmus-Engine (src/lib/rhythmus/). Nur noch für Typ-Referenz behalten. */
+export const MOCK_WORKFLOWS: WorkflowPlan[] = [];
 export { ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE };

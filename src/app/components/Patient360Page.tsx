@@ -54,7 +54,9 @@ import {
   MessageSquare,
   Mic,
   Trash2,
+  HeartPulse,
 } from "lucide-react";
+import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import {
   patients,
   statusConfig,
@@ -72,7 +74,8 @@ import { toast } from "sonner";
 import { useRecording } from "../recording/RecordingContext";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { ItemRow } from "./ui/ItemRow";
-import { WorkflowChecklist } from "./workflow/WorkflowChecklist";
+import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
+import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
 
 /* ── Tab definitions ─────────────────────── */
 const profileTabs = [
@@ -81,6 +84,7 @@ const profileTabs = [
   { id: "interrai", label: "InterRAI", icon: ClipboardList },
   { id: "pflegeplanung", label: "Pflegeplanung", icon: ListChecks },
   { id: "klv", label: "KLV", icon: FileText },
+  { id: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
   { id: "atl", label: "Aktivitäten (ATL)", icon: ClipboardList },
   { id: "workflow", label: "Workflow / Action Plan", icon: ListChecks },
   { id: "dokumente", label: "Dokumente", icon: FileText },
@@ -298,6 +302,13 @@ export function Patient360Page() {
     );
   }
 
+  // WF-02: Patient-Rhythmus-Tickets generieren (idempotent)
+  if (patient.aufnahmeDatum) {
+    const parts = patient.aufnahmeDatum.split(".");
+    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : patient.aufnahmeDatum;
+    generiereRhythmusTickets("patient", patient.id, `${patient.nachname}, ${patient.vorname}`, isoAnker, patient.pflegefachkraft);
+  }
+
   const st = statusConfig[patient.status];
   const ast = abrechnungsStatusConfig[patient.abrechnungsStatus];
   const sg = schweregradConfig[patient.schweregrad];
@@ -462,6 +473,7 @@ export function Patient360Page() {
         {activeTab === "interrai" && <TabInterRAI patientId={patient.id} patientName={`${patient.nachname}, ${patient.vorname}`} navigate={navigate} />}
         {activeTab === "pflegeplanung" && <TabPflegeplanung patientId={patient.id} navigate={navigate} />}
         {activeTab === "klv" && <TabKLV patientId={patient.id} />}
+        {activeTab === "vitaldaten" && <VitaldatenTab patientId={patient.id} />}
         {activeTab === "atl" && <TabATL patient={patient} />}
         {activeTab === "workflow" && <TabWorkflow patient={patient} />}
         {activeTab === "dokumente" && <TabDokumente patient={patient} />}
@@ -1867,10 +1879,7 @@ function TabATL({ patient }: { patient: Patient }) {
 
 function TabWorkflow({ patient }: { patient: Patient }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      <WorkflowChecklist patientId={patient.id} typ="patient-prozess" />
-      <WorkflowChecklist patientId={patient.id} typ="angehoeriger-monate" />
-    </div>
+    <RhythmusTimeline subjektTyp="patient" subjektId={patient.id} aktuellerBenutzer={patient.pflegefachkraft} />
   );
 }
 

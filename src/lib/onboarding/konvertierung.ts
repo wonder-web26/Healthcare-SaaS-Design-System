@@ -9,6 +9,8 @@
  */
 import type { InterRAIAssessment, Pflegeplanung, KLVVerordnung, WorkflowPlan } from "../../types/klinische-artefakte";
 import { verwalteQuellensteuerPendenz } from "../stammdaten/quellensteuer-automatik";
+import { getMessungenFuerPatient } from "../vitaldaten/store";
+import { konvertiereRhythmusSubjekt } from "../rhythmus/engine";
 
 export interface KonvertierungsErgebnis {
   patientId: string;
@@ -40,8 +42,8 @@ export function konvertiereOnboarding(
     klvVerordnungen: KLVVerordnung[];
     workflows: WorkflowPlan[];
   },
-  /** SP-07: Angehoerigen-Stammdaten fuer Pendenz-Erzeugung bei Quellensteuer */
-  angehoerigenDaten?: { name: string; quellensteuerpflichtig: boolean },
+  /** Angehoerigen-Stammdaten fuer Pendenz-Erzeugung */
+  angehoerigenDaten?: { name: string; quellensteuerpflichtig: boolean; aufenthaltsstatus: string; bvgAnbindungGewuenscht: boolean },
 ): KonvertierungsErgebnis {
   // 1. Generate new patient ID (in production: server-generated)
   const patientId = `P-${Date.now()}`;
@@ -80,10 +82,68 @@ export function konvertiereOnboarding(
     }
   }
 
+  // PA-05: Vitalmessungen von onboardingId auf patientId umhängen
+  // (Messungen wurden während Onboarding mit onboardingId als patientId erfasst)
+  const onboardingMessungen = getMessungenFuerPatient(onboardingId);
+  for (const m of onboardingMessungen) {
+    (m as { patientId: string }).patientId = patientId;
+  }
+
+  // WF-02: Rhythmus-Tickets von onboardingId auf patientId umhängen
+  konvertiereRhythmusSubjekt(onboardingId, patientId, "patient");
+
   // SP-07: Bei Quellensteuerpflicht Pendenz fuer Buchhaltung erzeugen
   // Erst jetzt, weil der Angehoerige als Mitarbeiter erst nach Konvertierung existiert.
   if (angehoerigenDaten?.quellensteuerpflichtig) {
     verwalteQuellensteuerPendenz("erstellen", angehoerigenDaten.name, angehoerigerId);
+  }
+
+  // Aufenthaltsstatus B: Pendenz fuer offene Bewilligungs-Aufgaben
+  if (angehoerigenDaten?.aufenthaltsstatus === "B") {
+    const heute = new Date().toISOString().slice(0, 10);
+    const faellig = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+    const bestehend = workflowTasks.find(
+      t => t.typ === "AUSWEIS_B_ANMELDUNG" && t.betroffenePerson.name === angehoerigenDaten.name && t.status === "offen"
+    );
+    if (!bestehend) {
+      workflowTasks.push({
+        id: `W-BEWB-${Date.now()}`,
+        typ: "AUSWEIS_B_ANMELDUNG",
+        titel: "Aufenthaltsstatus B — Bewilligung nachverfolgen",
+        kontext: `Mitarbeiter ${angehoerigenDaten.name} hat Aufenthaltsstatus B. Bitte sicherstellen: Spezialbewilligung beim Migrationsamt eingereicht, Bewilligungsstatus prüfen, ggf. Erneuerung rechtzeitig einleiten.`,
+        betroffenePerson: { name: angehoerigenDaten.name, initialen: angehoerigenDaten.name.split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2) },
+        erstellt: heute,
+        faellig,
+        status: "offen",
+        verantwortlich: { name: "Kathrin Meier", initialen: "KM" },
+        prioritaet: "hoch",
+      });
+      console.info(`[Audit] Pendenz erstellt: Aufenthaltsstatus B für ${angehoerigenDaten.name} (${angehoerigerId})`);
+    }
+  }
+
+  // BVG: Bei freiwilliger Anbindung Pendenz an Buchhaltung
+  if (angehoerigenDaten?.bvgAnbindungGewuenscht) {
+    const heute = new Date().toISOString().slice(0, 10);
+    const faellig = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+    const bestehend = workflowTasks.find(
+      t => t.titel.includes("BVG-Anbindung") && t.betroffenePerson.name === angehoerigenDaten.name && t.status === "offen"
+    );
+    if (!bestehend) {
+      workflowTasks.push({
+        id: `W-BVG-${Date.now()}`,
+        typ: "LOHNANPASSUNG_NACH_SRK",
+        titel: "BVG-Anbindung einrichten",
+        kontext: `Mitarbeiter ${angehoerigenDaten.name} wünscht freiwillige BVG-Anbindung (Lohn unter Eintrittsschwelle). Bitte Pensionskassen-Anmeldung vornehmen.`,
+        betroffenePerson: { name: angehoerigenDaten.name, initialen: angehoerigenDaten.name.split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2) },
+        erstellt: heute,
+        faellig,
+        status: "offen",
+        verantwortlich: { name: "Kathrin Meier", initialen: "KM" },
+        prioritaet: "mittel",
+      });
+      console.info(`[Audit] Pendenz erstellt: BVG-Anbindung für ${angehoerigenDaten.name} (${angehoerigerId})`);
+    }
   }
 
   return {

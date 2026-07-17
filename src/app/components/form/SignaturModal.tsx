@@ -6,7 +6,7 @@ export interface SignatureData {
   signedBy: string;
 }
 
-type DocType = "stellenbeschreibung" | "arbeitsvertrag" | "datenschutzerklaerung" | "einwilligungserklaerung";
+type DocType = "stellenbeschreibung" | "arbeitsvertrag";
 
 interface Props {
   isOpen: boolean;
@@ -24,8 +24,6 @@ interface Props {
 const DOC_META: Record<DocType, { title: string; pages: number }> = {
   stellenbeschreibung: { title: "Stellenbeschreibung Angehörigenpflege", pages: 2 },
   arbeitsvertrag: { title: "Arbeitsvertrag", pages: 4 },
-  datenschutzerklaerung: { title: "Datenschutzerklärung gemäss DSG / DSGVO", pages: 2 },
-  einwilligungserklaerung: { title: "Einwilligungserklärung", pages: 1 },
 };
 
 function formatDateDE(d: Date): string {
@@ -42,10 +40,8 @@ function getContractText(type: DocType, name: string, lohn: string, eintritt: st
       return `STELLENBESCHREIBUNG ANGEHÖRIGENPFLEGE\n\nVertragsparteien\n${spitex} (Arbeitgeber)\n${name} (Arbeitnehmer/in)\n\n1. Aufgabengebiet\nDie angestellte Person übernimmt pflegerische Aufgaben im häuslichen Umfeld gemäss den Weisungen der zuständigen Pflegefachkraft. Die Tätigkeiten umfassen Grundpflege, Begleitung im Alltag sowie die Dokumentation der erbrachten Leistungen.\n\n2. Verantwortlichkeiten\n- Durchführung der zugewiesenen Pflegemassnahmen\n- Einhaltung der Hygienestandards\n- Führen des Einsatzprotokolls\n- Meldung von Auffälligkeiten an die Pflegefachkraft\n\n3. Arbeitszeit\nDie Arbeitszeit richtet sich nach dem individuellen Einsatzplan. Einsätze erfolgen in der Regel zwischen 07:00 und 20:00 Uhr.`;
     case "arbeitsvertrag":
       return `ARBEITSVERTRAG\n\nzwischen\n${spitex} (nachfolgend "Arbeitgeber")\nund\n${name} (nachfolgend "Arbeitnehmer/in")\n\n1. Anstellung\nDer Arbeitnehmer wird per ${eintritt || "___"} als pflegender Angehöriger im Stundenlohn angestellt.\n\n2. Lohn\nDer Brutto-Stundenlohn beträgt CHF ${lohn || "___"}. Die Auszahlung erfolgt monatlich, jeweils am 25. des Folgemonats.\n\n3. Arbeitszeit\nDie Arbeitszeit richtet sich nach dem Einsatzplan und den Bedürfnissen der betreuten Person. Überstunden werden im Folgemonat kompensiert oder ausbezahlt.\n\n4. Kündigungsfrist\nDas Arbeitsverhältnis kann von beiden Seiten unter Einhaltung einer Frist von 30 Tagen auf das Ende eines Kalendermonats gekündigt werden.\n\n5. Sozialversicherungen\nDer Arbeitnehmer ist bei den üblichen Sozialversicherungen (AHV, IV, EO, ALV, BVG, UVG) angemeldet. Die Beiträge werden gemäss den gesetzlichen Bestimmungen aufgeteilt.\n\n6. Gesamtarbeitsvertrag\nEs gilt der GAV für das Gesundheitswesen des Kantons Zürich.\n\n7. Schlussbestimmungen\nÄnderungen dieses Vertrages bedürfen der Schriftform. Gerichtsstand ist Zürich.`;
-    case "datenschutzerklaerung":
-      return `DATENSCHUTZERKLÄRUNG\ngemäss DSG und DSGVO\n\n1. Datenerfassung\n${spitex} erfasst personenbezogene Daten des Arbeitnehmers für die Vertragserfüllung, Lohnabrechnung und gesetzliche Pflichten.\n\n2. Verarbeitungszwecke\n- Personalverwaltung und Lohnabrechnung\n- Einsatzplanung und Dokumentation\n- Gesetzliche Meldepflichten (AHV, Steuern)\n\n3. Weitergabe an Dritte\nDaten werden nur an berechtigte Dritte weitergegeben (Sozialversicherungen, Steuerbehörden, Krankenkasse). Eine Weitergabe zu Marketingzwecken erfolgt nicht.\n\n4. Rechte der betroffenen Person\nSie haben das Recht auf Auskunft, Berichtigung, Löschung und Einschränkung der Verarbeitung. Kontakt: datenschutz@spitex-kaufmann.ch`;
-    case "einwilligungserklaerung":
-      return `EINWILLIGUNGSERKLÄRUNG\n\nIch, ${name}, erkläre mich einverstanden mit:\n\n1. Der Verwendung meines Fotos für den internen Mitarbeiter-Ausweis\n2. Der Weitergabe meiner Kontaktdaten an die Notfallkontakt-Liste\n3. Der elektronischen Kommunikation über die Spitex-App\n\nDiese Einwilligung kann jederzeit schriftlich widerrufen werden.`;
+    default:
+      return "";
   }
 }
 

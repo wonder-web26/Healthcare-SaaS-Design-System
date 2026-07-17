@@ -27,7 +27,6 @@ import {
 import {
   StepPatient,
   emptyPatientForm,
-  getPatientRequiredDocKeys,
   getFehlendePflichtdokumente,
   type PatientFormData,
 } from "./StepPatient";
@@ -40,7 +39,8 @@ import { ArztAnfrageProvider, useArztAnfrage } from "./ArztAnfrageContext";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 // import { AnnaListenEinordnung, type DetailKontext } from "../anna/AnnaListenEinordnung";
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
-import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, MOCK_WORKFLOWS } from "../../lib/mocks/klinische-artefakte-mock";
+import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
+import { getTicketsFuerSubjekt } from "../../lib/rhythmus/engine";
 import { toast } from "sonner";
 
 /* ══════════════════════════════════════════
@@ -375,10 +375,10 @@ export function OnboardingPage() {
   // Override-Dialog state
   const [overrideBegrundung, setOverrideBegrundung] = useState("");
 
-  // Workflow-Aggregat
-  const workflowForHeader = MOCK_WORKFLOWS.find(w => w.typ === "patient-prozess" && w.onboardingId === caseId);
-  const workflowDone = workflowForHeader?.schritte.filter(s => s.status === "abgeschlossen").length ?? 0;
-  const workflowTotal = workflowForHeader?.schritte.length ?? 0;
+  // Workflow-Aggregat (aus Rhythmus-Engine)
+  const rhythmusTickets = getTicketsFuerSubjekt("patient", caseId);
+  const workflowDone = rhythmusTickets.filter(t => t.status === "erledigt").length;
+  const workflowTotal = rhythmusTickets.length;
 
   // Tab-jump state (for header pill clicks → StepPatient tab switch)
   const [requestedPatientTab, setRequestedPatientTab] = useState<number | null>(null);
@@ -804,14 +804,13 @@ export function OnboardingPage() {
                         fehlendeDokumente: abschlussPruefung.fehlendePflichtdokumente,
                         begruendung: overrideBegrundung.trim(),
                       };
-                      // Store on the workflow for persistence across konversion (Mock: console + toast)
-                      const wf = MOCK_WORKFLOWS.find(w => w.onboardingId === caseId && w.typ === "patient-prozess");
-                      if (wf) (wf as Record<string, unknown>).abschlussOverride = auditNote;
                       console.info("[Audit] Abschluss mit Override:", auditNote);
                     }
-                    konvertiereOnboarding(caseId, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: MOCK_KLV_VERORDNUNGEN, workflows: MOCK_WORKFLOWS }, {
+                    konvertiereOnboarding(caseId, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: MOCK_KLV_VERORDNUNGEN, workflows: [] }, {
                       name: `${angehoerigerData.vorname || ""} ${angehoerigerData.name || ""}`.trim(),
                       quellensteuerpflichtig: angehoerigerData.quellensteuer === "ja",
+                      aufenthaltsstatus: angehoerigerData.aufenthaltsstatus,
+                      bvgAnbindungGewuenscht: angehoerigerData.bvgAnbindungGewuenscht === "ja",
                     });
                   }
                   setShowAbschlussDialog(false);

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { ClipboardList, AlertTriangle, Calendar, CheckCircle2, List, Plus, Sparkles } from "lucide-react";
-import { unifiedEntries, entryTitle, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
+import { getUnifiedEntries, entryTitle, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
 import { AnnaListenEinordnung, type ListenKontext } from "../anna/AnnaListenEinordnung";
 
@@ -111,7 +111,8 @@ interface Props {
    ══════════════════════════════════════════ */
 
 export function PendenzenManagementUebersicht({ onSwitchToList, onSelectPendenz }: Props) {
-  const agg = useMemo(() => calculateAggregates(unifiedEntries), []);
+  const entries = useMemo(() => getUnifiedEntries(), []);
+  const agg = useMemo(() => calculateAggregates(entries), [entries]);
 
   const annaContext = useMemo<ListenKontext>(() => ({
     seite: "pendenzen_management",

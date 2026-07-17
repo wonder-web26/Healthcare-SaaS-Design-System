@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import {
   unifiedEntries,
+  getUnifiedEntries,
   entryTitle,
   CURRENT_USER,
   MY_TEAM,
@@ -209,9 +210,12 @@ export function ServiceDeskPage() {
     }
   }, [role]);
 
+  // Alle Einträge inkl. Rhythmus-Tickets
+  const allEntries = useMemo(() => getUnifiedEntries(), []);
+
   // Filtered entries
   const filtered = useMemo(() => {
-    let list = unifiedEntries.map(e => ({
+    let list = allEntries.map(e => ({
       ...e,
       status: (localStatus[e.id] || e.status) as UnifiedEntry["status"],
     }));
@@ -223,7 +227,7 @@ export function ServiceDeskPage() {
 
     list.sort((a, b) => sortScore(a, role) - sortScore(b, role));
     return list;
-  }, [view, localStatus, role]);
+  }, [view, localStatus, role, allEntries]);
 
   // Bucketed entries
   const bucketed = useMemo(() => {
@@ -236,25 +240,25 @@ export function ServiceDeskPage() {
 
   // View counts
   const viewCounts = useMemo(() => {
-    const all = unifiedEntries.map(e => ({ ...e, status: (localStatus[e.id] || e.status) as UnifiedEntry["status"] }));
+    const all = allEntries.map(e => ({ ...e, status: (localStatus[e.id] || e.status) as UnifiedEntry["status"] }));
     return {
       mir: all.filter(e => e.verantwortlich.initialen === CURRENT_USER && e.status !== "erledigt").length,
       team: all.filter(e => MY_TEAM.includes(e.verantwortlich.initialen) && e.status !== "erledigt").length,
       alle: all.filter(e => e.status !== "erledigt").length,
       erledigt: all.filter(e => e.status === "erledigt").length,
     };
-  }, [localStatus]);
+  }, [localStatus, allEntries]);
 
   // Selected entry
   const selected = useMemo(() => {
     if (!selectedId) return null;
-    const e = unifiedEntries.find(e => e.id === selectedId);
+    const e = allEntries.find(e => e.id === selectedId);
     if (!e) return null;
     return { ...e, status: (localStatus[e.id] || e.status) as UnifiedEntry["status"] };
-  }, [selectedId, localStatus]);
+  }, [selectedId, localStatus, allEntries]);
 
   // Anna context
-  const annaContext = useMemo(() => buildAnnaContext(unifiedEntries, role), [role]);
+  const annaContext = useMemo(() => buildAnnaContext(allEntries, role), [role, allEntries]);
 
   const viewOrder = getViewOrder(role);
 
