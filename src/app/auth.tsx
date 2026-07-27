@@ -16,11 +16,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const CREDENTIALS = {
   username: "admin",
-  password: "Sp1t3x!Cockpit#2026",
+  password: "270825",
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [role, setRoleState] = useState<UserRole>("diplomiert");
 
   const login = useCallback((username: string, password: string): boolean => {

@@ -8,8 +8,13 @@
  * HINWEIS: Item-Texte, CAP-Logik, NANDA-Diagnosen sind plausibel nachgebildet.
  */
 
-import type { InterRAIAntwortOption } from "../lib/interrai/types";
-export type { InterRAIAntwortOption };
+// InterRAIAntwortOption was previously imported from lib/interrai/types.ts
+// (now deleted). Inlined here since InterRAIItem still uses it.
+export interface InterRAIAntwortOption {
+  wert: string;
+  bezeichnung: string;
+  kurzLabel: string;
+}
 
 /* ══════════════════════════════════════════
    CONTAINER HELPERS
@@ -298,30 +303,8 @@ export interface WorkflowPlan {
 }
 
 /* ══════════════════════════════════════════
-   INTERRAI SEKTIONEN + KLV STATUS PIPELINE
+   KLV STATUS PIPELINE
    ══════════════════════════════════════════ */
-
-export const SEKTIONEN = [
-  { id: "A", name: "Administrative Daten und Beurteilungsgrund" },
-  { id: "B", name: "Aufnahme und Vorgeschichte" },
-  { id: "C", name: "Kognitive Fähigkeiten" },
-  { id: "D", name: "Kommunikation und Sehen" },
-  { id: "E", name: "Stimmungslage und Verhalten" },
-  { id: "F", name: "Psychosoziales Wohlbefinden" },
-  { id: "G", name: "Körperliche Funktionsfähigkeiten" },
-  { id: "H", name: "Kontinenz" },
-  { id: "I", name: "Medizinische Diagnosen" },
-  { id: "J", name: "Gesundheitszustand" },
-  { id: "K", name: "Mund- und Ernährungsstatus" },
-  { id: "L", name: "Zustand der Haut" },
-  { id: "M", name: "Medikamente" },
-  { id: "N", name: "Behandlungen" },
-  { id: "O", name: "Verantwortungen, Verfügungen" },
-  { id: "P", name: "Informelle Unterstützung" },
-  { id: "Q", name: "Wohnumgebungsabklärung" },
-  { id: "R", name: "Entlassungsaussichten und allgemeiner Zustand" },
-  { id: "S", name: "Assessment-Informationen" },
-] as const;
 
 export const KLV_STATUS_PIPELINE: { status: KLVStatus; label: string }[] = [
   { status: "entwurf", label: "Entwurf" },

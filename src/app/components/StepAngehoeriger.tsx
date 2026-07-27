@@ -52,6 +52,7 @@ import { Label } from "./ui/label";
 import { PersonalienFormV2, SteuerFormV2, AnstellungFormV2 } from "./form/MigratedAngehoerigerForms";
 import { PartnerFormV2, KinderFormV2, DokumenteFormV2 } from "./form/MigratedAngehoerigerForms2";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
+import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/krankenkassen";
 import { ZIVILSTAND_OPTIONS } from "../../lib/stammdaten/zivilstand";
 import { Combobox } from "./form/Combobox";
@@ -148,6 +149,8 @@ export interface AngehoerigerFormData {
   /** Ferienanspruch in Wochen (Dezimalzahl) */
   ferienanspruchWochen: string;
   /** Qualifikation */
+  /** Pflegerische Qualifikationsstufe: ohne_srk | srk | fage_dipl */
+  qualifikation: string;
   deutschNiveau: string;
   zertifikatVorhanden: string;
   srkZertifikatVorhanden: string;
@@ -299,6 +302,7 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   externesPensumProzent: "",
   externerEintritt: "",
   bvgAnbindungGewuenscht: "",
+  qualifikation: "",
   deutschNiveau: "",
   zertifikatVorhanden: "nein",
   srkZertifikatVorhanden: "nein",
@@ -513,11 +517,24 @@ function getSubStepStatus(
       return "empty";
     }
     case "dokumente": {
-      const requiredKeys = getRequiredScanKeys(data);
-      const uploadedCount = requiredKeys.filter((k) => !!data.scans[k]).length;
-      if (uploadedCount === requiredKeys.length && requiredKeys.length > 0)
-        return "complete";
-      if (uploadedCount > 0) return "partial";
+      // Stammdaten-Engine: gleiche Quelle wie DokumenteFormV2
+      const kontext: DokumentKontext = {
+        partnerErforderlich:
+          ((data.zivilstand === "verheiratet" || data.zivilstand === "eingetragene_partnerschaft") && data.quellensteuer === "ja")
+          || data.partnerManualToggle === true,
+        hatKinder: parseInt(data.anzahlKinder) > 0,
+        kinderzulagenUeberSpitex: data.kinderzulagenUeberSpitex === "ja",
+        unterhaltspflicht: data.hatUnterhaltspflichtigeKinder === "ja",
+        zertifikatDeutschVorhanden: data.zertifikatVorhanden === "ja",
+        srkZertifikatVorhanden: data.srkZertifikatVorhanden === "ja",
+        assistenzbeitragJa: false,
+      };
+      const sichtbar = sichtbareDokumenttypen(kontext, "angehoeriger");
+      const pflicht = sichtbar.filter(d => d.pflicht && !d.mehrfach);
+      const vollstaendig = pflicht.filter(d => istDokumentVollstaendig(d, data.scans)).length;
+      if (pflicht.length === 0) return "complete";
+      if (vollstaendig === pflicht.length) return "complete";
+      if (vollstaendig > 0) return "partial";
       return "empty";
     }
     default:
@@ -1111,7 +1128,7 @@ function PersonalienForm({
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand */}
 
       {/* ── Section 2: Kontaktdaten ─────────── */}
       <div>
@@ -1225,7 +1242,7 @@ function PersonalienForm({
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand */}
 
       {/* ── Section 3: Krankenkasse (SP-02, SP-03) ─────────── */}
       <div>
@@ -1416,7 +1433,7 @@ function SteuerForm({
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand */}
 
       <div>
         <h5 className="text-foreground mb-3 flex items-center gap-2">
@@ -1433,7 +1450,7 @@ function SteuerForm({
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand */}
 
       <div>
         <h5 className="text-foreground mb-3 flex items-center gap-2">
@@ -1682,7 +1699,7 @@ function PartnerForm({
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand */}
 
       {/* Section 2: Aufenthalt & Ausweis */}
       <div>
@@ -2528,7 +2545,7 @@ function AnstellungForm({
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand */}
 
       {/* Section 2: Auszahlung / Bankdaten */}
       <div>
@@ -2600,7 +2617,7 @@ function AnstellungForm({
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand */}
 
       {/* Completion summary */}
       <div>
@@ -2653,946 +2670,10 @@ function AnstellungForm({
   );
 }
 
-/* ══════════════════════════════════════════
-   STEP 6 – ERFORDERLICHE DOKUMENTE
-   ══════════════════════════════════════════ */
 
-interface ScanItemDef {
-  key: string;
-  label: string;
-  description: string;
-  icon: React.ElementType;
-  mandatory: boolean;
-  condition?: (d: AngehoerigerFormData) => boolean;
-}
+/* Legacy-Dokument-Code (SCAN_ITEMS, DokumenteForm, CameraModal, ScanUploadButton)
+   entfernt — ersetzt durch Stammdaten-Engine in DokumenteFormV2. */
 
-const SCAN_ITEMS: ScanItemDef[] = [
-  {
-    key: "id_scan",
-    label: "ID oder Pass Angehöriger",
-    description: "Gültiger Reisepass oder Identitätskarte (Vorder- und Rückseite)",
-    icon: Shield,
-    mandatory: true,
-  },
-  {
-    key: "spezialbewilligung_b",
-    label: "Einreichungs-Bestätigung Spezialbewilligung B",
-    description: "Bestätigung vom Migrationsamt, dass die Erwerbstätigkeits-Bewilligung beantragt wurde. Gibt die Vertragsphase frei.",
-    icon: ShieldAlert,
-    mandatory: true,
-    condition: (d) => d.aufenthaltsstatus === "B",
-  },
-  {
-    key: "krankenkassenkarte",
-    label: "Krankenkassenkarte Angehöriger",
-    description: "Versichertenkarte mit Kartennummer und Versicherungsnummer",
-    icon: CreditCard,
-    mandatory: true,
-  },
-  {
-    key: "bankkarte",
-    label: "Bankkarte",
-    description: "Debit-/Kreditkarte mit IBAN-Zuordnung oder Bankbestätigung",
-    icon: Landmark,
-    mandatory: true,
-  },
-  {
-    key: "partner_krankenkassenkarte",
-    label: "Krankenkassenkarte Partner/in",
-    description: "Versichertenkarte des Partners / der Partnerin",
-    icon: HeartHandshake,
-    mandatory: true,
-    condition: (d) =>
-      d.zivilstand === "verheiratet" ||
-      d.zivilstand === "eingetragene_partnerschaft" ||
-      d.quellensteuer === "ja",
-  },
-  {
-    key: "kinder_krankenkassenkarte",
-    label: "Krankenkassenkarte Kinder",
-    description: "Versichertenkarten aller unterhaltspflichtigen Kinder",
-    icon: Baby,
-    mandatory: true,
-    condition: (d) => d.hatUnterhaltspflichtigeKinder === "ja",
-  },
-  {
-    key: "nachweis_unterhaltspflichtige_kinder",
-    label: "Nachweis für unterhaltspflichtige Kinder",
-    description: "Familienbüchlein oder Geburtsurkunde der unterhaltspflichtigen Kinder. Eines der beiden Dokumente genügt.",
-    icon: FileText,
-    mandatory: true,
-    condition: (d) => d.hatUnterhaltspflichtigeKinder === "ja",
-  },
-  {
-    key: "nachweis_kinderzulagen",
-    label: "Nachweis für Kinderzulagen über Spitex",
-    description: "Hochzeitsurkunde oder Familienurkunde. Eines der beiden Dokumente genügt.",
-    icon: FileText,
-    mandatory: true,
-    condition: (d) => d.kinderzulagenUeberSpitex === "ja",
-  },
-  {
-    key: "familienbuchlein",
-    label: "Familienbüchlein",
-    description: "Vollständige Kopie mit allen eingetragenen Kindern",
-    icon: FileText,
-    mandatory: true,
-    condition: (d) =>
-      d.kinderzulagenUeberSpitex === "ja" ||
-      d.kinderzulagenBeantragt === "ja",
-  },
-];
-
-function getRequiredScanKeys(data: AngehoerigerFormData): string[] {
-  return SCAN_ITEMS.filter(
-    (item) => item.mandatory && (!item.condition || item.condition(data))
-  ).map((item) => item.key);
-}
-
-function getVisibleScanItems(data: AngehoerigerFormData): ScanItemDef[] {
-  return SCAN_ITEMS.filter(
-    (item) => !item.condition || item.condition(data)
-  );
-}
-
-/* ── Camera Modal ───────────────────────── */
-function CameraModal({
-  open,
-  docLabel,
-  onCapture,
-  onClose,
-}: {
-  open: boolean;
-  docLabel: string;
-  onCapture: (file: ScanFile) => void;
-  onClose: () => void;
-}) {
-  const [phase, setPhase] = useState<
-    "viewfinder" | "capturing" | "preview" | "uploading" | "done"
-  >("viewfinder");
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setPhase("viewfinder");
-      setCapturedImage(null);
-    }
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [open]);
-
-  if (!open) return null;
-
-  const handleCapture = () => {
-    setPhase("capturing");
-    // Simulate camera flash + capture
-    timerRef.current = setTimeout(() => {
-      // Generate a placeholder "captured" preview
-      const canvas = document.createElement("canvas");
-      canvas.width = 400;
-      canvas.height = 280;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        // Document-like gradient
-        const grad = ctx.createLinearGradient(0, 0, 400, 280);
-        grad.addColorStop(0, "#f0f4ff");
-        grad.addColorStop(0.5, "#e8eeff");
-        grad.addColorStop(1, "#f5f7ff");
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 400, 280);
-        // Simulated document edges
-        ctx.strokeStyle = "#c7d2fe";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(30, 20, 340, 240);
-        // Text lines
-        ctx.fillStyle = "#94a3b8";
-        for (let i = 0; i < 6; i++) {
-          const w = 120 + Math.random() * 180;
-          ctx.fillRect(55, 50 + i * 32, w, 8);
-        }
-        // Photo placeholder
-        ctx.fillStyle = "#cbd5e1";
-        ctx.fillRect(280, 45, 65, 80);
-      }
-      setCapturedImage(canvas.toDataURL("image/png"));
-      setPhase("preview");
-    }, 600);
-  };
-
-  const handleRetake = () => {
-    setCapturedImage(null);
-    setPhase("viewfinder");
-  };
-
-  const handleConfirm = () => {
-    setPhase("uploading");
-    // Simulate upload to SharePoint
-    timerRef.current = setTimeout(() => {
-      setPhase("done");
-      timerRef.current = setTimeout(() => {
-        const now = new Date();
-        onCapture({
-          name: `${docLabel.replace(/[^a-zA-Z0-9äöüÄÖÜ]/g, "_")}_${now.getTime()}.pdf`,
-          type: "application/pdf",
-          size: `${(Math.random() * 2 + 0.3).toFixed(1)} MB`,
-          timestamp: now.toLocaleString("de-CH"),
-          previewUrl: capturedImage,
-        });
-      }, 800);
-    }, 1500);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-card rounded-2xl border border-border shadow-2xl w-full max-w-lg overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border-light">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-primary-light flex items-center justify-center">
-              <Camera className="w-4 h-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-[13px] text-foreground" style={{ fontWeight: 600 }}>
-                Dokument scannen
-              </p>
-              <p className="text-[11px] text-muted-foreground">{docLabel}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center transition-colors"
-          >
-            <X className="w-4 h-4 text-muted-foreground" />
-          </button>
-        </div>
-
-        {/* Viewport */}
-        <div className="relative bg-black/95 aspect-[4/3] flex items-center justify-center overflow-hidden">
-          {phase === "viewfinder" && (
-            <>
-              {/* Simulated camera viewfinder */}
-              <div className="absolute inset-6 border-2 border-white/20 rounded-xl">
-                {/* Corner marks */}
-                <div className="absolute -top-px -left-px w-6 h-6 border-t-2 border-l-2 border-white/80 rounded-tl-md" />
-                <div className="absolute -top-px -right-px w-6 h-6 border-t-2 border-r-2 border-white/80 rounded-tr-md" />
-                <div className="absolute -bottom-px -left-px w-6 h-6 border-b-2 border-l-2 border-white/80 rounded-bl-md" />
-                <div className="absolute -bottom-px -right-px w-6 h-6 border-b-2 border-r-2 border-white/80 rounded-br-md" />
-              </div>
-              {/* Scan line animation */}
-              <div className="absolute inset-x-8 top-8 bottom-8">
-                <div
-                  className="h-0.5 bg-primary/60 rounded-full"
-                  style={{
-                    animation: "scanline 2.5s ease-in-out infinite",
-                  }}
-                />
-                <style>{`
-                  @keyframes scanline {
-                    0%, 100% { transform: translateY(0); }
-                    50% { transform: translateY(calc(100% - 2px)); }
-                  }
-                `}</style>
-              </div>
-              {/* Center icon */}
-              <div className="flex flex-col items-center gap-2 z-10">
-                <ScanLine className="w-10 h-10 text-white/40" />
-                <p className="text-[12px] text-white/50" style={{ fontWeight: 500 }}>
-                  Dokument im Rahmen positionieren
-                </p>
-              </div>
-            </>
-          )}
-
-          {phase === "capturing" && (
-            <div className="absolute inset-0 bg-white animate-pulse flex items-center justify-center">
-              <Camera className="w-12 h-12 text-primary/30" />
-            </div>
-          )}
-
-          {(phase === "preview" || phase === "uploading" || phase === "done") &&
-            capturedImage && (
-              <div className="relative w-full h-full">
-                <img
-                  src={capturedImage}
-                  alt="Captured"
-                  className="w-full h-full object-contain"
-                />
-                {phase === "uploading" && (
-                  <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-                      <CloudUpload className="w-6 h-6 text-white animate-bounce" />
-                    </div>
-                    <p className="text-white text-[13px]" style={{ fontWeight: 500 }}>
-                      Wird in SharePoint hochgeladen…
-                    </p>
-                    <div className="w-48 h-1.5 bg-white/20 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary rounded-full"
-                        style={{
-                          animation: "uploadbar 1.5s ease-out forwards",
-                        }}
-                      />
-                      <style>{`
-                        @keyframes uploadbar {
-                          0% { width: 0%; }
-                          60% { width: 75%; }
-                          100% { width: 100%; }
-                        }
-                      `}</style>
-                    </div>
-                  </div>
-                )}
-                {phase === "done" && (
-                  <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-3">
-                    <div className="w-14 h-14 rounded-full bg-success flex items-center justify-center">
-                      <Check className="w-7 h-7 text-white" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-white text-[14px]" style={{ fontWeight: 600 }}>
-                        Erfolgreich gespeichert
-                      </p>
-                      <div className="flex items-center justify-center gap-1.5 mt-1">
-                        <FolderSync className="w-3.5 h-3.5 text-white/70" />
-                        <p className="text-white/70 text-[12px]">
-                          Dokument im SharePoint gespeichert.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-        </div>
-
-        {/* Controls */}
-        <div className="px-5 py-4 border-t border-border-light">
-          {phase === "viewfinder" && (
-            <div className="flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 h-10 rounded-xl border border-border text-[13px] text-muted-foreground hover:bg-muted transition-colors"
-                style={{ fontWeight: 500 }}
-              >
-                Abbrechen
-              </button>
-              <button
-                type="button"
-                onClick={handleCapture}
-                className="flex-[2] h-10 rounded-xl bg-primary text-primary-foreground text-[13px] flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors"
-                style={{ fontWeight: 600 }}
-              >
-                <Camera className="w-4 h-4" />
-                Aufnahme
-              </button>
-            </div>
-          )}
-
-          {phase === "preview" && (
-            <div className="flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={handleRetake}
-                className="flex-1 h-10 rounded-xl border border-border text-[13px] text-muted-foreground hover:bg-muted transition-colors flex items-center justify-center gap-1.5"
-                style={{ fontWeight: 500 }}
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Wiederholen
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirm}
-                className="flex-[2] h-10 rounded-xl bg-success text-white text-[13px] flex items-center justify-center gap-2 hover:bg-success/90 transition-colors"
-                style={{ fontWeight: 600 }}
-              >
-                <Upload className="w-4 h-4" />
-                Hochladen & Speichern
-              </button>
-            </div>
-          )}
-
-          {(phase === "capturing" || phase === "uploading" || phase === "done") && (
-            <div className="flex items-center justify-center h-10">
-              {phase !== "done" ? (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="text-[13px]">
-                    {phase === "capturing" ? "Wird aufgenommen…" : "Wird hochgeladen…"}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-success">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span className="text-[13px]" style={{ fontWeight: 500 }}>
-                    Dokument im SharePoint gespeichert.
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── File upload via native picker ──────── */
-function useFileUpload(
-  scanKey: string,
-  docLabel: string,
-  data: AngehoerigerFormData,
-  onChange: (d: AngehoerigerFormData) => void
-) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const trigger = () => inputRef.current?.click();
-
-  const handleFile = (file: File) => {
-    const now = new Date();
-    const previewUrl = file.type.startsWith("image/")
-      ? URL.createObjectURL(file)
-      : null;
-    const scanFile: ScanFile = {
-      name: file.name,
-      type: file.type,
-      size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
-      timestamp: now.toLocaleString("de-CH"),
-      previewUrl,
-    };
-    onChange({
-      ...data,
-      scans: { ...data.scans, [scanKey]: scanFile },
-    });
-  };
-
-  const InputEl = (
-    <input
-      ref={inputRef}
-      type="file"
-      accept="image/*,.pdf"
-      className="hidden"
-      onChange={(e) => {
-        const f = e.target.files?.[0];
-        if (f) handleFile(f);
-        e.target.value = "";
-      }}
-    />
-  );
-
-  return { trigger, InputEl };
-}
-
-/* ── DokumenteForm ──────────────────────── */
-function DokumenteForm({
-  data,
-  onChange,
-  onOpenSpezialbewilligung,
-}: {
-  data: AngehoerigerFormData;
-  onChange: (d: AngehoerigerFormData) => void;
-  onOpenSpezialbewilligung?: () => void;
-}) {
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const [cameraDocKey, setCameraDocKey] = useState("");
-  const [cameraDocLabel, setCameraDocLabel] = useState("");
-  const [sharePointToasts, setSharePointToasts] = useState<Set<string>>(new Set());
-  const [previewOpen, setPreviewOpen] = useState<string | null>(null);
-
-  // Sync: if dialog already uploaded the document, reflect it in scans
-  const syncedData = { ...data };
-  if (data.aufenthaltsstatus === "B" && data.spezialbewilligungStatus === "eingereicht" && data.spezialbewilligungDokument && !data.scans.spezialbewilligung_b) {
-    syncedData.scans = {
-      ...data.scans,
-      spezialbewilligung_b: {
-        name: data.spezialbewilligungDokument.name,
-        type: "application/pdf",
-        size: data.spezialbewilligungDokument.size,
-        timestamp: formatDateDisplay(data.spezialbewilligungEinreichungsDatum),
-        previewUrl: null,
-      },
-    };
-  }
-
-  const handleChange = (updated: AngehoerigerFormData) => {
-    const oldScan = data.scans.spezialbewilligung_b;
-    const newScan = updated.scans.spezialbewilligung_b;
-
-    if (!oldScan && newScan) {
-      const today = "2026-03-03";
-      const todayDisplay = formatDateDisplay(today);
-      const ext = newScan.name.split(".").pop() || "pdf";
-      const structuredName = `Einreichungs-Bestätigung Spezialbewilligung B – ${todayDisplay}.${ext}`;
-      onChange({
-        ...updated,
-        spezialbewilligungStatus: "eingereicht",
-        spezialbewilligungDokument: { name: structuredName, size: newScan.size },
-        spezialbewilligungEinreichungsDatum: today,
-        scans: { ...updated.scans, spezialbewilligung_b: { ...newScan, name: structuredName } },
-      });
-      return;
-    }
-
-    if (oldScan && !newScan) {
-      onChange({
-        ...updated,
-        spezialbewilligungStatus: "ausstehend",
-        spezialbewilligungDokument: null,
-        spezialbewilligungEinreichungsDatum: "",
-      });
-      return;
-    }
-
-    onChange(updated);
-  };
-
-  const visibleItems = getVisibleScanItems(syncedData);
-  const requiredKeys = getRequiredScanKeys(syncedData);
-  const uploadedRequired = requiredKeys.filter((k) => !!syncedData.scans[k]).length;
-  const totalRequired = requiredKeys.length;
-  const allComplete = uploadedRequired === totalRequired && totalRequired > 0;
-
-  const openCamera = (key: string, label: string) => {
-    setCameraDocKey(key);
-    setCameraDocLabel(label);
-    setCameraOpen(true);
-  };
-
-  const handleCameraCapture = (file: ScanFile) => {
-    handleChange({
-      ...syncedData,
-      scans: { ...syncedData.scans, [cameraDocKey]: file },
-    });
-    setCameraOpen(false);
-    // Show SharePoint toast
-    setSharePointToasts((prev) => new Set(prev).add(cameraDocKey));
-    setTimeout(() => {
-      setSharePointToasts((prev) => {
-        const next = new Set(prev);
-        next.delete(cameraDocKey);
-        return next;
-      });
-    }, 4000);
-  };
-
-  const [confirmRemoveKey, setConfirmRemoveKey] = useState<string | null>(null);
-
-  const removeScan = (key: string) => {
-    if (key === "spezialbewilligung_b") {
-      setConfirmRemoveKey(key);
-      return;
-    }
-    handleChange({
-      ...syncedData,
-      scans: { ...syncedData.scans, [key]: null },
-    });
-  };
-
-  const confirmRemove = () => {
-    if (confirmRemoveKey) {
-      handleChange({
-        ...syncedData,
-        scans: { ...syncedData.scans, [confirmRemoveKey]: null },
-      });
-      setConfirmRemoveKey(null);
-    }
-  };
-
-  return (
-    <div className="space-y-5">
-      {/* Summary bar */}
-      <div className="flex items-center justify-between p-4 rounded-xl bg-muted/20 border border-border">
-        <div className="flex items-center gap-3">
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-              allComplete ? "bg-success-light" : "bg-primary-light"
-            }`}
-          >
-            {allComplete ? (
-              <FileCheck className="w-5 h-5 text-success" />
-            ) : (
-              <FileText className="w-5 h-5 text-primary" />
-            )}
-          </div>
-          <div>
-            <p className="text-[13px] text-foreground" style={{ fontWeight: 600 }}>
-              Pflicht-Dokumente
-            </p>
-            <p className="text-[12px] text-muted-foreground">
-              {uploadedRequired} von {totalRequired} hochgeladen
-            </p>
-          </div>
-        </div>
-        {/* Progress ring */}
-        <div className="relative w-12 h-12">
-          <svg className="w-12 h-12 -rotate-90" viewBox="0 0 48 48">
-            <circle
-              cx="24"
-              cy="24"
-              r="20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3"
-              className="text-muted/30"
-            />
-            <circle
-              cx="24"
-              cy="24"
-              r="20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3"
-              strokeDasharray={`${(uploadedRequired / Math.max(totalRequired, 1)) * 125.6} 125.6`}
-              strokeLinecap="round"
-              className={allComplete ? "text-success" : "text-primary"}
-              style={{ transition: "stroke-dasharray 0.5s ease" }}
-            />
-          </svg>
-          <span
-            className={`absolute inset-0 flex items-center justify-center text-[11px] tabular-nums ${
-              allComplete ? "text-success" : "text-foreground"
-            }`}
-            style={{ fontWeight: 700 }}
-          >
-            {totalRequired > 0
-              ? `${Math.round((uploadedRequired / totalRequired) * 100)}%`
-              : "–"}
-          </span>
-        </div>
-      </div>
-
-      {/* Scan items list */}
-      <div className="space-y-2.5">
-        {visibleItems.map((item) => {
-          const scan = syncedData.scans[item.key] ?? null;
-          const isUploaded = !!scan;
-          const isRequired = requiredKeys.includes(item.key);
-          const showToast = sharePointToasts.has(item.key);
-          const Icon = item.icon;
-
-          return (
-            <div
-              key={item.key}
-              className={`rounded-xl border transition-all ${
-                isUploaded
-                  ? "border-success/25 bg-success-light/10"
-                  : isRequired
-                  ? "border-warning/20 bg-warning-light/5"
-                  : "border-border bg-card"
-              }`}
-            >
-              <div className="flex items-start gap-3.5 p-4">
-                {/* Status icon */}
-                <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                    isUploaded
-                      ? "bg-success text-white"
-                      : isRequired
-                      ? "bg-warning-light text-warning"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {isUploaded ? (
-                    <Check className="w-5 h-5" />
-                  ) : (
-                    <Icon className="w-5 h-5" />
-                  )}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>
-                          {item.label}
-                        </p>
-                        {isRequired && !isUploaded && (
-                          <span
-                            className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[9px] bg-error/10 text-error shrink-0"
-                            style={{ fontWeight: 600 }}
-                          >
-                            Pflicht
-                          </span>
-                        )}
-                        {!isRequired && (
-                          <span
-                            className="inline-flex items-center px-1.5 py-[1px] rounded text-[9px] bg-muted text-muted-foreground shrink-0"
-                            style={{ fontWeight: 600 }}
-                          >
-                            Optional
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                        {item.description}
-                      </p>
-                    </div>
-
-                    {/* Status badge */}
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] shrink-0 ${
-                        isUploaded
-                          ? "bg-success-light text-success-foreground"
-                          : isRequired
-                          ? "bg-error/10 text-error"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                      style={{ fontWeight: 600 }}
-                    >
-                      {isUploaded && item.key === "spezialbewilligung_b" && data.spezialbewilligungEinreichungsDatum ? (
-                        <>
-                          <CheckCircle2 className="w-3 h-3" />
-                          Eingereicht am {formatDateDisplay(data.spezialbewilligungEinreichungsDatum)}
-                        </>
-                      ) : isUploaded ? (
-                        <>
-                          <CheckCircle2 className="w-3 h-3" />
-                          Hochgeladen
-                        </>
-                      ) : isRequired ? (
-                        <>
-                          <AlertCircle className="w-3 h-3" />
-                          Fehlend
-                        </>
-                      ) : (
-                        <>
-                          <Circle className="w-3 h-3" />
-                          Nicht vorhanden
-                        </>
-                      )}
-                    </span>
-                  </div>
-
-                  {/* Uploaded file details */}
-                  {isUploaded && scan && (
-                    <div className="mt-3 p-3 rounded-lg bg-success-light/30 border border-success/10">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileCheck className="w-4 h-4 text-success shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-[12px] text-foreground truncate" style={{ fontWeight: 500 }}>
-                              {scan.name}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {scan.size} · {scan.timestamp}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {scan.previewUrl && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPreviewOpen(
-                                  previewOpen === item.key ? null : item.key
-                                )
-                              }
-                              className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-muted border border-border transition-colors"
-                              title="Vorschau"
-                            >
-                              <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => removeScan(item.key)}
-                            className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors"
-                            title="Entfernen"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-error" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Image preview */}
-                      {previewOpen === item.key && scan.previewUrl && (
-                        <div className="mt-2.5 rounded-lg overflow-hidden border border-success/10">
-                          <img
-                            src={scan.previewUrl}
-                            alt={item.label}
-                            className="w-full max-h-40 object-contain bg-white"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* SharePoint toast */}
-                  {showToast && (
-                    <div className="mt-2.5 flex items-center gap-2 p-2.5 rounded-lg bg-success-light border border-success/15 animate-in fade-in slide-in-from-bottom-2">
-                      <FolderSync className="w-4 h-4 text-success shrink-0" />
-                      <p className="text-[12px] text-success-foreground" style={{ fontWeight: 500 }}>
-                        Dokument im SharePoint gespeichert.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Action buttons */}
-                  {!isUploaded && (
-                    <div className="mt-3 flex items-center gap-2 flex-wrap">
-                      <ScanUploadButton
-                        scanKey={item.key}
-                        docLabel={item.label}
-                        data={syncedData}
-                        onChange={handleChange}
-                        onCameraOpen={() => openCamera(item.key, item.label)}
-                      />
-                      {item.key === "spezialbewilligung_b" && onOpenSpezialbewilligung && (
-                        <button
-                          type="button"
-                          onClick={onOpenSpezialbewilligung}
-                          className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline cursor-pointer"
-                          style={{ fontWeight: 500 }}
-                        >
-                          <Info className="w-3 h-3" />
-                          Mehr zum Bewilligungs-Prozess →
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Missing mandatory warning */}
-      {!allComplete && uploadedRequired > 0 && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-warning-light/40 border border-warning/15">
-          <div className="w-9 h-9 rounded-lg bg-warning-light flex items-center justify-center shrink-0 mt-0.5">
-            <AlertCircle className="w-[18px] h-[18px] text-warning" />
-          </div>
-          <div>
-            <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>
-              {totalRequired - uploadedRequired} Pflicht-Dokument{totalRequired - uploadedRequired !== 1 ? "e" : ""} fehlen
-            </p>
-            <p className="text-[12px] text-muted-foreground mt-0.5 leading-relaxed">
-              {visibleItems
-                .filter(
-                  (item) =>
-                    requiredKeys.includes(item.key) && !data.scans[item.key]
-                )
-                .map((item) => item.label)
-                .join(", ")}
-              . Dieser Abschnitt kann erst als vollständig markiert werden, wenn alle Pflichtdokumente hochgeladen sind.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* All complete celebration */}
-      {allComplete && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-success-light/40 border border-success/15">
-          <div className="w-9 h-9 rounded-lg bg-success-light flex items-center justify-center shrink-0 mt-0.5">
-            <FileCheck className="w-[18px] h-[18px] text-success" />
-          </div>
-          <div>
-            <p className="text-[13px] text-success-foreground" style={{ fontWeight: 500 }}>
-              Alle Pflichtdokumente vollständig
-            </p>
-            <div className="flex items-center gap-1.5 mt-1">
-              <FolderSync className="w-3.5 h-3.5 text-success" />
-              <p className="text-[12px] text-muted-foreground">
-                Alle Dokumente wurden im SharePoint gespeichert und sind für die Personaladministration zugänglich.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Info callout */}
-      <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-info-light/50 border border-info/10">
-        <Info className="w-4 h-4 text-info mt-0.5 shrink-0" />
-        <p className="text-[12px] text-info-foreground leading-relaxed">
-          Dokumente werden als PDF konvertiert und automatisch im SharePoint der Organisation abgelegt. Auf dem Tablet können Sie die Kamerafunktion nutzen, um Dokumente direkt abzufotografieren. Alternativ laden Sie bestehende Dateien über «Datei wählen» hoch. Die Pflichtdokumente variieren je nach Zivilstand, Kinderstatus und Zulagen-Einstellungen.
-        </p>
-      </div>
-
-      {/* Camera modal */}
-      <CameraModal
-        open={cameraOpen}
-        docLabel={cameraDocLabel}
-        onCapture={handleCameraCapture}
-        onClose={() => setCameraOpen(false)}
-      />
-
-      {/* Spezialbewilligung remove confirmation */}
-      {confirmRemoveKey === "spezialbewilligung_b" && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-foreground/20 backdrop-blur-[1px]" onClick={() => setConfirmRemoveKey(null)} />
-          <div className="relative bg-card rounded-xl border border-border shadow-xl p-5 max-w-[360px]">
-            <h5 className="text-foreground">Einreichung entfernen?</h5>
-            <p className="text-[12px] text-muted-foreground mt-1.5 leading-relaxed">
-              Die Einreichungs-Bestätigung wird entfernt und der Status auf "ausstehend" zurückgesetzt.
-              Die Vertragsphase wird erneut blockiert.
-            </p>
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <button
-                onClick={() => setConfirmRemoveKey(null)}
-                className="px-3 py-[6px] rounded-xl text-[12px] text-foreground hover:bg-secondary transition-colors cursor-pointer"
-                style={{ fontWeight: 500 }}
-              >
-                Abbrechen
-              </button>
-              <button
-                onClick={confirmRemove}
-                className="px-3 py-[6px] rounded-xl text-[12px] bg-error text-white hover:bg-error/90 transition-colors cursor-pointer"
-                style={{ fontWeight: 500 }}
-              >
-                Entfernen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ── Scan Upload Button pair ──────────── */
-function ScanUploadButton({
-  scanKey,
-  docLabel,
-  data,
-  onChange,
-  onCameraOpen,
-}: {
-  scanKey: string;
-  docLabel: string;
-  data: AngehoerigerFormData;
-  onChange: (d: AngehoerigerFormData) => void;
-  onCameraOpen: () => void;
-}) {
-  const { trigger, InputEl } = useFileUpload(scanKey, docLabel, data, onChange);
-
-  return (
-    <>
-      {InputEl}
-      <button
-        type="button"
-        onClick={onCameraOpen}
-        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-[12px] hover:bg-primary/90 transition-colors"
-        style={{ fontWeight: 500 }}
-      >
-        <Camera className="w-3.5 h-3.5" />
-        Scannen
-      </button>
-      <button
-        type="button"
-        onClick={trigger}
-        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border text-[12px] text-muted-foreground hover:bg-muted transition-colors"
-        style={{ fontWeight: 500 }}
-      >
-        <Upload className="w-3.5 h-3.5" />
-        Datei wählen
-      </button>
-    </>
-  );
-}
 
 /* ══════════════════════════════════════════
    SUB-STEP CONTENT ROUTER

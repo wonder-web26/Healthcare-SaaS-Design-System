@@ -42,6 +42,10 @@ import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
 import { getTicketsFuerSubjekt } from "../../lib/rhythmus/engine";
 import { toast } from "sonner";
+import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
+import { useRecording } from "../recording/RecordingContext";
+import { Mic } from "lucide-react";
+import { getPersonByOnboardingId, getAssessmentsForPerson, createAssessment } from "../../lib/interrai/store";
 
 /* ══════════════════════════════════════════
    STEP DEFINITIONS
@@ -62,7 +66,7 @@ const baseSteps: WizardStep[] = [
   {
     id: 1,
     key: "angehoeriger",
-    label: "Angehöriger (HR)",
+    label: "Angehöriger",
     shortLabel: "Angehöriger",
     icon: Users,
     description: "Personalangaben und HR-Daten des Angehörigen",
@@ -78,7 +82,7 @@ const baseSteps: WizardStep[] = [
   {
     id: 2,
     key: "patient",
-    label: "Patient (Medizin)",
+    label: "Patient",
     shortLabel: "Patient",
     icon: HeartPulse,
     description: "Medizinische und pflegerische Angaben zum Patienten",
@@ -226,6 +230,14 @@ export function OnboardingPage() {
   const [showSpezialbewilligung, setShowSpezialbewilligung] = useState(false);
   const [showAbschlussDialog, setShowAbschlussDialog] = useState(false);
   const [showAbbruchDialog, setShowAbbruchDialog] = useState(false);
+  /** Gespeicherte Abschluss-Begründung (innerhalb der Sitzung einsehbar) */
+  const [abschlussAuditLog, setAbschlussAuditLog] = useState<{
+    zeitpunkt: string; person: string; fehlendeDokumente: string[]; begruendung: string;
+  } | null>(null);
+  const recording = useRecording();
+  const obPerson = caseId ? getPersonByOnboardingId(caseId) : null;
+  const isRecording = recording.phase === "recording" && obPerson != null && recording.session?.personId === obPerson.id;
+  const hasRecording = false; // No "done" phase in new recording model
 
   /* ── Dynamic steps based on Aufenthaltsstatus B ── */
   const requiresB = angehoerigerData.aufenthaltsstatus === "B";
@@ -267,7 +279,7 @@ export function OnboardingPage() {
     setCompletedSteps((prev) => {
       const next = new Set(prev);
       const vertragStepId = requiresB ? 4 : 3;
-      if (step3Valid && !requiresB) next.add(vertragStepId);
+      if (step3Valid) next.add(vertragStepId);
       else next.delete(vertragStepId);
       return next;
     });
@@ -292,8 +304,8 @@ export function OnboardingPage() {
 
   const goNext = () => {
     if (currentStep < wizardSteps.length) {
-      // Mark current step as completed when moving forward
-      setCompletedSteps((prev) => new Set([...prev, currentStep]));
+      // Navigation erlaubt auch bei unvollständigen Schritten.
+      // Completion wird ausschliesslich aus dem Füllzustand abgeleitet (useEffect oben).
       goToStep(currentStep + 1);
     }
   };
@@ -304,18 +316,8 @@ export function OnboardingPage() {
 
   /* ── Save simulation ───────────────────── */
   const handleSave = useCallback(() => {
-    setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString("de-CH", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      setLastSaved(timeStr);
-      setShowSaveToast(true);
-      setTimeout(() => setShowSaveToast(false), 3000);
-    }, 1200);
+    // Prototyp: keine Persistenz. Hinweis statt Scheinspeicherung.
+    toast("Prototyp — Daten werden innerhalb der Sitzung gehalten, aber nicht dauerhaft gespeichert.");
   }, []);
 
   useEffect(() => {
@@ -350,11 +352,29 @@ export function OnboardingPage() {
    * Header-Status, Footer-Sperre, und Abschluss-Dialog nutzen alle diese Ableitung.
    */
   const abschlussPruefung = useMemo(() => {
-    const fehlendePflichtdokumente = getFehlendePflichtdokumente(patientData.scans);
+    // Patient-Dokumente
+    const fehlendPatient = getFehlendePflichtdokumente(patientData.scans);
+
+    // Angehörigen-Dokumente (gleiche Engine wie DokumenteFormV2 und getSubStepStatus)
+    const angKontext: DokumentKontext = {
+      partnerErforderlich: ((angehoerigerData.zivilstand === "verheiratet" || angehoerigerData.zivilstand === "eingetragene_partnerschaft") && angehoerigerData.quellensteuer === "ja") || angehoerigerData.partnerManualToggle === true,
+      hatKinder: parseInt(angehoerigerData.anzahlKinder) > 0,
+      kinderzulagenUeberSpitex: angehoerigerData.kinderzulagenUeberSpitex === "ja",
+      unterhaltspflicht: angehoerigerData.hatUnterhaltspflichtigeKinder === "ja",
+      zertifikatDeutschVorhanden: angehoerigerData.zertifikatVorhanden === "ja",
+      srkZertifikatVorhanden: angehoerigerData.srkZertifikatVorhanden === "ja",
+      assistenzbeitragJa: false,
+    };
+    const angSichtbar = sichtbareDokumenttypen(angKontext, "angehoeriger");
+    const fehlendAng = angSichtbar
+      .filter(d => d.pflicht && !d.mehrfach && !istDokumentVollstaendig(d, angehoerigerData.scans))
+      .map(d => d.label);
+
+    const fehlendePflichtdokumente = [...fehlendPatient, ...fehlendAng];
     const arbeitsvertragOk = step3Valid;
     const vollstaendig = arbeitsvertragOk && fehlendePflichtdokumente.length === 0;
-    return { arbeitsvertragOk, fehlendePflichtdokumente, vollstaendig };
-  }, [step3Valid, patientData.scans]);
+    return { arbeitsvertragOk, fehlendePflichtdokumente, fehlendPatient, fehlendAng, vollstaendig };
+  }, [step3Valid, patientData.scans, angehoerigerData]);
 
   const fehlendeDocs = abschlussPruefung.fehlendePflichtdokumente.length;
 
@@ -394,7 +414,7 @@ export function OnboardingPage() {
 
   return (
     <EinwilligungProvider onboardingId={caseId || null} patientId={null}>
-    <ArztAnfrageProvider onboardingId={caseId || null} patientId={null}>
+    <ArztAnfrageProvider onboardingId={caseId || null} patientId={null} hausarztName={patientData.hausarztName} hausarztEmail={patientData.hausarztEmail}>
     <div className="flex flex-col h-full min-h-0">
       {/* ═══════════════════════════════════════
          HEADER CARD — einzeilig, scroll-collapse
@@ -466,7 +486,7 @@ export function OnboardingPage() {
                       onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                     >
                       <Check style={{ width: 9, height: 9 }} />
-                      {workflowDone} von {workflowTotal} Schritten
+                      {completedCount} von {nonBlockedSteps.length} Schritten
                     </button>
                     {/* Pill 2: Pflichtdokumente — neutral (Outline) oder Ocker (letzter Blocker) */}
                     {fehlendeDocs > 0 && (
@@ -497,6 +517,49 @@ export function OnboardingPage() {
           </div>
         );
       })()}
+
+      {/* ═══════════════════════════════════════
+         AUFZEICHNUNG (Onboarding-Ebene, sichtbar in allen Schritten/Tabs)
+         ═══════════════════════════════════════ */}
+      {isExisting && (
+        <div style={{ padding: "0 var(--space-6)", marginBottom: 2 }}>
+          {isRecording ? (
+            /* During recording: quiet hint — Beenden is in the global bar only */
+            <div className="flex items-center" style={{ gap: 8, padding: "8px 16px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--status-danger)", animation: "pulse 1.5s ease-in-out infinite", flexShrink: 0 }} />
+              <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+                Aufzeichnung läuft — beenden über die Leiste oben.
+              </span>
+            </div>
+          ) : (
+            /* Vor der Aufzeichnung: Einstiegsblock */
+            <div style={{ padding: "14px 18px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>Gespräch aufzeichnen</div>
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>
+                    Aus dem Gespräch entstehen Vorschläge für die Bedarfsabklärung (interRAI), Pflegeplanung und KLV-Verordnung.
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!caseId) return;
+                    const person = getPersonByOnboardingId(caseId);
+                    if (!person) return;
+                    const assessments = getAssessmentsForPerson(person.id);
+                    const target = assessments.find(a => a.status === "in_bearbeitung") ?? createAssessment(person.id, "erstabklaerung");
+                    recording.startRecording(person.id, target.id, `${person.vorname} ${person.nachname}`);
+                  }}
+                  className="inline-flex items-center cursor-pointer shrink-0"
+                  style={{ gap: 6, padding: "8px 20px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
+                >
+                  <Mic style={{ width: 14, height: 14 }} /> Aufzeichnen
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════
          MOBILE STEPPER
@@ -552,6 +615,7 @@ export function OnboardingPage() {
                     const iconBg = isBlocked ? "var(--status-danger-bg)" : isDanger ? "var(--status-danger)" : isCompleted ? "var(--status-success)" : isInProgress ? "var(--brand-primary)" : "var(--bg-secondary)";
                     const iconColor = isBlocked ? "var(--status-danger)" : (isDanger || isCompleted || isInProgress) ? "var(--text-on-dark)" : "var(--text-secondary)";
 
+                    const isVisitedButIncomplete = visitedSteps.has(step.id) && !isCompleted && !isInProgress;
                     let statusText = "Ausstehend";
                     let statusColor = "var(--text-tertiary)";
                     if (isBlocked) { statusText = "Blockiert"; statusColor = "var(--status-danger)"; }
@@ -562,6 +626,7 @@ export function OnboardingPage() {
                         : "Abgeschlossen";
                       statusColor = "var(--status-success-text)";
                     } else if (isInProgress) { statusText = "In Bearbeitung"; statusColor = "var(--text-secondary)"; }
+                    else if (isVisitedButIncomplete) { statusText = "Unvollständig"; statusColor = "var(--status-warning-text)"; }
 
                     return (
                       <div key={step.key}>
@@ -678,20 +743,26 @@ export function OnboardingPage() {
                       );
                     })()
                   ) : (
-                    <button
-                      onClick={() => {
-                        if (!abschlussPruefung.arbeitsvertragOk) return; // hart gesperrt
-                        setOverrideBegrundung("");
-                        setShowAbschlussDialog(true);
-                      }}
-                      disabled={isSaving || !abschlussPruefung.arbeitsvertragOk}
-                      className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                      style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
-                      onMouseEnter={e => { if (abschlussPruefung.arbeitsvertragOk) e.currentTarget.style.background = "var(--brand-primary-dark)"; }}
-                      onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
-                      title={!abschlussPruefung.arbeitsvertragOk ? "Erst Arbeitsvertrag unterschreiben" : undefined}>
-                      <Check style={{ width: 14, height: 14 }} /> Onboarding abschliessen
-                    </button>
+                    <div>
+                      <button
+                        onClick={() => {
+                          if (!abschlussPruefung.arbeitsvertragOk) return;
+                          setOverrideBegrundung("");
+                          setShowAbschlussDialog(true);
+                        }}
+                        disabled={isSaving || !abschlussPruefung.arbeitsvertragOk}
+                        className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
+                        onMouseEnter={e => { if (abschlussPruefung.arbeitsvertragOk) e.currentTarget.style.background = "var(--brand-primary-dark)"; }}
+                        onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
+                        <Check style={{ width: 14, height: 14 }} /> Onboarding abschliessen
+                      </button>
+                      {!abschlussPruefung.arbeitsvertragOk && (
+                        <div style={{ marginTop: 6, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+                          Arbeitsvertrag muss zuerst im Schritt «Vertragsunterzeichnung» unterschrieben werden.
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -711,20 +782,7 @@ export function OnboardingPage() {
         />
       )}
 
-      {/* ═══════════════════════════════════════
-         SAVE TOAST
-         ═══════════════════════════════════════ */}
-      {showSaveToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-foreground text-background shadow-lg">
-            <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-            <span className="text-[13px]" style={{ fontWeight: 500 }}>
-              Fortschritt gespeichert
-            </span>
-            <span className="text-[11px] opacity-70">{lastSaved}</span>
-          </div>
-        </div>
-      )}
+      {/* Save-Toast entfernt — Prototyp hat keine Persistenz */}
 
       {/* ═══════════════════════════════════════
          ABSCHLUSS-DIALOG (shared abschlussPruefung)
@@ -757,9 +815,22 @@ export function OnboardingPage() {
                   </span>
                 </div>
                 <div style={{ padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: "var(--radius-card)", marginBottom: 10, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
-                  {abschlussPruefung.fehlendePflichtdokumente.map((label, i) => (
-                    <div key={i} style={{ padding: "2px 0" }}>· {label}</div>
-                  ))}
+                  {abschlussPruefung.fehlendPatient.length > 0 && (
+                    <div style={{ marginBottom: abschlussPruefung.fehlendAng.length > 0 ? 6 : 0 }}>
+                      <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginBottom: 2 }}>Patient</div>
+                      {abschlussPruefung.fehlendPatient.map((label, i) => (
+                        <div key={`p-${i}`} style={{ padding: "2px 0" }}>· {label}</div>
+                      ))}
+                    </div>
+                  )}
+                  {abschlussPruefung.fehlendAng.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginBottom: 2 }}>Angehörige/r</div>
+                      {abschlussPruefung.fehlendAng.map((label, i) => (
+                        <div key={`a-${i}`} style={{ padding: "2px 0" }}>· {label}</div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <label style={{ display: "block", fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 4 }}>
                   Begründung (Pflichtfeld)
@@ -796,22 +867,33 @@ export function OnboardingPage() {
                 disabled={abschlussPruefung.fehlendePflichtdokumente.length > 0 && !overrideBegrundung.trim()}
                 onClick={() => {
                   if (caseId) {
-                    // Audit-Spur: bei Override dokumentieren
+                    // Audit-Spur: bei Override dokumentieren und in Sitzungs-State festhalten
                     if (abschlussPruefung.fehlendePflichtdokumente.length > 0 && overrideBegrundung.trim()) {
                       const auditNote = {
                         zeitpunkt: new Date().toISOString(),
-                        person: "Sandra Weber", // aktuelle Session-Rolle (Mock)
+                        person: "Sandra Weber",
                         fehlendeDokumente: abschlussPruefung.fehlendePflichtdokumente,
                         begruendung: overrideBegrundung.trim(),
                       };
+                      setAbschlussAuditLog(auditNote);
                       console.info("[Audit] Abschluss mit Override:", auditNote);
                     }
-                    konvertiereOnboarding(caseId, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: MOCK_KLV_VERORDNUNGEN, workflows: [] }, {
+                    const ergebnis = konvertiereOnboarding(caseId, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: MOCK_KLV_VERORDNUNGEN, workflows: [] }, {
                       name: `${angehoerigerData.vorname || ""} ${angehoerigerData.name || ""}`.trim(),
                       quellensteuerpflichtig: angehoerigerData.quellensteuer === "ja",
                       aufenthaltsstatus: angehoerigerData.aufenthaltsstatus,
                       bvgAnbindungGewuenscht: angehoerigerData.bvgAnbindungGewuenscht === "ja",
+                      qualifikation: angehoerigerData.qualifikation,
                     });
+
+                    // Qualifizierte Erfolgsmeldung
+                    const a = ergebnis.konvertierteArtefakte;
+                    const uebernommen: string[] = [];
+                    if (a.interRAIAssessments.length > 0) uebernommen.push(`${a.interRAIAssessments.length} InterRAI`);
+                    if (a.pflegeplanungen.length > 0) uebernommen.push(`${a.pflegeplanungen.length} Pflegeplanung`);
+                    if (a.klvVerordnungen.length > 0) uebernommen.push(`${a.klvVerordnungen.length} KLV`);
+                    const artefaktInfo = uebernommen.length > 0 ? ` (${uebernommen.join(", ")})` : "";
+                    console.info("[Konvertierung]", ergebnis);
                   }
                   setShowAbschlussDialog(false);
                   const overrideHint = abschlussPruefung.fehlendePflichtdokumente.length > 0 ? " (mit ausstehenden Dokumenten)" : "";

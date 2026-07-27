@@ -9,10 +9,11 @@
  *
  * Lead-Conversion-Muster: carries onboardingId + patientId.
  */
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import { Check, Send, RefreshCw, Sparkles, AlertTriangle, Clock, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
+import React, { createContext, useContext, useState, useCallback, useRef, type ReactNode } from "react";
+import { Check, Send, RefreshCw, Sparkles, AlertTriangle, Clock, ChevronDown, ChevronUp, RotateCcw, Pen, Upload, FileText } from "lucide-react";
 import type { ArztAnfrage, ArztAnfrageStatus } from "../../types/klinische-artefakte";
 import { useEinwilligung } from "./EinwilligungContext";
+import { EinwilligungModal } from "./einwilligung/EinwilligungModal";
 import { toast } from "sonner";
 
 /* ── Context ──────────────────────────── */
@@ -24,6 +25,8 @@ interface ArztAnfrageContextValue {
     einwilligungSigniert: boolean;
     einwilligungDatum: string | null;
     einwilligungHerkunft: string | null;
+    /** Einwilligung signiert aber Arzt-E-Mail fehlt */
+    arztEmailFehlt: boolean;
   };
   /** Tage seit Versand (berechnet) */
   tageSeitVersand: number;
@@ -46,10 +49,15 @@ export function useArztAnfrage(): ArztAnfrageContextValue | null {
 export function ArztAnfrageProvider({
   onboardingId,
   patientId,
+  hausarztName,
+  hausarztEmail,
   children,
 }: {
   onboardingId: string | null;
   patientId: string | null;
+  /** Dynamisch aus Patientendaten — kein hartkodierter Empfänger */
+  hausarztName?: string;
+  hausarztEmail?: string;
   children: ReactNode;
 }) {
   let einwilligung: ReturnType<typeof useEinwilligung> | null = null;
@@ -57,15 +65,13 @@ export function ArztAnfrageProvider({
 
   const einwilligungSigniert = einwilligung?.status.signiert ?? false;
 
-  // Der Flow startet immer bei wartet_auf_einwilligung — bestehende Arzt-Diagnosen
-  // können aus manueller Erfassung stammen und blockieren den Anfrage-Flow nicht.
   const [anfrage, setAnfrage] = useState<ArztAnfrage>({
     id: `AA-${onboardingId || patientId || "new"}`,
     onboardingId,
     patientId,
     status: "wartet_auf_einwilligung",
-    empfaengerName: "Dr. R. Steiner",
-    empfaengerEmail: "r.steiner@praxis-steiner.ch",
+    empfaengerName: hausarztName || "",
+    empfaengerEmail: hausarztEmail || "",
     gesendetAm: null,
     erinnertAm: null,
     antwortAm: null,
@@ -73,23 +79,34 @@ export function ArztAnfrageProvider({
     gesendeterText: null,
   });
 
-  // Derived: auto-advance from wartet_auf_einwilligung → versandbereit when Einwilligung signed
+  // Aktualisiere Empfänger wenn sich Patientendaten ändern
+  if (hausarztName && anfrage.empfaengerName !== hausarztName) {
+    setAnfrage(prev => ({ ...prev, empfaengerName: hausarztName }));
+  }
+  if (hausarztEmail && anfrage.empfaengerEmail !== hausarztEmail) {
+    setAnfrage(prev => ({ ...prev, empfaengerEmail: hausarztEmail }));
+  }
+
+  // ECHTER Statuswechsel: Einwilligung signiert → versandbereit (wenn E-Mail vorhanden)
+  const arztEmailVorhanden = !!(anfrage.empfaengerEmail || hausarztEmail);
   const effectiveStatus: ArztAnfrageStatus =
-    anfrage.status === "wartet_auf_einwilligung" && einwilligungSigniert
+    anfrage.status === "wartet_auf_einwilligung" && einwilligungSigniert && arztEmailVorhanden
       ? "versandbereit"
-      : anfrage.status;
+      : anfrage.status === "wartet_auf_einwilligung" && einwilligungSigniert && !arztEmailVorhanden
+        ? "wartet_auf_einwilligung" // Einwilligung da, aber E-Mail fehlt
+        : anfrage.status;
 
   const heute = new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
   const schwellwert = 10;
 
-  // Tage seit Versand
   const tageSeitVersand = anfrage.gesendetAm
-    ? Math.max(0, Math.floor((new Date("2026-06-06").getTime() - new Date(anfrage.gesendetAm.split(".").reverse().join("-")).getTime()) / 86400000))
+    ? Math.max(0, Math.floor((Date.now() - new Date(anfrage.gesendetAm.split(".").reverse().join("-")).getTime()) / 86400000))
     : 0;
 
   const senden = useCallback((betreff: string, text: string) => {
-    setAnfrage(prev => ({ ...prev, status: "gesendet", gesendetAm: "28.05.2026", gesendeterBetreff: betreff, gesendeterText: text }));
-  }, []);
+    setAnfrage(prev => ({ ...prev, status: "gesendet", gesendetAm: heute, gesendeterBetreff: betreff, gesendeterText: text }));
+    toast("Versand simuliert — im Prototyp wird keine echte E-Mail gesendet");
+  }, [heute]);
 
   const erinnerungSenden = useCallback(() => {
     setAnfrage(prev => ({ ...prev, erinnertAm: heute, gesendetAm: heute }));
@@ -110,6 +127,7 @@ export function ArztAnfrageProvider({
       einwilligungSigniert,
       einwilligungDatum: einwilligung?.status.datum ?? null,
       einwilligungHerkunft: einwilligung?.status.herkunft ?? null,
+      arztEmailFehlt: einwilligungSigniert && !arztEmailVorhanden,
     },
     tageSeitVersand,
     schwellwert,
@@ -157,12 +175,13 @@ export function ArztAnfrageFlowInline({ compact = false }: { compact?: boolean }
   const { anfrage, spiegel, tageSeitVersand, schwellwert, senden, erinnerungSenden, antwortSimulieren, extrahieren } = ctx;
   const s = anfrage.status;
 
-  /* wartet_auf_einwilligung */
+  /* wartet_auf_einwilligung — mit Möglichkeit, direkt hier zu signieren */
   if (s === "wartet_auf_einwilligung") {
     return (
-      <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-        Wartet auf signierte Einwilligung
-      </span>
+      <InlineEinwilligungBlock
+        arztEmailFehlt={spiegel.arztEmailFehlt}
+        einwilligungSigniert={spiegel.einwilligungSigniert}
+      />
     );
   }
 
@@ -227,13 +246,18 @@ export function ArztAnfrageFlowInline({ compact = false }: { compact?: boolean }
             </div>
           </div>
 
-          <button
-            onClick={() => senden(betreff, nachricht)}
-            className="inline-flex items-center cursor-pointer"
-            style={{ gap: 5, padding: "8px 18px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
-          >
-            <Send style={{ width: 12, height: 12 }} /> Absenden bestätigen
-          </button>
+          <div className="flex items-center" style={{ gap: 8, marginBottom: 6 }}>
+            <button
+              onClick={() => senden(betreff, nachricht)}
+              className="inline-flex items-center cursor-pointer"
+              style={{ gap: 5, padding: "8px 18px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
+            >
+              <Send style={{ width: 12, height: 12 }} /> Absenden bestätigen
+            </button>
+          </div>
+          <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontStyle: "italic" }}>
+            Prototyp: Es wird keine echte E-Mail gesendet.
+          </div>
         </div>
       </div>
     );
@@ -302,5 +326,92 @@ export function ArztAnfrageFlowInline({ compact = false }: { compact?: boolean }
     <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>
       Diagnosen von {anfrage.empfaengerName} extrahiert und zur Prüfung hinterlegt.
     </span>
+  );
+}
+
+/* ══════════════════════════════════════════
+   INLINE EINWILLIGUNG — signierbar aus der Pflegeplanung heraus
+   ══════════════════════════════════════════ */
+
+function InlineEinwilligungBlock({ arztEmailFehlt, einwilligungSigniert }: {
+  arztEmailFehlt: boolean;
+  einwilligungSigniert: boolean;
+}) {
+  let einwilligung: ReturnType<typeof useEinwilligung> | null = null;
+  try { einwilligung = useEinwilligung(); } catch { /* ausserhalb Onboarding */ }
+
+  const [showModal, setShowModal] = useState(false);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+
+  const handleScanUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !einwilligung) return;
+    einwilligung.signScan(new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }));
+    e.target.value = "";
+  };
+
+  // Einwilligung signiert aber E-Mail fehlt
+  if (arztEmailFehlt) {
+    return (
+      <div>
+        <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+          Einwilligung signiert — E-Mail-Adresse des Hausarztes fehlt
+        </span>
+        <div className="flex items-center" style={{ gap: 6, marginTop: 4, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+          <AlertTriangle style={{ width: 11, height: 11 }} />
+          Bitte die E-Mail-Adresse des Hausarztes im Tab «Personalien» erfassen.
+        </div>
+      </div>
+    );
+  }
+
+  // Einwilligung nicht signiert — Hinweis + direkte Aktion
+  return (
+    <div>
+      <div style={{ padding: "12px 16px", background: "var(--status-warning-bg)", borderRadius: 10, marginBottom: 8 }}>
+        <div className="flex items-start" style={{ gap: 8 }}>
+          <FileText style={{ width: 16, height: 16, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 2 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--status-warning-text)" }}>
+              Einwilligungserklärung erforderlich
+            </div>
+            <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", marginTop: 4 }}>
+              Für die Arzt-Anfrage muss die Einwilligungserklärung des Patienten vorliegen.
+              Sie können die Erklärung direkt hier anzeigen und signieren.
+            </div>
+            <div className="flex items-center flex-wrap" style={{ gap: 8, marginTop: 10 }}>
+              <button
+                onClick={() => setShowModal(true)}
+                className="inline-flex items-center cursor-pointer"
+                style={{ gap: 5, padding: "8px 18px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
+              >
+                <Pen style={{ width: 12, height: 12 }} /> Einwilligung anzeigen und signieren
+              </button>
+              <input ref={scanInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleScanUpload} />
+              <button
+                onClick={() => scanInputRef.current?.click()}
+                className="inline-flex items-center cursor-pointer"
+                style={{ gap: 5, padding: "8px 18px", borderRadius: 999, background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: "var(--text-small)", fontWeight: 500, border: "0.5px solid var(--border-default)" }}
+              >
+                <Upload style={{ width: 12, height: 12 }} /> Unterschriebenes Exemplar hochladen
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {showModal && einwilligung && (
+        <EinwilligungModal
+          isOpen
+          onClose={() => setShowModal(false)}
+          onSignDigital={(_, datum) => {
+            einwilligung!.signDigital(datum);
+            setShowModal(false);
+          }}
+          patientName=""
+          patientGeburtsdatum=""
+        />
+      )}
+    </div>
   );
 }

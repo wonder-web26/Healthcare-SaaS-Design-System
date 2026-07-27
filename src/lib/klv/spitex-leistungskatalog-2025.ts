@@ -19,6 +19,14 @@
  *   defaultHaeufigkeit = häufige Frequenz-Angabe aus Katalog (W = pro Woche, T = pro Tag, m = pro Monat, n.B. = nach Bedarf)
  */
 
+/** Katalogversion als Laufzeitkonstante — für Nachweise und Versionsbezug */
+export const LEISTUNGSKATALOG_VERSION = {
+  name: "Spitex Schweiz Leistungskatalog",
+  jahr: 2025,
+  stand: "15.10.2025",
+  quelle: "Offizieller Leistungskatalog der Spitex Schweiz 2025",
+} as const;
+
 export type KLVKategorie = "a" | "b" | "c";
 
 export type LeistungskatalogPosition = {

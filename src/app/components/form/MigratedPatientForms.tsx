@@ -13,6 +13,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { Combobox as FormSelect } from "./Combobox";
 import { FormField } from "./FormField";
 import type { PatientFormData } from "../StepPatient";
+import { NATIONALITAETEN } from "./MigratedAngehoerigerForms";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
 import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
@@ -56,7 +57,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
         <AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => onUpdate("ahvNummer", v)} />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <TextInput label="Nationalität" value={data.nationalitaet} onChange={v => onUpdate("nationalitaet", v)} placeholder="z.B. Schweiz" />
+        <FormSelect label="Nationalität" value={data.nationalitaet || null} onChange={v => onUpdate("nationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" />
         {isSwiss && <TextInput label="Heimatort" value={data.heimatort} onChange={v => onUpdate("heimatort", v)} placeholder="z.B. Bern" />}
         {!isSwiss && filled(data.nationalitaet) && (
           <FormSelect label="Aufenthaltsstatus" value={data.aufenthaltsstatus || null} onChange={v => onUpdate("aufenthaltsstatus", v || "")}
@@ -86,6 +87,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
         <TextInput label="Hausarzt Name" required value={data.hausarztName} onChange={v => onUpdate("hausarztName", v)} onBlur={() => onBlur("hausarztName")} placeholder="Dr. Müller" error={t("hausarztName") && !filled(data.hausarztName) ? "Pflichtfeld" : undefined} />
         <TextInput label="Hausarzt Telefon" value={data.hausarztTelefon} onChange={v => onUpdate("hausarztTelefon", v)} placeholder="+41 44 123 45 67" />
+        <TextInput label="Hausarzt E-Mail" value={data.hausarztEmail} onChange={v => onUpdate("hausarztEmail", v)} placeholder="praxis@example.ch" />
       </div>
       <div style={{ marginTop: "var(--space-4)" }}>
         <TextInput label="Spezialarzt" value={data.spezialAerzte} onChange={v => onUpdate("spezialAerzte", v)} placeholder="Optional — z.B. Kardiologe Dr. Weber" />
@@ -149,7 +151,7 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
    ══════════════════════════════════════════ */
 export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
   const t = (f: string) => touched.has(f);
-  const [expandedAnamnese, setExpandedAnamnese] = useState(false);
+  // expandedAnamnese state entfernt — Erweiterte Anamnese ist dauerhaft sichtbar
 
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
@@ -191,40 +193,30 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
         <FormSelect label="Personen im Haushalt" value={data.personenImHaushalt || null} onChange={v => onUpdate("personenImHaushalt", v || "")} options={PERSONEN} placeholder="Wählen" hint="Inklusive Patient" />
       </div>
 
-      {/* Erweiterte Anamnese (collapsible) */}
-      <div style={{ marginTop: 28 }}>
-        <button type="button" onClick={() => setExpandedAnamnese(o => !o)} className="inline-flex items-center cursor-pointer transition-colors"
-          style={{ gap: "var(--space-2)", padding: "10px 18px", borderRadius: "var(--radius-pill)", background: "transparent", border: "none", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
-          onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-          {expandedAnamnese ? <ChevronUp style={{ width: 14, height: 14 }} /> : <ChevronDown style={{ width: 14, height: 14 }} />}
-          {expandedAnamnese ? "Erweiterte Anamnese einklappen" : "Erweiterte Anamnese ausfüllen (optional)"}
-        </button>
+      {/* Erweiterte Anamnese (dauerhaft sichtbar) */}
+      <SectionHeader icon={HeartPulse} label="Erweiterte Anamnese" />
+      <div className="flex flex-col" style={{ gap: "var(--space-4)" }}>
+        <TextareaInput label="Ausführliche Anamnese" value={data.anamneseText} onChange={v => onUpdate("anamneseText", v)} placeholder="Detaillierte medizinische Vorgeschichte" />
 
-        {expandedAnamnese && (
-          <div className="flex flex-col" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-            <TextareaInput label="Ausführliche Anamnese" value={data.anamneseText} onChange={v => onUpdate("anamneseText", v)} placeholder="Detaillierte medizinische Vorgeschichte" />
-
-            {/* PA-03: Sturz-Assessment */}
-            <SectionHeader icon={HeartPulse} label="Sturz-Assessment" />
-            <FormSelect label="Stürze in den letzten 12 Monaten?" required value={data.sturzLetzte12m || null} onChange={v => {
-              const val = v || "kein_sturz";
-              onUpdate("sturzLetzte12m", val);
-              if (val === "kein_sturz") { onUpdate("sturzAnzahl", ""); onUpdate("sturzKommentar", ""); }
-            }} options={[
-              { value: "kein_sturz", label: "Kein Sturz" },
-              { value: "innerhalb_6_monate", label: "Ja, innerhalb 6 Monate" },
-              { value: "7_bis_12_monate", label: "Ja, vor 7–12 Monaten" },
-            ]} placeholder="Bitte wählen" />
-            {data.sturzLetzte12m && data.sturzLetzte12m !== "kein_sturz" && (
-              <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-3)" }}>
-                <NumberInput label="Anzahl Stürze" value={data.sturzAnzahl} onChange={v => onUpdate("sturzAnzahl", v)} placeholder="z.B. 2" />
-                <TextareaInput label="Bemerkungen (Umstände, Verletzungen, Ort)" value={data.sturzKommentar} onChange={v => onUpdate("sturzKommentar", v)} placeholder="z.B. Sturz im Bad, Prellung am Arm" />
-              </div>
-            )}
-            <FormSelect label="Stimmung" value={data.stimmungAktuell || null} onChange={v => onUpdate("stimmungAktuell", v || "")} options={STIMMUNG} placeholder="Stimmung einschätzen" />
-            <TextareaInput label="Behandlungsziel" value={data.behandlungszielFokus} onChange={v => onUpdate("behandlungszielFokus", v)} placeholder="Hauptziel der Pflege und Betreuung" />
+        {/* PA-03: Sturz-Assessment */}
+        <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginTop: 4 }}>Sturz-Assessment</div>
+        <FormSelect label="Stürze in den letzten 12 Monaten?" required value={data.sturzLetzte12m || null} onChange={v => {
+          const val = v || "kein_sturz";
+          onUpdate("sturzLetzte12m", val);
+          if (val === "kein_sturz") { onUpdate("sturzAnzahl", ""); onUpdate("sturzKommentar", ""); }
+        }} options={[
+          { value: "kein_sturz", label: "Kein Sturz" },
+          { value: "innerhalb_6_monate", label: "Ja, innerhalb 6 Monate" },
+          { value: "7_bis_12_monate", label: "Ja, vor 7–12 Monaten" },
+        ]} placeholder="Bitte wählen" />
+        {data.sturzLetzte12m && data.sturzLetzte12m !== "kein_sturz" && (
+          <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-3)" }}>
+            <NumberInput label="Anzahl Stürze" value={data.sturzAnzahl} onChange={v => onUpdate("sturzAnzahl", v)} placeholder="z.B. 2" />
+            <TextareaInput label="Bemerkungen (Umstände, Verletzungen, Ort)" value={data.sturzKommentar} onChange={v => onUpdate("sturzKommentar", v)} placeholder="z.B. Sturz im Bad, Prellung am Arm" />
           </div>
         )}
+        <FormSelect label="Stimmung" value={data.stimmungAktuell || null} onChange={v => onUpdate("stimmungAktuell", v || "")} options={STIMMUNG} placeholder="Stimmung einschätzen" />
+        <TextareaInput label="Behandlungsziel" value={data.behandlungszielFokus} onChange={v => onUpdate("behandlungszielFokus", v)} placeholder="Hauptziel der Pflege und Betreuung" />
       </div>
     </div>
   );

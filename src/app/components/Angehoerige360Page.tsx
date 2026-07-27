@@ -63,6 +63,11 @@ import { DetailNavigation } from "./DetailNavigation";
 import { AnnaAngehoerigeSummary } from "../anna/AnnaAngehoerigeSummary";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
+import { getNachweiseFuerAngehoeriger } from "../../lib/schulung/nachweis-store";
+import { getKontrollenFuerAngehoeriger, erstelleKontrolle, getNaechsteFaelligkeit, type KontrolleArt } from "../../lib/arbeitskontrolle/store";
+import { exportiereArbeitskontrollePDF } from "../../lib/arbeitskontrolle/pdf-export";
+import "../../lib/schulung/demo-seed";
+import "../../lib/arbeitskontrolle/demo-seed";
 
 /* ══════════════════════════════════════════
    EXTENDED MOCK DATA — HR detail fields
@@ -580,7 +585,7 @@ export function Angehoerige360Page() {
       {/* ── Tab Content ────────────────────── */}
       <div style={{ padding: "20px var(--space-6) 40px" }}>
         {activeTab === "ueberblick" && <TabUeberblick a={a} detail={detail} />}
-        {activeTab === "workflow" && <TabWorkflow a={a} />}
+        {activeTab === "workflow" && <TabWorkflow a={a} detail={detail} />}
         {activeTab === "dokumente" && <TabDokumenteAngehoerige a={a} />}
         {activeTab === "related" && <TabRelatedLists a={a} detail={detail} />}
         {activeTab === "tickets" && <TabTickets tickets={tickets} navigate={navigate} />}
@@ -1197,9 +1202,140 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
 /* ══════════════════════════════════════════
    TAB: WORKFLOW / ACTION PLAN
    ══════════════════════════════════════════ */
-function TabWorkflow({ a }: { a: Angehoeriger }) {
+function TabWorkflow({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDetail }) {
+  const navigate = useNavigate();
+  const [, forceUpdate] = useState(0);
+  const nachweise = getNachweiseFuerAngehoeriger(a.id);
+  const kontrollen = getKontrollenFuerAngehoeriger(a.id);
+
   return (
-    <RhythmusTimeline subjektTyp="angehoeriger" subjektId={a.id} aktuellerBenutzer={a.pflegefachkraft} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <RhythmusTimeline subjektTyp="angehoeriger" subjektId={a.id} aktuellerBenutzer={a.pflegefachkraft} />
+
+      {/* Schulungsnachweise */}
+      {nachweise.length > 0 && (
+        <div style={{ padding: "var(--space-4)" }}>
+          <div style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 12 }}>Schulungsnachweise</div>
+          <div className="flex flex-col" style={{ gap: 8 }}>
+            {nachweise.map(n => (
+              <div key={n.id} className="flex items-center justify-between cursor-pointer" onClick={() => navigate(`/schulungsnachweis/${n.id}`)} style={{ padding: "12px 16px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
+                <div>
+                  <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>Initialschulung — Patient {n.patientName}</div>
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2 }}>{n.unterschriften.length} von {n.positionen.length} Positionen unterschrieben</div>
+                </div>
+                <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: n.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: n.status === "abgeschlossen" ? "var(--status-success)" : "var(--status-warning-text)" }}>
+                  {n.status === "abgeschlossen" ? "Abgeschlossen" : "In Bearbeitung"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Arbeitskontrollen */}
+      <ArbeitskontrolleHistorie a={a} detail={detail} kontrollen={kontrollen} navigate={navigate} onRefresh={() => forceUpdate(n => n + 1)} />
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   ARBEITSKONTROLLE HISTORIE
+   ══════════════════════════════════════════ */
+
+function ArbeitskontrolleHistorie({ a, detail, kontrollen, navigate, onRefresh }: {
+  a: Angehoeriger;
+  detail: AngehoerigerDetail;
+  kontrollen: ReturnType<typeof getKontrollenFuerAngehoeriger>;
+  navigate: ReturnType<typeof useNavigate>;
+  onRefresh: () => void;
+}) {
+  // Eintrittsdatum in ISO konvertieren
+  const parts = detail.eintrittsdatum?.split(".") ?? [];
+  const isoEintritt = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : undefined;
+  const naechsteFaellig = getNaechsteFaelligkeit(a.id, isoEintritt);
+  const heute = new Date().toISOString().slice(0, 10);
+  const istUeberfaellig = naechsteFaellig ? naechsteFaellig < heute : false;
+  const hatOffene = kontrollen.some(k => k.status === "in_bearbeitung");
+
+  const neueKontrolleErstellen = (art: KontrolleArt) => {
+    const patienten = a.zugeordnetePatientenList;
+    const patientId = patienten.length > 0 ? patienten[0].id : null;
+    const patientName = patienten.length > 0 ? patienten[0].name : null;
+    const k = erstelleKontrolle(a.id, `${a.vorname} ${a.nachname}`, a.pflegefachkraft, patientId, patientName, art);
+    onRefresh();
+    navigate(`/arbeitskontrolle/${k.id}`);
+  };
+
+  return (
+    <div style={{ padding: "var(--space-4)" }}>
+      <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)" }}>Arbeitskontrollen</div>
+          {naechsteFaellig && (
+            <div style={{ fontSize: "var(--text-meta)", color: istUeberfaellig ? "var(--status-danger)" : "var(--text-tertiary)", marginTop: 2 }}>
+              Nächste fällig: {new Date(naechsteFaellig).toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" })}
+              {istUeberfaellig && " — überfällig"}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center" style={{ gap: 6 }}>
+          <button onClick={() => neueKontrolleErstellen("regulaer")} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "6px 14px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-meta)", fontWeight: 500, border: "none" }}>
+            + Reguläre Kontrolle
+          </button>
+          <button onClick={() => neueKontrolleErstellen("ausserordentlich")} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "6px 14px", borderRadius: 999, background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "var(--text-meta)", fontWeight: 500, border: "0.5px solid var(--border-default)" }}>
+            + Ausserordentlich
+          </button>
+        </div>
+      </div>
+
+      {kontrollen.length === 0 ? (
+        <div style={{ padding: "var(--space-6)", textAlign: "center", color: "var(--text-tertiary)", fontSize: "var(--text-small)" }}>
+          Noch keine Arbeitskontrollen durchgeführt.
+        </div>
+      ) : (
+        <div className="flex flex-col" style={{ gap: 8 }}>
+          {kontrollen.map(k => (
+            <div key={k.id} className="flex items-center justify-between" style={{ padding: "12px 16px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
+              <div className="flex items-center cursor-pointer" style={{ gap: 10, flex: 1 }} onClick={() => navigate(`/arbeitskontrolle/${k.id}`)}>
+                <div>
+                  <div className="flex items-center" style={{ gap: 6 }}>
+                    <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
+                      {new Date(k.kontrollDatum).toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                    </span>
+                    {k.art === "ausserordentlich" && (
+                      <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: "var(--text-meta)", background: "var(--status-info-bg)", color: "var(--status-info)", fontWeight: 500 }}>Ausserordentlich</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2 }}>
+                    {k.fallfuehrendeName}{k.patientName ? ` · ${k.patientName}` : ""} · {k.unterschriften.length}/2 Unterschriften
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center" style={{ gap: 6 }}>
+                {k.status === "abgeschlossen" && (
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const blob = await exportiereArbeitskontrollePDF(k);
+                      const url = URL.createObjectURL(blob);
+                      const anchor = document.createElement("a"); anchor.href = url; anchor.download = `Arbeitskontrolle_${k.kontrollDatum}.pdf`;
+                      document.body.appendChild(anchor); anchor.click(); document.body.removeChild(anchor); URL.revokeObjectURL(url);
+                    }}
+                    className="inline-flex items-center cursor-pointer"
+                    style={{ gap: 3, padding: "3px 10px", borderRadius: 999, background: "var(--bg-secondary)", color: "var(--text-secondary)", fontSize: "var(--text-meta)", fontWeight: 500, border: "0.5px solid var(--border-default)" }}
+                  >
+                    PDF
+                  </button>
+                )}
+                <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: k.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: k.status === "abgeschlossen" ? "var(--status-success)" : "var(--status-warning-text)" }}>
+                  {k.status === "abgeschlossen" ? "Abgeschlossen" : "In Bearbeitung"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

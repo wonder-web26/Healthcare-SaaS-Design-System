@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>Service Desk</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #F7F8FA; color: #111827; font-family: 'Inter', system-ui, sans-serif; font-size: 14px; -webkit-font-smoothing: antialiased; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; padding: 0; }
+input, textarea, select { font-family: inherit; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #D1D5DB; }
+.row-hover:hover { background: rgba(79, 70, 229, 0.03); }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #4F46E5; outline-offset: 2px; border-radius: 6px; }
+.view-fade { animation: fadeIn 0.2s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+/* ==========================================================
+   Mock data
+   ========================================================== */
+(function(){
+const TODAY = "2026-03-03";
+
+const PEOPLE = {
+  MK: { name: "Maria Keller", initialen: "MK", color: "#4F46E5" },
+  KM: { name: "Kathrin Meier", initialen: "KM", color: "#059669" },
+  SW: { name: "Sandra Weber", initialen: "SW", color: "#D97706" },
+  LB: { name: "Laura Brunner", initialen: "LB", color: "#DC2626" },
+  TS: { name: "Thomas Schmid", initialen: "TS", color: "#2563EB" },
+};
+
+const ENTRIES = [
+  { id: "W-0142", quelle: "workflow", typ: "SRK_ANMELDUNG", typLabel: "SRK-Anmeldung", person: {name:"Ayşe Yılmaz", initialen:"AY"}, kontext: "Vertragsstart 15.01.2026 · Anmeldung ausstehend", erstellt: "2026-02-15", faellig: "2026-03-01", status: "offen", verantwortlich: PEOPLE.MK, prioritaet: "hoch" },
+  { id: "W-0143", quelle: "workflow", typ: "SRK_ANMELDUNG", typLabel: "SRK-Anmeldung", person: {name:"Carlos Silva", initialen:"CS"}, kontext: "Vertragsstart 01.02.2026 · Frist läuft", erstellt: "2026-02-10", faellig: "2026-03-05", status: "offen", verantwortlich: PEOPLE.KM, prioritaet: "hoch" },
+  { id: "W-0144", quelle: "workflow", typ: "SRK_ANMELDUNG", typLabel: "SRK-Anmeldung", person: {name:"Dragana Petrović", initialen:"DP"}, kontext: "Vertragsstart 10.02.2026 · noch nicht angemeldet", erstellt: "2026-02-20", faellig: "2026-03-10", status: "offen", verantwortlich: PEOPLE.MK, prioritaet: "mittel" },
+  { id: "W-0145", quelle: "workflow", typ: "RE_ASSESSMENT", typLabel: "Re-Assessment", person: {name:"Monika Brunner", initialen:"MB"}, kontext: "Letzte Einstufung 03.09.2025 · halbjährlich fällig", erstellt: "2026-02-18", faellig: "2026-03-03", status: "offen", verantwortlich: PEOPLE.SW, prioritaet: "hoch" },
+  { id: "W-0146", quelle: "workflow", typ: "RE_ASSESSMENT", typLabel: "Re-Assessment", person: {name:"Peter Müller", initialen:"PM"}, kontext: "Pflegestufe-Überprüfung nach Spitalaufenthalt", erstellt: "2026-02-22", faellig: "2026-03-08", status: "in_bearbeitung", verantwortlich: PEOPLE.SW, prioritaet: "hoch" },
+  { id: "W-0147", quelle: "workflow", typ: "RE_ASSESSMENT", typLabel: "Re-Assessment", person: {name:"Elisabeth Hofer", initialen:"EH"}, kontext: "Schweregrad-Verschlechterung gemeldet", erstellt: "2026-02-25", faellig: "2026-03-12", status: "offen", verantwortlich: PEOPLE.LB, prioritaet: "mittel" },
+  { id: "W-0148", quelle: "workflow", typ: "RE_ASSESSMENT", typLabel: "Re-Assessment", person: {name:"Jakob Weber", initialen:"JW"}, kontext: "Routinemässige Halbjahres-Überprüfung", erstellt: "2026-03-01", faellig: "2026-03-15", status: "offen", verantwortlich: PEOPLE.SW, prioritaet: "mittel" },
+  { id: "W-0149", quelle: "workflow", typ: "AUSWEIS_B_ANMELDUNG", typLabel: "Ausweis B", person: {name:"Carlos Silva", initialen:"CS"}, kontext: "Aufenthaltsbewilligung B erteilt · Anmeldung Migrationsamt", erstellt: "2026-02-20", faellig: "2026-03-10", status: "offen", verantwortlich: PEOPLE.MK, prioritaet: "mittel" },
+  { id: "W-0150", quelle: "workflow", typ: "AUSWEIS_B_ANMELDUNG", typLabel: "Ausweis B", person: {name:"Fatima Al-Hassan", initialen:"FA"}, kontext: "Bewilligung seit 25.01.2026 · Meldefrist 30 Tage", erstellt: "2026-02-05", faellig: "2026-02-22", status: "offen", verantwortlich: PEOPLE.KM, prioritaet: "hoch" },
+  { id: "W-0151", quelle: "workflow", typ: "QUELLENSTEUER_ANMELDUNG", typLabel: "Quellensteuer", person: {name:"Ayşe Yılmaz", initialen:"AY"}, kontext: "Steueramt Zürich · Tarif A", erstellt: "2026-02-01", faellig: "2026-02-28", status: "offen", verantwortlich: PEOPLE.MK, prioritaet: "hoch" },
+  { id: "W-0152", quelle: "workflow", typ: "QUELLENSTEUER_ANMELDUNG", typLabel: "Quellensteuer", person: {name:"Carlos Silva", initialen:"CS"}, kontext: "Steueramt Winterthur · Tarif B", erstellt: "2026-02-10", faellig: "2026-03-05", status: "offen", verantwortlich: PEOPLE.MK, prioritaet: "mittel" },
+  { id: "W-0153", quelle: "workflow", typ: "KINDERZULAGEN_ANTRAG", typLabel: "Kinderzulagen", person: {name:"Fatima Al-Hassan", initialen:"FA"}, kontext: "2 Kinder · Nachweis Geburtsurkunden eingereicht", erstellt: "2026-02-12", faellig: "2026-03-20", status: "in_bearbeitung", verantwortlich: PEOPLE.KM, prioritaet: "mittel" },
+  { id: "W-0154", quelle: "workflow", typ: "LOHNANPASSUNG_NACH_SRK", typLabel: "Lohnanpassung", person: {name:"Dragana Petrović", initialen:"DP"}, kontext: "SRK-Kurs bestanden am 20.02.2026 · rückwirkend ab Kursdatum", erstellt: "2026-02-21", faellig: "2026-03-25", status: "offen", verantwortlich: PEOPLE.MK, prioritaet: "niedrig" },
+  { id: "W-0155", quelle: "workflow", typ: "LOHNANPASSUNG_NACH_SRK", typLabel: "Lohnanpassung", person: {name:"Peter Müller", initialen:"PM"}, kontext: "Kursbestätigung erhalten", erstellt: "2026-03-02", faellig: "2026-04-01", status: "offen", verantwortlich: PEOPLE.MK, prioritaet: "niedrig" },
+  { id: "W-0156", quelle: "workflow", typ: "RE_ASSESSMENT", typLabel: "Re-Assessment", person: {name:"Hans Ebert", initialen:"HE"}, kontext: "Routine · halbjährlich", erstellt: "2026-03-01", faellig: "2026-04-05", status: "offen", verantwortlich: PEOPLE.SW, prioritaet: "niedrig" },
+  { id: "T-0088", quelle: "ticket", typ: "SCHLUESSEL", typLabel: "Schlüssel", person: {name:"Ayşe Yılmaz", initialen:"AY"}, titel: "Schlüsselverlust melden", kontext: "Wohnungsschlüssel verloren · Ersatz bestellen", erstellt: "2026-03-02", faellig: "2026-03-03", status: "offen", verantwortlich: PEOPLE.LB, prioritaet: "hoch" },
+  { id: "T-0089", quelle: "ticket", typ: "ANFRAGE", typLabel: "Anfrage", person: {name:"Sandra Weber", initialen:"SW"}, titel: "Urlaubsvertretung", kontext: "Abwesenheit 15.03. – 28.03.2026 · Übergabe koordinieren", erstellt: "2026-03-01", faellig: "2026-03-10", status: "in_bearbeitung", verantwortlich: PEOPLE.MK, prioritaet: "mittel" },
+  { id: "T-0090", quelle: "ticket", typ: "PROBLEM", typLabel: "Problem", person: {name:"Laura Brunner", initialen:"LB"}, titel: "Zugang Klientenportal", kontext: "Login-Fehler · seit 02.03.2026", erstellt: "2026-03-02", faellig: "2026-03-04", status: "offen", verantwortlich: PEOPLE.TS, prioritaet: "hoch" },
+  { id: "T-0091", quelle: "ticket", typ: "MELDUNG", typLabel: "Meldung", person: {name:"Carlos Silva", initialen:"CS"}, titel: "Dokumente fehlen", kontext: "Arbeitsvertrag Kopie nicht erhalten", erstellt: "2026-03-01", faellig: "2026-03-06", status: "offen", verantwortlich: PEOPLE.KM, prioritaet: "mittel" },
+  { id: "T-0092", quelle: "ticket", typ: "ANFRAGE", typLabel: "Anfrage", person: {name:"Sandra Weber", initialen:"SW"}, titel: "Weiterbildung Demenz-Pflege", kontext: "Anfrage · Budget-Freigabe nötig", erstellt: "2026-02-28", faellig: "2026-03-20", status: "offen", verantwortlich: PEOPLE.MK, prioritaet: "niedrig" },
+  { id: "T-0093", quelle: "ticket", typ: "PROBLEM", typLabel: "Problem", person: null, titel: "Fahrtkostenabrechnung Februar fehlerhaft", kontext: "Angehörige reklamieren · Kilometerpauschale falsch berechnet", erstellt: "2026-03-01", faellig: "2026-03-07", status: "in_bearbeitung", verantwortlich: PEOPLE.MK, prioritaet: "hoch" },
+  { id: "T-0094", quelle: "ticket", typ: "MELDUNG", typLabel: "Meldung", person: {name:"Thomas Schmid", initialen:"TS"}, titel: "Krankmeldung bis 06.03.", kontext: "AUB eingegangen · Vertretung nötig", erstellt: "2026-03-02", faellig: "2026-03-03", status: "offen", verantwortlich: PEOPLE.MK, prioritaet: "hoch" },
+  { id: "T-0095", quelle: "ticket", typ: "SCHLUESSEL", typLabel: "Schlüssel", person: {name:"Monika Brunner", initialen:"MB"}, titel: "Schlüsselübergabe Neu-Klient", kontext: "Hausschlüssel + Codier-Karte Tiefgarage", erstellt: "2026-03-02", faellig: "2026-03-09", status: "offen", verantwortlich: PEOPLE.LB, prioritaet: "mittel" },
+  { id: "T-0096", quelle: "ticket", typ: "ANFRAGE", typLabel: "Anfrage", person: {name:"Elisabeth Hofer", initialen:"EH"}, titel: "Spezialbewilligung KLV-Zuschlag", kontext: "Komplexe Wundpflege · Antrag beim Kanton", erstellt: "2026-02-26", faellig: "2026-03-11", status: "in_bearbeitung", verantwortlich: PEOPLE.SW, prioritaet: "mittel" },
+  { id: "T-0097", quelle: "ticket", typ: "PROBLEM", typLabel: "Problem", person: null, titel: "MedLink Sync-Fehler · 12 Einträge unvollständig", kontext: "Seit Release 4.2.1 · IT bereits informiert", erstellt: "2026-03-01", faellig: "2026-03-05", status: "in_bearbeitung", verantwortlich: PEOPLE.TS, prioritaet: "hoch" },
+  { id: "T-0098", quelle: "ticket", typ: "MELDUNG", typLabel: "Meldung", person: {name:"Jakob Weber", initialen:"JW"}, titel: "Adresse aktualisiert", kontext: "Familie Weber verzieht · Einsatzplanung anpassen", erstellt: "2026-03-02", faellig: "2026-03-17", status: "offen", verantwortlich: PEOPLE.MK, prioritaet: "niedrig" },
+];
+
+// The team members: Maria is the current user.
+const CURRENT_USER = "MK";
+const MY_TEAM = ["MK", "KM", "SW"];
+
+// Types per quelle
+const WORKFLOW_TYPES = [
+  { id: "SRK_ANMELDUNG", label: "SRK-Anmeldung" },
+  { id: "RE_ASSESSMENT", label: "Re-Assessment" },
+  { id: "AUSWEIS_B_ANMELDUNG", label: "Ausweis B" },
+  { id: "QUELLENSTEUER_ANMELDUNG", label: "Quellensteuer" },
+  { id: "KINDERZULAGEN_ANTRAG", label: "Kinderzulagen" },
+  { id: "LOHNANPASSUNG_NACH_SRK", label: "Lohnanpassung" },
+];
+const TICKET_TYPES = [
+  { id: "SCHLUESSEL", label: "Schlüssel" },
+  { id: "ANFRAGE", label: "Anfrage" },
+  { id: "PROBLEM", label: "Problem" },
+  { id: "MELDUNG", label: "Meldung" },
+];
+
+window.APP_DATA = { TODAY, PEOPLE, ENTRIES, CURRENT_USER, MY_TEAM, WORKFLOW_TYPES, TICKET_TYPES };
+})();
+</script>
+
+<script type="text/babel" data-presets="react">
+/* ==========================================================
+   Icons
+   ========================================================== */
+(function(){
+const Icon = ({ name, size = 16, style = {} }) => {
+  const props = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round", style };
+  const paths = {
+    dashboard: <><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></>,
+    userplus: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></>,
+    users: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>,
+    heart: <><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></>,
+    branch: <><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></>,
+    headphones: <><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></>,
+    file: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></>,
+    help: <><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
+    chevron: <polyline points="6 9 12 15 18 9"/>,
+    chevronRight: <polyline points="9 18 15 12 9 6"/>,
+    search: <><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>,
+    plus: <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
+    bell: <><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>,
+    clock: <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>,
+    alert: <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
+    inbox: <><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></>,
+    user: <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
+    check: <polyline points="20 6 9 17 4 12"/>,
+    checkcircle: <><circle cx="12" cy="12" r="10"/><polyline points="9 12 12 15 16 10"/></>,
+    x: <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>,
+    more: <><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></>,
+    filter: <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>,
+    upload: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
+    sliders: <><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></>,
+  };
+  return <svg {...props}>{paths[name]}</svg>;
+};
+window.Icon = Icon;
+})();
+</script>
+
+<script type="text/babel" data-presets="react">
+/* ==========================================================
+   Helpers + Shared UI
+   ========================================================== */
+(function(){
+const { TODAY } = window.APP_DATA;
+function formatDate(iso) { if (!iso) return "—"; const [y,m,d] = iso.split("-"); return `${d}.${m}.${y}`; }
+function formatShort(iso) { if (!iso) return "—"; const [, m, d] = iso.split("-"); const months = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"]; return `${parseInt(d)}. ${months[parseInt(m)-1]}`; }
+function daysFromToday(iso) { if (!iso) return null; const t = new Date(TODAY); const d = new Date(iso); return Math.round((d - t) / 86400000); }
+function faelligBucket(iso) { if (!iso) return "kein"; const d = daysFromToday(iso); if (d < 0) return "ueberfaellig"; if (d === 0) return "heute"; if (d === 1) return "morgen"; if (d <= 7) return "diese_woche"; return "spaeter"; }
+
+const statusCfg = {
+  offen:           { label: "Offen",          dot: "#DC2626", bg: "#FEF2F2", text: "#991B1B" },
+  in_bearbeitung:  { label: "In Bearbeitung", dot: "#D97706", bg: "#FFFBEB", text: "#92400E" },
+  erledigt:        { label: "Erledigt",       dot: "#059669", bg: "#ECFDF5", text: "#065F46" },
+};
+const prioCfg = {
+  hoch:    { label: "Hoch",    color: "#DC2626" },
+  mittel:  { label: "Mittel",  color: "#D97706" },
+  niedrig: { label: "Niedrig", color: "#9CA3AF" },
+};
+const typColor = (quelle) => quelle === "workflow" ? { color: "#4F46E5", bg: "#EEF2FF" } : { color: "#1E40AF", bg: "#EFF6FF" };
+
+function Avatar({ p, size = 24 }) {
+  if (!p) return null;
+  const bg = p.color ? `${p.color}15` : "#F3F4F6";
+  const fg = p.color || "#6B7280";
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: 999, background: bg, color: fg,
+      display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+      fontSize: size <= 18 ? 8.5 : size <= 22 ? 9.5 : 10.5, fontWeight: 600, letterSpacing: 0.2,
+    }}>{p.initialen}</div>
+  );
+}
+function StatusPill({ status }) {
+  const s = statusCfg[status];
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 8px", borderRadius: 999, background: s.bg, color: s.text, fontSize: 11, fontWeight: 500, whiteSpace: "nowrap" }}>
+      <span style={{ width: 5, height: 5, borderRadius: 999, background: s.dot }}/> {s.label}
+    </span>
+  );
+}
+function TypeTag({ entry }) {
+  const c = typColor(entry.quelle);
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 7px", borderRadius: 6, background: c.bg, color: c.color, fontSize: 11, fontWeight: 500, whiteSpace: "nowrap" }}>
+      {entry.typLabel}
+    </span>
+  );
+}
+function PriorityDot({ prio }) {
+  return <span title={prioCfg[prio].label} style={{ width: 6, height: 6, borderRadius: 999, background: prioCfg[prio].color, flexShrink: 0 }}/>;
+}
+function FaelligDate({ iso }) {
+  if (!iso) return <span style={{ color: "#9CA3AF", fontSize: 12 }}>—</span>;
+  const b = faelligBucket(iso);
+  const colors = { ueberfaellig: "#991B1B", heute: "#92400E", morgen: "#92400E", diese_woche: "#374151", spaeter: "#6B7280" };
+  const dotColors = { ueberfaellig: "#DC2626", heute: "#D97706", morgen: "#D97706", diese_woche: "#9CA3AF", spaeter: "#D1D5DB" };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: colors[b], whiteSpace: "nowrap", fontWeight: b === "ueberfaellig" || b === "heute" ? 500 : 400 }}>
+      <span style={{ width: 5, height: 5, borderRadius: 999, background: dotColors[b] }}/>
+      {formatDate(iso)}
+    </span>
+  );
+}
+
+// Entry title convention: for workflow-tasks and tickets with a person → person name; otherwise ticket title.
+function entryTitle(e) {
+  if (e.person) return e.person.name;
+  return e.titel || "—";
+}
+
+window.helpers = { formatDate, formatShort, daysFromToday, faelligBucket, statusCfg, prioCfg, typColor, entryTitle };
+window.shared = { Avatar, StatusPill, TypeTag, PriorityDot, FaelligDate };
+})();
+</script>
+
+<script type="text/babel" data-presets="react">
+/* ==========================================================
+   Sidebar + Topbar
+   ========================================================== */
+(function(){
+const Icon = window.Icon;
+const { ENTRIES, CURRENT_USER } = window.APP_DATA;
+
+// Nav counter: "Mir zugewiesene offene Einträge"
+const myOpenCount = ENTRIES.filter(e => e.verantwortlich.initialen === CURRENT_USER && e.status !== "erledigt").length;
+
+function Sidebar() {
+  const items = [
+    { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+    { id: "onboarding", label: "Onboarding", icon: "userplus", badge: "3" },
+    { id: "patienten", label: "Patienten", icon: "users" },
+    { id: "angehoerige", label: "Angehörige", icon: "heart" },
+    { id: "zuteilung", label: "Management Zuteilung", icon: "branch" },
+    { id: "servicedesk", label: "Service Desk", icon: "headphones", badge: String(myOpenCount), active: true },
+    { id: "vorlagen", label: "Vorlagen", icon: "file" },
+  ];
+  return (
+    <aside style={{ position: "fixed", left: 0, top: 0, bottom: 0, width: 256, background: "#FAFBFC", borderRight: "1px solid #F0F1F4", display: "flex", flexDirection: "column", zIndex: 40 }}>
+      <div style={{ height: 64, display: "flex", alignItems: "center", gap: 12, padding: "0 20px", borderBottom: "1px solid #F0F1F4" }}>
+        <div style={{ width: 32, height: 32, borderRadius: 10, background: "#4F46E5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M9 1L16 5V13L9 17L2 13V5L9 1Z" stroke="white" strokeWidth="1.5" fill="none"/>
+            <circle cx="9" cy="9" r="3" fill="white" opacity="0.9"/>
+          </svg>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: -0.1, lineHeight: 1.2 }}>Spitex-Cockpit</span>
+          <span style={{ fontSize: 10, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.08, fontWeight: 500 }}>V1</span>
+        </div>
+      </div>
+      <div style={{ padding: "16px 12px 8px" }}>
+        <button style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, textAlign: "left" }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: "#EEF2FF", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontSize: 11, color: "#4F46E5", fontWeight: 700 }}>SP</span>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 500, color: "#111827" }}>Spitex Zürich Nord</div>
+            <div style={{ fontSize: 10.5, color: "#6B7280" }}>Organisation</div>
+          </div>
+        </button>
+      </div>
+      <nav style={{ flex: 1, overflowY: "auto", padding: "4px 12px" }}>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {items.map(item => {
+            const isActive = item.active;
+            return (
+              <li key={item.id} style={{ marginBottom: 2 }}>
+                <button style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "7px 10px",
+                  borderRadius: 8, fontSize: 13, textAlign: "left",
+                  background: isActive ? "#EEF2FF" : "transparent",
+                  color: isActive ? "#4F46E5" : "#374151",
+                  fontWeight: isActive ? 500 : 400,
+                }}>
+                  <Icon name={item.icon} size={16} style={{ color: isActive ? "#4F46E5" : "#9CA3AF", flexShrink: 0 }}/>
+                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</span>
+                  {item.badge && (
+                    <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 999, background: "rgba(79,70,229,0.1)", color: "#4F46E5", fontWeight: 600 }}>{item.badge}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+      <div style={{ padding: "12px", borderTop: "1px solid #F0F1F4" }}>
+        <button style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 8, fontSize: 13, color: "#374151", textAlign: "left" }}>
+          <Icon name="settings" size={16} style={{ color: "#9CA3AF" }}/>Einstellungen
+        </button>
+        <button style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 8, fontSize: 13, color: "#374151", textAlign: "left" }}>
+          <Icon name="help" size={16} style={{ color: "#9CA3AF" }}/>Hilfe & Support
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function Topbar() {
+  return (
+    <div style={{ position: "sticky", top: 0, zIndex: 30, background: "#FFFFFF", borderBottom: "1px solid #F0F1F4", height: 64, display: "flex", alignItems: "center", padding: "0 24px", gap: 16 }}>
+      <div style={{ flex: 1, maxWidth: 440 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "#F7F8FA", borderRadius: 10, border: "1px solid #F0F1F4" }}>
+          <Icon name="search" size={14} style={{ color: "#9CA3AF" }}/>
+          <span style={{ fontSize: 13, color: "#9CA3AF", flex: 1 }}>Patienten, Angehörige, Tickets suchen…</span>
+          <span style={{ fontSize: 10.5, padding: "2px 6px", borderRadius: 4, background: "#FFFFFF", border: "1px solid #E5E7EB", color: "#6B7280", fontWeight: 500 }}>⌘K</span>
+        </div>
+      </div>
+      <div style={{ flex: 1 }}/>
+      <button style={{ width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280", position: "relative" }}>
+        <Icon name="bell" size={17}/>
+        <span style={{ position: "absolute", top: 6, right: 6, width: 7, height: 7, borderRadius: 999, background: "#DC2626", border: "2px solid white" }}/>
+      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px 4px 4px", borderRadius: 999, background: "#F7F8FA" }}>
+        <div style={{ width: 28, height: 28, borderRadius: 999, background: "#4F46E5", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600 }}>MK</div>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 500 }}>Maria Keller</div>
+          <div style={{ fontSize: 10, color: "#6B7280" }}>Admin</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+window.chrome = { Sidebar, Topbar };
+})();
+</script>
+
+<script type="text/babel" data-presets="react">
+/* ==========================================================
+   URL State (query params)
+   ========================================================== */
+(function(){
+function useUrlState() {
+  const [state, setState] = React.useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    return {
+      view: p.get("view") || "mir",   // mir | team | alle | erledigt
+      quelle: p.get("quelle") || "",  // workflow | ticket | ""
+      typ: p.get("typ") || "",        // e.g. SRK_ANMELDUNG
+      selected: p.get("id") || null,
+    };
+  });
+  React.useEffect(() => {
+    const p = new URLSearchParams();
+    if (state.view !== "mir") p.set("view", state.view);
+    if (state.quelle) p.set("quelle", state.quelle);
+    if (state.typ) p.set("typ", state.typ);
+    if (state.selected) p.set("id", state.selected);
+    const qs = p.toString();
+    const next = window.location.pathname + (qs ? "?" + qs : "");
+    window.history.replaceState(null, "", next);
+  }, [state]);
+  return [state, setState];
+}
+window.useUrlState = useUrlState;
+})();
+</script>
+
+<script type="text/babel" data-presets="react">
+/* ==========================================================
+   Filter Popover
+   ========================================================== */
+(function(){
+const Icon = window.Icon;
+const { WORKFLOW_TYPES, TICKET_TYPES } = window.APP_DATA;
+
+function FilterPopover({ state, setState, onClose }) {
+  const setQuelle = (q) => setState(s => ({ ...s, quelle: s.quelle === q ? "" : q, typ: "" }));
+  const setTyp = (t) => setState(s => ({ ...s, typ: s.typ === t ? "" : t }));
+  return (
+    <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 20, background: "white", border: "1px solid #E5E7EB", borderRadius: 12, boxShadow: "0 8px 24px rgba(17,24,39,0.08)", width: 280, padding: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "#111827" }}>Filter</div>
+        <button onClick={onClose} style={{ color: "#9CA3AF", padding: 2 }}><Icon name="x" size={14}/></button>
+      </div>
+      <div style={{ fontSize: 10.5, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.08, fontWeight: 500, marginBottom: 8 }}>Quelle</div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        {[{id:"workflow",label:"Workflow"}, {id:"ticket",label:"Tickets"}].map(q => {
+          const active = state.quelle === q.id;
+          return (
+            <button key={q.id} onClick={() => setQuelle(q.id)} style={{
+              flex: 1, padding: "7px 10px", borderRadius: 8, fontSize: 12,
+              border: `1px solid ${active ? "#4F46E5" : "#E5E7EB"}`,
+              background: active ? "#EEF2FF" : "white",
+              color: active ? "#4F46E5" : "#374151", fontWeight: active ? 500 : 400,
+            }}>{q.label}</button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 10.5, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.08, fontWeight: 500, marginBottom: 8 }}>Typ</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {[...WORKFLOW_TYPES, ...TICKET_TYPES].map(t => {
+          const active = state.typ === t.id;
+          return (
+            <button key={t.id} onClick={() => setTyp(t.id)} style={{
+              padding: "5px 10px", borderRadius: 999, fontSize: 11.5,
+              border: `1px solid ${active ? "#4F46E5" : "#E5E7EB"}`,
+              background: active ? "#EEF2FF" : "white",
+              color: active ? "#4F46E5" : "#374151", fontWeight: active ? 500 : 400,
+            }}>{t.label}</button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+window.FilterPopover = FilterPopover;
+})();
+</script>
+
+<script type="text/babel" data-presets="react">
+/* ==========================================================
+   List + Detail
+   ========================================================== */
+(function(){
+const { Avatar, StatusPill, TypeTag, PriorityDot, FaelligDate } = window.shared;
+const { statusCfg, prioCfg, typColor, formatDate, faelligBucket, entryTitle } = window.helpers;
+const { ENTRIES, WORKFLOW_TYPES, TICKET_TYPES } = window.APP_DATA;
+const Icon = window.Icon;
+
+const BUCKETS = [
+  { key: "ueberfaellig",   label: "Überfällig",   color: "#DC2626" },
+  { key: "heute",          label: "Heute",        color: "#D97706" },
+  { key: "morgen",         label: "Morgen",       color: "#D97706" },
+  { key: "diese_woche",    label: "Diese Woche",  color: "#111827" },
+  { key: "spaeter",        label: "Später",       color: "#6B7280" },
+  { key: "kein",           label: "Ohne Termin",  color: "#9CA3AF" },
+];
+
+function typLabelFor(id) {
+  const m = [...WORKFLOW_TYPES, ...TICKET_TYPES].find(t => t.id === id);
+  return m ? m.label : id;
+}
+
+function ServiceDeskPage({ urlState, setUrlState }) {
+  const [filterOpen, setFilterOpen] = React.useState(false);
+
+  const filtered = React.useMemo(() => {
+    let list = ENTRIES;
+    if (urlState.view === "mir") list = list.filter(e => e.verantwortlich.initialen === "MK");
+    else if (urlState.view === "team") list = list.filter(e => ["MK","KM","SW"].includes(e.verantwortlich.initialen));
+    else if (urlState.view === "erledigt") list = list.filter(e => e.status === "erledigt");
+    // default for non-erledigt views: hide erledigt
+    if (urlState.view !== "erledigt") list = list.filter(e => e.status !== "erledigt");
+    if (urlState.quelle) list = list.filter(e => e.quelle === urlState.quelle);
+    if (urlState.typ) list = list.filter(e => e.typ === urlState.typ);
+    return list;
+  }, [urlState.view, urlState.quelle, urlState.typ]);
+
+  // Auto-select first entry when filter changes
+  React.useEffect(() => {
+    if (filtered.length === 0) {
+      if (urlState.selected !== null) setUrlState(s => ({ ...s, selected: null }));
+      return;
+    }
+    const exists = filtered.some(e => e.id === urlState.selected);
+    if (!exists) setUrlState(s => ({ ...s, selected: filtered[0].id }));
+  }, [filtered, urlState.selected]);
+
+  const selected = ENTRIES.find(e => e.id === urlState.selected) || null;
+
+  const grouped = React.useMemo(() => {
+    const g = {};
+    BUCKETS.forEach(b => g[b.key] = []);
+    filtered.forEach(e => {
+      const b = faelligBucket(e.faellig);
+      (g[b] || g.kein).push(e);
+    });
+    Object.values(g).forEach(arr => arr.sort((a,b) => (a.faellig||"").localeCompare(b.faellig||"")));
+    return g;
+  }, [filtered]);
+
+  const counts = {
+    offen: filtered.filter(e => e.status !== "erledigt").length,
+    ueberfaellig: grouped.ueberfaellig.length,
+    dieseWoche: grouped.heute.length + grouped.morgen.length + grouped.diese_woche.length,
+  };
+
+  const views = [
+    { id: "mir", label: "Mir zugewiesen", icon: "user", count: ENTRIES.filter(e => e.verantwortlich.initialen === "MK" && e.status !== "erledigt").length },
+    { id: "team", label: "Mein Team", icon: "users", count: ENTRIES.filter(e => ["MK","KM","SW"].includes(e.verantwortlich.initialen) && e.status !== "erledigt").length },
+    { id: "alle", label: "Alle", icon: "inbox", count: ENTRIES.filter(e => e.status !== "erledigt").length },
+    { id: "erledigt", label: "Erledigt", icon: "checkcircle", count: ENTRIES.filter(e => e.status === "erledigt").length },
+  ];
+
+  return (
+    <div style={{ display: "flex", height: "calc(100vh - 64px)", background: "white" }}>
+      {/* LEFT — view rail */}
+      <div style={{ width: 220, borderRight: "1px solid #F0F1F4", padding: "20px 14px", flexShrink: 0, overflowY: "auto", background: "#FAFBFC" }}>
+        <div style={{ fontSize: 10.5, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.08, fontWeight: 500, padding: "0 8px 8px" }}>Ansichten</div>
+        {views.map(v => {
+          const isActive = urlState.view === v.id;
+          return (
+            <button key={v.id} onClick={() => setUrlState(s => ({ ...s, view: v.id }))} style={{
+              width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "7px 10px",
+              borderRadius: 8, textAlign: "left", marginBottom: 2,
+              background: isActive ? "#EEF2FF" : "transparent",
+              color: isActive ? "#4F46E5" : "#374151",
+              fontWeight: isActive ? 500 : 400, fontSize: 13,
+            }}>
+              <Icon name={v.icon} size={15} style={{ color: isActive ? "#4F46E5" : "#9CA3AF" }}/>
+              <span style={{ flex: 1 }}>{v.label}</span>
+              <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 500 }}>{v.count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* MIDDLE — list */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", borderRight: "1px solid #F0F1F4" }}>
+        {/* page header */}
+        <div style={{ padding: "20px 24px 14px", borderBottom: "1px solid #F0F1F4" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 12 }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, color: "#111827", letterSpacing: -0.015 }}>Service Desk</h1>
+              <div style={{ fontSize: 12.5, color: "#6B7280", marginTop: 3 }}>
+                {counts.offen} offene Einträge · <span style={{ color: counts.ueberfaellig > 0 ? "#991B1B" : "#6B7280", fontWeight: counts.ueberfaellig > 0 ? 500 : 400 }}>{counts.ueberfaellig} überfällig</span> · {counts.dieseWoche} diese Woche fällig
+              </div>
+            </div>
+            <button style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 13px", borderRadius: 10, background: "#4F46E5", color: "white", fontSize: 12.5, fontWeight: 500, flexShrink: 0 }}>
+              <Icon name="plus" size={13}/> Neues Ticket
+            </button>
+          </div>
+          {/* Filter chips bar */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", position: "relative" }}>
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setFilterOpen(o => !o)} style={{
+                display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 11px",
+                borderRadius: 999, border: "1px solid #E5E7EB", background: filterOpen ? "#F3F4F6" : "white",
+                fontSize: 12, color: "#374151", fontWeight: 500
+              }}>
+                <Icon name="sliders" size={12}/> Filter
+                {(urlState.quelle || urlState.typ) && <span style={{ width: 5, height: 5, borderRadius: 999, background: "#4F46E5" }}/>}
+              </button>
+              {filterOpen && <FilterPopover state={urlState} setState={setUrlState} onClose={() => setFilterOpen(false)} />}
+            </div>
+
+            {urlState.quelle && (
+              <button onClick={() => setUrlState(s => ({ ...s, quelle: "" }))} style={{
+                display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 10px",
+                borderRadius: 999, background: "#EEF2FF", color: "#4F46E5", fontSize: 11.5, fontWeight: 500
+              }}>
+                Quelle: {urlState.quelle === "workflow" ? "Workflow" : "Tickets"} <Icon name="x" size={11}/>
+              </button>
+            )}
+            {urlState.typ && (
+              <button onClick={() => setUrlState(s => ({ ...s, typ: "" }))} style={{
+                display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 10px",
+                borderRadius: 999, background: "#EEF2FF", color: "#4F46E5", fontSize: 11.5, fontWeight: 500
+              }}>
+                Typ: {typLabelFor(urlState.typ)} <Icon name="x" size={11}/>
+              </button>
+            )}
+            {(urlState.quelle || urlState.typ) && (
+              <button onClick={() => setUrlState(s => ({ ...s, quelle: "", typ: "" }))} style={{ fontSize: 11.5, color: "#6B7280", padding: "5px 6px", fontWeight: 500 }}>
+                Alle zurücksetzen
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* grouped list */}
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: 56, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+              Keine Einträge mit diesen Filtern.
+            </div>
+          )}
+          {BUCKETS.map(bucket => {
+            const items = grouped[bucket.key];
+            if (!items || items.length === 0) return null;
+            return (
+              <div key={bucket.key}>
+                <div style={{ padding: "10px 24px", background: "#FAFBFC", borderTop: "1px solid #F0F1F4", borderBottom: "1px solid #F0F1F4", display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: bucket.color, textTransform: "uppercase", letterSpacing: 0.08 }}>{bucket.label}</span>
+                  <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 500 }}>{items.length}</span>
+                </div>
+                {items.map(e => {
+                  const isSelected = urlState.selected === e.id;
+                  const b = faelligBucket(e.faellig);
+                  const d = e.faellig ? daysFromToday(e.faellig) : null;
+                  const dateLabel = b === "ueberfaellig"
+                    ? `${Math.abs(d)} ${Math.abs(d) === 1 ? "Tag" : "Tage"} überfällig`
+                    : b === "heute" ? "heute" : b === "morgen" ? "morgen" : e.faellig ? formatShort(e.faellig) : "—";
+                  return (
+                    <button
+                      key={e.id}
+                      onClick={() => setUrlState(s => ({ ...s, selected: e.id }))}
+                      className={isSelected ? "" : "row-hover"}
+                      style={{
+                        width: "100%", display: "grid", gridTemplateColumns: "4px 1fr auto",
+                        gap: 12, alignItems: "center", padding: "11px 24px 11px 20px",
+                        background: isSelected ? "#EEF2FF" : "transparent",
+                        borderBottom: "1px solid #F7F8FA",
+                        textAlign: "left", transition: "background 0.1s",
+                      }}
+                    >
+                      <div style={{ width: 4, height: 36, borderRadius: 2, background: prioCfg[e.prioritaet].color, opacity: e.prioritaet === "niedrig" ? 0.3 : 0.9 }}/>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                          <TypeTag entry={e}/>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: isSelected ? "#4F46E5" : "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {entryTitle(e)}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "#6B7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {e.kontext}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 500, color: b === "ueberfaellig" ? "#DC2626" : b === "heute" || b === "morgen" ? "#D97706" : "#6B7280", whiteSpace: "nowrap" }}>
+                          {dateLabel}
+                        </div>
+                        <Avatar p={e.verantwortlich} size={18}/>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* RIGHT — detail */}
+      <div style={{ width: 400, flexShrink: 0, overflowY: "auto", background: "#FAFBFC" }}>
+        {selected ? <DetailPane entry={selected} /> : (
+          <div style={{ padding: 40, textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+            <Icon name="inbox" size={32} style={{ color: "#D1D5DB", marginBottom: 12 }}/>
+            <div>Wähle einen Eintrag, um Details zu sehen.</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatShort(iso) {
+  if (!iso) return "—";
+  const [, m, d] = iso.split("-");
+  const months = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+  return `${parseInt(d)}. ${months[parseInt(m)-1]}`;
+}
+function daysFromToday(iso) {
+  if (!iso) return null;
+  const t = new Date(window.APP_DATA.TODAY);
+  const d = new Date(iso);
+  return Math.round((d - t) / 86400000);
+}
+
+window.ServiceDeskPage = ServiceDeskPage;
+})();
+</script>
+
+<script type="text/babel" data-presets="react">
+/* ==========================================================
+   Detail Pane
+   ========================================================== */
+(function(){
+const { Avatar, StatusPill, TypeTag, PriorityDot, FaelligDate } = window.shared;
+const { statusCfg, prioCfg, formatDate, faelligBucket, entryTitle } = window.helpers;
+const Icon = window.Icon;
+
+function daysFromToday2(iso) {
+  if (!iso) return null;
+  const t = new Date(window.APP_DATA.TODAY);
+  const d = new Date(iso);
+  return Math.round((d - t) / 86400000);
+}
+
+function DetailPane({ entry }) {
+  const [status, setStatus] = React.useState(entry.status);
+  const [comment, setComment] = React.useState("");
+  const [comments, setComments] = React.useState([]);
+  React.useEffect(() => { setStatus(entry.status); setComments([]); setComment(""); }, [entry.id]);
+
+  const b = faelligBucket(entry.faellig);
+  const d = daysFromToday2(entry.faellig);
+  const dueLabel = b === "ueberfaellig" ? `${Math.abs(d)} ${Math.abs(d) === 1 ? "Tag" : "Tage"} überfällig`
+                 : b === "heute" ? "heute fällig"
+                 : b === "morgen" ? "morgen fällig"
+                 : entry.faellig ? formatDate(entry.faellig) : "—";
+
+  const addComment = () => {
+    if (!comment.trim()) return;
+    setComments(cs => [...cs, { text: comment, at: "jetzt", by: "Maria Keller" }]);
+    setComment("");
+  };
+
+  return (
+    <div style={{ padding: "20px 22px 28px", display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* header */}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <TypeTag entry={entry}/>
+          <span style={{ fontSize: 10.5, color: "#9CA3AF", fontFamily: "'JetBrains Mono', monospace" }}>{entry.id}</span>
+          <div style={{ flex: 1 }}/>
+          <button style={{ padding: 4, color: "#9CA3AF" }}><Icon name="more" size={16}/></button>
+        </div>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "#111827", letterSpacing: -0.01, lineHeight: 1.3 }}>
+          {entryTitle(entry)}
+        </h2>
+        <p style={{ margin: "6px 0 0", fontSize: 13, color: "#6B7280", lineHeight: 1.5 }}>{entry.kontext}</p>
+      </div>
+
+      {/* alert for urgent */}
+      {(b === "ueberfaellig" || b === "heute") && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", background: b === "ueberfaellig" ? "#FEF2F2" : "#FFFBEB", borderRadius: 10 }}>
+          <Icon name="alert" size={14} style={{ color: b === "ueberfaellig" ? "#DC2626" : "#D97706" }}/>
+          <span style={{ fontSize: 12, color: b === "ueberfaellig" ? "#991B1B" : "#92400E", fontWeight: 500 }}>{dueLabel}</span>
+        </div>
+      )}
+
+      {/* meta grid */}
+      <div style={{ background: "white", border: "1px solid #F0F1F4", borderRadius: 10, padding: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", rowGap: 14, columnGap: 16 }}>
+          <Meta label="Typ" value={<TypeTag entry={entry}/>}/>
+          <Meta label="Status" value={<StatusPill status={status}/>}/>
+          {entry.person && <Meta label="Betroffene Person" value={
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Avatar p={entry.person} size={18}/>
+              <span style={{ fontSize: 12.5, fontWeight: 500 }}>{entry.person.name}</span>
+            </span>
+          }/>}
+          <Meta label="Verantwortlich" value={
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Avatar p={entry.verantwortlich} size={18}/>
+              <span style={{ fontSize: 12.5, fontWeight: 500 }}>{entry.verantwortlich.name}</span>
+            </span>
+          }/>
+          <Meta label="Priorität" value={
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 500, color: prioCfg[entry.prioritaet].color }}>
+              <PriorityDot prio={entry.prioritaet}/>{prioCfg[entry.prioritaet].label}
+            </span>
+          }/>
+          <Meta label="Fällig" value={<FaelligDate iso={entry.faellig}/>}/>
+          <Meta label="Erstellt" value={<span style={{ fontSize: 12, color: "#6B7280" }}>{formatDate(entry.erstellt)}</span>}/>
+        </div>
+      </div>
+
+      {/* Verlauf */}
+      <div>
+        <div style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.08, fontWeight: 500, marginBottom: 10 }}>Verlauf</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <VerlaufEvent dot="#9CA3AF" actor={entry.verantwortlich.name} text="Eintrag erstellt" date={formatDate(entry.erstellt)}/>
+          {entry.status === "in_bearbeitung" && (
+            <VerlaufEvent dot="#D97706" actor={entry.verantwortlich.name} text="Status auf ‚In Bearbeitung' gesetzt" date={formatDate(entry.erstellt)}/>
+          )}
+          {comments.map((c, i) => (
+            <VerlaufEvent key={i} dot="#4F46E5" actor={c.by} text={`kommentiert: "${c.text}"`} date={c.at}/>
+          ))}
+        </div>
+      </div>
+
+      {/* Aktionen */}
+      <div style={{ background: "white", border: "1px solid #F0F1F4", borderRadius: 10, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ fontSize: 11, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.08, fontWeight: 500 }}>Aktionen</div>
+
+        {/* Status-Dropdown */}
+        <div>
+          <label style={{ fontSize: 11, color: "#6B7280", fontWeight: 500, display: "block", marginBottom: 5 }}>Status ändern</label>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} style={{
+            width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #E5E7EB",
+            fontSize: 12.5, color: "#374151", background: "white", outline: "none"
+          }}>
+            <option value="offen">Offen</option>
+            <option value="in_bearbeitung">In Bearbeitung</option>
+            <option value="erledigt">Erledigt</option>
+          </select>
+        </div>
+
+        {/* Kommentar */}
+        <div>
+          <label style={{ fontSize: 11, color: "#6B7280", fontWeight: 500, display: "block", marginBottom: 5 }}>Kommentar hinzufügen</label>
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Kurzer Kommentar zum Stand…" style={{
+            width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB",
+            fontSize: 12.5, color: "#374151", minHeight: 60, resize: "vertical", outline: "none", lineHeight: 1.4
+          }}/>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+            <button onClick={addComment} disabled={!comment.trim()} style={{
+              padding: "5px 11px", borderRadius: 8, fontSize: 12, fontWeight: 500,
+              background: comment.trim() ? "#F3F4F6" : "#F3F4F6",
+              color: comment.trim() ? "#374151" : "#9CA3AF",
+              cursor: comment.trim() ? "pointer" : "not-allowed",
+            }}>Speichern</button>
+          </div>
+        </div>
+
+        {/* Dokumente */}
+        {(entry.quelle === "workflow" || entry.typ === "SCHLUESSEL" || entry.typ === "MELDUNG") && (
+          <div>
+            <label style={{ fontSize: 11, color: "#6B7280", fontWeight: 500, display: "block", marginBottom: 5 }}>Dokumente</label>
+            <button style={{
+              width: "100%", padding: "9px 10px", borderRadius: 8, border: "1px dashed #D1D5DB",
+              display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+              fontSize: 12, color: "#6B7280", fontWeight: 500, background: "#FAFBFC"
+            }}>
+              <Icon name="upload" size={13}/> Datei hochladen
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Primary CTA: Erledigt */}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button onClick={() => setStatus("erledigt")} style={{
+          padding: "9px 14px", borderRadius: 10,
+          background: status === "erledigt" ? "#ECFDF5" : "#4F46E5",
+          color: status === "erledigt" ? "#065F46" : "white",
+          fontSize: 12.5, fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 6,
+          border: status === "erledigt" ? "1px solid #A7F3D0" : "none",
+        }}>
+          <Icon name="check" size={13}/> {status === "erledigt" ? "Erledigt" : "Als erledigt markieren"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Meta({ label, value }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.08, fontWeight: 500, marginBottom: 4 }}>{label}</div>
+      <div>{value}</div>
+    </div>
+  );
+}
+
+function VerlaufEvent({ dot, actor, text, date }) {
+  return (
+    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+      <div style={{ width: 6, height: 6, borderRadius: 999, background: dot, marginTop: 6, flexShrink: 0 }}/>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 12, color: "#374151" }}>
+          <span style={{ fontWeight: 500 }}>{actor}</span> · {text}
+        </div>
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 1 }}>{date}</div>
+      </div>
+    </div>
+  );
+}
+
+window.DetailPane = DetailPane;
+})();
+</script>
+
+<script type="text/babel" data-presets="react">
+/* ==========================================================
+   App shell
+   ========================================================== */
+const { Sidebar, Topbar } = window.chrome;
+const { ServiceDeskPage } = window;
+
+function App() {
+  const [urlState, setUrlState] = window.useUrlState();
+  return (
+    <div data-screen-label="Service Desk" style={{ minHeight: "100vh", background: "#F7F8FA" }}>
+      <Sidebar />
+      <div style={{ marginLeft: 256 }}>
+        <Topbar />
+        <ServiceDeskPage urlState={urlState} setUrlState={setUrlState} />
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

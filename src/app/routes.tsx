@@ -12,9 +12,11 @@ import { AngehoerigePage } from "./components/AngehoerigePage";
 import { Angehoerige360Page } from "./components/Angehoerige360Page";
 import { FormShowcase } from "./components/FormShowcase";
 import { InterRAIListPage } from "./components/interrai/InterRAIListPage";
-import { InterRAIDetailPage } from "./components/interrai/InterRAIDetailPage";
 import { PflegeplanungArbeitsbereich } from "./components/PflegeplanungArbeitsbereich";
 import { KLVArbeitsbereich } from "./components/KLVArbeitsbereich";
+import { SchulungsnachweisPage } from "./components/schulung/SchulungsnachweisPage";
+import { ArbeitskontrollePage } from "./components/arbeitskontrolle/ArbeitskontrollePage";
+import { InterraiNeuPage } from "./components/interrai-neu/InterraiNeuPage";
 
 export const router = createBrowserRouter([
   {
@@ -24,9 +26,10 @@ export const router = createBrowserRouter([
       { index: true, Component: DashboardPage },
       { path: "dashboard", Component: StrategicDashboard },
       { path: "interrai", Component: InterRAIListPage },
-      { path: "interrai/:assessmentId", Component: InterRAIDetailPage },
       { path: "pflegeplanung/:planungId", Component: PflegeplanungArbeitsbereich },
       { path: "klv/:klvId", Component: KLVArbeitsbereich },
+      { path: "schulungsnachweis/:nachweisId", Component: SchulungsnachweisPage },
+      { path: "arbeitskontrolle/:kontrolleId", Component: ArbeitskontrollePage },
       { path: "patienten", Component: PatientenPage },
       { path: "patienten/:patientId", Component: Patient360Page },
       { path: "angehoerige", Component: AngehoerigePage },
@@ -37,6 +40,7 @@ export const router = createBrowserRouter([
       { path: "zuteilung", Component: ZuteilungPage },
       { path: "servicedesk", Component: ServiceDeskPage },
       { path: "showcase/forms", Component: FormShowcase },
+      { path: "interrai-neu/:assessmentId", Component: InterraiNeuPage },
       { path: "vorlagen", Component: PlaceholderPage },
       { path: "*", Component: PlaceholderPage },
     ],

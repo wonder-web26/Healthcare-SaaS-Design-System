@@ -14,6 +14,7 @@ import { DokumentScanUpload, type ScanFile } from "./DokumentScanUpload";
 import type { AngehoerigerFormData } from "../StepAngehoeriger";
 import { pruefeQuellensteuerAutomatik } from "../../../lib/stammdaten/quellensteuer-automatik";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../../lib/stammdaten/dokumenttypen";
+import { SEMMeldeBanner, NATIONALITAETEN } from "./MigratedAngehoerigerForms";
 import { toast } from "sonner";
 
 function filled(v: string | undefined | null): boolean {
@@ -113,7 +114,7 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
         <TextInput label="Vorname" required={istPflicht} value={data.partnerVorname} onChange={v => set("partnerVorname", v)} onBlur={() => touch("partnerVorname")} placeholder="Vorname" error={errIfPflicht("partnerVorname", data.partnerVorname)} />
         <TextInput label="Nachname" required={istPflicht} value={data.partnerName} onChange={v => set("partnerName", v)} onBlur={() => touch("partnerName")} placeholder="Nachname" error={errIfPflicht("partnerName", data.partnerName)} />
         <TextInput label="Geburtsdatum" required={istPflicht} value={data.partnerGeburtsdatum} onChange={v => set("partnerGeburtsdatum", v)} onBlur={() => touch("partnerGeburtsdatum")} placeholder="01.01.1985" hint="Format: TT.MM.JJJJ" error={errIfPflicht("partnerGeburtsdatum", data.partnerGeburtsdatum)} />
-        <TextInput label="Nationalitaet" value={data.partnerNationalitaet} onChange={v => set("partnerNationalitaet", v)} placeholder="z.B. Schweiz, Deutschland" />
+        <FormSelect label="Nationalität" value={data.partnerNationalitaet || null} onChange={v => set("partnerNationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
@@ -256,7 +257,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                 <button type="button" onClick={addKind} className="inline-flex items-center cursor-pointer transition-colors"
                   style={{ gap: "var(--space-2)", padding: "9.5px 22px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--text-primary)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
                   onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
-                  <Plus style={{ width: 14, height: 14 }} /> Weiteres Kind hinzufuegen
+                  <Plus style={{ width: 14, height: 14 }} /> {data.kinder.length === 0 ? "Kind erfassen" : "Weiteres Kind hinzufügen"}
                 </button>
               </div>
             </>
@@ -357,7 +358,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
           if (doc.modus === "unterschrift") {
             const istUnterschrieben = data.scans[doc.code] === "unterschrieben";
             return (
-              <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+              <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center" style={{ gap: 8 }}>
                     <FileSignature style={{ width: 16, height: 16, color: istUnterschrieben ? "var(--status-success)" : "var(--text-tertiary)" }} />
@@ -381,7 +382,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
           if (doc.mehrfach) {
             const eintraege = mehrfachEintraege[doc.code] || [];
             return (
-              <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+              <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
                 <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>
                   {doc.label} <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontWeight: 400 }}>(optional, beliebig viele)</span>
                 </div>
@@ -432,7 +433,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
             const scanVorne = data.scans[`${doc.code}_vorne`];
             const scanHinten = data.scans[`${doc.code}_hinten`];
             return (
-              <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+              <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
                 <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
                   <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
                     {doc.label} {doc.pflicht && <span style={{ color: "var(--status-danger)" }}>*</span>}
@@ -450,7 +451,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
           /* ── modus=upload + einseitig (Standard) ── */
           const scan = data.scans[doc.code];
           return (
-            <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+            <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
               <div className="flex items-center justify-between" style={{ marginBottom: scan ? 0 : "var(--space-3)" }}>
                 <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
                   {doc.label}{doc.pflicht ? "" : " (optional)"} {doc.pflicht && <span style={{ color: "var(--status-danger)" }}>*</span>}
@@ -468,13 +469,18 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
           );
         })}
 
+        {/* SEM-Meldeformular im Dokumente-Tab (bei B, S, F) */}
+        {(data.aufenthaltsstatus === "B" || data.aufenthaltsstatus === "S" || data.aufenthaltsstatus === "F") && (
+          <SEMMeldeBanner data={data} />
+        )}
+
         {/* Pro-Kind-Dokumente: ein Upload pro Kind, das über Spitex abgerechnet wird */}
         {kinderMitZulagen.map((kind, idx) => {
           const kindKey = `kind_kk_${kind.id}`;
           const kindLabel = `Krankenkassenkarte — ${kind.vorname || ""} ${kind.name || `Kind ${idx + 1}`}`.trim();
           const kindScan = data.scans[kindKey];
           return (
-            <div key={kindKey} style={{ padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+            <div key={kindKey} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
               <div className="flex items-center justify-between" style={{ marginBottom: kindScan ? 0 : "var(--space-3)" }}>
                 <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
                   {kindLabel} <span style={{ color: "var(--status-danger)" }}>*</span>
@@ -497,7 +503,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
 }
 
 /** Zeigt einen hochgeladenen Scan mit Vorschau/Entfernen-Aktionen */
-function ScanDisplay({ scanKey, scan, onRemove, previewOpen, setPreviewOpen }: {
+export function ScanDisplay({ scanKey, scan, onRemove, previewOpen, setPreviewOpen }: {
   scanKey: string;
   scan: { name: string; size: string; timestamp?: string; previewUrl?: string | null };
   onRemove: (key: string) => void;
@@ -533,7 +539,7 @@ function ScanDisplay({ scanKey, scan, onRemove, previewOpen, setPreviewOpen }: {
 }
 
 /** Scan-Slot: zeigt Upload-Buttons oder hochgeladenen Scan */
-function ScanSlot({ label, scanKey, docLabel, scan, onFile, onRemove, previewOpen, setPreviewOpen }: {
+export function ScanSlot({ label, scanKey, docLabel, scan, onFile, onRemove, previewOpen, setPreviewOpen }: {
   label: string;
   scanKey: string;
   docLabel: string;

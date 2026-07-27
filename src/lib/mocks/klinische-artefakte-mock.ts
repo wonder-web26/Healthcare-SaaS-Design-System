@@ -4,11 +4,22 @@
  * leeres OB (Rosa Ammann), abgebrochenes OB (Walter Frei).
  */
 import type { InterRAIAssessment, InterRAIItem, AnnaKonfidenz, CapResult, OutcomeScale, Pflegeplanung, Pflegediagnose, Massnahme, Pflegeziel, KLVVerordnung, WorkflowPlan, WorkflowSchritt, AerztlicheDiagnose } from "../../types/klinische-artefakte";
-import { INTERRAI_ITEMS } from "../interrai/interrai-items";
 
 /* ══════════════════════════════════════════
    DEMO ITEMS (30 items, A–S)
+   Self-contained factory — the old interrai-items.ts catalog was deleted.
    ══════════════════════════════════════════ */
+
+// Section names by letter — used by the self-contained makeItem factory
+const SEKTION_MAP: Record<string, string> = {
+  A: "Identifikation", B: "Kommunikation", C: "Kognition",
+  D: "Kommunikation und Sehen", E: "Stimmung und Verhalten",
+  F: "Psychosoziales Wohlbefinden", G: "Funktionsstatus",
+  H: "Kontinenz", I: "Krankheitsdiagnosen", J: "Gesundheitszustand",
+  K: "Ernährungszustand", L: "Mund- und Zahnstatus", M: "Medikamente",
+  N: "Behandlungen und Prozeduren", O: "Verantwortlichkeit",
+  P: "Soziale Unterstützung", Q: "Umfeld", R: "Potenzial", S: "Entlassungsprognose",
+};
 
 function makeItem(
   code: string,
@@ -18,17 +29,17 @@ function makeItem(
   ausGespraech: boolean,
   zitat: string | null,
 ): InterRAIItem {
-  const def = INTERRAI_ITEMS.find(d => d.code === code)!;
+  const sektion = code[0];
   return {
     id: `item-${code}-${assessmentId}`,
     assessmentId,
-    code: def.code,
-    sektion: def.sektion,
-    sektionName: def.sektionName,
-    frageKurz: def.frageKurz,
-    frageVoll: def.frageVoll,
-    antwortTyp: def.antwortTyp,
-    antwortOptionen: def.antwortOptionen.map(o => ({ ...o })),
+    code,
+    sektion,
+    sektionName: SEKTION_MAP[sektion] || sektion,
+    frageKurz: code,
+    frageVoll: code,
+    antwortTyp: typeof antwortWert === "number" ? "zahl" : "skala",
+    antwortOptionen: [],
     antwortWert,
     validiert: true,
     ausGespraech,

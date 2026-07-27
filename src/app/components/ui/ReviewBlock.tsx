@@ -114,11 +114,15 @@ export function ReviewBlock({
             )}
           </div>
 
-          {/* Status-Pill */}
-          <div className="flex items-center shrink-0" style={{ gap: 4, padding: "2px 10px", borderRadius: 999, background: pill.bg, color: pill.color }}>
-            <PillIcon style={{ width: 11, height: 11 }} />
-            <span style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)" }}>{pill.label}</span>
-          </div>
+          {/* Status — Zustände als Text, nicht als Button-ähnliche Pill */}
+          {status === "vorschlag" ? (
+            <span className="shrink-0" style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>{pill.label}</span>
+          ) : (
+            <div className="flex items-center shrink-0" style={{ gap: 4, padding: "2px 10px", borderRadius: 999, background: pill.bg, color: pill.color }}>
+              <PillIcon style={{ width: 11, height: 11 }} />
+              <span style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)" }}>{pill.label}</span>
+            </div>
+          )}
 
           {/* Löschen (immer sichtbar wenn gesetzt) */}
           {onLoeschen && (

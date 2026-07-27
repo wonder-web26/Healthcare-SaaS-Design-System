@@ -67,15 +67,19 @@ import {
 import { StatusModal } from "./StatusModal";
 import { TabDokumente } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
-import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, DEMO_SCALES, DEMO_CAPS, ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
 import { KLV_STATUS_PIPELINE, getArtefaktContainer, type KLVVerordnung } from "../../types/klinische-artefakte";
 import { hProWoche, berechneSummen, einheitLabel } from "../../lib/klv/berechnung";
 import { toast } from "sonner";
 import { useRecording } from "../recording/RecordingContext";
+import { getPersonByPatientId } from "../../lib/interrai/store";
+import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { ItemRow } from "./ui/ItemRow";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
+import { getNachweiseFuerPatient } from "../../lib/schulung/nachweis-store";
+import "../../lib/schulung/demo-seed";
 
 /* ── Tab definitions ─────────────────────── */
 const profileTabs = [
@@ -1878,8 +1882,45 @@ function TabATL({ patient }: { patient: Patient }) {
 }
 
 function TabWorkflow({ patient }: { patient: Patient }) {
+  const navigate = useNavigate();
+  const nachweise = getNachweiseFuerPatient(patient.id);
+
   return (
-    <RhythmusTimeline subjektTyp="patient" subjektId={patient.id} aktuellerBenutzer={patient.pflegefachkraft} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <RhythmusTimeline subjektTyp="patient" subjektId={patient.id} aktuellerBenutzer={patient.pflegefachkraft} />
+
+      {nachweise.length > 0 && (
+        <div style={{ padding: "var(--space-4)" }}>
+          <div style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 12 }}>Schulungsnachweise</div>
+          <div className="flex flex-col" style={{ gap: 8 }}>
+            {nachweise.map(n => (
+              <div
+                key={n.id}
+                className="flex items-center justify-between cursor-pointer"
+                onClick={() => navigate(`/schulungsnachweis/${n.id}`)}
+                style={{ padding: "12px 16px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}
+              >
+                <div>
+                  <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
+                    Initialschulung — Angehörige {n.angehoerigerName}
+                  </div>
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2 }}>
+                    {n.unterschriften.length} von {n.positionen.length} Positionen unterschrieben
+                  </div>
+                </div>
+                <span style={{
+                  padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500,
+                  background: n.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)",
+                  color: n.status === "abgeschlossen" ? "var(--status-success)" : "var(--status-warning-text)",
+                }}>
+                  {n.status === "abgeschlossen" ? "Abgeschlossen" : "In Bearbeitung"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2708,129 +2749,20 @@ function TabHistorie({ patient }: { patient: Patient }) {
 /* ══════════════════════════════════════════
    TAB: INTERRAI
    ══════════════════════════════════════════ */
-function TabInterRAI({ patientId, patientName, navigate }: { patientId: string; patientName: string; navigate: (p: string) => void }) {
-  const recording = useRecording();
-  const [, forceUpdate] = useState(0);
-  const assessments = MOCK_ASSESSMENTS.filter(a => a.patientId === patientId);
-
-  const deleteAssessment = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const idx = MOCK_ASSESSMENTS.findIndex(a => a.id === id);
-    if (idx >= 0) { MOCK_ASSESSMENTS.splice(idx, 1); forceUpdate(n => n + 1); toast("InterRAI-Entwurf gelöscht"); }
-  };
-  const last = assessments.find(a => a.status === "abgeschlossen");
-  const inProgress = assessments.find(a => a.status === "in-bearbeitung");
-  const scales = last?.outcomeScales || [];
-  const caps = last?.getriggerteCaps || [];
-  const isRecordingThis = (recording.phase === "recording" || recording.phase === "processing") && recording.session?.patientId === patientId;
-  const canStartRecording = recording.phase === "idle" || recording.phase === "result";
-
-  return (
-    <div>
-      {/* Recording CTA — primary action for new InterRAI */}
-      <div style={{ padding: "14px 18px", background: isRecordingThis ? "rgba(168,50,31,0.06)" : "var(--bg-elevated)", border: `var(--border-thin) solid ${isRecordingThis ? "var(--status-danger)" : "var(--border-default)"}`, borderRadius: "var(--radius-card)", marginBottom: 16 }}>
-        {isRecordingThis ? (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center" style={{ gap: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--status-danger)", animation: "pulse 1.5s ease-in-out infinite" }} />
-              <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Aufnahme läuft…</span>
-              <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Stopp über die Leiste oben.</span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between flex-wrap" style={{ gap: 8 }}>
-            <div>
-              <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-                {inProgress ? "Laufendes Re-Assessment ergänzen" : last ? "Neues Re-Assessment starten" : "Erstes InterRAI starten"}
-              </div>
-              <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>
-                Gespräch aufzeichnen — Anna erstellt InterRAI, Pflegeplanung und KLV-Entwürfe.
-              </div>
-            </div>
-            <button
-              onClick={() => recording.startRecording(patientId, patientName)}
-              disabled={!canStartRecording}
-              className="inline-flex items-center cursor-pointer"
-              style={{ gap: 6, padding: "8px 18px", borderRadius: "var(--radius-pill)", background: !canStartRecording ? "var(--bg-secondary)" : "var(--status-danger)", color: !canStartRecording ? "var(--text-tertiary)" : "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none", opacity: !canStartRecording ? 0.5 : 1 }}
-            >
-              <Mic style={{ width: 14, height: 14 }} /> Gespräch aufzeichnen
-            </button>
-          </div>
-        )}
+function TabInterRAI({ patientId }: { patientId: string; patientName: string; navigate: (p: string) => void }) {
+  const person = getPersonByPatientId(patientId);
+  if (!person) {
+    return (
+      <div style={{ padding: "var(--space-6)", textAlign: "center", color: "var(--text-tertiary)" }}>
+        Keine Person für diese Patienten-ID hinterlegt.
       </div>
-
-      {/* In-progress assessment hint */}
-      {inProgress && (
-        <button onClick={() => navigate(`/interrai/${inProgress.id}`)} className="w-full flex items-center text-left cursor-pointer" style={{ padding: "10px 14px", borderRadius: "var(--radius-card)", background: "var(--status-warning-bg)", border: "var(--border-thin) solid var(--status-warning)", marginBottom: 16, gap: 8 }} onMouseEnter={e => e.currentTarget.style.opacity = "0.9"} onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
-          <Activity style={{ width: 14, height: 14, color: "var(--status-warning-text)" }} />
-          <div className="flex-1">
-            <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--status-warning-text)" }}>Re-Assessment in Bearbeitung ({inProgress.erfassungsgrad}%)</div>
-            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Gestartet am {inProgress.startDatum} — Klicken zum Weiterarbeiten</div>
-          </div>
-          <ChevronRight style={{ width: 14, height: 14, color: "var(--status-warning-text)" }} />
-        </button>
-      )}
-
-      {/* Last completed assessment summary */}
-      {last && (
-        <>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 4 }}>Letztes InterRAI: {last.startDatum} <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>(vor ca. 7 Monaten)</span></div>
-            {last.onboardingId && <div style={{ fontSize: "var(--text-meta)", color: "var(--status-info)", marginTop: 2 }}>aus Onboarding</div>}
-            <div className="inline-flex items-center" style={{ gap: 4, marginTop: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", background: "var(--status-warning-bg)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--status-warning-text)" }}>
-              <AlertTriangle style={{ width: 12, height: 12 }} /> Re-Assessment fällig
-            </div>
-          </div>
-          {scales.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 8, fontWeight: "var(--weight-medium)" }}>Outcome-Scales</div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" style={{ gap: 8 }}>
-                {scales.map(s => {
-                  const pct = s.maxWert > 0 ? s.wert / s.maxWert : 0;
-                  const color = s.richtung === "hoeher-schlechter" ? (pct > 0.5 ? "var(--status-danger)" : pct > 0.25 ? "var(--status-warning)" : "var(--status-success)") : (pct > 0.5 ? "var(--status-success)" : "var(--status-warning)");
-                  return (<div key={s.id} style={{ padding: "10px 14px", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-                    <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", marginBottom: 4 }}>{s.abkuerzung}</div>
-                    <div className="flex items-end" style={{ gap: 3 }}><span style={{ fontSize: 18, fontWeight: "var(--weight-medium)", color }}>{s.wert}</span><span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>/{s.maxWert}</span></div>
-                  </div>);
-                })}
-              </div>
-            </div>
-          )}
-          {caps.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 8, fontWeight: "var(--weight-medium)" }}>Aktive CAPs ({caps.length})</div>
-              {caps.map(cap => (
-                <div key={cap.id} style={{ padding: "10px 14px", background: cap.prioritaet === "hoch" ? "rgba(168,50,31,0.04)" : "var(--bg-elevated)", border: `var(--border-thin) solid ${cap.prioritaet === "hoch" ? "var(--status-danger)" : "var(--border-default)"}`, borderRadius: "var(--radius-card)", marginBottom: 6 }}>
-                  <div className="flex items-center" style={{ gap: 6 }}><AlertTriangle style={{ width: 12, height: 12, color: cap.prioritaet === "hoch" ? "var(--status-danger)" : "var(--status-warning)" }} /><span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{cap.name}</span></div>
-                  <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 4 }}>{cap.beschreibung}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Empty state */}
-      {!last && !inProgress && (
-        <div style={{ padding: "var(--space-6)", textAlign: "center", color: "var(--text-tertiary)", marginBottom: 20 }}>
-          <ClipboardList style={{ width: 32, height: 32, margin: "0 auto 8px", color: "var(--text-tertiary)" }} />
-          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 4 }}>Noch kein InterRAI</div>
-          <div style={{ fontSize: "var(--text-small)" }}>Starte ein Gespräch — Anna erstellt automatisch die Entwürfe.</div>
-        </div>
-      )}
-
-      {/* Verlauf */}
-      <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12 }}>Verlauf</div>
-      {assessments.length === 0 ? <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Keine Einträge</div> : assessments.map(a => (
-        <div key={a.id} onClick={() => navigate(`/interrai/${a.id}`)} className="flex items-center cursor-pointer transition-colors" style={{ padding: "10px 14px", borderRadius: "var(--radius-card)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", marginBottom: 6 }} onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
-          <div className="flex-1"><div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}><span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{a.startDatum}</span><span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", background: a.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: a.status === "abgeschlossen" ? "var(--status-success-text)" : "var(--status-warning-text)" }}>{a.status === "abgeschlossen" ? "Abgeschlossen" : `${a.erfassungsgrad}%`}</span>{a.onboardingId && <span style={{ fontSize: "var(--text-micro)", color: "var(--status-info)" }}>aus Onboarding</span>}{a.getriggerteCaps.length > 0 && <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{a.getriggerteCaps.length} CAPs</span>}</div></div>
-          {a.status !== "abgeschlossen" && (
-            <button onClick={e => deleteAssessment(a.id, e)} className="cursor-pointer" title="Entwurf löschen" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 4, marginRight: 4 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 14, height: 14 }} /></button>
-          )}
-          <ChevronRight style={{ width: 14, height: 14, color: "var(--text-tertiary)" }} />
-        </div>
-      ))}
-    </div>
+    );
+  }
+  return (
+    <AssessmentStatusView
+      person={person}
+      returnTo={`/patienten/${patientId}?tab=interrai`}
+    />
   );
 }
 

@@ -9,12 +9,18 @@
  */
 import type { InterRAIAssessment, Pflegeplanung, KLVVerordnung, WorkflowPlan } from "../../types/klinische-artefakte";
 import { verwalteQuellensteuerPendenz } from "../stammdaten/quellensteuer-automatik";
+import { workflowTasks } from "../mocks/workflow-tasks";
 import { getMessungenFuerPatient } from "../vitaldaten/store";
 import { konvertiereRhythmusSubjekt } from "../rhythmus/engine";
+import { erstelleNachweis } from "../schulung/nachweis-store";
+import { MOCK_KLV_VERORDNUNGEN } from "../mocks/klinische-artefakte-mock";
+import { getPersonByOnboardingId, updatePersonZustand } from "../interrai/store";
 
 export interface KonvertierungsErgebnis {
   patientId: string;
   angehoerigerId: string;
+  /** Qualifikation des Angehörigen, falls im Onboarding erfasst */
+  qualifikation: string | null;
   konvertierteArtefakte: {
     interRAIAssessments: string[];
     pflegeplanungen: string[];
@@ -43,20 +49,23 @@ export function konvertiereOnboarding(
     workflows: WorkflowPlan[];
   },
   /** Angehoerigen-Stammdaten fuer Pendenz-Erzeugung */
-  angehoerigenDaten?: { name: string; quellensteuerpflichtig: boolean; aufenthaltsstatus: string; bvgAnbindungGewuenscht: boolean },
+  angehoerigenDaten?: { name: string; quellensteuerpflichtig: boolean; aufenthaltsstatus: string; bvgAnbindungGewuenscht: boolean; qualifikation?: string },
 ): KonvertierungsErgebnis {
   // 1. Generate new patient ID (in production: server-generated)
   const patientId = `P-${Date.now()}`;
   const angehoerigerId = `A-${Date.now()}`;
 
-  // 2. Set patientId on all artefacts belonging to this onboarding
-  const konvertierteBA: string[] = [];
-  for (const ba of artefakte.interRAIAssessments) {
-    if (ba.onboardingId === onboardingId) {
-      ba.patientId = patientId;
-      konvertierteBA.push(ba.id);
-    }
+  // 2. Update person state — assessments reference the person, not the
+  //    onboarding or patient. The assessment itself stays untouched.
+  const person = getPersonByOnboardingId(onboardingId);
+  if (person) {
+    updatePersonZustand(person.id, "patient", patientId);
   }
+
+  // InterRAI assessments are no longer rewritten during conversion.
+  // They reference the person by stable personId. The person's zustand
+  // changes above; the assessment remains unchanged.
+  const konvertierteBA: string[] = [];
 
   const konvertiertePP: string[] = [];
   for (const pp of artefakte.pflegeplanungen) {
@@ -91,6 +100,25 @@ export function konvertiereOnboarding(
 
   // WF-02: Rhythmus-Tickets von onboardingId auf patientId umhängen
   konvertiereRhythmusSubjekt(onboardingId, patientId, "patient");
+
+  // Initialschulung: Nachweis erstellen wenn KLV-Positionen vorhanden
+  const klvVerordnung = [...artefakte.klvVerordnungen, ...MOCK_KLV_VERORDNUNGEN].find(
+    k => k.onboardingId === onboardingId || k.patientId === patientId
+  );
+  if (klvVerordnung && klvVerordnung.leistungspositionen.length > 0 && angehoerigenDaten) {
+    const klvNummern = klvVerordnung.leistungspositionen.map(lp => lp.klvNummer);
+    const patientName = klvVerordnung.patientName || "Patient";
+    erstelleNachweis(
+      angehoerigerId,
+      angehoerigenDaten.name,
+      angehoerigenDaten.qualifikation || "",
+      patientId,
+      patientName,
+      "Sandra Weber",
+      klvNummern,
+    );
+    console.info(`[Audit] Schulungsnachweis erstellt: ${angehoerigenDaten.name} → ${patientName}, ${klvNummern.length} Positionen`);
+  }
 
   // SP-07: Bei Quellensteuerpflicht Pendenz fuer Buchhaltung erzeugen
   // Erst jetzt, weil der Angehoerige als Mitarbeiter erst nach Konvertierung existiert.
@@ -146,9 +174,15 @@ export function konvertiereOnboarding(
     }
   }
 
+  // Qualifikation auf Angehörigen-Datensatz übernehmen
+  if (angehoerigenDaten?.qualifikation) {
+    console.info(`[Audit] Qualifikation für ${angehoerigenDaten.name} (${angehoerigerId}): ${angehoerigenDaten.qualifikation}`);
+  }
+
   return {
     patientId,
     angehoerigerId,
+    qualifikation: angehoerigenDaten?.qualifikation ?? null,
     konvertierteArtefakte: {
       interRAIAssessments: konvertierteBA,
       pflegeplanungen: konvertiertePP,

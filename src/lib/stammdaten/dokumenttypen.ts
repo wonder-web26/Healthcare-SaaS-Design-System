@@ -128,16 +128,5 @@ export function istDokumentVollstaendig(
   return !!scans[typ.code];
 }
 
-/**
- * Zählt offene Pflicht-Dokumente.
- * = offene Pflicht-Uploads PLUS nicht unterschriebene Pflicht-Unterschriftsdokumente.
- */
-export function zaehleOffenePflichtdokumente(
-  kontext: DokumentKontext,
-  scans: Record<string, unknown>,
-  entitaet?: DokumentEntitaet,
-): number {
-  return sichtbareDokumenttypen(kontext, entitaet)
-    .filter(d => d.pflicht && !d.mehrfach && !istDokumentVollstaendig(d, scans))
-    .length;
-}
+/* zaehleOffenePflichtdokumente entfernt — war exportiert aber nirgends aufgerufen.
+   Logik lebt direkt in den Verwendungsstellen über sichtbareDokumenttypen + istDokumentVollstaendig. */

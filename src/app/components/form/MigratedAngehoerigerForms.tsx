@@ -4,7 +4,7 @@
  * Form logic (state, validation, conditional fields) unchanged.
  */
 import { useState } from "react";
-import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Info } from "lucide-react";
+import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Info, Download, AlertTriangle } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { TextInput } from "./TextInput";
 import { NumberInput } from "./NumberInput";
@@ -18,6 +18,7 @@ import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
 import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
 import { leiteTarifcodeAb } from "../../../lib/stammdaten/quellensteuer-tarif";
+import { formDataToSEM, erstelleSEMFormular, ermittleFehlendeFelderSEM, downloadBlob } from "../../../lib/sem/meldeformular";
 import { FUNKTIONEN_OPTIONS } from "../../../lib/stammdaten/funktionen";
 import { DEUTSCH_NIVEAU_OPTIONS } from "../../../lib/stammdaten/sprachkenntnisse";
 import { FIRMEN_DEFAULT_FERIENWOCHEN, berechneFerienzuschlagProzent, pruefeFerienMinimum } from "../../../lib/stammdaten/ferien";
@@ -29,7 +30,14 @@ function filled(v: string | undefined | null): boolean {
 
 const JA_NEIN = [{ value: "ja", label: "Ja" }, { value: "nein", label: "Nein" }];
 
-const NATIONALITAETEN = [
+/** Qualifikationsstufen — gleiche Werte wie Qualifikation-Typ in angehoerigeData.ts */
+const QUALIFIKATION_OPTIONS = [
+  { value: "ohne_srk", label: "ohne SRK" },
+  { value: "srk", label: "SRK" },
+  { value: "fage_dipl", label: "FaGe / Dipl" },
+];
+
+export const NATIONALITAETEN = [
   { value: "schweiz", label: "Schweiz" }, { value: "deutschland", label: "Deutschland" },
   { value: "frankreich", label: "Frankreich" }, { value: "italien", label: "Italien" },
   { value: "oesterreich", label: "Österreich" }, { value: "portugal", label: "Portugal" },
@@ -124,6 +132,11 @@ export function PersonalienFormV2({
         </div>
       )}
 
+      {/* SEM-Meldeformular: bei B, S, F Meldepflicht */}
+      {(data.aufenthaltsstatus === "B" || data.aufenthaltsstatus === "S" || data.aufenthaltsstatus === "F") && (
+        <SEMMeldeBanner data={data} />
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <FormSelect label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND} placeholder="Zivilstand wählen" />
         <TextInput label="Zivilstand seit" required value={data.zivilstandSeit} onChange={v => set("zivilstandSeit", v)} onBlur={() => touch("zivilstandSeit")} placeholder="01.06.2020" hint="Format: TT.MM.JJJJ" />
@@ -155,12 +168,24 @@ export function PersonalienFormV2({
       {/* Qualifikation */}
       <SectionHeader icon={User} label="Qualifikation" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+        <FormSelect label="Qualifikationsstufe" required value={data.qualifikation || null} onChange={v => { set("qualifikation", v || ""); touch("qualifikation"); }} options={QUALIFIKATION_OPTIONS} placeholder="Qualifikation wählen" error={touched.qualifikation && !filled(data.qualifikation) ? "Pflichtfeld" : undefined} />
         <FormSelect label="Deutschkenntnisse" required value={data.deutschNiveau || null} onChange={v => { set("deutschNiveau", v || ""); touch("deutschNiveau"); }} options={DEUTSCH_NIVEAU_OPTIONS} placeholder="Niveau wählen" error={touched.deutschNiveau && !filled(data.deutschNiveau) ? "Bitte ausfüllen" : undefined} />
         {data.deutschNiveau && data.deutschNiveau !== "muttersprache" && (
           <SegmentedControl label="Sprachzertifikat vorhanden?" value={data.zertifikatVorhanden} onChange={v => set("zertifikatVorhanden", v)} options={JA_NEIN} />
         )}
         <SegmentedControl label="SRK-Pflegehelfer-Zertifikat vorhanden?" required value={data.srkZertifikatVorhanden} onChange={v => set("srkZertifikatVorhanden", v)} options={JA_NEIN} />
       </div>
+      {/* Konsistenz Qualifikation ↔ SRK-Zertifikat */}
+      {data.qualifikation === "ohne_srk" && data.srkZertifikatVorhanden === "ja" && (
+        <div style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
+          Qualifikation «ohne SRK» gewählt, aber SRK-Zertifikat als vorhanden markiert — bitte prüfen.
+        </div>
+      )}
+      {(data.qualifikation === "srk" || data.qualifikation === "fage_dipl") && data.srkZertifikatVorhanden === "nein" && (
+        <div style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
+          Qualifikation «{data.qualifikation === "srk" ? "SRK" : "FaGe / Dipl"}» gewählt, aber SRK-Zertifikat nicht als vorhanden markiert — bitte prüfen.
+        </div>
+      )}
       {/* Konsistenz Funktion ↔ SRK */}
       {data.funktion === "ph_srk" && data.srkZertifikatVorhanden === "nein" && (
         <div style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
@@ -354,3 +379,77 @@ export function AnstellungFormV2({
     </div>
   );
 }
+
+/* ══════════════════════════════════════════
+   SEM-MELDEFORMULAR BANNER
+   ══════════════════════════════════════════ */
+
+function SEMMeldeBanner({ data }: { data: AngehoerigerFormData }) {
+  const [loading, setLoading] = useState(false);
+  const [showLuecken, setShowLuecken] = useState(false);
+
+  const semDaten = formDataToSEM(data);
+  const fehlend = ermittleFehlendeFelderSEM(semDaten);
+
+  const handleDownload = async () => {
+    setLoading(true);
+    try {
+      const blob = await erstelleSEMFormular(semDaten);
+      const datumStr = new Date().toISOString().slice(0, 10);
+      downloadBlob(blob, `SEM-Meldeformular_${data.name || "Angehoeriger"}_${datumStr}.pdf`);
+    } catch (e) {
+      console.error("SEM-Formular konnte nicht erstellt werden:", e);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ marginTop: "var(--space-4)", padding: "14px 18px", background: "var(--status-warning-bg)", borderRadius: 10, border: "0.5px solid var(--status-warning)" }}>
+      <div className="flex items-start" style={{ gap: 12 }}>
+        <AlertTriangle style={{ width: 18, height: 18, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--status-warning-text)" }}>
+            Meldepflicht beim kantonalen Amt für Migration
+          </div>
+          <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", marginTop: 4 }}>
+            Aufenthaltsstatus {data.aufenthaltsstatus}: Bei Stellenantritt muss die Erwerbstätigkeit beim zuständigen kantonalen Amt gemeldet werden.
+            Das offizielle SEM-Formular kann mit den erfassten Daten vorausgefüllt heruntergeladen werden.
+          </div>
+
+          {/* Fehlende Felder anzeigen */}
+          {fehlend.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                onClick={() => setShowLuecken(!showLuecken)}
+                className="cursor-pointer"
+                style={{ background: "none", border: "none", padding: 0, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", fontWeight: 500, textDecoration: "underline" }}
+              >
+                {fehlend.length} Feld{fehlend.length !== 1 ? "er" : ""} nicht befüllt {showLuecken ? "▲" : "▼"}
+              </button>
+              {showLuecken && (
+                <div style={{ marginTop: 4, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                  {fehlend.map(f => f.label).join(", ")} — diese Felder bleiben im PDF leer und können manuell ergänzt werden.
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ marginTop: 10 }}>
+            <button
+              onClick={handleDownload}
+              disabled={loading}
+              className="inline-flex items-center cursor-pointer"
+              style={{ gap: 6, padding: "8px 18px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none", opacity: loading ? 0.6 : 1 }}
+            >
+              <Download style={{ width: 14, height: 14 }} />
+              {loading ? "Wird erstellt…" : "SEM-Meldeformular herunterladen"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Exportiert für Wiederverwendung im Dokumente-Tab */
+export { SEMMeldeBanner };

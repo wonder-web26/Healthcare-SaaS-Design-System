@@ -50,11 +50,10 @@ import { useNavigate } from "react-router";
 import { TabPersonalienV2, TabSteuerV2, TabAnamneseV2 } from "./form/MigratedPatientForms";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
-import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, MOCK_ARZT_DIAGNOSEN, DEMO_SCALES, DEMO_CAPS, ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
-import { KLV_STATUS_PIPELINE, SEKTIONEN } from "../../types/klinische-artefakte";
-import { Arbeitsbereich } from "./interrai/Arbeitsbereich";
-import { getAntwortText, getKonfidenzColor } from "../../lib/interrai/helpers";
+import { MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, MOCK_ARZT_DIAGNOSEN, ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
 import { useRecording } from "../recording/RecordingContext";
+import { getPersonByOnboardingId } from "../../lib/interrai/store";
+import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
 import type { KLVLeistung, KLVEinheit, Pflegediagnose, Massnahme, Pflegeziel, AerztlicheDiagnose } from "../../types/klinische-artefakte";
 import { NANDA_KATALOG } from "../../lib/mocks/nanda-enp-katalog";
 import { ReviewBlock } from "./ui/ReviewBlock";
@@ -74,12 +73,15 @@ import { useEinwilligung } from "./EinwilligungContext";
 import { useArztAnfrage, ArztAnfrageFlowInline } from "./ArztAnfrageContext";
 import { SectionAction } from "./ui/SectionAction";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
+import { NATIONALITAETEN } from "./form/MigratedAngehoerigerForms";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/krankenkassen";
 import { Combobox } from "./form/Combobox";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import { patients } from "./patientData";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext, type DokumentTypDefinition } from "../../lib/stammdaten/dokumenttypen";
 import { DokumentScanUpload, type ScanFile } from "./form/DokumentScanUpload";
+import { EinwilligungModal } from "./einwilligung/EinwilligungModal";
+import { ScanDisplay, ScanSlot } from "./form/MigratedAngehoerigerForms2";
 
 export interface ATLEntry {
   ja: boolean | null;
@@ -104,6 +106,7 @@ export interface PatientFormData {
   ahvNummer: string;
   hausarztName: string;
   hausarztTelefon: string;
+  hausarztEmail: string;
   email: string;
   telefon: string;
   adresseStrasse: string;
@@ -202,6 +205,7 @@ export const emptyPatientForm: PatientFormData = {
   ahvNummer: "",
   hausarztName: "",
   hausarztTelefon: "",
+  hausarztEmail: "",
   email: "",
   telefon: "",
   adresseStrasse: "",
@@ -345,9 +349,11 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
       return { done: answered.length, total: allItems.length };
     }
     case "dokumente": {
-      const reqKeys = getPatientRequiredDocKeys();
-      const uploaded = reqKeys.filter((k) => !!data.scans[k]).length;
-      return { done: uploaded, total: reqKeys.length };
+      // Stammdaten-Engine: gleiche Prüfung wie die Dokumente-Anzeige
+      const pflicht = sichtbareDokumenttypen(PATIENT_DOK_KONTEXT, "patient")
+        .filter(d => d.pflicht && !d.mehrfach);
+      const vollst = pflicht.filter(d => istDokumentVollstaendig(d, data.scans)).length;
+      return { done: vollst, total: pflicht.length };
     }
     default:
       return { done: 0, total: 0 };
@@ -403,8 +409,9 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const recording = useRecording();
 
-  /* Compute overall validity (tabs 1-3 must be complete) */
-  const requiredTabs = ["personalien", "steuer", "anamnese"];
+  /* Compute overall validity — Pflichtfelder + Pflichtdokumente.
+   * InterRAI, Pflegeplanung, KLV, Workflow: ausgenommen (Zertifizierung ausstehend, siehe MODUL_ZERTIFIZIERUNG). */
+  const requiredTabs = ["personalien", "steuer", "anamnese", "dokumente"];
   const allRequiredComplete = requiredTabs.every((k) => isTabComplete(k, data));
 
   useEffect(() => {
@@ -486,32 +493,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           })}
         </div>
         </div>
-        {/* Recording-Button — rechtsbündig in der Tab-Zeile, Anna-Akzent per styleguide 9 */}
-        {onboardingId && (() => {
-          const isActive = recording.phase === "recording" && recording.session?.onboardingId === onboardingId;
-          const isBusy = recording.phase === "recording" || recording.phase === "processing";
-          return (
-            <button
-              onClick={() => isActive ? recording.stopRecording() : recording.startRecording(null, `${data.vorname || "Patient"} ${data.name || ""}`, onboardingId)}
-              disabled={isBusy && !isActive}
-              className="inline-flex items-center cursor-pointer transition-colors shrink-0"
-              style={{
-                gap: 6, padding: "8px 18px 8px 14px", borderRadius: 999, marginLeft: 8,
-                background: isActive ? "var(--bg-elevated)" : (isBusy ? "var(--bg-secondary)" : "linear-gradient(135deg, var(--brand-primary), var(--brand-accent))"),
-                color: isActive ? "var(--text-primary)" : (isBusy ? "var(--text-tertiary)" : "var(--text-on-dark)"),
-                fontSize: "var(--text-small)", fontWeight: 500,
-                border: isActive ? "0.5px solid var(--border-default)" : "none",
-                minHeight: 36, opacity: isBusy && !isActive ? 0.5 : 1,
-              }}
-            >
-              {isActive ? (
-                <><span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--status-danger)", animation: "rec-pulse 1.5s ease-in-out infinite", flexShrink: 0 }} /><style>{`@keyframes rec-pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }`}</style> Stoppen</>
-              ) : (
-                <><Mic style={{ width: 14, height: 14 }} /> Aufzeichnen</>
-              )}
-            </button>
-          );
-        })()}
+        {/* Aufzeichnen-Button entfernt — lebt jetzt im Aufzeichnungsblock der Pflegeplanung */}
       </div>
 
       {/* ═══════════════════════════════════════
@@ -878,10 +860,10 @@ function TabPersonalien({ data, touched, onUpdate, onBlur }: FieldProps) {
           </FormField>
 
           <FormField label="Nationalität">
-            <TextInput
+            <SelectInput
               value={data.nationalitaet}
               onChange={(v) => onUpdate("nationalitaet", v)}
-              placeholder="z.B. Schweiz"
+              options={[{ value: "", label: "Nationalität wählen" }, ...NATIONALITAETEN.map(n => ({ value: n.value, label: n.label }))]}
             />
           </FormField>
 
@@ -968,7 +950,7 @@ function TabPersonalien({ data, touched, onUpdate, onBlur }: FieldProps) {
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand (kein Border) */}
 
       {/* ── Section: Adresse ─── */}
       <div>
@@ -1027,7 +1009,7 @@ function TabPersonalien({ data, touched, onUpdate, onBlur }: FieldProps) {
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand (kein Border) */}
 
       {/* ── Section: Krankenkasse & Ärzte ─── */}
       <div>
@@ -1086,7 +1068,7 @@ function TabPersonalien({ data, touched, onUpdate, onBlur }: FieldProps) {
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand (kein Border) */}
 
       {/* ── Section: Notfallkontakt ─── */}
       <div>
@@ -1191,7 +1173,7 @@ function TabSteuer({ data, touched, onUpdate, onBlur }: FieldProps) {
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand (kein Border) */}
 
       {/* ── Section 2: Leistungen ─── */}
       <div>
@@ -1238,7 +1220,7 @@ function TabSteuer({ data, touched, onUpdate, onBlur }: FieldProps) {
         </div>
       </div>
 
-      <div className="border-t border-border-light" />
+      {/* Sektions-Abstand (kein Border) */}
 
       {/* ── Section 3: Steuer ─── */}
       <div>
@@ -2004,6 +1986,65 @@ function PatientScanUploadButton({
    Code archiviert, nicht gelöscht (Append-only-Konvention).
 ── Ende ARCHIV ── */
 
+/* ── Einwilligung-Aktionen (Digital signieren + Scan hochladen) ── */
+function EinwilligungAktionen({ patientName, patientGeburtsdatum, angehoerigerName, onSignDigital, onScanUpload }: {
+  patientName: string;
+  patientGeburtsdatum: string;
+  angehoerigerName: string;
+  onSignDigital: (unterzeichner: unknown, datum: string) => void;
+  onScanUpload: (file: ScanFile) => void;
+}) {
+  const [showModal, setShowModal] = useState(false);
+  const scanInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleScanFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const now = new Date();
+    onScanUpload({
+      name: file.name,
+      type: file.type,
+      size: file.size < 1024 * 1024 ? `${(file.size / 1024).toFixed(0)} KB` : `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+      timestamp: now.toLocaleString("de-CH"),
+      previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+    });
+    e.target.value = "";
+  };
+
+  return (
+    <div className="mt-3 flex items-center gap-2 flex-wrap">
+      <button
+        onClick={() => setShowModal(true)}
+        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
+        style={{ fontWeight: 500, border: "none" }}
+      >
+        <Check className="w-3.5 h-3.5" /> Digital signieren
+      </button>
+      <input ref={scanInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleScanFile} />
+      <button
+        onClick={() => scanInputRef.current?.click()}
+        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] border border-border text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+        style={{ fontWeight: 500 }}
+      >
+        <Upload className="w-3.5 h-3.5" /> Unterschriebenes Exemplar hochladen
+      </button>
+      {showModal && (
+        <EinwilligungModal
+          isOpen
+          onClose={() => setShowModal(false)}
+          onSignDigital={(unterzeichner, datum) => {
+            onSignDigital(unterzeichner, datum);
+            setShowModal(false);
+          }}
+          patientName={patientName}
+          patientGeburtsdatum={patientGeburtsdatum}
+          angehoerigerName={angehoerigerName}
+        />
+      )}
+    </div>
+  );
+}
+
 /* ── TabDokumente main (PA-07: stammdaten-gesteuert) ── */
 function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d: PatientFormData) => void }) {
   const einwilligung = useEinwilligung();
@@ -2051,594 +2092,166 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
     removeScan(id);
   };
 
-  /* ── RENDERING ── */
+  /* ── RENDERING (gleicher Stil wie Angehörigen-Dokumente) ── */
+  const pflichtOffen = totalPflicht - vollstaendig;
 
   return (
-    <div className="space-y-5">
-      {/* ── Summary bar ── */}
-      <div className="flex items-center justify-between p-4 rounded-xl bg-muted/20 border border-border flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-              allComplete ? "bg-success-light" : "bg-primary-light"
-            }`}
-          >
-            {allComplete ? (
-              <FileCheck className="w-5 h-5 text-success" />
-            ) : (
-              <FileText className="w-5 h-5 text-primary" />
-            )}
-          </div>
-          <div>
-            <p className="text-[13px] text-foreground" style={{ fontWeight: 600 }}>
-              Patienten-Dokumente
-            </p>
-            <p className="text-[12px] text-muted-foreground">
-              {vollstaendig} von {totalPflicht} Pflichtdokumente vollständig
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] ${
-              allComplete
-                ? "bg-success-light text-success-foreground"
-                : "bg-warning-light text-warning-foreground"
-            }`}
-            style={{ fontWeight: 600 }}
-          >
-            {allComplete ? (
-              <><CheckCircle2 className="w-3 h-3" /> Vollständig</>
-            ) : (
-              <><AlertCircle className="w-3 h-3" /> Ausstehend</>
-            )}
-          </span>
-
-          {/* Progress ring */}
-          <div className="relative w-12 h-12">
-            <svg className="w-12 h-12 -rotate-90" viewBox="0 0 48 48">
-              <circle cx="24" cy="24" r="20" fill="none" stroke="currentColor" strokeWidth="3" className="text-muted/30" />
-              <circle
-                cx="24" cy="24" r="20" fill="none" stroke="currentColor" strokeWidth="3"
-                strokeDasharray={`${(vollstaendig / Math.max(totalPflicht, 1)) * 125.6} 125.6`}
-                strokeLinecap="round"
-                className={allComplete ? "text-success" : "text-primary"}
-                style={{ transition: "stroke-dasharray 0.5s ease" }}
-              />
-            </svg>
-            <span
-              className={`absolute inset-0 flex items-center justify-center text-[11px] tabular-nums ${
-                allComplete ? "text-success" : "text-foreground"
-              }`}
-              style={{ fontWeight: 700 }}
-            >
-              {totalPflicht > 0 ? `${Math.round((vollstaendig / totalPflicht) * 100)}%` : "–"}
-            </span>
-          </div>
-        </div>
+    <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
+      <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: "var(--space-5)" }}>
+        {vollstaendig} von {totalPflicht} vollständig{pflichtOffen > 0 ? ` · ${pflichtOffen} Pflicht offen` : ""}
       </div>
 
-      {/* ── Dokumentenliste aus Stammdaten-Engine ── */}
-      <div className="space-y-3">
+      <div className="flex flex-col" style={{ gap: "var(--space-4)" }}>
         {sichtbar.map(doc => {
-          /* ── modus=unterschrift: Status-Anzeige (Einwilligung) ── */
+          /* modus=unterschrift: Einwilligung */
           if (doc.modus === "unterschrift") {
             const istSigniert = einwilligung.status.signiert;
             return (
-              <div
-                key={doc.code}
-                className={`rounded-xl border transition-all ${
-                  istSigniert
-                    ? "border-success/25 bg-success-light/10"
-                    : doc.pflicht
-                    ? "border-warning/20 bg-warning-light/5"
-                    : "border-border bg-card"
-                }`}
-              >
-                <div className="flex items-start gap-3.5 p-4">
-                  <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                      istSigniert ? "bg-success text-white" : "bg-warning-light text-warning"
-                    }`}
-                  >
-                    {istSigniert ? <Check className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{doc.label}</p>
-                        {doc.pflicht && !istSigniert && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[9px] bg-error/10 text-error shrink-0" style={{ fontWeight: 600 }}>Pflicht</span>
-                        )}
-                      </div>
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] shrink-0 ${
-                          istSigniert ? "bg-success-light text-success-foreground" : "bg-error/10 text-error"
-                        }`}
-                        style={{ fontWeight: 600 }}
-                      >
-                        {istSigniert ? (
-                          <><CheckCircle2 className="w-3 h-3" /> Unterschrieben{einwilligung.status.datum ? ` · ${einwilligung.status.datum}` : ""}</>
-                        ) : (
-                          <><AlertCircle className="w-3 h-3" /> Offen</>
-                        )}
-                      </span>
-                    </div>
-                    {/* Unterschriften-Aktionen */}
+              <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center" style={{ gap: 8 }}>
+                    <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
+                      {doc.label} {doc.pflicht && <span style={{ color: "var(--status-danger)" }}>*</span>}
+                    </span>
                     {!istSigniert && (
-                      <div className="mt-3 flex items-center gap-2 flex-wrap">
-                        <button
-                          onClick={() => einwilligung.signDigital(new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }))}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors cursor-pointer"
-                          style={{ fontWeight: 500, border: "none" }}
-                        >
-                          <Check className="w-3.5 h-3.5" /> Digital signieren
-                        </button>
-                      </div>
-                    )}
-                    {istSigniert && einwilligung.status.herkunft && (
-                      <div className="mt-3 p-3 rounded-lg bg-success-light/30 border border-success/10">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                          <div>
-                            <p className="text-[12px] text-foreground" style={{ fontWeight: 500 }}>
-                              {einwilligung.status.herkunft === "digital" ? "Digital signiert" : "Scan hochgeladen"}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground">{einwilligung.status.datum}</p>
-                          </div>
-                        </div>
-                      </div>
+                      <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Erforderlich für die Arzt-Anfrage (Tab Pflegeplanung)</span>
                     )}
                   </div>
+                  {istSigniert ? (
+                    <Check style={{ width: 16, height: 16, color: "var(--status-success)" }} />
+                  ) : (
+                    <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Offen</span>
+                  )}
                 </div>
+                {istSigniert && einwilligung.status.herkunft && (
+                  <div style={{ marginTop: 6, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+                    {einwilligung.status.herkunft === "digital" ? "Digital signiert" : "Scan hochgeladen"} · {einwilligung.status.datum}
+                  </div>
+                )}
+                {!istSigniert && (
+                  <EinwilligungAktionen
+                    patientName={`${data.vorname || ""} ${data.name || ""}`.trim() || "Patient"}
+                    patientGeburtsdatum={data.geburtsdatum || ""}
+                    angehoerigerName=""
+                    onSignDigital={(_, datum) => einwilligung.signDigital(datum)}
+                    onScanUpload={(file) => {
+                      einwilligung.signScan(new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }));
+                      handleScanFile(`${doc.code}_scan`, file);
+                    }}
+                  />
+                )}
               </div>
             );
           }
 
-          /* ── mehrfach=true: Sammelbehälter (Sonstige) ── */
+          /* mehrfach: Sonstige Dokumente */
           if (doc.mehrfach) {
             const eintraege = mehrfachEintraege[doc.code] || [];
             return (
-              <div key={doc.code} className="rounded-xl border border-border bg-card">
-                <div className="flex items-start gap-3.5 p-4">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 bg-muted text-muted-foreground">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{doc.label}</p>
-                      <span className="inline-flex items-center px-1.5 py-[1px] rounded text-[9px] bg-muted text-muted-foreground shrink-0" style={{ fontWeight: 600 }}>
-                        Optional · beliebig viele
-                      </span>
-                    </div>
-
-                    {/* Bestehende Einträge */}
-                    {eintraege.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {eintraege.map(eintrag => {
-                          const scan = data.scans[eintrag.id] ?? null;
-                          return (
-                            <div key={eintrag.id} className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/30 border border-border/50">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[12px] text-foreground" style={{ fontWeight: 500 }}>{eintrag.label}</p>
-                                {scan ? (
-                                  <p className="text-[10px] text-muted-foreground">{scan.name} · {scan.size}</p>
-                                ) : (
-                                  <div className="mt-1.5 flex items-center gap-2">
-                                    <DokumentScanUpload scanKey={eintrag.id} docLabel={eintrag.label} onFile={handleScanFile} />
-                                  </div>
-                                )}
-                              </div>
-                              {scan && (
-                                <div className="flex items-center gap-1 shrink-0">
-                                  {scan.previewUrl && (
-                                    <button type="button" onClick={() => setPreviewOpen(previewOpen === eintrag.id ? null : eintrag.id)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-muted border border-border transition-colors" title="Vorschau">
-                                      <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                                    </button>
-                                  )}
-                                  <button type="button" onClick={() => removeScan(eintrag.id)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors" title="Entfernen">
-                                    <Trash2 className="w-3.5 h-3.5 text-error" />
-                                  </button>
-                                </div>
-                              )}
-                              {!scan && (
-                                <button type="button" onClick={() => removeMehrfachEintrag(doc.code, eintrag.id)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors shrink-0" title="Eintrag entfernen">
-                                  <Trash2 className="w-3.5 h-3.5 text-error" />
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Neuen Eintrag hinzufügen */}
-                    <div className="mt-3 flex items-center gap-2">
-                      <input
-                        value={mehrfachNeuesLabel[doc.code] || ""}
-                        onChange={e => setMehrfachNeuesLabel(prev => ({ ...prev, [doc.code]: e.target.value }))}
-                        placeholder="Bezeichnung eingeben"
-                        className="flex-1 px-3 py-2 rounded-lg border border-border text-[12px] bg-card text-foreground"
-                        style={{ fontFamily: "inherit" }}
-                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addMehrfachEintrag(doc.code); } }}
-                      />
-                      <button
-                        onClick={() => addMehrfachEintrag(doc.code)}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-[12px] text-foreground hover:bg-muted transition-colors cursor-pointer"
-                        style={{ fontWeight: 500 }}
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Hinzufügen
-                      </button>
-                    </div>
-                  </div>
+              <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+                <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>
+                  {doc.label} <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontWeight: 400 }}>(optional, beliebig viele)</span>
                 </div>
-              </div>
-            );
-          }
-
-          /* ── modus=upload + beidseitig (ID, KK-Karte) ── */
-          if (doc.beidseitig) {
-            const scanVorne = data.scans[`${doc.code}_vorne`] ?? null;
-            const scanHinten = data.scans[`${doc.code}_hinten`] ?? null;
-            const isComplete = !!scanVorne && !!scanHinten;
-            return (
-              <div
-                key={doc.code}
-                className={`rounded-xl border transition-all ${
-                  isComplete
-                    ? "border-success/25 bg-success-light/10"
-                    : doc.pflicht
-                    ? "border-warning/20 bg-warning-light/5"
-                    : "border-border bg-card"
-                }`}
-              >
-                <div className="flex items-start gap-3.5 p-4">
-                  <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                      isComplete ? "bg-success text-white" : doc.pflicht ? "bg-warning-light text-warning" : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {isComplete ? <Check className="w-5 h-5" /> : <Shield className="w-5 h-5" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{doc.label}</p>
-                        {doc.pflicht && !isComplete && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[9px] bg-error/10 text-error shrink-0" style={{ fontWeight: 600 }}>Pflicht</span>
-                        )}
-                      </div>
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] shrink-0 ${
-                          isComplete ? "bg-success-light text-success-foreground" : "bg-error/10 text-error"
-                        }`}
-                        style={{ fontWeight: 600 }}
-                      >
-                        {isComplete ? (
-                          <><CheckCircle2 className="w-3 h-3" /> Vollständig</>
-                        ) : (
-                          <><AlertCircle className="w-3 h-3" /> {scanVorne || scanHinten ? "1 von 2" : "Fehlend"}</>
-                        )}
-                      </span>
-                    </div>
-
-                    {/* Zwei Scan-Slots: Vorderseite + Rückseite */}
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Vorderseite */}
-                      <div className={`p-3 rounded-lg border ${scanVorne ? "border-success/20 bg-success-light/20" : "border-border bg-muted/20"}`}>
-                        <p className="text-[11px] text-muted-foreground mb-2" style={{ fontWeight: 500 }}>Vorderseite</p>
-                        {scanVorne ? (
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-[12px] text-foreground truncate" style={{ fontWeight: 500 }}>{scanVorne.name}</p>
-                              <p className="text-[10px] text-muted-foreground">{scanVorne.size} · {scanVorne.timestamp}</p>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {scanVorne.previewUrl && (
-                                <button type="button" onClick={() => setPreviewOpen(previewOpen === `${doc.code}_vorne` ? null : `${doc.code}_vorne`)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-muted border border-border transition-colors" title="Vorschau">
-                                  <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                                </button>
-                              )}
-                              <button type="button" onClick={() => removeScan(`${doc.code}_vorne`)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors" title="Entfernen">
-                                <Trash2 className="w-3.5 h-3.5 text-error" />
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <DokumentScanUpload scanKey={`${doc.code}_vorne`} docLabel={`${doc.label} — Vorderseite`} onFile={handleScanFile} />
-                          </div>
-                        )}
-                        {previewOpen === `${doc.code}_vorne` && scanVorne?.previewUrl && (
-                          <div className="mt-2 rounded-lg overflow-hidden border border-success/10">
-                            <img src={scanVorne.previewUrl} alt="Vorderseite" className="w-full max-h-32 object-contain bg-white" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Rückseite */}
-                      <div className={`p-3 rounded-lg border ${scanHinten ? "border-success/20 bg-success-light/20" : "border-border bg-muted/20"}`}>
-                        <p className="text-[11px] text-muted-foreground mb-2" style={{ fontWeight: 500 }}>Rückseite</p>
-                        {scanHinten ? (
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-[12px] text-foreground truncate" style={{ fontWeight: 500 }}>{scanHinten.name}</p>
-                              <p className="text-[10px] text-muted-foreground">{scanHinten.size} · {scanHinten.timestamp}</p>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {scanHinten.previewUrl && (
-                                <button type="button" onClick={() => setPreviewOpen(previewOpen === `${doc.code}_hinten` ? null : `${doc.code}_hinten`)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-muted border border-border transition-colors" title="Vorschau">
-                                  <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                                </button>
-                              )}
-                              <button type="button" onClick={() => removeScan(`${doc.code}_hinten`)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors" title="Entfernen">
-                                <Trash2 className="w-3.5 h-3.5 text-error" />
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <DokumentScanUpload scanKey={`${doc.code}_hinten`} docLabel={`${doc.label} — Rückseite`} onFile={handleScanFile} />
-                          </div>
-                        )}
-                        {previewOpen === `${doc.code}_hinten` && scanHinten?.previewUrl && (
-                          <div className="mt-2 rounded-lg overflow-hidden border border-success/10">
-                            <img src={scanHinten.previewUrl} alt="Rückseite" className="w-full max-h-32 object-contain bg-white" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-
-          /* ── modus=upload + einseitig (Standard) ── */
-          const scan = data.scans[doc.code] ?? null;
-          const isUploaded = !!scan;
-          return (
-            <div
-              key={doc.code}
-              className={`rounded-xl border transition-all ${
-                isUploaded
-                  ? "border-success/25 bg-success-light/10"
-                  : doc.pflicht
-                  ? "border-warning/20 bg-warning-light/5"
-                  : "border-border bg-card"
-              }`}
-            >
-              <div className="flex items-start gap-3.5 p-4">
-                <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
-                    isUploaded ? "bg-success text-white" : doc.pflicht ? "bg-warning-light text-warning" : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {isUploaded ? <Check className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{doc.label}</p>
-                      {doc.pflicht && !isUploaded && (
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-[1px] rounded text-[9px] bg-error/10 text-error shrink-0" style={{ fontWeight: 600 }}>Pflicht</span>
-                      )}
-                      {!doc.pflicht && (
-                        <span className="inline-flex items-center px-1.5 py-[1px] rounded text-[9px] bg-muted text-muted-foreground shrink-0" style={{ fontWeight: 600 }}>Optional</span>
-                      )}
-                    </div>
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] shrink-0 ${
-                        isUploaded ? "bg-success-light text-success-foreground" : doc.pflicht ? "bg-error/10 text-error" : "bg-muted text-muted-foreground"
-                      }`}
-                      style={{ fontWeight: 600 }}
-                    >
-                      {isUploaded ? (
-                        <><CheckCircle2 className="w-3 h-3" /> Hochgeladen</>
-                      ) : doc.pflicht ? (
-                        <><AlertCircle className="w-3 h-3" /> Fehlend</>
-                      ) : (
-                        <><Circle className="w-3 h-3" /> Ausstehend</>
-                      )}
-                    </span>
-                  </div>
-                  {/* Uploaded file details */}
-                  {isUploaded && scan && (
-                    <div className="mt-3 p-3 rounded-lg bg-success-light/30 border border-success/10">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileCheck className="w-4 h-4 text-success shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-[12px] text-foreground truncate" style={{ fontWeight: 500 }}>{scan.name}</p>
-                            <p className="text-[10px] text-muted-foreground">{scan.size} · {scan.timestamp}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {scan.previewUrl && (
-                            <button type="button" onClick={() => setPreviewOpen(previewOpen === doc.code ? null : doc.code)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-muted border border-border transition-colors" title="Vorschau">
-                              <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                {eintraege.length > 0 && (
+                  <div className="flex flex-col" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
+                    {eintraege.map(eintrag => {
+                      const scan = data.scans[eintrag.id];
+                      return (
+                        <div key={eintrag.id} style={{ padding: "8px 12px", background: "var(--bg-elevated)", borderRadius: 8, border: "0.5px solid var(--border-default)" }}>
+                          <div className="flex items-center justify-between" style={{ marginBottom: scan ? 0 : 6 }}>
+                            <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>{eintrag.label}</span>
+                            <button onClick={() => removeMehrfachEintrag(doc.code, eintrag.id)} className="cursor-pointer" style={{ background: "none", border: "none", padding: 4, color: "var(--status-danger)" }} title="Entfernen">
+                              <Trash2 style={{ width: 14, height: 14 }} />
                             </button>
+                          </div>
+                          {scan ? (
+                            <ScanDisplay scanKey={eintrag.id} scan={scan} onRemove={removeScan} previewOpen={previewOpen} setPreviewOpen={setPreviewOpen} />
+                          ) : (
+                            <div className="flex items-center" style={{ gap: 8 }}>
+                              <DokumentScanUpload scanKey={eintrag.id} docLabel={eintrag.label} onFile={handleScanFile} />
+                            </div>
                           )}
-                          <button type="button" onClick={() => removeScan(doc.code)} className="w-7 h-7 rounded-md flex items-center justify-center hover:bg-error/5 border border-border hover:border-error/20 transition-colors" title="Entfernen">
-                            <Trash2 className="w-3.5 h-3.5 text-error" />
-                          </button>
                         </div>
-                      </div>
-                      {previewOpen === doc.code && scan.previewUrl && (
-                        <div className="mt-2.5 rounded-lg overflow-hidden border border-success/10">
-                          <img src={scan.previewUrl} alt={doc.label} className="w-full max-h-40 object-contain bg-white" />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {/* Upload actions */}
-                  {!isUploaded && (
-                    <div className="mt-3 flex items-center gap-2 flex-wrap">
-                      <DokumentScanUpload scanKey={doc.code} docLabel={doc.label} onFile={handleScanFile} />
-                    </div>
-                  )}
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex items-center" style={{ gap: 8 }}>
+                  <input value={mehrfachNeuesLabel[doc.code] || ""} onChange={e => setMehrfachNeuesLabel(prev => ({ ...prev, [doc.code]: e.target.value }))} placeholder="Bezeichnung eingeben" style={{ flex: 1, padding: "6px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "inherit" }} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addMehrfachEintrag(doc.code); } }} />
+                  <button onClick={() => addMehrfachEintrag(doc.code)} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "6px 14px", borderRadius: 999, background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: 500 }}>
+                    <Plus style={{ width: 12, height: 12 }} /> Hinzufügen
+                  </button>
                 </div>
               </div>
+            );
+          }
+
+          /* beidseitig: ID, KK-Karte */
+          if (doc.beidseitig) {
+            const scanVorne = data.scans[`${doc.code}_vorne`];
+            const scanHinten = data.scans[`${doc.code}_hinten`];
+            return (
+              <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+                <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+                  <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
+                    {doc.label} {doc.pflicht && <span style={{ color: "var(--status-danger)" }}>*</span>}
+                  </div>
+                  {istDokumentVollstaendig(doc, data.scans) && <Check style={{ width: 16, height: 16, color: "var(--status-success)" }} />}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-3)" }}>
+                  <ScanSlot label="Vorderseite" scanKey={`${doc.code}_vorne`} docLabel={`${doc.label} — Vorderseite`} scan={scanVorne} onFile={handleScanFile} onRemove={removeScan} previewOpen={previewOpen} setPreviewOpen={setPreviewOpen} />
+                  <ScanSlot label="Rückseite" scanKey={`${doc.code}_hinten`} docLabel={`${doc.label} — Rückseite`} scan={scanHinten} onFile={handleScanFile} onRemove={removeScan} previewOpen={previewOpen} setPreviewOpen={setPreviewOpen} />
+                </div>
+              </div>
+            );
+          }
+
+          /* einseitig Standard */
+          const scan = data.scans[doc.code];
+          return (
+            <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: scan ? 0 : "var(--space-3)" }}>
+                <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
+                  {doc.label}{doc.pflicht ? "" : " (optional)"} {doc.pflicht && <span style={{ color: "var(--status-danger)" }}>*</span>}
+                </div>
+                {scan && <Check style={{ width: 16, height: 16, color: "var(--status-success)" }} />}
+              </div>
+              {scan ? (
+                <ScanDisplay scanKey={doc.code} scan={scan} onRemove={removeScan} previewOpen={previewOpen} setPreviewOpen={setPreviewOpen} />
+              ) : (
+                <div className="flex items-center" style={{ gap: 8 }}>
+                  <DokumentScanUpload scanKey={doc.code} docLabel={doc.label} onFile={handleScanFile} />
+                </div>
+              )}
             </div>
           );
         })}
       </div>
-
-      {/* Missing mandatory warning */}
-      {!allComplete && vollstaendig > 0 && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-warning-light/40 border border-warning/15">
-          <div className="w-9 h-9 rounded-lg bg-warning-light flex items-center justify-center shrink-0 mt-0.5">
-            <AlertCircle className="w-[18px] h-[18px] text-warning" />
-          </div>
-          <div>
-            <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>
-              {totalPflicht - vollstaendig} Pflicht-Dokument{totalPflicht - vollstaendig !== 1 ? "e" : ""} fehlen
-            </p>
-            <p className="text-[12px] text-muted-foreground mt-0.5 leading-relaxed">
-              {getFehlendePflichtdokumente(data.scans).join(", ")}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* All complete */}
-      {allComplete && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-success-light/40 border border-success/15">
-          <div className="w-9 h-9 rounded-lg bg-success-light flex items-center justify-center shrink-0 mt-0.5">
-            <FileCheck className="w-[18px] h-[18px] text-success" />
-          </div>
-          <p className="text-[13px] text-success-foreground" style={{ fontWeight: 500 }}>
-            Alle Pflichtdokumente vollständig
-          </p>
-        </div>
-      )}
-
-      {/* Info */}
-      <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-info-light/50 border border-info/10">
-        <Info className="w-4 h-4 text-info mt-0.5 shrink-0" />
-        <p className="text-[12px] text-info-foreground leading-relaxed">
-          Dokumente werden als PDF konvertiert und automatisch im SharePoint abgelegt. Auf dem Tablet können Sie die Kamerafunktion nutzen, um Dokumente direkt abzufotografieren.
-        </p>
-      </div>
-
     </div>
   );
 }
+
 
 /* ══════════════════════════════════════════
    ONBOARDING CLINICAL TABS (read by onboardingId)
    ══════════════════════════════════════════ */
 
 function OnboardingTabBA({ onboardingId }: { onboardingId: string }) {
-  const ba = MOCK_ASSESSMENTS.find(a => a.onboardingId === onboardingId);
-
-  // Empty state: no assessment yet
-  if (!ba) return (
-    <div style={{ padding: "var(--space-8)", textAlign: "center" }}>
-      <div style={{ width: 48, height: 48, borderRadius: "var(--radius-card)", background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-        <ClipboardList style={{ width: 22, height: 22, color: "var(--text-tertiary)" }} />
-      </div>
-      <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>Noch kein InterRAI</div>
-      <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 16, maxWidth: 320, margin: "0 auto 16px" }}>
-        Starte ein Gespräch über den Recording-Button im Header oder erfasse die Items manuell.
-      </div>
-      <button onClick={() => alert("InterRAI starten – erstellt neues Assessment (Demo)")} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}>
-        <ClipboardList style={{ width: 14, height: 14 }} /> InterRAI starten
-      </button>
-    </div>
-  );
-
-  // In-progress: embed the full Arbeitsbereich directly
-  if (ba.status === "in-bearbeitung") {
+  const person = getPersonByOnboardingId(onboardingId);
+  if (!person) {
     return (
-      <Arbeitsbereich
-        assessmentId={ba.id}
-        patientName={ba.patientName}
-        typ={ba.typ}
-        startDatum={ba.startDatum}
-        initialItems={ba.items}
-        onboardingId={ba.onboardingId}
-      />
+      <div style={{ padding: "var(--space-8)", textAlign: "center" }}>
+        <div style={{ fontSize: "var(--text-body)", color: "var(--text-tertiary)" }}>
+          Keine Person für dieses Onboarding hinterlegt.
+        </div>
+      </div>
     );
   }
-
-  // Completed: read-only summary with Scales, CAPs, and Items
-  const scales = ba.outcomeScales;
-  const caps = ba.getriggerteCaps;
-  const sectionItems = SEKTIONEN.map(s => ({ ...s, items: ba.items.filter(i => i.sektion === s.id) })).filter(s => s.items.length > 0);
-
   return (
-    <div style={{ padding: "var(--space-4)" }}>
-      <TabHeader
-        titel="InterRAI"
-        statusPill={<span className="inline-flex items-center" style={{ gap: 4, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--status-success-bg)", color: "var(--status-success-text)" }}><Check style={{ width: 11, height: 11 }} /> Abgeschlossen</span>}
-        meta={<HeaderMeta modus="zusammenfassung" text={`${ba.items.length} Items erfasst`} />}
-      />
-      <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: -8, marginBottom: 12 }}>{ba.startDatum}</div>
-
-      {/* Outcome-Scales */}
-      {scales.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 6, fontWeight: "var(--weight-medium)" }}>Outcome-Scales</div>
-          <div className="grid grid-cols-2 sm:grid-cols-3" style={{ gap: 6 }}>
-            {scales.map(s => {
-              const pct = s.maxWert > 0 ? s.wert / s.maxWert : 0;
-              const color = s.richtung === "hoeher-schlechter" ? (pct > 0.5 ? "var(--status-danger)" : pct > 0.25 ? "var(--status-warning)" : "var(--status-success)") : (pct > 0.5 ? "var(--status-success)" : "var(--status-warning)");
-              return (
-                <div key={s.id} style={{ padding: "8px 12px", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)" }}>{s.abkuerzung}</div>
-                  <div className="flex items-end" style={{ gap: 3, marginTop: 2 }}><span style={{ fontSize: 16, fontWeight: "var(--weight-medium)", color }}>{s.wert}</span><span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>/{s.maxWert}</span></div>
-                  <div style={{ height: 3, background: "var(--bg-secondary)", borderRadius: "var(--radius-pill)", marginTop: 4, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.max(5, pct * 100)}%`, background: color, borderRadius: "var(--radius-pill)" }} /></div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* CAPs */}
-      {caps.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 6, fontWeight: "var(--weight-medium)" }}>Aktive CAPs ({caps.length})</div>
-          {caps.map(cap => (
-            <div key={cap.id} style={{ padding: "8px 12px", background: cap.prioritaet === "hoch" ? "rgba(168,50,31,0.04)" : "var(--bg-elevated)", border: `var(--border-thin) solid ${cap.prioritaet === "hoch" ? "var(--status-danger)" : "var(--border-default)"}`, borderRadius: "var(--radius-card)", marginBottom: 4 }}>
-              <div className="flex items-center" style={{ gap: 6 }}>
-                <AlertTriangle style={{ width: 12, height: 12, color: cap.prioritaet === "hoch" ? "var(--status-danger)" : "var(--status-warning)" }} />
-                <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{cap.name}</span>
-                <span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: cap.prioritaet === "hoch" ? "var(--status-danger-bg)" : "var(--status-warning-bg)", color: cap.prioritaet === "hoch" ? "var(--status-danger)" : "var(--status-warning-text)" }}>{cap.prioritaet === "hoch" ? "Hoch" : "Mittel"}</span>
-              </div>
-              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 3 }}>{cap.beschreibung}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Items by section (compact read-only) */}
-      {sectionItems.length > 0 && (
-        <div>
-          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 6, fontWeight: "var(--weight-medium)" }}>Erfasste Items ({ba.items.length})</div>
-          <div className="flex flex-col" style={{ gap: 4 }}>
-            {sectionItems.map(s => (
-              <div key={s.id} style={{ padding: "8px 12px", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-                <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 3 }}>Sektion {s.id} – {s.name}</div>
-                {s.items.map(item => (
-                  <div key={item.id} className="flex items-center" style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", padding: "1px 0", gap: 5 }}>
-                    <span style={{ padding: "0 4px", borderRadius: 3, fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--brand-primary-light)", color: "var(--brand-primary)" }}>{item.code}</span>
-                    <span className="truncate" style={{ color: "var(--text-primary)" }}>{item.frageKurz}</span>
-                    <span className="truncate" style={{ flex: 1 }}>{getAntwortText(item) || "–"}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Footer */}
-      <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 12 }}>
-        Folgt dem Schema InterRAI HC Schweiz. Item-Texte sinngemäss formuliert.
-      </div>
-    </div>
+    <AssessmentStatusView
+      person={person}
+      returnTo={`/onboarding/${onboardingId}`}
+    />
   );
 }
 
@@ -2738,54 +2351,52 @@ function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {
 
   return (
     <div ref={ppContainerRef} style={{ padding: "var(--space-4)" }}>
-      <TabHeader
-        titel="Pflegeplanung"
-        statusPill={<span className="inline-flex items-center" style={{ gap: 4, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}><Clock style={{ width: 11, height: 11 }} /> {statusLabel}</span>}
-        meta={vorschlaegeCount > 0 ? (
-          <button
-            onClick={scrollToFirstVorschlag}
-            className="inline-flex items-center cursor-pointer"
-            style={{ gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--status-warning-bg)", color: "var(--status-warning-text)", border: "none" }}
-            onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
-            onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-          >
-            <Clock style={{ width: 10, height: 10 }} />
-            {vorschlaegeCount} {vorschlaegeCount === 1 ? "Vorschlag" : "Vorschläge"} zu prüfen
-          </button>
-        ) : undefined}
-        aktion={<button onClick={() => setShowAddDiagnose(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 22px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}><Plus style={{ width: 14, height: 14 }} /> Pflegediagnose hinzufügen</button>}
-      />
 
-      {/* ═══ Sektion: Ärztliche Diagnosen (eine Sektion, alle Zustände) ═══ */}
+      {/* Aufzeichnung verschoben in den Onboarding-Kopfbereich (OnboardingPage.tsx) */}
+
+      {/* ═══ Kopfzeile: nur Titel + Zustände als Text ═══ */}
+      <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)" }}>Pflegeplanung</div>
+        <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+          {statusLabel}
+          {vorschlaegeCount > 0 && (
+            <span onClick={scrollToFirstVorschlag} className="cursor-pointer" style={{ marginLeft: 8, color: "var(--text-tertiary)" }}>
+              · {vorschlaegeCount} {vorschlaegeCount === 1 ? "Vorschlag" : "Vorschläge"} zu prüfen
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ Sektion: Ärztliche Diagnosen ═══ */}
       <div style={{ marginBottom: 16 }}>
-        <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
-          <span style={{ fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ärztliche Diagnosen</span>
-          <div className="flex items-center" style={{ gap: 2 }}>
-            {/* Flow-Status ersetzt die Anfrage-Aktion nur bei "gesendet" (stille Statuszeile).
-               antwort_erhalten hat eigenen prominenten ReviewBlock — keine Ghost-Aktion nötig. */}
-            {arztAnfrage && arztAnfrage.anfrage.status === "gesendet" && !showArztAnfrage ? (
-              <SectionAction
-                icon={<Stethoscope style={{ width: 10, height: 10 }} />}
-                label="Beim Arzt anfragen"
-                statusText={`${arztAnfrage.anfrage.empfaengerName} · ${arztAnfrage.tageSeitVersand} Tage`}
-                onClick={() => { setShowArztAnfrage(true); setShowAddArztDiag(false); }}
-              />
-            ) : (
-              <SectionAction
-                icon={<Stethoscope style={{ width: 10, height: 10 }} />}
-                label="Beim Arzt anfragen"
-                onClick={() => { setShowArztAnfrage(!showArztAnfrage); setShowAddArztDiag(false); }}
-                active={showArztAnfrage}
-              />
-            )}
-            <SectionAction
-              icon={<Plus style={{ width: 10, height: 10 }} />}
-              label="Erfassen"
+        <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+          <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>Ärztliche Diagnosen</span>
+          <div className="flex items-center" style={{ gap: 8 }}>
+            {/* Primäraktion */}
+            <button
+              onClick={() => { setShowArztAnfrage(!showArztAnfrage); setShowAddArztDiag(false); }}
+              className="inline-flex items-center cursor-pointer"
+              style={{ gap: 5, padding: "7px 16px", borderRadius: 999, background: showArztAnfrage ? "var(--brand-primary)" : "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
+            >
+              <Stethoscope style={{ width: 12, height: 12 }} /> Beim Arzt anfragen
+            </button>
+            {/* Sekundäraktion */}
+            <button
               onClick={() => { setShowAddArztDiag(!showAddArztDiag); setShowArztAnfrage(false); }}
-              active={showAddArztDiag}
-            />
+              className="inline-flex items-center cursor-pointer"
+              style={{ gap: 5, padding: "7px 16px", borderRadius: 999, background: "transparent", color: "var(--text-primary)", fontSize: "var(--text-small)", fontWeight: 500, border: "0.5px solid var(--border-default)" }}
+            >
+              Manuell erfassen
+            </button>
           </div>
         </div>
+
+        {/* Arzt-Anfrage-Status als Zustandsband (kein Button) */}
+        {arztAnfrage && arztAnfrage.anfrage.status === "gesendet" && !showArztAnfrage && (
+          <div style={{ padding: "6px 12px", background: "var(--bg-secondary)", borderRadius: 8, marginBottom: 6, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+            Angefragt bei {arztAnfrage.anfrage.empfaengerName} · wartet seit {arztAnfrage.tageSeitVersand} Tagen
+          </div>
+        )}
 
         {/* Arzt-Anfrage-Flow (kanonisches Zuhause).
            antwort_erhalten: immer sichtbar (Handlungsbedarf → ReviewBlock-Prominenz).
@@ -2859,9 +2470,7 @@ function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {
             {/* Status-Pill + Aktionen */}
             {ad.status === "entwurf" ? (
               <div className="flex items-center shrink-0" style={{ gap: 2 }}>
-                <span className="inline-flex items-center" style={{ gap: 3, padding: "1px 8px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}>
-                  <Clock style={{ width: 9, height: 9 }} /> Vorschlag
-                </span>
+                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Vorschlag</span>
                 <button
                   onClick={() => setArztDiagnosen(prev => prev.map(d => d.id === ad.id ? { ...d, status: "bestaetigt" as const } : d))}
                   className="cursor-pointer"
@@ -2898,8 +2507,11 @@ function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {
       </div>
 
       {/* ═══ Sektion: Pflegediagnosen ═══ */}
-      <div className="flex items-center" style={{ marginBottom: 6 }}>
-        <span style={{ fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Pflegediagnosen</span>
+      <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+        <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>Pflegediagnosen</span>
+        <button onClick={() => setShowAddDiagnose(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "7px 16px", borderRadius: 999, background: "transparent", color: "var(--text-primary)", fontSize: "var(--text-small)", fontWeight: 500, border: "0.5px solid var(--border-default)" }}>
+          Pflegediagnose hinzufügen
+        </button>
       </div>
 
       {/* Pflegediagnosen — ReviewBlock per styleguide 8.10 */}
