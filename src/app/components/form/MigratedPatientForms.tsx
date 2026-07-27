@@ -12,6 +12,7 @@ import { AHVNummerInput } from "./AHVNummerInput";
 import { SegmentedControl } from "./SegmentedControl";
 import { Combobox as FormSelect } from "./Combobox";
 import { FormField } from "./FormField";
+import { DateField } from "./DateField";
 import type { PatientFormData } from "../StepPatient";
 import { NATIONALITAETEN } from "./MigratedAngehoerigerForms";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
@@ -50,7 +51,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
         <TextInput label="Name" required value={data.name} onChange={v => onUpdate("name", v)} onBlur={() => onBlur("name")} placeholder="Nachname" error={t("name") && !filled(data.name) ? "Pflichtfeld" : undefined} />
         <TextInput label="Vorname" required value={data.vorname} onChange={v => onUpdate("vorname", v)} onBlur={() => onBlur("vorname")} placeholder="Vorname" error={t("vorname") && !filled(data.vorname) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Geburtsdatum" required value={data.geburtsdatum} onChange={v => onUpdate("geburtsdatum", v)} onBlur={() => onBlur("geburtsdatum")} placeholder="01.01.1950" hint="Format: TT.MM.JJJJ" />
+        <DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => onUpdate("geburtsdatum", (v as string) ?? "")} onBlur={() => onBlur("geburtsdatum")} />
         <FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => onUpdate("geschlecht", v || "")} options={GESCHLECHT} placeholder="Geschlecht wählen" />
       </div>
       <div style={{ marginTop: "var(--space-4)" }}>

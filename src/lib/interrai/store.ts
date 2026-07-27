@@ -16,6 +16,7 @@ import {
   evaluateSkipLogic,
   getItem,
 } from "./instrument";
+import { dateZuIso } from "../datum";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -376,21 +377,20 @@ export function abschliessenAssessment(assessmentId: string, person: string): nu
   if (!a || istAbgeschlossen(a)) return -1;
 
   const now = new Date().toISOString();
-  const datumFormatted = new Date().toLocaleDateString("de-CH", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-  });
 
-  // Fill S1 (evaluator signature) if empty
+  // Fill S1 (evaluator signature) if empty — a person name (text field), not a date.
   if (a.answers["S1"] == null || a.answers["S1"] === "") {
     a.answers["S1"] = person;
   }
-  // Fill S2a (completing person signature) if empty
+  // Fill S2a (completing person signature) if empty — a person name (text field).
   if (a.answers["S2a"] == null || a.answers["S2a"] === "") {
     a.answers["S2a"] = person;
   }
-  // Fill S2b (completion date) if empty
+  // Fill S2b (completion date) if empty — ISO yyyy-MM-dd, matching the date
+  // renderer (previously written as dd.MM.yyyy via toLocaleDateString, which a
+  // type=date control sanitised to empty).
   if (a.answers["S2b"] == null || a.answers["S2b"] === "") {
-    a.answers["S2b"] = datumFormatted;
+    a.answers["S2b"] = dateZuIso(new Date());
   }
 
   // Discard all remaining unconfirmed suggestions

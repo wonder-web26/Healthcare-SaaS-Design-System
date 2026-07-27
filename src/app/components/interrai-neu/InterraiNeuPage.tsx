@@ -49,6 +49,7 @@ import {
   getMatrixDisplayMode,
 } from "../../../lib/interrai/instrument";
 
+import { DateField } from "../form/DateField";
 import { MODUL_ZERTIFIZIERUNG } from "../../../lib/stammdaten/modul-zertifizierung";
 import {
   getAssessment,
@@ -2096,13 +2097,15 @@ function SimpleItemInput({
   }
   if (item.answerType === "date") {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <input
-          type="date"
-          value={value ?? ""}
-          onChange={(e) => onChange(e.target.value)}
-          style={{ ...inputStyle, maxWidth: 200 }}
-        />
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ width: "100%", maxWidth: 240 }}>
+          <DateField
+            wertFormat="iso"
+            bereich={item.code === "A3" ? "past" : "any"}
+            value={value ?? null}
+            onChange={(v) => onChange((v as string) ?? "")}
+          />
+        </div>
         <RawFieldAffordance
           suggestion={suggestion}
           confirmedSegId={confirmedSegId}
@@ -2939,12 +2942,14 @@ function FieldgroupRenderer({
                     placeholder={ghost ? `Vorschlag: ${fgSuggestion!.wert}` : "0"}
                   />
                 ) : sub.answerType === "date" ? (
-                  <input
-                    type="date"
-                    value={answers[sub.code] ?? ""}
-                    onChange={(e) => onAnswer(sub.code, e.target.value)}
-                    style={{ ...inputStyle, maxWidth: 200 }}
-                  />
+                  <div style={{ width: "100%", maxWidth: 240 }}>
+                    <DateField
+                      wertFormat="iso"
+                      bereich="any"
+                      value={answers[sub.code] ?? null}
+                      onChange={(v) => onAnswer(sub.code, (v as string) ?? "")}
+                    />
+                  </div>
                 ) : (
                   <input
                     type="text"

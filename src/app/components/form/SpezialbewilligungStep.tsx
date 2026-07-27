@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { AlertTriangle, Info, CircleCheck, Calendar } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
-import { DatePicker } from "./DatePicker";
+import { DateField } from "./DateField";
 import { DocumentUploader, type UploadedFile } from "./DocumentUploader";
 import { DocumentPreviewModal } from "./DocumentPreviewModal";
 import type { AngehoerigerFormData } from "../StepAngehoeriger";
@@ -94,12 +94,13 @@ export function SpezialbewilligungStep({ data, onChange }: Props) {
       <SectionHeader icon={Calendar} label="Einreichung" first />
 
       <div className="flex flex-col" style={{ gap: "var(--space-4)" }}>
-        <DatePicker
+        <DateField
           label="Einreichungsdatum beim Migrationsamt"
           required
+          wertFormat="date"
+          bereich="past"
           value={datumValue}
-          onChange={handleDateChange}
-          maxDate={new Date()}
+          onChange={(v) => handleDateChange(v as Date | null)}
           hint="Datum, an dem die Spezialbewilligung eingereicht wurde"
         />
 

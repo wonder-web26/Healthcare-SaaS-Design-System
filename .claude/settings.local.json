@@ -77,7 +77,10 @@
       "Bash(awk 'NR>=2619 && NR<=2720 && /erstellt|Datum|datum|\\\\.date|<td/' src/app/components/Patient360Page.tsx)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(echo \"--- commit exit: $? ---\")"
+      "Bash(echo \"--- commit exit: $? ---\")",
+      "Bash(awk 'NR<=841 && /^\\(function |const [A-Z][A-Za-z0-9]* *[:=].*=>|export function |const [A-Z][A-Za-z0-9]* = \\\\\\(\\)/ {ln=NR; line=$0} END{print ln\": \"line}' src/app/components/StepPatient.tsx)",
+      "Bash(awk -F: '$1>700 && $1<900')",
+      "Bash(echo \"--- commit exit $? ---\")"
     ]
   }
 }
