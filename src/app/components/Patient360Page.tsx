@@ -74,6 +74,7 @@ import { toast } from "sonner";
 import { useRecording } from "../recording/RecordingContext";
 import { getPersonByPatientId } from "../../lib/interrai/store";
 import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
+import { DateField } from "./form/DateField";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { ItemRow } from "./ui/ItemRow";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
@@ -1104,13 +1105,7 @@ function WorkflowSection({
           {/* Due date */}
           <div className="hidden sm:flex items-center" style={{ gap: 4 }}>
             <Calendar style={{ width: 12, height: 12, color: task.overdue && !isDone ? "var(--status-danger)" : "var(--text-tertiary)" }} />
-            <input
-              type="date"
-              value={task.dueDate}
-              onChange={e => handleDateChange(task, e.target.value)}
-              disabled={isDone}
-              style={{ fontSize: "var(--text-meta)", color: task.overdue && !isDone ? "var(--status-danger)" : "var(--text-secondary)", background: "transparent", border: "none", outline: "none", fontFamily: "inherit", fontVariantNumeric: "tabular-nums", cursor: isDone ? "default" : "pointer", opacity: isDone ? 0.5 : 1 }}
-            />
+            <DateField wertFormat="iso" bereich="future" value={task.dueDate || null} onChange={v => handleDateChange(task, (v as string) ?? "")} disabled={isDone} />
           </div>
 
           {/* Assignee */}

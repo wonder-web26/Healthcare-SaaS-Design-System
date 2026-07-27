@@ -7,6 +7,7 @@ import { useState } from "react";
 import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Info, Download, AlertTriangle } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { TextInput } from "./TextInput";
+import { DateField } from "./DateField";
 import { NumberInput } from "./NumberInput";
 import { AHVNummerInput } from "./AHVNummerInput";
 import { IBANInput } from "./IBANInput";
@@ -92,7 +93,7 @@ export function PersonalienFormV2({
         <TextInput label="Name" required value={data.name} onChange={v => set("name", v)} onBlur={() => touch("name")} placeholder="Nachname" error={touched.name && !filled(data.name) ? "Pflichtfeld" : undefined} />
         <TextInput label="Vorname" required value={data.vorname} onChange={v => set("vorname", v)} onBlur={() => touch("vorname")} placeholder="Vorname" error={touched.vorname && !filled(data.vorname) ? "Pflichtfeld" : undefined} />
         <FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => { set("geschlecht", v || ""); touch("geschlecht"); }} options={GESCHLECHT} placeholder="Geschlecht wählen" error={touched.geschlecht && !filled(data.geschlecht) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Geburtsdatum" required value={data.geburtsdatum} onChange={v => set("geburtsdatum", v)} onBlur={() => touch("geburtsdatum")} placeholder="01.01.1990" hint="Format: TT.MM.JJJJ" />
+        <DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => set("geburtsdatum", (v as string) ?? "")} onBlur={() => touch("geburtsdatum")} />
       </div>
       <div style={{ marginTop: "var(--space-4)" }}>
         <AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => set("ahvNummer", v)} />
@@ -124,10 +125,10 @@ export function PersonalienFormV2({
             Angaben zur Aufenthaltsbewilligung
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
-            <TextInput label="Einreisedatum" required value={data.einreisedatum} onChange={v => set("einreisedatum", v)} onBlur={() => touch("einreisedatum")} placeholder="01.03.2025" hint="Datum der Einreise in die Schweiz (TT.MM.JJJJ)" error={touched.einreisedatum && !filled(data.einreisedatum) ? "Bitte ausfüllen" : undefined} />
+            <DateField label="Einreisedatum" required wertFormat="display" bereich="past" value={data.einreisedatum || null} onChange={v => set("einreisedatum", (v as string) ?? "")} onBlur={() => touch("einreisedatum")} />
             <TextInput label="ZEMIS-Nummer" required value={data.zemisNummer} onChange={v => set("zemisNummer", v)} onBlur={() => touch("zemisNummer")} placeholder="ZEMIS-Nummer" hint="Zentrales Migrationsinformationssystem" error={touched.zemisNummer && !filled(data.zemisNummer) ? "Bitte ausfüllen" : undefined} />
-            <TextInput label="Einreichungsdatum Migrationsamt" required value={data.einreichungsdatumMigrationsamt} onChange={v => set("einreichungsdatumMigrationsamt", v)} onBlur={() => touch("einreichungsdatumMigrationsamt")} placeholder="15.02.2026" hint="Datum des Antrags beim Migrationsamt (TT.MM.JJJJ)" error={touched.einreichungsdatumMigrationsamt && !filled(data.einreichungsdatumMigrationsamt) ? "Bitte ausfüllen" : undefined} />
-            <TextInput label="Ablaufdatum Bewilligung" value={data.bewilligungAblaufdatum} onChange={v => set("bewilligungAblaufdatum", v)} placeholder="31.12.2027" hint="Optional — bei Eingabe wird 30 Tage vor Ablauf eine Erneuerungs-Pendenz erstellt" />
+            <DateField label="Einreichungsdatum Migrationsamt" required wertFormat="display" bereich="any" value={data.einreichungsdatumMigrationsamt || null} onChange={v => set("einreichungsdatumMigrationsamt", (v as string) ?? "")} onBlur={() => touch("einreichungsdatumMigrationsamt")} />
+            <DateField label="Ablaufdatum Bewilligung" wertFormat="display" bereich="any" value={data.bewilligungAblaufdatum || null} onChange={v => set("bewilligungAblaufdatum", (v as string) ?? "")} hint="Optional — bei Eingabe wird 30 Tage vor Ablauf eine Erneuerungs-Pendenz erstellt" />
           </div>
         </div>
       )}
@@ -139,7 +140,7 @@ export function PersonalienFormV2({
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <FormSelect label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND} placeholder="Zivilstand wählen" />
-        <TextInput label="Zivilstand seit" required value={data.zivilstandSeit} onChange={v => set("zivilstandSeit", v)} onBlur={() => touch("zivilstandSeit")} placeholder="01.06.2020" hint="Format: TT.MM.JJJJ" />
+        <DateField label="Zivilstand seit" required wertFormat="display" bereich="past" value={data.zivilstandSeit || null} onChange={v => set("zivilstandSeit", (v as string) ?? "")} onBlur={() => touch("zivilstandSeit")} />
       </div>
 
       {/* Kontaktdaten */}
@@ -343,7 +344,7 @@ export function AnstellungFormV2({
         <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
           <TextInput label="Funktion extern" required value={data.externeFunktion} onChange={v => set("externeFunktion", v)} onBlur={() => touch("externeFunktion")} placeholder="z.B. Pflegehelferin" error={touched.externeFunktion && !filled(data.externeFunktion) ? "Bitte ausfüllen" : undefined} />
           <NumberInput label="Pensum extern" required value={data.externesPensumProzent} onChange={v => set("externesPensumProzent", v)} suffix="%" placeholder="50" />
-          <TextInput label="Eintritt extern" required value={data.externerEintritt} onChange={v => set("externerEintritt", v)} onBlur={() => touch("externerEintritt")} placeholder="01.01.2024" error={touched.externerEintritt && !filled(data.externerEintritt) ? "Bitte ausfüllen" : undefined} />
+          <DateField label="Eintritt extern" required wertFormat="display" bereich="any" value={data.externerEintritt || null} onChange={v => set("externerEintritt", (v as string) ?? "")} onBlur={() => touch("externerEintritt")} />
           <SegmentedControl label="BVG-Anbindung gewünscht?" value={data.bvgAnbindungGewuenscht} onChange={v => set("bvgAnbindungGewuenscht", v)} options={JA_NEIN} />
         </div>
       )}
@@ -351,7 +352,7 @@ export function AnstellungFormV2({
       <SectionHeader icon={Briefcase} label="Anstellung" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
         <FormSelect label="Funktion" required value={data.funktion || null} onChange={v => { set("funktion", v || ""); touch("funktion"); }} options={FUNKTIONEN} placeholder="Funktion wählen" error={touched.funktion && !filled(data.funktion) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Eintrittsdatum" required value={data.eintrittsdatum} onChange={v => set("eintrittsdatum", v)} onBlur={() => touch("eintrittsdatum")} placeholder="01.03.2026" />
+        <DateField label="Eintrittsdatum" required wertFormat="display" bereich="any" value={data.eintrittsdatum || null} onChange={v => set("eintrittsdatum", (v as string) ?? "")} onBlur={() => touch("eintrittsdatum")} />
         <NumberInput label="Stundenlohn" required value={data.stundenlohn} onChange={v => set("stundenlohn", v)} suffix="CHF" placeholder="32.00" />
         <NumberInput label="Ferienanspruch" required value={data.ferienanspruchWochen} onChange={v => set("ferienanspruchWochen", v)} suffix="Wochen" placeholder="5" />
         {/* Ferienzuschlag abgeleitet aus Wochen */}

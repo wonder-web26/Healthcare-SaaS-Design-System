@@ -5,6 +5,7 @@
  * mit Status, Fälligkeit, Protokoll und Erledigen-Aktion.
  */
 import { useState } from "react";
+import { DateField } from "../form/DateField";
 import {
   CheckCircle2,
   Circle,
@@ -271,12 +272,7 @@ function TicketZeile({ ticket, isLast, aktuellerBenutzer, onErledigt }: {
                 <div style={{ marginBottom: 12, padding: "10px 12px", background: "var(--bg-secondary)", borderRadius: 8 }}>
                   <div style={{ fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>Fälligkeit anpassen</div>
                   <div className="flex items-center" style={{ gap: 8, marginBottom: 6 }}>
-                    <input
-                      type="date"
-                      value={neuesDatum}
-                      onChange={e => { setNeuesDatum(e.target.value); setDatumFehler(null); }}
-                      style={{ padding: "6px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "inherit" }}
-                    />
+                    <DateField wertFormat="iso" bereich="future" value={neuesDatum || null} onChange={v => { setNeuesDatum((v as string) ?? ""); setDatumFehler(null); }} />
                   </div>
                   <textarea
                     value={datumBegruendung}

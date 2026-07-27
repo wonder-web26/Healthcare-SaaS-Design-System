@@ -19,7 +19,6 @@ import { Calendar } from "../ui/calendar";
 import { FormField } from "./FormField";
 import {
   formatAnzeige,
-  formatMitWochentag,
   parseEingabe,
   istGueltig,
   isoZuDate,
@@ -323,22 +322,14 @@ export function DateField({
     </Popover>
   );
 
-  // Rückmeldung unter dem Feld: Wochentag (gültig) bzw. Plausibilitätshinweis.
-  const feedback = (
-    <>
-      {selected && !error && (
-        <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 4 }}>
-          {formatMitWochentag(selected)}
-        </div>
-      )}
-      {plaus && (
-        <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 4 }}>
-          <AlertTriangle style={{ width: 12, height: 12, flexShrink: 0 }} />
-          {plaus}
-        </div>
-      )}
-    </>
-  );
+  // Bereich unter dem Feld ist ausschliesslich Meldungen vorbehalten (Fehler
+  // via FormField/Fehlerzeile, Plausibilität hier). Keine Wochentag-Zeile mehr.
+  const feedback = plaus ? (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 4 }}>
+      <AlertTriangle style={{ width: 12, height: 12, flexShrink: 0 }} />
+      {plaus}
+    </div>
+  ) : null;
 
   if (label) {
     return (

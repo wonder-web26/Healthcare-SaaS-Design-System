@@ -62,6 +62,7 @@ import { TabDokumenteGeneric, type DocFolder } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
 import { AnnaAngehoerigeSummary } from "../anna/AnnaAngehoerigeSummary";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
+import { DateField } from "./form/DateField";
 import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
 import { getNachweiseFuerAngehoeriger } from "../../lib/schulung/nachweis-store";
 import { getKontrollenFuerAngehoeriger, erstelleKontrolle, getNaechsteFaelligkeit, type KontrolleArt } from "../../lib/arbeitskontrolle/store";
@@ -1005,7 +1006,7 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
                           </td>
                           <td className="px-3 py-2.5">
                             {isEd("kinder") ? (
-                              <input type="text" value={k.geburtsdatum} onChange={e => updateKind(k.id, "geburtsdatum", e.target.value)} placeholder="TT.MM.JJJJ" className={inputClass + " !py-1.5 !text-[12px]"} />
+                              <DateField wertFormat="display" bereich="past" value={k.geburtsdatum || null} onChange={v => updateKind(k.id, "geburtsdatum", (v as string) ?? "")} />
                             ) : (
                               <span className="text-[13px] text-foreground">{k.geburtsdatum}</span>
                             )}
@@ -1038,7 +1039,7 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
                           </td>
                           <td className="px-3 py-2.5">
                             {isEd("kinder") ? (
-                              <input type="text" value={k.ausbildungsbeginn} onChange={e => updateKind(k.id, "ausbildungsbeginn", e.target.value)} placeholder="TT.MM.JJJJ" className={inputClass + " !py-1.5 !text-[12px]"} />
+                              <DateField wertFormat="display" bereich="any" value={k.ausbildungsbeginn || null} onChange={v => updateKind(k.id, "ausbildungsbeginn", (v as string) ?? "")} />
                             ) : (
                               <span className="text-[13px] text-muted-foreground">{k.ausbildungsbeginn || "—"}</span>
                             )}
@@ -1739,11 +1740,11 @@ function TableStempel() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>Gültig ab *</label>
-                    <input type="text" placeholder="z.B. 01.04.2026" value={bewForm.gueltigAb} onChange={(e) => setBewForm((p) => ({ ...p, gueltigAb: e.target.value }))} className={inputCls} />
+                    <DateField wertFormat="display" bereich="any" value={bewForm.gueltigAb || null} onChange={v => setBewForm((p) => ({ ...p, gueltigAb: (v as string) ?? "" }))} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>Gültig bis</label>
-                    <input type="text" placeholder="Offen lassen = unbefristet" value={bewForm.gueltigBis} onChange={(e) => setBewForm((p) => ({ ...p, gueltigBis: e.target.value }))} className={inputCls} />
+                    <DateField wertFormat="display" bereich="any" value={bewForm.gueltigBis || null} onChange={v => setBewForm((p) => ({ ...p, gueltigBis: (v as string) ?? "" }))} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>Tägliche Minuten *</label>
@@ -2206,7 +2207,7 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
                           {/* Geburtsdatum */}
                           <td className="px-3 py-2.5">
                             {isEditing ? (
-                              <input type="text" value={k.geburtsdatum} onChange={(e) => updateKind(k.id, "geburtsdatum", e.target.value)} placeholder="TT.MM.JJJJ" className={inputClass + " !py-1.5 !text-[12px]"} />
+                              <DateField wertFormat="display" bereich="past" value={k.geburtsdatum || null} onChange={v => updateKind(k.id, "geburtsdatum", (v as string) ?? "")} />
                             ) : (
                               <span className="text-[13px] text-foreground">{k.geburtsdatum}</span>
                             )}
@@ -2242,7 +2243,7 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
                           {/* Ausbildungsbeginn */}
                           <td className="px-3 py-2.5">
                             {isEditing && k.zulagenart === "W" ? (
-                              <input type="text" value={k.ausbildungsbeginn} onChange={(e) => updateKind(k.id, "ausbildungsbeginn", e.target.value)} placeholder="TT.MM.JJJJ" className={inputClass + " !py-1.5 !text-[12px]"} />
+                              <DateField wertFormat="display" bereich="any" value={k.ausbildungsbeginn || null} onChange={v => updateKind(k.id, "ausbildungsbeginn", (v as string) ?? "")} />
                             ) : (
                               <span className="text-[13px] text-muted-foreground">{k.ausbildungsbeginn}</span>
                             )}
@@ -2696,7 +2697,7 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Deadline</div>
               {isEditing ? (
-                <input type="text" value={deadline} onChange={(e) => setDeadline(e.target.value)} placeholder="TT.MM.JJJJ" className={inputClass} />
+                <DateField wertFormat="display" bereich="any" value={deadline || null} onChange={v => setDeadline((v as string) ?? "")} />
               ) : (
                 <div className="flex items-center gap-2.5">
                   <div className="flex items-center gap-1.5 text-[13px] text-foreground" style={{ fontWeight: 450 }}>
@@ -2722,13 +2723,12 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Abgeschlossen am</div>
               {isEditing ? (
-                <input
-                  type="text"
-                  value={abgeschlossenAm}
-                  onChange={(e) => setAbgeschlossenAm(e.target.value)}
-                  placeholder="TT.MM.JJJJ"
+                <DateField
+                  wertFormat="display"
+                  bereich="past"
+                  value={abgeschlossenAm && abgeschlossenAm !== "—" ? abgeschlossenAm : null}
+                  onChange={v => setAbgeschlossenAm((v as string) ?? "")}
                   disabled={status !== "abgeschlossen"}
-                  className={`${inputClass} ${status !== "abgeschlossen" ? "opacity-40 cursor-not-allowed" : ""}`}
                 />
               ) : (
                 <div className="flex items-center gap-1.5 text-[13px]" style={{ fontWeight: 450 }}>

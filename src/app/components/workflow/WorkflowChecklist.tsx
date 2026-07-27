@@ -8,6 +8,8 @@
 import { useState, useCallback } from "react";
 import { Check, CheckCircle2, AlertTriangle, Calendar, ChevronDown, ChevronUp, UserCircle } from "lucide-react";
 import { MOCK_WORKFLOWS } from "../../../lib/mocks/klinische-artefakte-mock";
+import { DateField } from "../form/DateField";
+import { isoZuAnzeige } from "../../../lib/datum";
 import type { WorkflowPlan, WorkflowSchritt, WorkflowTyp } from "../../../types/klinische-artefakte";
 import { TabHeader, HeaderMeta } from "../ui/TabHeader";
 import { ItemRow } from "../ui/ItemRow";
@@ -148,8 +150,7 @@ export function WorkflowChecklist({ onboardingId, patientId, angehoerigerId, typ
   };
 
   const handleDateChange = (s: WorkflowSchritt, iso: string) => {
-    const [y, m, d] = iso.split("-");
-    updateSchritt(s.nr, { dueDate: iso, dueDateDisplay: `${d}.${m}.${y}`, overdue: s.status === "offen" && isOverdue(iso) });
+    updateSchritt(s.nr, { dueDate: iso, dueDateDisplay: isoZuAnzeige(iso), overdue: s.status === "offen" && isOverdue(iso) });
   };
 
   const handleAssignee = (s: WorkflowSchritt, assignee: string) => {
@@ -206,7 +207,7 @@ export function WorkflowChecklist({ onboardingId, patientId, angehoerigerId, typ
           )}
           <div className="hidden sm:flex items-center" style={{ gap: 4 }}>
             <Calendar style={{ width: 12, height: 12, color: task.overdue && !isDone ? "var(--status-danger)" : "var(--text-tertiary)" }} />
-            <input type="date" value={task.dueDate} onChange={e => handleDateChange(task, e.target.value)} disabled={isDone} style={{ fontSize: "var(--text-meta)", color: task.overdue && !isDone ? "var(--status-danger)" : "var(--text-secondary)", background: "transparent", border: "none", outline: "none", fontFamily: "inherit", fontVariantNumeric: "tabular-nums", cursor: isDone ? "default" : "pointer", opacity: isDone ? 0.5 : 1 }} />
+            <DateField wertFormat="iso" bereich="future" value={task.dueDate || null} onChange={v => handleDateChange(task, (v as string) ?? "")} disabled={isDone} />
           </div>
           <div className="hidden md:block relative">
             <button onClick={() => setOpenDropdown(isDropOpen ? null : `wf-${task.nr}`)} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "2px 8px", borderRadius: 999, background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>

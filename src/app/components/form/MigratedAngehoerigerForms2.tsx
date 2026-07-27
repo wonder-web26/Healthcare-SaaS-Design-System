@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Users, IdCard, Coins, FileText, Plus, Upload, Eye, Check, FileSignature, Trash2, Shield, FileCheck } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { TextInput } from "./TextInput";
+import { DateField } from "./DateField";
 import { AHVNummerInput } from "./AHVNummerInput";
 import { SegmentedControl } from "./SegmentedControl";
 import { Combobox as FormSelect } from "./Combobox";
@@ -113,7 +114,7 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
         <TextInput label="Vorname" required={istPflicht} value={data.partnerVorname} onChange={v => set("partnerVorname", v)} onBlur={() => touch("partnerVorname")} placeholder="Vorname" error={errIfPflicht("partnerVorname", data.partnerVorname)} />
         <TextInput label="Nachname" required={istPflicht} value={data.partnerName} onChange={v => set("partnerName", v)} onBlur={() => touch("partnerName")} placeholder="Nachname" error={errIfPflicht("partnerName", data.partnerName)} />
-        <TextInput label="Geburtsdatum" required={istPflicht} value={data.partnerGeburtsdatum} onChange={v => set("partnerGeburtsdatum", v)} onBlur={() => touch("partnerGeburtsdatum")} placeholder="01.01.1985" hint="Format: TT.MM.JJJJ" error={errIfPflicht("partnerGeburtsdatum", data.partnerGeburtsdatum)} />
+        <DateField label="Geburtsdatum" required={istPflicht} wertFormat="display" bereich="past" value={data.partnerGeburtsdatum || null} onChange={v => set("partnerGeburtsdatum", (v as string) ?? "")} onBlur={() => touch("partnerGeburtsdatum")} />
         <FormSelect label="Nationalität" value={data.partnerNationalitaet || null} onChange={v => set("partnerNationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" />
       </div>
 
@@ -243,7 +244,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                     <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
                       <TextInput label="Vorname" required value={kind.vorname} onChange={v => updateKind(kind.id, "vorname", v)} placeholder="Vorname" />
                       <TextInput label="Nachname" required value={kind.name} onChange={v => updateKind(kind.id, "name", v)} placeholder="Nachname" />
-                      <TextInput label="Geburtsdatum" required value={kind.geburtsdatum} onChange={v => updateKind(kind.id, "geburtsdatum", v)} placeholder="01.01.2015" hint="TT.MM.JJJJ" />
+                      <DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={kind.geburtsdatum || null} onChange={v => updateKind(kind.id, "geburtsdatum", (v as string) ?? "")} />
                       <FormSelect label="Geschlecht" value={kind.geschlecht || null} onChange={v => updateKind(kind.id, "geschlecht", v || "")} options={GESCHLECHT} placeholder="Waehlen" />
                     </div>
                     {/* SP-09: Ausbildungslogik >16/25 hier nicht ausimplementiert */}
