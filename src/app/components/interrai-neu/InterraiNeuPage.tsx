@@ -295,29 +295,34 @@ function PeriodBadge({ period }: { period: string }) {
  * colour. No hover, no pointer cursor, not tabbable, no click. The badge keeps
  * the 34px width so codes still line up with the matrix cells below.
  */
-function LegendBlock({ options }: { options: AnswerOption[] }) {
+function LegendBlock({ options, compact = false }: { options: AnswerOption[]; compact?: boolean }) {
   return (
     <div style={{
       background: "rgba(0, 0, 0, 0.045)",
       borderRadius: 8,
-      padding: "8px 12px 10px",
+      padding: compact ? "6px 12px 8px" : "8px 12px 10px",
       display: "flex",
-      flexDirection: "column",
-      gap: 4,
+      flexDirection: compact ? "row" : "column",
+      flexWrap: compact ? "wrap" : undefined,
+      columnGap: compact ? 18 : undefined,
+      rowGap: compact ? 3 : undefined,
+      gap: compact ? undefined : 4,
     }}>
       <div style={{
         fontSize: 10, fontWeight: 600, letterSpacing: "0.05em",
         textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 2,
+        flexBasis: compact ? "100%" : undefined,
       }}>
         Antwortoptionen
       </div>
       {options.map(opt => (
-        <div key={opt.code} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {/* Muted badge, 34px wide to align with the matrix cells — no fill,
-              no border, so it reads as a reference, not a button. */}
+        <div key={opt.code} style={{ display: "flex", alignItems: "baseline", gap: compact ? 6 : 10, minWidth: 0 }}>
+          {/* Muted badge — in the full legend 34px wide so codes align with the
+              matrix cells below; compact drops the fixed width to pack options
+              side by side. No fill/border: a reference, not a button. */}
           <span style={{
-            display: "inline-flex", alignItems: "center", justifyContent: "center",
-            minWidth: 34, minHeight: 28, padding: "0 8px",
+            display: "inline-flex", alignItems: "center", justifyContent: compact ? "flex-start" : "center",
+            minWidth: compact ? 0 : 34, padding: compact ? 0 : "2px 8px",
             fontFamily: "monospace", fontSize: 13, fontWeight: 600,
             color: "var(--text-secondary)", flexShrink: 0,
           }}>
@@ -1231,7 +1236,7 @@ export function InterraiNeuPage() {
                   gap: 10,
                   padding: "5px 28px",
                   background: "var(--bg-elevated)",
-                  borderBottom: legendDropdownOpen && legendHintItem
+                  borderBottom: (legendHintItem && bereich.items.find(i => i.code === legendHintItem)?.options && getMatrixDisplayMode(legendHintItem) === "legend")
                     ? "none"
                     : "0.5px solid var(--border-default)",
                   fontSize: 12,
@@ -1270,41 +1275,32 @@ export function InterraiNeuPage() {
                       />
                     </>
                   )}
-                {/* Compact legend hint — only when legend is scrolled out but item rows remain */}
-                {legendHintItem && (() => {
-                  const legendItem = bereich.items.find(i => i.code === legendHintItem);
-                  if (!legendItem || !legendItem.options || getMatrixDisplayMode(legendItem.code) !== "legend") return null;
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => setLegendDropdownOpen(prev => !prev)}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 4,
-                        marginLeft: 12, padding: "2px 10px", borderRadius: 6,
-                        background: "var(--bg-secondary)", border: "0.5px solid var(--border-default)",
-                        fontSize: 11, color: "var(--text-secondary)", cursor: "pointer", fontFamily: "inherit",
-                      }}
-                    >
-                      <span style={{ fontFamily: "monospace", fontWeight: 600 }}>{legendHintItem}</span>
-                      <span>Legende</span>
-                      <span style={{ fontSize: 9 }}>{legendDropdownOpen ? "▲" : "▼"}</span>
-                    </button>
-                  );
-                })()}
               </div>
 
-              {/* Legend dropdown panel — inside the sticky block so it
-                  appears below the bar at the current scroll position */}
-              {legendDropdownOpen && legendHintItem && (() => {
+              {/* Sticky legend — appears automatically once the item's own
+                  legend has scrolled out of view (legendHintItem), and drops
+                  away when the item is left. Compact layout so it never takes
+                  more than ~1/3 of the visible height; text is never truncated.
+                  The item observer guarantees only the current item's legend
+                  shows, never a foreign item's. */}
+              {legendHintItem && (() => {
                 const legendItem = bereich.items.find(i => i.code === legendHintItem);
-                if (!legendItem?.options) return null;
+                if (!legendItem?.options || getMatrixDisplayMode(legendItem.code) !== "legend") return null;
                 return (
                   <div style={{
-                    padding: "10px 28px 10px",
+                    // Overlay (out of flow) so appearing/disappearing never shifts
+                    // the item content — otherwise the observer would oscillate.
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    zIndex: 19,
+                    padding: "6px 28px 8px",
                     background: "var(--bg-secondary)",
                     borderBottom: "1px solid var(--border-default)",
+                    boxShadow: "0 3px 6px rgba(0,0,0,0.06)",
                   }}>
-                    <LegendBlock options={legendItem.options} />
+                    <LegendBlock options={legendItem.options} compact />
                   </div>
                 );
               })()}
@@ -1706,7 +1702,7 @@ function ItemRenderer({
           borderBottom: "0.5px solid var(--border-default)",
         }}
       >
-        <div style={{ flex: "0 1 200px", minWidth: 0, maxWidth: 200 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
               display: "flex",
@@ -1736,7 +1732,8 @@ function ItemRenderer({
             </span>
             {abwPeriode && <PeriodBadge period={abwPeriode} />}
           </div>
-          {/* Italic instruction line (§2, layout-vorgabe) */}
+          {/* Italic instruction line (§2, layout-vorgabe) — own max-width so the
+              lines do not run too long across the full card width. */}
           {item.instruction && (
             <div
               style={{
@@ -1745,6 +1742,7 @@ function ItemRenderer({
                 marginTop: 4,
                 lineHeight: 1.45,
                 fontStyle: "italic",
+                maxWidth: 800,
               }}
             >
               {item.instruction}
@@ -2514,8 +2512,8 @@ function MatrixRenderer({
                 outline: "none",
               }}
             >
-              {/* Sub-item label + detail */}
-              <div style={{ flex: "0 1 200px", minWidth: 0, maxWidth: 200 }}>
+              {/* Sub-item label + detail — takes the width left of the cells */}
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <TwoLevelLabel
                   code={sub.code}
                   label={sub.label}
@@ -2703,8 +2701,8 @@ function MatrixColumnsRenderer({
                 borderTop: "0.5px solid var(--border-default)",
               }}
             >
-              {/* Sub-item label */}
-              <div style={{ flex: "0 1 200px", minWidth: 0, maxWidth: 200 }}>
+              {/* Sub-item label — takes the width left of the column groups */}
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <TwoLevelLabel
                   code={sub.code}
                   label={sub.label}
