@@ -289,36 +289,41 @@ function PeriodBadge({ period }: { period: string }) {
 // ─── Legend block — tinted, no heading, badges match answer cells (§4.2, §5.5) ─
 
 /**
- * Renders the option legend as a tinted block with badges sized to match
- * the answer cells. No "Legende" heading. Text in primary color at reading
- * size. Identical appearance in-item and in the sticky-bar dropdown.
+ * Renders the option legend with an explicitly NON-interactive appearance,
+ * clearly distinct from answer options: a tinted, borderless block captioned
+ * "Antwortoptionen", code badge + full option text per line in secondary
+ * colour. No hover, no pointer cursor, not tabbable, no click. The badge keeps
+ * the 34px width so codes still line up with the matrix cells below.
  */
 function LegendBlock({ options }: { options: AnswerOption[] }) {
   return (
     <div style={{
-      background: "rgba(0, 0, 0, 0.03)",
-      border: "1px solid var(--border-default)",
+      background: "rgba(0, 0, 0, 0.045)",
       borderRadius: 8,
-      padding: "10px 14px",
+      padding: "8px 12px 10px",
       display: "flex",
       flexDirection: "column",
-      gap: 6,
+      gap: 4,
     }}>
+      <div style={{
+        fontSize: 10, fontWeight: 600, letterSpacing: "0.05em",
+        textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 2,
+      }}>
+        Antwortoptionen
+      </div>
       {options.map(opt => (
         <div key={opt.code} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {/* Badge sized to match MatrixCell (min 34×34) */}
+          {/* Muted badge, 34px wide to align with the matrix cells — no fill,
+              no border, so it reads as a reference, not a button. */}
           <span style={{
             display: "inline-flex", alignItems: "center", justifyContent: "center",
-            minWidth: 34, minHeight: 34, padding: "0 8px",
-            background: "var(--bg-elevated)",
-            border: "0.5px solid var(--border-default)",
-            borderRadius: 6,
+            minWidth: 34, minHeight: 28, padding: "0 8px",
             fontFamily: "monospace", fontSize: 13, fontWeight: 600,
             color: "var(--text-secondary)", flexShrink: 0,
           }}>
             {opt.code}
           </span>
-          <span style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.35 }}>
+          <span style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.35 }}>
             {opt.label}
           </span>
         </div>
@@ -1150,9 +1155,8 @@ export function InterraiNeuPage() {
                 <span
                   style={{
                     flex: 1,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    lineHeight: 1.3,
+                    wordBreak: "break-word",
                   }}
                 >
                   {b.title}
@@ -1306,7 +1310,7 @@ export function InterraiNeuPage() {
               })()}
           </div>
 
-          <div style={{ padding: "24px 32px 80px" }}>
+          <div style={{ padding: "24px 32px 80px", maxWidth: 1040, boxSizing: "border-box" }}>
             {skipResult.skippedBereichCodes.has(activeBereich) ? (
               <div
                 style={{

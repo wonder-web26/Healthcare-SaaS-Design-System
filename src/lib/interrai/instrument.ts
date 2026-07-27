@@ -213,15 +213,15 @@ export type MatrixDisplayMode = "legend" | "direct";
  * Determines whether a matrix item needs a separate legend or can print option
  * text directly on the selection surfaces.
  *
- * Rule: ≤4 options AND longest option label ≤28 characters → "direct".
- * Otherwise → "legend".
+ * Rule: ≤4 options AND longest option label ≤15 characters → "direct".
+ * Both conditions must hold; otherwise → "legend".
  */
 export function getMatrixDisplayMode(code: string): MatrixDisplayMode {
   const item = itemsByCode.get(code);
   if (!item || !item.options || item.options.length === 0) return "legend";
   if (item.options.length > 4) return "legend";
   const maxLen = Math.max(...item.options.map((o) => o.label.length));
-  if (maxLen > 28) return "legend";
+  if (maxLen > 15) return "legend";
   return "direct";
 }
 
