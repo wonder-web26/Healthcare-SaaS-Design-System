@@ -1,5 +1,5 @@
 /**
- * Arbeitskontrolle — Datenhaltung, Bewertungen, Unterschriften, Integrität.
+ * Arbeitskontrolle — Datenhaltung, Bewertungen, Unterschriften.
  *
  * Kein eigenes Domänenobjekt. Bestehendes Dokumentenkonzept und Pendenzen.
  * Personaldokument: nur beim Angehörigen abgelegt, NICHT im Patientendossier.
@@ -14,8 +14,14 @@ import { getOrgEinstellungen } from "../stammdaten/org-einstellungen";
    TYPEN
    ══════════════════════════════════════════ */
 
-/** 1–6 oder null (= "Kann ich nicht beurteilen") */
-export type Bewertung = 1 | 2 | 3 | 4 | 5 | 6 | null;
+/**
+ * Bewertungszustand eines Kriteriums — drei Zustände gemäss Vorlage V1:
+ * - 1–6: bewertet
+ * - "nicht_beurteilbar": bewusst als nicht beurteilbar erfasst (eigene Spalte
+ *   der Vorlage, "Kann ich nicht beurteilen")
+ * - null: nicht erfasst (Anfangszustand, keine Eingabe erfolgt)
+ */
+export type Bewertung = 1 | 2 | 3 | 4 | 5 | 6 | "nicht_beurteilbar" | null;
 
 export interface KriteriumBewertung {
   code: string;
@@ -33,7 +39,16 @@ export interface Unterschrift {
   signaturDataUrl: string;
   datum: string; // ISO datetime
   name: string;
+  /** Der beim Unterschreiben bestätigte Wortlaut (Beurteilung vs. Kenntnisnahme). */
+  bestaetigungstext: string;
 }
+
+/** Rechtlich bedeutsamer Wortlaut, den die jeweilige Rolle beim Unterschreiben
+ *  bestätigt. Einzige Quelle für Maske (Hinweis), Speicherung und Dokument. */
+export const BESTAETIGUNGSTEXTE: Record<Unterschrift["rolle"], string> = {
+  fallfuehrende: "Ich bestätige die Durchführung und Richtigkeit dieser Arbeitskontrolle.",
+  mitarbeiterin: "Ich bestätige den Erhalt dieser Beurteilung. Die Unterschrift bestätigt die Kenntnisnahme, nicht die Zustimmung.",
+};
 
 export type KontrolleStatus = "in_bearbeitung" | "abgeschlossen";
 export type KontrolleArt = "regulaer" | "ausserordentlich";
@@ -63,7 +78,8 @@ export interface Arbeitskontrolle {
   status: KontrolleStatus;
   erstelltAm: string;
   abgeschlossenAm: string | null;
-  integritaetsHash: string | null;
+  /** Bei Abschluss festgehaltenes, zu diesem Zeitpunkt geltendes Kontrollintervall (Monate). */
+  kontrollintervallMonate: number | null;
 }
 
 /* ══════════════════════════════════════════
@@ -109,7 +125,7 @@ export function erstelleKontrolle(
     status: "in_bearbeitung",
     erstelltAm: new Date().toISOString(),
     abgeschlossenAm: null,
-    integritaetsHash: null,
+    kontrollintervallMonate: null,
   };
 
   KONTROLLEN.push(kontrolle);
@@ -147,12 +163,17 @@ export function kontrolleUnterschreiben(
   if (!k) return { ok: false, fehler: "Kontrolle nicht gefunden" };
   if (k.status === "abgeschlossen") return { ok: false, fehler: "Kontrolle ist abgeschlossen" };
   if (k.unterschriften.some(u => u.rolle === rolle)) return { ok: false, fehler: `${rolle === "fallfuehrende" ? "Fallführende" : "Mitarbeiter:in"} hat bereits unterschrieben` };
+  // Reihenfolge (AK-U1 vor AK-U2): Kenntnisnahme erst nach der Beurteilung.
+  if (rolle === "mitarbeiterin" && !k.unterschriften.some(u => u.rolle === "fallfuehrende")) {
+    return { ok: false, fehler: "Erst nach der Unterschrift der Fallführenden möglich" };
+  }
 
   k.unterschriften.push({
     rolle,
     signaturDataUrl,
     datum: new Date().toISOString(),
     name,
+    bestaetigungstext: BESTAETIGUNGSTEXTE[rolle],
   });
 
   // Automatisch abschliessen wenn beide unterschrieben haben
@@ -167,29 +188,16 @@ export function kontrolleUnterschreiben(
    ABSCHLIESSEN
    ══════════════════════════════════════════ */
 
-async function berechneHash(k: Arbeitskontrolle): Promise<string> {
-  const inhalt = JSON.stringify({
-    id: k.id, bloecke: k.bloecke, verbesserungen: k.verbesserungen,
-    unterschriften: k.unterschriften.map(u => ({ rolle: u.rolle, datum: u.datum, name: u.name })),
-  });
-  if (typeof crypto !== "undefined" && crypto.subtle) {
-    const buffer = new TextEncoder().encode(inhalt);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
-    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
-  }
-  let hash = 0;
-  for (let i = 0; i < inhalt.length; i++) hash = ((hash << 5) - hash + inhalt.charCodeAt(i)) | 0;
-  return Math.abs(hash).toString(16).padStart(8, "0");
-}
-
-async function kontrolleAbschliessen(k: Arbeitskontrolle): Promise<void> {
-  k.integritaetsHash = await berechneHash(k);
+function kontrolleAbschliessen(k: Arbeitskontrolle): void {
+  const turnus = getOrgEinstellungen().arbeitskontrolleTurnusMonate;
+  // Das zum Zeitpunkt des Abschlusses geltende Intervall festhalten, damit es
+  // im Dokument nachvollziehbar bleibt, auch wenn die Vorgabe später ändert.
+  k.kontrollintervallMonate = turnus;
   k.abgeschlossenAm = new Date().toISOString();
   k.status = "abgeschlossen";
 
   // Nächste reguläre Kontrolle planen (nur bei regulären)
   if (k.art === "regulaer") {
-    const turnus = getOrgEinstellungen().arbeitskontrolleTurnusMonate;
     const naechstesFaellig = new Date(k.kontrollDatum);
     naechstesFaellig.setMonth(naechstesFaellig.getMonth() + turnus);
     console.info(`[Audit] Arbeitskontrolle ${k.id} (regulär) abgeschlossen. Nächste fällig: ${naechstesFaellig.toISOString().slice(0, 10)}`);

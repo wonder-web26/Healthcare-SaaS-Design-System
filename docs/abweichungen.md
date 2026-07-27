@@ -115,6 +115,7 @@ der Kundenvorlage ist auch dann ein Problem, wenn sie fachlich sinnvoll ist.
 | Entscheidungsinstanz | `HH` |
 | **Status** | **offen — Auslieferungssperre** |
 | Bemerkung | Ein nicht ausgefülltes Formular erzeugt ein Dokument, das für jedes Kriterium behauptet, eine Beurteilung sei nicht möglich gewesen. Das ist eine unzutreffende Aussage in einem Nachweisdokument. Vor jeder Demonstration zu beheben. |
+| Umsetzung | In diesem Lauf technisch umgesetzt am 27.07.2026 (Dreiteilung nicht erfasst / nicht beurteilbar / bewertet in Datenmodell, Maske und Dokument). Status unverändert — die Entscheidung liegt bei `HH`. |
 
 ### A-07 — Massnahmen und Nachkontrolle fehlen
 
@@ -152,6 +153,7 @@ der Kundenvorlage ist auch dann ein Problem, wenn sie fachlich sinnvoll ist.
 | Entscheidungsinstanz | `HH` |
 | **Status** | **offen** |
 | Bemerkung | „Kenntnisnahme, nicht Zustimmung" ist eine rechtlich bedeutsame Unterscheidung. Sie gehört gespeichert und im Dokument ausgewiesen. |
+| Umsetzung | In diesem Lauf technisch umgesetzt am 27.07.2026 (Wortlaut wird beim Unterschreiben gespeichert und im Dokument unter der jeweiligen Unterschrift ausgewiesen). Status unverändert — die Entscheidung liegt bei `HH`. |
 
 ### A-10 — Unterschriftsreihenfolge nicht erzwungen
 
@@ -164,6 +166,7 @@ der Kundenvorlage ist auch dann ein Problem, wenn sie fachlich sinnvoll ist.
 | Entscheidungsinstanz | `HH` |
 | **Status** | **offen** |
 | Bemerkung | Eine Kenntnisnahme vor der Beurteilung ergibt fachlich keinen Sinn. |
+| Umsetzung | In diesem Lauf technisch umgesetzt am 27.07.2026 (AK-U2 erst möglich, wenn AK-U1 vorliegt; die gesperrte Fläche ist sichtbar, nicht bedienbar, mit Begründung). Status unverändert — die Entscheidung liegt bei `HH`. |
 
 ### A-11 — Kontrollintervall im Dokument nicht ausgewiesen
 
@@ -176,6 +179,7 @@ der Kundenvorlage ist auch dann ein Problem, wenn sie fachlich sinnvoll ist.
 | Entscheidungsinstanz | `HH` |
 | **Status** | **offen** |
 | Bemerkung | Das Drei-Monats-Intervall ist Kaufmanns interne Regel, keine gesetzliche. Für die Nachvollziehbarkeit sollte im Dokument stehen, welche Regel zum Zeitpunkt der Kontrolle galt. |
+| Umsetzung | In diesem Lauf technisch umgesetzt am 27.07.2026 (bei Abschluss geltendes Intervall wird festgehalten und im Kopfbereich des Dokuments ausgewiesen, ausdrücklich als organisationsinterne Vorgabe). Status unverändert — die Entscheidung liegt bei `HH`. |
 
 ---
 
@@ -184,3 +188,4 @@ der Kundenvorlage ist auch dann ein Problem, wenn sie fachlich sinnvoll ist.
 | Datum | Änderung |
 |---|---|
 | 27.07.2026 | Register angelegt, A-01 bis A-11 aus der ersten Bestandsaufnahme erfasst |
+| 27.07.2026 | A-06, A-09, A-10, A-11 in diesem Lauf technisch umgesetzt (Umsetzungsvermerk je Eintrag). Status unverändert — Entscheidung offen. |

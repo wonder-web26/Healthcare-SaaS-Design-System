@@ -10,16 +10,13 @@ import {
 import { exportiereArbeitskontrollePDF } from "../../../lib/arbeitskontrolle/pdf-export";
 import { BEURTEILUNGSBLOECKE } from "../../../lib/arbeitskontrolle/kriterien";
 import {
-  getKontrolleById, aktualisiereKontrolle, kontrolleUnterschreiben,
+  getKontrolleById, aktualisiereKontrolle, kontrolleUnterschreiben, BESTAETIGUNGSTEXTE,
   type Arbeitskontrolle, type BlockBewertung, type Bewertung,
 } from "../../../lib/arbeitskontrolle/store";
+import { formatAnzeige, isoZuAnzeige } from "../../../lib/datum";
 import { toast } from "sonner";
 
 const SKALA = [1, 2, 3, 4, 5, 6] as const;
-
-function formatDatum(iso: string): string {
-  return new Date(iso).toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
 
 /* ══════════════════════════════════════════
    HAUPTKOMPONENTE
@@ -103,7 +100,7 @@ export function ArbeitskontrollePage() {
           </div>
           <div>
             <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginBottom: 2 }}>Datum der Kontrolle</div>
-            <div style={{ fontSize: "var(--text-body)", fontWeight: 500, color: "var(--text-primary)" }}>{formatDatum(kontrolle.kontrollDatum)}</div>
+            <div style={{ fontSize: "var(--text-body)", fontWeight: 500, color: "var(--text-primary)" }}>{isoZuAnzeige(kontrolle.kontrollDatum)}</div>
           </div>
           {kontrolle.patientName && (
             <div>
@@ -133,22 +130,26 @@ export function ArbeitskontrollePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12 }}>
           <UnterschriftBlock
             label="Fallführende (Beurteilung)"
-            hinweis="Ich bestätige die Durchführung und Richtigkeit dieser Arbeitskontrolle."
+            hinweis={BESTAETIGUNGSTEXTE.fallfuehrende}
             unterschrift={kontrolle.unterschriften.find(u => u.rolle === "fallfuehrende")}
             istAbgeschlossen={istAbgeschlossen}
             onSign={(dataUrl) => {
-              kontrolleUnterschreiben(kontrolle.id, "fallfuehrende", dataUrl, kontrolle.fallfuehrendeName);
+              const res = kontrolleUnterschreiben(kontrolle.id, "fallfuehrende", dataUrl, kontrolle.fallfuehrendeName);
+              if (!res.ok) { toast(res.fehler ?? "Unterschrift nicht möglich"); return; }
               refresh();
               toast("Unterschrift Fallführende gespeichert");
             }}
           />
           <UnterschriftBlock
             label="Mitarbeiter:in (Kenntnisnahme)"
-            hinweis="Ich bestätige den Erhalt dieser Beurteilung. Die Unterschrift bestätigt die Kenntnisnahme, nicht die Zustimmung."
+            hinweis={BESTAETIGUNGSTEXTE.mitarbeiterin}
             unterschrift={kontrolle.unterschriften.find(u => u.rolle === "mitarbeiterin")}
             istAbgeschlossen={istAbgeschlossen}
+            gesperrt={!hatFallfuehrende}
+            gesperrtGrund="Erst möglich, sobald die Fallführende (Beurteilung) unterschrieben hat."
             onSign={(dataUrl) => {
-              kontrolleUnterschreiben(kontrolle.id, "mitarbeiterin", dataUrl, kontrolle.angehoerigerName);
+              const res = kontrolleUnterschreiben(kontrolle.id, "mitarbeiterin", dataUrl, kontrolle.angehoerigerName);
+              if (!res.ok) { toast(res.fehler ?? "Unterschrift nicht möglich"); return; }
               refresh();
               toast("Unterschrift Mitarbeiter:in gespeichert");
             }}
@@ -166,9 +167,9 @@ export function ArbeitskontrollePage() {
         </div>
       )}
 
-      {istAbgeschlossen && kontrolle.integritaetsHash && (
+      {istAbgeschlossen && kontrolle.abgeschlossenAm && (
         <div style={{ marginTop: 24, padding: "10px 16px", background: "var(--bg-secondary)", borderRadius: 8, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-          Abgeschlossen am {formatDatum(kontrolle.abgeschlossenAm!)} · Hash: {kontrolle.integritaetsHash.slice(0, 12)}…
+          Abgeschlossen am {formatAnzeige(new Date(kontrolle.abgeschlossenAm))}
         </div>
       )}
     </div>
@@ -208,6 +209,11 @@ function BeurteilungsFormular({ kontrolle, istAbgeschlossen, onSpeichern }: {
     save(next, verbesserungen, meldungGL, meldungLP);
   };
 
+  // Nicht erfasste Kriterien (Zustand "nicht erfasst" = null) für den Hinweis
+  // vor dem Abschliessen. Der Abschluss wird dadurch nicht blockiert.
+  const nichtErfasst = bloecke.reduce((sum, b) => sum + b.bewertungen.filter(x => x.wert === null).length, 0);
+  const gesamtKriterien = bloecke.reduce((sum, b) => sum + b.bewertungen.length, 0);
+
   return (
     <div className="flex flex-col" style={{ gap: 16 }}>
       {BEURTEILUNGSBLOECKE.map((blockDef, blockIdx) => {
@@ -220,36 +226,52 @@ function BeurteilungsFormular({ kontrolle, istAbgeschlossen, onSpeichern }: {
 
             {blockDef.kriterien.map(krit => {
               const bewertung = blockData?.bewertungen.find(b => b.code === krit.code);
+              const wert = bewertung?.wert;
+              const nichtBeurteilbar = wert === "nicht_beurteilbar";
               return (
                 <div key={krit.code} style={{ marginBottom: 10, paddingLeft: 8 }}>
                   <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4, fontWeight: 500 }}>{krit.label}</div>
                   <div className="flex items-center flex-wrap" style={{ gap: 4 }}>
-                    {SKALA.map(n => (
-                      <button
-                        key={n}
-                        onClick={() => !istAbgeschlossen && setBewertung(blockIdx, krit.code, n)}
-                        disabled={istAbgeschlossen}
-                        className="cursor-pointer disabled:cursor-default"
-                        style={{
-                          width: 32, height: 32, borderRadius: 8, border: "none", fontSize: 13, fontWeight: 500,
-                          background: bewertung?.wert === n ? "var(--brand-primary)" : "var(--bg-secondary)",
-                          color: bewertung?.wert === n ? "var(--text-on-dark)" : "var(--text-secondary)",
-                        }}
-                      >
-                        {n}
-                      </button>
-                    ))}
+                    {SKALA.map(n => {
+                      const sel = wert === n;
+                      return (
+                        <button
+                          key={n}
+                          // Toggle: erneuter Klick auf den gewählten Wert setzt zurück auf "nicht erfasst".
+                          onClick={() => !istAbgeschlossen && setBewertung(blockIdx, krit.code, sel ? null : n)}
+                          disabled={istAbgeschlossen}
+                          aria-pressed={sel}
+                          className="cursor-pointer disabled:cursor-default"
+                          style={{
+                            // Gewählt: erkennbar an Rahmen UND Schriftstärke (nicht an Farbe allein).
+                            width: 32, height: 32, borderRadius: 8, fontSize: 13,
+                            border: sel ? "2px solid var(--text-primary)" : "1px solid var(--border-default)",
+                            fontWeight: sel ? 700 : 500,
+                            background: sel ? "var(--brand-primary)" : "var(--bg-secondary)",
+                            color: sel ? "var(--text-on-dark)" : "var(--text-secondary)",
+                          }}
+                        >
+                          {n}
+                        </button>
+                      );
+                    })}
+                    {/* Abgesetzte, eigene Bedienfläche — liegt nicht auf der Skala 1–6. */}
+                    <span aria-hidden style={{ width: 1, height: 24, background: "var(--border-default)", margin: "0 6px" }} />
                     <button
-                      onClick={() => !istAbgeschlossen && setBewertung(blockIdx, krit.code, null)}
+                      onClick={() => !istAbgeschlossen && setBewertung(blockIdx, krit.code, nichtBeurteilbar ? null : "nicht_beurteilbar")}
                       disabled={istAbgeschlossen}
-                      className="cursor-pointer disabled:cursor-default"
+                      aria-pressed={nichtBeurteilbar}
+                      className="cursor-pointer disabled:cursor-default inline-flex items-center"
                       style={{
-                        padding: "4px 10px", borderRadius: 8, border: "none", fontSize: 11, fontWeight: 500,
-                        background: bewertung?.wert === null && blockData?.bewertungen.some(b => b.code === krit.code) ? "var(--status-warning-bg)" : "var(--bg-secondary)",
-                        color: "var(--text-tertiary)",
+                        gap: 4, height: 32, padding: "0 10px", borderRadius: 8, fontSize: 12,
+                        border: nichtBeurteilbar ? "2px solid var(--status-warning)" : "1px solid var(--border-default)",
+                        fontWeight: nichtBeurteilbar ? 700 : 500,
+                        background: nichtBeurteilbar ? "var(--status-warning-bg)" : "var(--bg-secondary)",
+                        color: nichtBeurteilbar ? "var(--status-warning)" : "var(--text-tertiary)",
                       }}
                     >
-                      n.b.
+                      {nichtBeurteilbar && <Check style={{ width: 12, height: 12 }} />}
+                      Nicht beurteilbar
                     </button>
                   </div>
                 </div>
@@ -296,6 +318,16 @@ function BeurteilungsFormular({ kontrolle, istAbgeschlossen, onSpeichern }: {
           <MeldeZeile label="Meldung an Leitung Pflege" value={meldungLP} disabled={istAbgeschlossen} onChange={v => { setMeldungLP(v); save(bloecke, verbesserungen, meldungGL, v); }} />
         </div>
       </div>
+
+      {/* Hinweis vor dem Abschliessen: nicht erfasste Kriterien (blockiert nicht). */}
+      {!istAbgeschlossen && nichtErfasst > 0 && (
+        <div className="flex items-center" style={{ gap: 8, padding: "10px 16px", background: "var(--status-warning-bg)", borderRadius: 8 }}>
+          <AlertTriangle style={{ width: 15, height: 15, color: "var(--status-warning)", flexShrink: 0 }} />
+          <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
+            {nichtErfasst} von {gesamtKriterien} {nichtErfasst === 1 ? "Kriterium ist" : "Kriterien sind"} nicht erfasst. Der Abschluss ist trotzdem möglich.
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -326,11 +358,13 @@ function MeldeZeile({ label, value, disabled, onChange }: {
    UNTERSCHRIFT-BLOCK
    ══════════════════════════════════════════ */
 
-function UnterschriftBlock({ label, hinweis, unterschrift, istAbgeschlossen, onSign }: {
+function UnterschriftBlock({ label, hinweis, unterschrift, istAbgeschlossen, gesperrt = false, gesperrtGrund, onSign }: {
   label: string;
   hinweis: string;
   unterschrift?: { signaturDataUrl: string; datum: string; name: string };
   istAbgeschlossen: boolean;
+  gesperrt?: boolean;
+  gesperrtGrund?: string;
   onSign: (dataUrl: string) => void;
 }) {
   const [showPad, setShowPad] = useState(false);
@@ -345,12 +379,31 @@ function UnterschriftBlock({ label, hinweis, unterschrift, istAbgeschlossen, onS
           <div className="flex items-center" style={{ gap: 6, marginBottom: 4 }}>
             <CheckCircle2 style={{ width: 14, height: 14, color: "var(--status-success)" }} />
             <span style={{ fontSize: "var(--text-meta)", color: "var(--status-success)", fontWeight: 500 }}>
-              {unterschrift.name} · {formatDatum(unterschrift.datum)}
+              {unterschrift.name} · {formatAnzeige(new Date(unterschrift.datum))}
             </span>
           </div>
           <img src={unterschrift.signaturDataUrl} alt="Unterschrift" style={{ height: 40, opacity: 0.7 }} />
         </div>
-      ) : istAbgeschlossen ? null : showPad ? (
+      ) : istAbgeschlossen ? null : gesperrt ? (
+        // Sichtbar, aber nicht bedienbar, mit Begründung (Reihenfolge AK-U1 vor AK-U2).
+        <div>
+          <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            className="inline-flex items-center"
+            style={{ gap: 6, padding: "8px 16px", borderRadius: 999, background: "var(--bg-secondary)", color: "var(--text-tertiary)", fontSize: "var(--text-small)", fontWeight: 500, border: "0.5px solid var(--border-default)", cursor: "not-allowed", opacity: 0.7 }}
+          >
+            <Lock style={{ width: 12, height: 12 }} /> Unterschreiben
+          </button>
+          {gesperrtGrund && (
+            <div className="flex items-center" style={{ gap: 6, marginTop: 8 }}>
+              <Info style={{ width: 12, height: 12, color: "var(--text-tertiary)", flexShrink: 0 }} />
+              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{gesperrtGrund}</span>
+            </div>
+          )}
+        </div>
+      ) : showPad ? (
         <SignaturPadInline onSign={(d) => { onSign(d); setShowPad(false); }} onCancel={() => setShowPad(false)} />
       ) : (
         <button onClick={() => setShowPad(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 16px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}>
