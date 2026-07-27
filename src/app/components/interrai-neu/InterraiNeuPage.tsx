@@ -2098,7 +2098,7 @@ function SimpleItemInput({
   if (item.answerType === "date") {
     return (
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-        <div style={{ width: "100%", maxWidth: 240 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <DateField
             wertFormat="iso"
             bereich={item.code === "A3" ? "past" : "any"}
@@ -2942,7 +2942,7 @@ function FieldgroupRenderer({
                     placeholder={ghost ? `Vorschlag: ${fgSuggestion!.wert}` : "0"}
                   />
                 ) : sub.answerType === "date" ? (
-                  <div style={{ width: "100%", maxWidth: 240 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <DateField
                       wertFormat="iso"
                       bereich="any"

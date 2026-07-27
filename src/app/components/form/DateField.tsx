@@ -10,8 +10,10 @@
  * statt es zu vereinheitlichen.
  */
 import { useEffect, useRef, useState } from "react";
-import { Calendar as CalendarIcon, AlertTriangle } from "lucide-react";
+import { Calendar as CalendarIcon, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { de } from "date-fns/locale";
+import { addMonths, subMonths } from "date-fns";
+import { useNavigation } from "react-day-picker";
 import { Popover, PopoverAnchor, PopoverTrigger, PopoverContent } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { FormField } from "./FormField";
@@ -40,6 +42,8 @@ export interface DateFieldProps {
   disabled?: boolean;
   onBlur?: () => void;
 }
+
+const MONATE = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
 // ── Wert-Konversion je nach Aufrufstellen-Format ─────────────────────────────
 
@@ -77,6 +81,49 @@ function plausibilitaet(d: Date, bereich: DatumBereich): string | null {
   return null;
 }
 
+/**
+ * Eigener Kalenderkopf: genau eine Monatsauswahl, eine Jahresauswahl und zwei
+ * Pfeile — deutsch, ohne die doppelte Standardüberschrift/-Dropdowns von
+ * react-day-picker und ohne Überlagerung.
+ */
+function macheKalenderKopf(vonJahr: number, bisJahr: number) {
+  const jahre: number[] = [];
+  for (let y = bisJahr; y >= vonJahr; y--) jahre.push(y);
+  const pfeil: React.CSSProperties = {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    width: 28, height: 28, borderRadius: "var(--radius-pill)",
+    background: "transparent", border: "none", cursor: "pointer", flexShrink: 0,
+  };
+  const auswahl: React.CSSProperties = {
+    padding: "5px 8px", borderRadius: "var(--radius-card)",
+    border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)",
+    fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit", cursor: "pointer",
+  };
+  return function KalenderKopf() {
+    const { currentMonth, goToMonth } = useNavigation();
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "0 2px 10px" }}>
+        <button type="button" aria-label="Vorheriger Monat" style={pfeil} onClick={() => goToMonth(subMonths(currentMonth, 1))}>
+          <ChevronLeft style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
+        </button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <select aria-label="Monat" value={currentMonth.getMonth()} style={auswahl}
+            onChange={(e) => goToMonth(new Date(currentMonth.getFullYear(), Number(e.target.value), 1))}>
+            {MONATE.map((n, i) => <option key={i} value={i}>{n}</option>)}
+          </select>
+          <select aria-label="Jahr" value={currentMonth.getFullYear()} style={{ ...auswahl, fontVariantNumeric: "tabular-nums" }}
+            onChange={(e) => goToMonth(new Date(Number(e.target.value), currentMonth.getMonth(), 1))}>
+            {jahre.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <button type="button" aria-label="Nächster Monat" style={pfeil} onClick={() => goToMonth(addMonths(currentMonth, 1))}>
+          <ChevronRight style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
+        </button>
+      </div>
+    );
+  };
+}
+
 export function DateField({
   value,
   onChange,
@@ -89,8 +136,8 @@ export function DateField({
   onBlur,
 }: DateFieldProps) {
   const incoming = toDate(value, wertFormat);
-  // Stable primitive key so a "date"-format caller passing a fresh Date object
-  // on every render does not churn the sync effect below.
+  // Stabiler Schlüssel des aussen anliegenden Werts (auch für "date", das je
+  // Render ein neues Date-Objekt liefert).
   const incomingKey = incoming ? dateZuIso(incoming) : "";
   const [selected, setSelected] = useState<Date | null>(incoming);
   const [text, setText] = useState<string>(incoming ? formatAnzeige(incoming) : "");
@@ -99,49 +146,56 @@ export function DateField({
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Externe Wertänderung (z. B. Schrittwechsel) übernehmen, solange nicht getippt wird.
+  // Externe Wertänderung (z. B. Schrittwechsel) übernehmen — nicht während der
+  // Benutzer tippt und nicht, während eine ungültige Eingabe angezeigt wird
+  // (die muss stehen bleiben).
   useEffect(() => {
-    if (focused) return;
+    if (focused || error) return;
     setSelected(incomingKey ? incoming : null);
     setText(incomingKey ? formatAnzeige(incoming!) : "");
-    setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingKey]);
 
-  const emit = (d: Date | null) => onChange(fromDate(d, wertFormat));
+  // Nach aussen nur melden, wenn sich der Wert tatsächlich geändert hat. Das
+  // verhindert, dass ein erneutes Verlassen des Feldes ohne Änderung an einer
+  // Aufrufstelle mit Toggle-Semantik (interRAI setAnswer) den Wert löscht.
+  const emitIfChanged = (d: Date | null) => {
+    const neuerKey = d ? dateZuIso(d) : "";
+    if (neuerKey !== incomingKey) onChange(fromDate(d, wertFormat));
+  };
 
   const commit = () => {
     const { date, status } = parseEingabe(text);
     if (status === "leer") {
-      setError(null); setSelected(null); emit(null);
+      setError(null); setSelected(null); emitIfChanged(null);
     } else if (status === "ok" && date) {
-      setText(formatAnzeige(date)); setError(null); setSelected(date); emit(date);
+      setText(formatAnzeige(date)); setError(null); setSelected(date); emitIfChanged(date);
     } else {
       // ungültig / unvollständig: Eingabe bleibt stehen, Wert bleibt leer.
       setError(status === "unvollstaendig"
         ? "Bitte das Jahr vierstellig eingeben."
         : "Kein gültiges Datum.");
-      setSelected(null); emit(null);
+      setSelected(null); emitIfChanged(null);
     }
     onBlur?.();
   };
 
   const waehleImKalender = (d: Date | undefined) => {
     if (!d) return;
-    setSelected(d); setText(formatAnzeige(d)); setError(null); emit(d);
+    setSelected(d); setText(formatAnzeige(d)); setError(null); emitIfChanged(d);
     setOpen(false);
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
   const aufheben = () => {
-    setSelected(null); setText(""); setError(null); emit(null);
+    setSelected(null); setText(""); setError(null); emitIfChanged(null);
   };
 
   const heute = new Date();
   const jahr = heute.getFullYear();
-  const zeigeHeute = bereich === "any"; // past/future schliessen den Stichtag aus
-  const fromYear = bereich === "future" ? jahr : 1900;
-  const toYear = bereich === "past" ? jahr : jahr + 10;
+  const zeigeHeute = bereich !== "past"; // nur "past" schliesst den Stichtag aus
+  const vonJahr = 1900;
+  const bisJahr = jahr + 10;
 
   const plaus = selected && !error ? plausibilitaet(selected, bereich) : null;
 
@@ -157,7 +211,7 @@ export function DateField({
         <div
           className="relative"
           style={{
-            display: "flex", alignItems: "center",
+            display: "flex", alignItems: "center", width: "100%", boxSizing: "border-box",
             borderRadius: "var(--radius-card)",
             border: `${error || focused || open ? "1.5px" : "var(--border-thin)"} solid ${borderColor}`,
             background: disabled ? "var(--bg-secondary)" : "var(--bg-elevated)",
@@ -210,7 +264,7 @@ export function DateField({
         side="bottom"
         sideOffset={4}
         style={{ width: "auto", padding: 0 }}
-        onEscapeKeyDown={() => { setOpen(false); }}
+        onEscapeKeyDown={() => setOpen(false)}
         onCloseAutoFocus={(e) => { e.preventDefault(); inputRef.current?.focus(); }}
       >
         <Calendar
@@ -218,10 +272,9 @@ export function DateField({
           locale={de}
           selected={selected ?? undefined}
           onSelect={waehleImKalender}
+          month={undefined}
           defaultMonth={selected ?? (bereich === "past" ? new Date(jahr - 30, 0) : new Date())}
-          captionLayout="dropdown-buttons"
-          fromYear={fromYear}
-          toYear={toYear}
+          components={{ Caption: macheKalenderKopf(vonJahr, bisJahr) }}
           classNames={{
             day: "size-9 p-0 font-normal rounded-md hover:bg-accent hover:text-accent-foreground",
             day_selected: "bg-primary text-primary-foreground border-2 border-primary font-medium hover:bg-primary hover:text-primary-foreground",
