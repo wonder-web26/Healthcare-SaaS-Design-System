@@ -81,7 +81,8 @@
       "Bash(awk 'NR<=841 && /^\\(function |const [A-Z][A-Za-z0-9]* *[:=].*=>|export function |const [A-Z][A-Za-z0-9]* = \\\\\\(\\)/ {ln=NR; line=$0} END{print ln\": \"line}' src/app/components/StepPatient.tsx)",
       "Bash(awk -F: '$1>700 && $1<900')",
       "Bash(echo \"--- commit exit $? ---\")",
-      "Bash(curl -s -o /dev/null -w \"Dev-Server HTTP %{http_code}\\\\n\" http://localhost:5173/)"
+      "Bash(curl -s -o /dev/null -w \"Dev-Server HTTP %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(awk '/export const NATIONALITAETEN = \\\\[/,/\\\\];/' src/app/components/form/MigratedAngehoerigerForms.tsx)"
     ]
   }
 }

@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { FormField } from "./FormField";
+import { validiereAHV, maskiereAHV } from "../../../lib/validierung";
 
 interface AHVNummerInputProps {
   label: string;
@@ -10,35 +11,15 @@ interface AHVNummerInputProps {
   disabled?: boolean;
 }
 
-function formatAHV(raw: string): string {
-  const digits = raw.replace(/\D/g, "").slice(0, 13);
-  let result = "";
-  for (let i = 0; i < digits.length; i++) {
-    if (i === 3 || i === 7 || i === 11) result += ".";
-    result += digits[i];
-  }
-  return result;
-}
+// Format und Prüfung laufen zentral über lib/validierung (keine zweite
+// Implementierung derselben Prüfung). Die Export-Signatur bleibt erhalten.
+const formatAHV = maskiereAHV;
 
 export function validateAHVNummer(input: string): { valid: boolean; reason?: string } {
-  const digits = input.replace(/\./g, "");
-
+  const digits = input.replace(/\D/g, "");
   if (digits.length === 0) return { valid: false, reason: "AHV-Nummer ist erforderlich" };
-  if (digits.length !== 13) return { valid: false, reason: "AHV-Nummer muss 13 Ziffern haben" };
-  if (!/^\d{13}$/.test(digits)) return { valid: false, reason: "AHV-Nummer darf nur Ziffern enthalten" };
-  if (!digits.startsWith("756")) return { valid: false, reason: "Schweizer AHV-Nummer beginnt mit 756" };
-
-  let sum = 0;
-  for (let i = 0; i < 12; i++) {
-    const digit = parseInt(digits[i], 10);
-    const weight = i % 2 === 0 ? 1 : 3;
-    sum += digit * weight;
-  }
-  const expected = (10 - (sum % 10)) % 10;
-  const actual = parseInt(digits[12], 10);
-
-  if (expected !== actual) return { valid: false, reason: "Prüfziffer ist ungültig" };
-  return { valid: true };
+  const res = validiereAHV(input);
+  return res.status === "ok" ? { valid: true } : { valid: false, reason: res.meldung };
 }
 
 export function AHVNummerInput({ label, required, value, onChange, placeholder = "756.1234.5678.97", disabled }: AHVNummerInputProps) {

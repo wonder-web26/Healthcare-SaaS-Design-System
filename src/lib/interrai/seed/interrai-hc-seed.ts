@@ -31,11 +31,25 @@
 
 export type AnswerType = "text" | "number" | "date" | "single_choice" | "composite";
 
+/**
+ * A conditional follow-up field revealed only while this option is selected.
+ * Its value is stored under `code`, counts as an open field only while visible,
+ * and is reset when another option is chosen. Expressed on the option, so the
+ * renderer needs no per-item special case.
+ */
+export interface FollowUp {
+  code: string;
+  kind: "text" | "land";
+  label?: string;
+}
+
 export interface AnswerOption {
   code: string;
   label: string;
   /** The printed option is followed by a blank line for free text */
   freeText?: boolean;
+  /** Conditional follow-up field shown while this option is selected */
+  followUp?: FollowUp;
 }
 
 /** Answer column for items printed with more than one box per row (G1). */
@@ -366,7 +380,7 @@ export const interraiHcSchweiz: Instrument = {
           answerType: "single_choice",
           options: [
             { code: "1", label: "Schweiz" },
-            { code: "2", label: "Andere, welche:" },
+            { code: "2", label: "Andere, welche:", followUp: { code: "B2a", kind: "land", label: "Staat" } },
           ],
         },
         {
@@ -395,7 +409,7 @@ export const interraiHcSchweiz: Instrument = {
             { code: "18", label: "Hindi" },
             { code: "19", label: "Tigrinya" },
             { code: "20", label: "Somalisch" },
-            { code: "21", label: "Andere, welche?" },
+            { code: "21", label: "Andere, welche?", followUp: { code: "B3a", kind: "text", label: "Sprache" } },
           ],
         },
         {

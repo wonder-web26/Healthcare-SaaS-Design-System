@@ -23,6 +23,7 @@ import {
   Ban,
 } from "lucide-react";
 import type { AngehoerigerFormData } from "./StepAngehoeriger";
+import { istAHVFormatGueltig } from "../../lib/validierung";
 import type { PatientFormData } from "./StepPatient";
 import type { DokumenteFormData } from "./StepDokumente";
 
@@ -43,10 +44,9 @@ function filled(v: string | undefined | null): boolean {
   return typeof v === "string" && v.trim().length > 0;
 }
 
+// AHV-Formatprüfung über den zentralen Baustein (keine doppelte Implementierung).
 function isValidAHV(v: string | undefined | null): boolean {
-  if (!v) return false;
-  const clean = v.replace(/[\s.]/g, "");
-  return /^756\d{10}$/.test(clean);
+  return !!v && istAHVFormatGueltig(v);
 }
 
 function isValidIBAN(v: string | undefined | null): boolean {

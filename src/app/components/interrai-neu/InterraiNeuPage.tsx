@@ -50,6 +50,9 @@ import {
 } from "../../../lib/interrai/instrument";
 
 import { DateField } from "../form/DateField";
+import { Combobox } from "../form/Combobox";
+import { NATIONALITAETEN } from "../form/MigratedAngehoerigerForms";
+import { validiereFeld, maskiereAHV, maskiereZiffern, ICD_HINWEIS, type ValidierungTyp } from "../../../lib/validierung";
 import { MODUL_ZERTIFIZIERUNG } from "../../../lib/stammdaten/modul-zertifizierung";
 import {
   getAssessment,
@@ -728,6 +731,15 @@ export function InterraiNeuPage() {
             // Use setTimeout to avoid setState-in-render warning
             setTimeout(() => alert(`${cleared} Zusatzfeld${cleared > 1 ? "er" : ""} geleert.`), 0);
           }
+        }
+      }
+
+      // Reset a conditional follow-up value when a different option is chosen —
+      // a value must never linger for an option that is no longer selected.
+      const itemForFollow = interraiHcSchweiz.bereiche.flatMap(b => b.items).find(i => i.code === code);
+      for (const o of itemForFollow?.options ?? []) {
+        if (o.followUp && newVal !== o.code && next[o.followUp.code] != null && next[o.followUp.code] !== "") {
+          next[o.followUp.code] = null;
         }
       }
 
@@ -1787,6 +1799,8 @@ function ItemRenderer({
             item={item}
             value={answers[item.code] ?? null}
             onChange={(v) => onAnswer(item.code, v)}
+            answers={answers}
+            onAnswer={onAnswer}
             suggestion={vorschlaegeMap[item.code] ?? null}
             onConfirmVorschlag={onConfirmVorschlag}
             gespraechSegments={gespraechSegments}
@@ -1884,6 +1898,8 @@ function ItemRenderer({
             item={item}
             value={answers[item.code] ?? null}
             onChange={(v) => onAnswer(item.code, v)}
+            answers={answers}
+            onAnswer={onAnswer}
             suggestion={vorschlaegeMap[item.code] ?? null}
             onConfirmVorschlag={onConfirmVorschlag}
             gespraechSegments={gespraechSegments}
@@ -2026,6 +2042,72 @@ function ContextPanel({ item }: { item: any }) {
  *
  * Long option lists (≥8) use the scrollable search variant (§3.6).
  */
+/**
+ * Which central validation applies to a field, by its (base) code. Kept in the
+ * renderer (not the seed) so no new seed fields are introduced; the repeat
+ * suffix "#n" is stripped so every I3 diagnosis row is covered.
+ */
+function validierungFuer(code: string): ValidierungTyp | null {
+  const base = code.replace(/#\d+$/, "");
+  if (base === "A5a") return "ahvn13";
+  if (base === "K1a") return "groesse_cm";
+  if (base === "K1b") return "gewicht_kg";
+  if (base === "I3.icd") return "icd10";
+  return null;
+}
+
+/** Codes rendered as a multi-line textarea (prose fields). */
+const MEHRZEILIGE_CODES = new Set(["A10"]);
+
+/** Country options for a "land" follow-up — the product's existing list, minus "Andere". */
+const LAENDER_OPTIONEN = NATIONALITAETEN.filter((n) => n.value !== "andere");
+
+/**
+ * Text field with central validation. Masks input where the type requires it
+ * (AHV dots, digit-only), shows a formal error (kept, never auto-corrected) or
+ * a non-blocking plausibility hint below, plus an optional standing note.
+ */
+function ValidiertesFeld({ vtyp, value, onChange, placeholder, breite, hinweis }: {
+  vtyp: ValidierungTyp;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  breite?: number;
+  hinweis?: string;
+}) {
+  const numeric = vtyp === "ahvn13" || vtyp === "groesse_cm" || vtyp === "gewicht_kg";
+  const mask = (raw: string) =>
+    vtyp === "ahvn13" ? maskiereAHV(raw)
+    : (vtyp === "groesse_cm" || vtyp === "gewicht_kg") ? maskiereZiffern(raw, 3)
+    : raw;
+  const res = validiereFeld(vtyp, value ?? "");
+  const invalid = res.status === "ungueltig";
+  return (
+    <div style={{ minWidth: 0 }}>
+      <input
+        type="text"
+        inputMode={numeric ? "numeric" : undefined}
+        value={value ?? ""}
+        onChange={(e) => onChange(mask(e.target.value))}
+        placeholder={placeholder}
+        aria-invalid={invalid}
+        style={{ ...inputStyle, maxWidth: breite ?? 320, ...(invalid ? { border: "1.5px solid var(--status-danger)" } : {}) }}
+      />
+      {invalid && (
+        <div style={{ fontSize: 11, color: "var(--status-danger)", marginTop: 3 }}>{res.meldung}</div>
+      )}
+      {res.status === "unplausibel" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--status-warning-text)", marginTop: 3 }}>
+          <AlertTriangle style={{ width: 11, height: 11, flexShrink: 0 }} />{res.meldung}
+        </div>
+      )}
+      {hinweis && !invalid && (
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 3 }}>{hinweis}</div>
+      )}
+    </div>
+  );
+}
+
 function SimpleItemInput({
   item,
   value,
@@ -2036,6 +2118,8 @@ function SimpleItemInput({
   activeEvidenceSegId,
   onEvidenceClick,
   bestaetigungenSegMap,
+  answers,
+  onAnswer,
 }: {
   item: Item;
   value: string | null;
@@ -2046,6 +2130,8 @@ function SimpleItemInput({
   activeEvidenceSegId?: string | null;
   onEvidenceClick?: (segId: string | null) => void;
   bestaetigungenSegMap?: Record<string, string>;
+  answers?: Answers;
+  onAnswer?: (code: string, value: string) => void;
 }) {
   const options = getEffectiveOptions(item.code);
   const [freeTextValue, setFreeTextValue] = useState("");
@@ -2053,7 +2139,48 @@ function SimpleItemInput({
   // Confirmed evidence segId for this field (after confirmation, suggestion is gone)
   const confirmedSegId = bestaetigungenSegMap?.[item.code];
 
+  // Conditional follow-up field for the currently selected option (B2/B3).
+  const selectedOpt = options.find((o) => o.code === value);
+  const followUp = selectedOpt?.followUp ?? null;
+  const followUpEl = followUp && onAnswer ? (
+    <div style={{ marginTop: 8, marginLeft: 20, paddingLeft: 12, borderLeft: "2px solid var(--border-default)" }}>
+      {followUp.kind === "land" ? (
+        <div style={{ maxWidth: 320 }}>
+          <Combobox
+            label={followUp.label}
+            value={answers?.[followUp.code] || null}
+            onChange={(v) => onAnswer(followUp.code, v || "")}
+            options={LAENDER_OPTIONEN}
+            placeholder="Staat wählen"
+          />
+        </div>
+      ) : (
+        <>
+          <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>{followUp.label}</label>
+          <input
+            type="text"
+            value={answers?.[followUp.code] ?? ""}
+            onChange={(e) => onAnswer(followUp.code, e.target.value)}
+            style={{ ...inputStyle, maxWidth: 320 }}
+            placeholder="Bitte angeben"
+          />
+        </>
+      )}
+    </div>
+  ) : null;
+
   if (item.answerType === "text") {
+    if (MEHRZEILIGE_CODES.has(item.code)) {
+      return (
+        <textarea
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          rows={3}
+          placeholder="Freitext"
+          style={{ ...inputStyle, maxWidth: 640, minHeight: 76, resize: "vertical", lineHeight: 1.5 }}
+        />
+      );
+    }
     const unconfirmed = !!suggestion && suggestion.zustand !== "gestuetzt";
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -2123,7 +2250,10 @@ function SimpleItemInput({
   // Single choice with long option list (§3.6)
   if (options.length >= 8) {
     return (
-      <LongOptionInput options={options} value={value} onChange={onChange} />
+      <>
+        <LongOptionInput options={options} value={value} onChange={onChange} />
+        {followUpEl}
+      </>
     );
   }
 
@@ -2187,6 +2317,7 @@ function SimpleItemInput({
           </div>
         );
       })}
+      {followUpEl}
     </div>
   );
 }
@@ -2933,6 +3064,18 @@ function FieldgroupRenderer({
             </label>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {(() => {
+                const vtyp = validierungFuer(sub.code);
+                if (vtyp) {
+                  return (
+                    <ValidiertesFeld
+                      vtyp={vtyp}
+                      value={answers[sub.code] ?? ""}
+                      onChange={(v) => onAnswer(sub.code, v)}
+                      placeholder={vtyp === "ahvn13" ? "756.XXXX.XXXX.XX" : "0"}
+                      breite={vtyp === "ahvn13" ? 200 : 120}
+                    />
+                  );
+                }
                 const unconfirmed = !!fgSuggestion && fgSuggestion.zustand !== "gestuetzt";
                 const ghost = unconfirmed && !answers[sub.code];
                 return sub.answerType === "number" ? (
@@ -3335,6 +3478,15 @@ function RepeatFixedRenderer({
                         );
                       })}
                     </div>
+                  ) : validierungFuer(sub.code) === "icd10" ? (
+                    <ValidiertesFeld
+                      vtyp="icd10"
+                      value={answers[fieldCode] ?? ""}
+                      onChange={(v) => onAnswer(fieldCode, v)}
+                      placeholder="z. B. I50.9"
+                      hinweis={ICD_HINWEIS}
+                      breite={220}
+                    />
                   ) : (
                     <input
                       type={
@@ -3519,6 +3671,15 @@ function RepeatDynamicRenderer({
                         })}
                       </div>
                     )
+                  ) : validierungFuer(sub.code) === "icd10" ? (
+                    <ValidiertesFeld
+                      vtyp="icd10"
+                      value={answers[fieldCode] ?? ""}
+                      onChange={(v) => onAnswer(fieldCode, v)}
+                      placeholder="z. B. I50.9"
+                      hinweis={ICD_HINWEIS}
+                      breite={220}
+                    />
                   ) : (
                     <input
                       type={

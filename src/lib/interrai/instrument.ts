@@ -338,6 +338,14 @@ export function getInputFieldsForBereich(bereichCode: string): InputField[] {
     }
   }
 
+  // Conditional follow-up fields count as input fields (skip logic hides them
+  // again while their triggering option is not selected).
+  for (const f of getAllFollowUpFields()) {
+    if (f.bereichCode === bereichCode) {
+      fields.push({ code: f.code, label: f.label, bereichCode, parentItemCode: f.parentCode });
+    }
+  }
+
   return fields;
 }
 
@@ -346,6 +354,46 @@ export function getInputFieldsForBereich(bereichCode: string): InputField[] {
  */
 export function getAllInputFields(): InputField[] {
   return interraiHcSchweiz.bereiche.flatMap((b) => getInputFieldsForBereich(b.code));
+}
+
+// ── Conditional follow-up fields (seed `option.followUp`) ─────────────────────
+
+export interface FollowUpFeld {
+  /** Answer key of the follow-up value */
+  code: string;
+  /** Item/sub-item code whose answer triggers the field */
+  parentCode: string;
+  /** Option code that reveals the field */
+  triggerValue: string;
+  kind: "text" | "land";
+  label: string;
+  bereichCode: string;
+}
+
+/** All conditional follow-up fields defined on options across the instrument. */
+export function getAllFollowUpFields(): FollowUpFeld[] {
+  const out: FollowUpFeld[] = [];
+  for (const b of interraiHcSchweiz.bereiche) {
+    for (const item of b.items) {
+      const scan = (parentCode: string, opts?: AnswerOption[]) => {
+        for (const o of opts ?? []) {
+          if (o.followUp) {
+            out.push({
+              code: o.followUp.code,
+              parentCode,
+              triggerValue: o.code,
+              kind: o.followUp.kind,
+              label: o.followUp.label ?? o.followUp.code,
+              bereichCode: b.code,
+            });
+          }
+        }
+      };
+      scan(item.code, item.options);
+      for (const s of item.subItems ?? []) scan(s.code, s.options);
+    }
+  }
+  return out;
 }
 
 /**
@@ -461,6 +509,14 @@ export function evaluateSkipLogic(answers: Record<string, string | null>): SkipR
           }
         }
       }
+    }
+  }
+
+  // Follow-up fields are skipped (not counted, not shown) unless their
+  // triggering option is currently selected.
+  for (const f of getAllFollowUpFields()) {
+    if (answers[f.parentCode] !== f.triggerValue) {
+      skippedItemCodes.add(f.code);
     }
   }
 
