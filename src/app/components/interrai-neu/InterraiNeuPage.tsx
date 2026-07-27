@@ -307,9 +307,10 @@ function LegendBlock({ options, compact = false }: { options: AnswerOption[]; co
       display: "flex",
       flexDirection: compact ? "row" : "column",
       flexWrap: compact ? "wrap" : undefined,
-      // Compact entries flow and wrap; generous gaps keep an option's text
-      // clearly apart from the next option's code (~28px across, ~8px down).
-      columnGap: compact ? 28 : undefined,
+      // Compact entries flow and wrap; a wide horizontal gap keeps an option's
+      // text clearly apart from the NEXT option's code, so the number groups
+      // with its own label rather than the preceding text (~40px across, ~8px down).
+      columnGap: compact ? 40 : undefined,
       rowGap: compact ? 8 : undefined,
       gap: compact ? undefined : 4,
     }}>
