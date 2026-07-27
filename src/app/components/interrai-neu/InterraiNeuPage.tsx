@@ -307,8 +307,10 @@ function LegendBlock({ options, compact = false }: { options: AnswerOption[]; co
       display: "flex",
       flexDirection: compact ? "row" : "column",
       flexWrap: compact ? "wrap" : undefined,
-      columnGap: compact ? 18 : undefined,
-      rowGap: compact ? 3 : undefined,
+      // Compact entries flow and wrap; generous gaps keep an option's text
+      // clearly apart from the next option's code (~28px across, ~8px down).
+      columnGap: compact ? 28 : undefined,
+      rowGap: compact ? 8 : undefined,
       gap: compact ? undefined : 4,
     }}>
       <div style={{
@@ -320,13 +322,16 @@ function LegendBlock({ options, compact = false }: { options: AnswerOption[]; co
       </div>
       {options.map(opt => (
         <div key={opt.code} style={{ display: "flex", alignItems: "baseline", gap: compact ? 6 : 10, minWidth: 0 }}>
-          {/* Muted badge — in the full legend 34px wide so codes align with the
-              matrix cells below; compact drops the fixed width to pack options
-              side by side. No fill/border: a reference, not a button. */}
+          {/* Muted badge with its own bordered area — like the full legend, only
+              smaller in compact. Never a bare code in the running text. In the
+              full legend it is 34px wide so codes align with the matrix cells. */}
           <span style={{
-            display: "inline-flex", alignItems: "center", justifyContent: compact ? "flex-start" : "center",
-            minWidth: compact ? 0 : 34, padding: compact ? 0 : "2px 8px",
-            fontFamily: "monospace", fontSize: 13, fontWeight: 600,
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            minWidth: compact ? 20 : 34, padding: compact ? "0px 5px" : "2px 8px",
+            border: compact ? "0.5px solid var(--border-default)" : undefined,
+            borderRadius: compact ? 4 : undefined,
+            background: compact ? "var(--bg-elevated)" : undefined,
+            fontFamily: "monospace", fontSize: compact ? 12 : 13, fontWeight: 600,
             color: "var(--text-secondary)", flexShrink: 0,
           }}>
             {opt.code}
@@ -577,6 +582,9 @@ export function InterraiNeuPage() {
   const [indivPraez, setIndivPraez] = useState<Record<string, string>>({});
   /** Ref to the right content scroll container — used to reset scroll on bereich change */
   const contentScrollRef = useRef<HTMLDivElement>(null);
+  /** Ref to the sticky bereich bar + legend container — its bottom edge is the
+   *  line that decides which item's legend sticks (see the scroll effect). */
+  const stickyRef = useRef<HTMLDivElement>(null);
   /** Item code whose legend hint should appear in the bereich bar (legend not visible but rows still visible) */
   const [legendHintItem, setLegendHintItem] = useState<string | null>(null);
   /** Whether the sticky-bar legend dropdown is open */
@@ -782,15 +790,49 @@ export function InterraiNeuPage() {
     }
   }, [answers, assessmentId]);
 
-  /** Callback from IntersectionObserver in matrix renderers: update which item's
-   *  legend should appear in the sticky bar hint. Clears the dropdown when
-   *  the active item changes. */
+  /** Set which item's legend appears in the sticky bar (fed by the scroll
+   *  effect below). Clears the dropdown when the active item changes. */
   const setActiveLegendItem = useCallback((code: string | null) => {
     setLegendHintItem(prev => {
       if (prev !== code) setLegendDropdownOpen(false);
       return code;
     });
   }, []);
+
+  /** Decide which item's legend sticks, from scroll position rather than an
+   *  IntersectionObserver. Show the legend for the item whose header has
+   *  scrolled under the sticky bar while its body still extends below. The
+   *  in-flow legend pushes content down, but because the card top AND the bar
+   *  bottom both shift by the legend's height when it appears, the trigger
+   *  (card.top < bar.bottom) is invariant to the legend — so it cannot
+   *  oscillate. */
+  useEffect(() => {
+    const container = contentScrollRef.current;
+    if (!container) return;
+    let ticking = false;
+    const compute = () => {
+      ticking = false;
+      const sticky = stickyRef.current;
+      if (!sticky) return;
+      const line = sticky.getBoundingClientRect().bottom;
+      let active: string | null = null;
+      for (const card of Array.from(container.querySelectorAll<HTMLElement>("[data-item]"))) {
+        const code = card.getAttribute("data-item");
+        if (!code || getMatrixDisplayMode(code) !== "legend") continue;
+        const r = card.getBoundingClientRect();
+        if (r.top < line - 1 && r.bottom > line + 24) { active = code; break; }
+      }
+      setActiveLegendItem(active);
+    };
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(compute);
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    compute();
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [activeBereich, setActiveLegendItem]);
 
   const skipResult = evaluateSkipLogic(answers);
   const bereich = interraiHcSchweiz.bereiche.find(
@@ -1245,6 +1287,7 @@ export function InterraiNeuPage() {
           {/* Bereich bar + legend dropdown — sticky at the top of the
               content scroll region so they remain visible at all times */}
           <div
+            ref={stickyRef}
             style={{
               position: "sticky",
               top: 0,
@@ -1300,24 +1343,18 @@ export function InterraiNeuPage() {
                   )}
               </div>
 
-              {/* Sticky legend — appears automatically once the item's own
-                  legend has scrolled out of view (legendHintItem), and drops
-                  away when the item is left. Compact layout so it never takes
-                  more than ~1/3 of the visible height; text is never truncated.
-                  The item observer guarantees only the current item's legend
-                  shows, never a foreign item's. */}
+              {/* Sticky legend — appears once the item's own legend has scrolled
+                  under the bar (see the scroll effect), and drops away when the
+                  item is left. It sits IN FLOW below the bar, so it pushes the
+                  content below it down rather than overlaying it: no sub-item row
+                  or code field is ever partly covered. Compact layout; text is
+                  never truncated. The scroll trigger is invariant to this push,
+                  so it never oscillates. */}
               {legendHintItem && (() => {
                 const legendItem = bereich.items.find(i => i.code === legendHintItem);
                 if (!legendItem?.options || getMatrixDisplayMode(legendItem.code) !== "legend") return null;
                 return (
                   <div style={{
-                    // Overlay (out of flow) so appearing/disappearing never shifts
-                    // the item content — otherwise the observer would oscillate.
-                    position: "absolute",
-                    top: "100%",
-                    left: 0,
-                    right: 0,
-                    zIndex: 19,
                     padding: "6px 28px 8px",
                     background: "var(--bg-secondary)",
                     borderBottom: "1px solid var(--border-default)",
@@ -2539,27 +2576,10 @@ function MatrixRenderer({
   const allSubs = item.subItems ?? [];
   const subs = allSubs.filter((s) => !skippedItems.has(s.code));
   const mode = getMatrixDisplayMode(item.code);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const legendRef = useRef<HTMLDivElement>(null);
-
-  // Track: legend NOT visible AND item rows still visible → show hint in bar
-  useEffect(() => {
-    if (mode !== "legend" || !containerRef.current || !legendRef.current || !onActiveLegend) return;
-    let legendVisible = true;
-    let itemVisible = true;
-
-    const legendObs = new IntersectionObserver(([e]) => { legendVisible = e.isIntersecting; update(); }, { threshold: 0 });
-    const itemObs = new IntersectionObserver(([e]) => { itemVisible = e.isIntersecting; update(); }, { threshold: 0.05 });
-
-    function update() {
-      if (!legendVisible && itemVisible) onActiveLegend(item.code);
-      else onActiveLegend(null);
-    }
-
-    legendObs.observe(legendRef.current);
-    itemObs.observe(containerRef.current);
-    return () => { legendObs.disconnect(); itemObs.disconnect(); };
-  }, [mode, item.code, onActiveLegend]);
+  // Which item's legend sticks is decided centrally by the scroll effect in
+  // InterraiNeuPage (invariant to the in-flow legend's push), not by a per-item
+  // IntersectionObserver here — an observer would oscillate once the legend
+  // pushes content instead of overlaying it.
 
   // Keyboard: digit keys set the answer for the focused row (§1.5)
   const pendingRef = useRef<string>("");
@@ -2601,10 +2621,10 @@ function MatrixRenderer({
   const rows = buildMatrixRows(subs);
 
   return (
-    <div ref={containerRef}>
+    <div>
       {/* Legend block — tinted, not sticky (scrolls with item content) */}
       {mode === "legend" && (
-        <div ref={legendRef} style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 12 }}>
           <LegendBlock options={options} />
         </div>
       )}
@@ -2732,33 +2752,18 @@ function MatrixColumnsRenderer({
   const allSubs = item.subItems ?? [];
   const subs = allSubs.filter((s) => !skippedItems.has(s.code));
   const mode = getMatrixDisplayMode(item.code);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const legendRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (mode !== "legend" || !containerRef.current || !legendRef.current || !onActiveLegend) return;
-    let legendVisible = true;
-    let itemVisible = true;
-    const legendObs = new IntersectionObserver(([e]) => { legendVisible = e.isIntersecting; upd(); }, { threshold: 0 });
-    const itemObs = new IntersectionObserver(([e]) => { itemVisible = e.isIntersecting; upd(); }, { threshold: 0.05 });
-    function upd() {
-      if (!legendVisible && itemVisible) onActiveLegend(item.code);
-      else onActiveLegend(null);
-    }
-    legendObs.observe(legendRef.current);
-    itemObs.observe(containerRef.current);
-    return () => { legendObs.disconnect(); itemObs.disconnect(); };
-  }, [item.code, onActiveLegend]);
+  // Sticky-legend selection is handled centrally by the scroll effect in
+  // InterraiNeuPage (see MatrixRenderer note) — no per-item observer here.
 
   if (options.length === 0 || subs.length === 0) return null;
 
   const rows = buildMatrixRows(subs);
 
   return (
-    <div ref={containerRef}>
+    <div>
       {/* Legend block — tinted, not sticky */}
       {mode === "legend" && (
-        <div ref={legendRef} style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 12 }}>
           <LegendBlock options={options} />
         </div>
       )}
