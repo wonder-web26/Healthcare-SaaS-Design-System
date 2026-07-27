@@ -102,7 +102,7 @@ function macheKalenderKopf(vonJahr: number, bisJahr: number) {
   return function KalenderKopf() {
     const { currentMonth, goToMonth } = useNavigation();
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "0 2px 10px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "0 0 6px" }}>
         <button type="button" aria-label="Vorheriger Monat" style={pfeil} onClick={() => goToMonth(subMonths(currentMonth, 1))}>
           <ChevronLeft style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
         </button>
@@ -211,7 +211,7 @@ export function DateField({
         <div
           className="relative"
           style={{
-            display: "flex", alignItems: "center", width: "100%", boxSizing: "border-box",
+            display: "flex", alignItems: "center", width: "100%", maxWidth: 200, boxSizing: "border-box",
             borderRadius: "var(--radius-card)",
             border: `${error || focused || open ? "1.5px" : "var(--border-thin)"} solid ${borderColor}`,
             background: disabled ? "var(--bg-secondary)" : "var(--bg-elevated)",
@@ -268,6 +268,7 @@ export function DateField({
         onCloseAutoFocus={(e) => { e.preventDefault(); inputRef.current?.focus(); }}
       >
         <Calendar
+          className="p-2"
           mode="single"
           locale={de}
           selected={selected ?? undefined}
@@ -277,23 +278,27 @@ export function DateField({
           components={{ Caption: macheKalenderKopf(vonJahr, bisJahr) }}
           classNames={{
             day: "size-9 p-0 font-normal rounded-md hover:bg-accent hover:text-accent-foreground",
-            day_selected: "bg-primary text-primary-foreground border-2 border-primary font-medium hover:bg-primary hover:text-primary-foreground",
+            // Selected day: fill PLUS a visible inset ring (contrasting foreground)
+            // PLUS bold — the second cue must not be the same colour as the fill.
+            day_selected: "bg-primary text-primary-foreground font-bold ring-2 ring-inset ring-primary-foreground hover:bg-primary hover:text-primary-foreground",
             day_today: "border border-muted-foreground",
             head_cell: "w-9 font-normal text-[0.8rem] text-muted-foreground",
           }}
         />
+        {/* Fusszeile: eine Aktion füllt die volle Breite, zwei teilen sie sich
+            (je flex:1). Innenabstand an das Tagesraster (p-2) angeglichen. */}
         <div
           style={{
-            display: "flex", justifyContent: zeigeHeute ? "space-between" : "flex-start",
-            gap: 8, padding: "8px 12px", borderTop: "var(--border-thin) solid var(--border-default)",
+            display: "flex", gap: 6, padding: "6px 8px",
+            borderTop: "var(--border-thin) solid var(--border-default)",
           }}
         >
           <button
             type="button"
             onClick={aufheben}
             style={{
-              minHeight: 44, padding: "0 12px", borderRadius: "var(--radius-card)",
-              background: "transparent", border: "none", cursor: "pointer",
+              flex: 1, minHeight: 44, padding: "0 10px", borderRadius: "var(--radius-card)",
+              background: "transparent", border: "none", cursor: "pointer", textAlign: "center",
               fontSize: "var(--text-small)", color: "var(--text-secondary)", fontFamily: "inherit",
             }}
           >
@@ -304,8 +309,8 @@ export function DateField({
               type="button"
               onClick={() => waehleImKalender(new Date())}
               style={{
-                minHeight: 44, padding: "0 12px", borderRadius: "var(--radius-card)",
-                background: "transparent", border: "none", cursor: "pointer",
+                flex: 1, minHeight: 44, padding: "0 10px", borderRadius: "var(--radius-card)",
+                background: "transparent", border: "none", cursor: "pointer", textAlign: "center",
                 fontSize: "var(--text-small)", color: "var(--brand-primary)",
                 fontWeight: "var(--weight-medium)", fontFamily: "inherit",
               }}

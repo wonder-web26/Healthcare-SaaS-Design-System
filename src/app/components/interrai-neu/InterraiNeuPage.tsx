@@ -1702,7 +1702,7 @@ function ItemRenderer({
           borderBottom: "0.5px solid var(--border-default)",
         }}
       >
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: "0 1 200px", minWidth: 0, maxWidth: 200 }}>
           <div
             style={{
               display: "flex",
@@ -2098,7 +2098,7 @@ function SimpleItemInput({
   if (item.answerType === "date") {
     return (
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: "0 1 200px", minWidth: 0, maxWidth: 200 }}>
           <DateField
             wertFormat="iso"
             bereich={item.code === "A3" ? "past" : "any"}
@@ -2511,7 +2511,7 @@ function MatrixRenderer({
               }}
             >
               {/* Sub-item label + detail */}
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: "0 1 200px", minWidth: 0, maxWidth: 200 }}>
                 <TwoLevelLabel
                   code={sub.code}
                   label={sub.label}
@@ -2700,7 +2700,7 @@ function MatrixColumnsRenderer({
               }}
             >
               {/* Sub-item label */}
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: "0 1 200px", minWidth: 0, maxWidth: 200 }}>
                 <TwoLevelLabel
                   code={sub.code}
                   label={sub.label}
@@ -2942,7 +2942,7 @@ function FieldgroupRenderer({
                     placeholder={ghost ? `Vorschlag: ${fgSuggestion!.wert}` : "0"}
                   />
                 ) : sub.answerType === "date" ? (
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: "0 1 200px", minWidth: 0, maxWidth: 200 }}>
                     <DateField
                       wertFormat="iso"
                       bereich="any"
