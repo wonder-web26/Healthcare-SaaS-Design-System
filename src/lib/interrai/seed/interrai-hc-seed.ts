@@ -84,6 +84,10 @@ export interface SubItem {
   /** Printed line introducing the attached fields, verbatim */
   attachmentIntro?: string;
   attachments?: Attachment[];
+  /** Provenance note when an entry diverges from the verbatim printed form. */
+  provenienz?: string;
+  /** Review status of a diverging entry. */
+  validierungsstatus?: "uebernahme" | "geaendert_bestaetigung_ausstehend";
 }
 
 export interface Dependency {
@@ -1414,8 +1418,13 @@ export const interraiHcSchweiz: Instrument = {
             },
             {
               code: "I3.icd",
-              label: "ICD-10-CM Code",
+              // Changed from the printed form: the form prints "ICD-10-CM"
+              // (US Clinical Modification); in Switzerland ICD-10-GM (BFS
+              // edition) applies. Marked as diverging, awaiting sign-off.
+              label: "ICD-10-GM Code",
               answerType: "text",
+              provenienz: "Geändert gegenüber Übernahme: 'ICD-10-CM' → 'ICD-10-GM' (Schweiz: ICD-10-GM in der vom BFS publizierten Fassung).",
+              validierungsstatus: "geaendert_bestaetigung_ausstehend",
             },
           ],
         },

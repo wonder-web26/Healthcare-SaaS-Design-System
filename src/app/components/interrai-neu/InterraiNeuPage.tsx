@@ -50,7 +50,7 @@ import {
 } from "../../../lib/interrai/instrument";
 
 import { DateField } from "../form/DateField";
-import { Combobox } from "../form/Combobox";
+import { ComboboxPopover } from "../form/ComboboxPopover";
 import { NATIONALITAETEN } from "../form/MigratedAngehoerigerForms";
 import { validiereFeld, maskiereAHV, maskiereZiffern, ICD_HINWEIS, type ValidierungTyp } from "../../../lib/validierung";
 import { MODUL_ZERTIFIZIERUNG } from "../../../lib/stammdaten/modul-zertifizierung";
@@ -2145,9 +2145,9 @@ function SimpleItemInput({
   const followUpEl = followUp && onAnswer ? (
     <div style={{ marginTop: 8, marginLeft: 20, paddingLeft: 12, borderLeft: "2px solid var(--border-default)" }}>
       {followUp.kind === "land" ? (
-        <div style={{ maxWidth: 320 }}>
-          <Combobox
-            label={followUp.label}
+        <div style={{ width: "100%", maxWidth: 320 }}>
+          <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>{followUp.label}</label>
+          <ComboboxPopover
             value={answers?.[followUp.code] || null}
             onChange={(v) => onAnswer(followUp.code, v || "")}
             options={LAENDER_OPTIONEN}
@@ -2155,16 +2155,16 @@ function SimpleItemInput({
           />
         </div>
       ) : (
-        <>
+        <div style={{ width: "100%", maxWidth: 320 }}>
           <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>{followUp.label}</label>
           <input
             type="text"
             value={answers?.[followUp.code] ?? ""}
             onChange={(e) => onAnswer(followUp.code, e.target.value)}
-            style={{ ...inputStyle, maxWidth: 320 }}
+            style={{ ...inputStyle, width: "100%", maxWidth: 320 }}
             placeholder="Bitte angeben"
           />
-        </>
+        </div>
       )}
     </div>
   ) : null;
@@ -3522,13 +3522,8 @@ function RepeatFixedRenderer({
         <Plus style={{ width: 14, height: 14 }} />
         Weitere Diagnose erfassen
       </button>
-
-      {/* Footnote */}
-      {item.footnote && (
-        <div style={{ fontSize: 11.5, color: "var(--text-tertiary)", fontStyle: "italic", marginTop: 4 }}>
-          {item.footnote}
-        </div>
-      )}
+      {/* Footnote is rendered once by ItemRenderer for every item; do not
+          repeat it here (that produced the duplicate note on I3). */}
     </div>
   );
 }
