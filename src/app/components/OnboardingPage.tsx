@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import {
   Users,
   HeartPulse,
@@ -205,6 +205,7 @@ function AnnaHinweisZeile({ onJumpToPflegeplanung }: { onJumpToPflegeplanung: ()
 export function OnboardingPage() {
   const navigate = useNavigate();
   const { caseId } = useParams<{ caseId: string }>();
+  const [searchParams] = useSearchParams();
   const isExisting = !!caseId;
   const caseInfo = caseId ? onboardingCaseLookup[caseId] : null;
 
@@ -402,6 +403,19 @@ export function OnboardingPage() {
 
   // Tab-jump state (for header pill clicks → StepPatient tab switch)
   const [requestedPatientTab, setRequestedPatientTab] = useState<number | null>(null);
+
+  // Restore the step + tab carried in the URL when returning from the interRAI
+  // form (e.g. ?step=patient&tab=interrai). Runs once on mount.
+  useEffect(() => {
+    if (searchParams.get("step") !== "patient") return;
+    const patientStep = wizardSteps.find((s) => s.key === "patient");
+    if (!patientStep) return;
+    goToStep(patientStep.id);
+    if (searchParams.get("tab") === "interrai") {
+      setTimeout(() => setRequestedPatientTab(5), 100);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Legacy progressLabel for footer (unchanged)
   const progressLabel = (() => {

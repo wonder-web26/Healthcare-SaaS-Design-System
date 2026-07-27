@@ -550,10 +550,21 @@ export function InterraiNeuPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const returnTo = searchParams.get("returnTo") || "/interrai";
 
   // Load assessment and person from store
   const assessment = assessmentId ? getAssessment(assessmentId) : undefined;
+
+  // Return origin, carried in the URL (survives reload, visible when debugging).
+  // Fallback when none is present: the patient view's interRAI tab, else the
+  // list — the button never leads nowhere. The label names the destination.
+  const returnZiel = searchParams.get("returnTo")
+    || (assessment && getPerson(assessment.personId)?.patientId
+        ? `/patienten/${getPerson(assessment.personId)!.patientId}?tab=interrai`
+        : "/interrai");
+  const returnLabel = returnZiel.startsWith("/onboarding") ? "Zurück zum Onboarding"
+    : returnZiel.startsWith("/patienten") ? "Zurück zum Patienten"
+    : returnZiel.startsWith("/interrai") ? "Zurück zur Übersicht"
+    : "Zurück";
   const person = assessment ? getPerson(assessment.personId) : undefined;
 
   const [activeBereich, setActiveBereich] = useState(
@@ -863,10 +874,10 @@ export function InterraiNeuPage() {
           flexWrap: "wrap",
         }}
       >
-        {/* Return button — always visible, navigates to the origin */}
+        {/* Return button — always visible, navigates to the origin (or fallback) */}
         <button
           type="button"
-          onClick={() => navigate(returnTo)}
+          onClick={() => navigate(returnZiel)}
           style={{
             display: "flex", alignItems: "center", gap: 4,
             padding: "3px 10px", borderRadius: 6,
@@ -876,7 +887,7 @@ export function InterraiNeuPage() {
           }}
         >
           <ArrowLeft style={{ width: 13, height: 13 }} />
-          <span>Zurück</span>
+          <span>{returnLabel}</span>
         </button>
         {person && (
           <>

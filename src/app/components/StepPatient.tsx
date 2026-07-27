@@ -2250,7 +2250,7 @@ function OnboardingTabBA({ onboardingId }: { onboardingId: string }) {
   return (
     <AssessmentStatusView
       person={person}
-      returnTo={`/onboarding/${onboardingId}`}
+      returnTo={`/onboarding/${onboardingId}?step=patient&tab=interrai`}
     />
   );
 }
