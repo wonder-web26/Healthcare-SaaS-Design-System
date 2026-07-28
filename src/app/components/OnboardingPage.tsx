@@ -36,6 +36,7 @@ import { SpezialbewilligungStep } from "./form/SpezialbewilligungStep";
 import { VertragsStep } from "./form/VertragsStep";
 import { EinwilligungProvider } from "./EinwilligungContext";
 import { ArztAnfrageProvider, useArztAnfrage } from "./ArztAnfrageContext";
+import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 // import { AnnaListenEinordnung, type DetailKontext } from "../anna/AnnaListenEinordnung";
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
@@ -482,8 +483,10 @@ export function OnboardingPage() {
                   </div>
                   {/* Meta (hidden when collapsed) */}
                   {!collapsed && isExisting && caseInfo && (
-                    <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2 }}>
-                      Angehörige: {caseInfo.angehoeriger} · Eintritt {caseInfo.vertragDatum}
+                    <div className="flex items-center flex-wrap" style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2, gap: 5 }}>
+                      <span>Angehörige: {caseInfo.angehoeriger} · Eintritt {caseInfo.vertragDatum} ·</span>
+                      {/* Bezugsperson lives on the care relationship, first set here in onboarding */}
+                      {caseId && <BezugspersonAuswahl caseId={caseId} />}
                     </div>
                   )}
                 </div>
