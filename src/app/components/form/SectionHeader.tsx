@@ -10,7 +10,10 @@ export function SectionHeader({ icon: Icon, label, first }: SectionHeaderProps) 
   return (
     <div>
       {!first && (
-        <div style={{ height: "var(--border-thin)", background: "var(--border-default)", marginBottom: 24 }} />
+        // Thin, restrained divider between sections. It spans exactly the field
+        // area width (100%, no overflow) and keeps clear space above and below so
+        // it never touches the field row above or the heading below.
+        <div style={{ width: "100%", height: "var(--border-thin)", background: "var(--border-default)", margin: "24px 0" }} />
       )}
       <div className="flex items-center" style={{ gap: "var(--space-2)", paddingBottom: "var(--space-4)" }}>
         <div className="shrink-0 flex items-center justify-center" style={{ width: 24, height: 24, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
