@@ -27,7 +27,7 @@ Embedding into generated PDF documents is therefore covered.
 ## Font engine
 
 pdf-lib cannot embed a custom font without a fontkit instance. `@pdf-lib/fontkit`
-is vendored as a self-contained UMD bundle at `../vendor/fontkit.umd.min.cjs`
+is vendored as a self-contained UMD bundle at `../vendor/fontkit.js (ESM wrapper around the UMD)`
 (SHA-256 `d8df561b9fba98e24f2e5130e40948809281bbbc55a20c412359f1a0a5eb35a6`,
 downloaded from cdn.jsdelivr.net/npm/@pdf-lib/fontkit/dist/fontkit.umd.min.js).
 It is a build artifact of `@pdf-lib/fontkit` (MIT). No npm package is installed;

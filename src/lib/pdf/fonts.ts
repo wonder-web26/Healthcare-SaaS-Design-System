@@ -7,7 +7,7 @@
  */
 import type { PDFDocument, PDFFont } from "pdf-lib";
 // @ts-expect-error — vendored UMD bundle, no type declarations
-import fontkit from "./vendor/fontkit.umd.min.cjs";
+import fontkit from "./vendor/fontkit.js";
 import { IBM_PLEX_SANS_REGULAR } from "./fonts/sans-regular";
 import { IBM_PLEX_SANS_MEDIUM } from "./fonts/sans-medium";
 import { IBM_PLEX_MONO_REGULAR } from "./fonts/mono-regular";
