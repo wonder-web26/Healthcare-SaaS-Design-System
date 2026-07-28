@@ -83,7 +83,9 @@
       "Bash(echo \"--- commit exit $? ---\")",
       "Bash(curl -s -o /dev/null -w \"Dev-Server HTTP %{http_code}\\\\n\" http://localhost:5173/)",
       "Bash(awk '/export const NATIONALITAETEN = \\\\[/,/\\\\];/' src/app/components/form/MigratedAngehoerigerForms.tsx)",
-      "Bash(grep -n 'returnTo=\\\\$\\\\|\"/interrai\"' src/app/components/interrai/InterRAIListPage.tsx)"
+      "Bash(grep -n 'returnTo=\\\\$\\\\|\"/interrai\"' src/app/components/interrai/InterRAIListPage.tsx)",
+      "Bash(git rev-list *)",
+      "Bash(git commit -q -m 'chore: sync local Claude Code settings *)"
     ]
   }
 }
