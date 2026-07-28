@@ -90,6 +90,7 @@ der Kundenvorlage ist auch dann ein Problem, wenn sie fachlich sinnvoll ist.
 | Entscheidungsinstanz | `KM` |
 | **Status** | **offen** |
 | Bemerkung | Inhaltlich verschiedene Fragen: erwünschte Verbesserung, Herkunft eines Vorschlags, Fehlervermeidung. Die Zusammenfassung verliert insbesondere, von wem ein Vorschlag stammt. |
+| Umsetzung | In diesem Lauf am 28.07.2026 aufgelöst: die drei Fragen AK-F1 bis AK-F3 erscheinen im Dokument als eigene Beschriftungen mit getrennten Antworten. Die Bildschirmmaske erfasst weiterhin ein kombiniertes Feld; dessen Text steht unter AK-F1, AK-F2/F3 bleiben ohne separaten Wert („—"). Status unverändert — die Entscheidung liegt bei `KM`. |
 
 ### A-05 — Ablaufhinweis ersatzlos entfallen
 
@@ -183,9 +184,73 @@ der Kundenvorlage ist auch dann ein Problem, wenn sie fachlich sinnvoll ist.
 
 ---
 
+### A-12 — Block 02: „und deren Wirkung" statt Vorlagenwortlaut
+
+| | |
+|---|---|
+| Betrifft | `AK-B2` (Blockfrage) |
+| Vorlage | „Wurden die Massnahmen und Wirkung der Massnahmen klar und verständlich in der Pflegedokumentation beschrieben?" |
+| System | „… und deren Wirkung …" |
+| Art | Undeklarierte Änderung des Kundenwortlauts |
+| Entscheidungsinstanz | `KM` |
+| **Status** | **abgelehnt** |
+| Umsetzung | In diesem Lauf am 28.07.2026 auf den Vorlagenwortlaut zurückgesetzt. |
+
+### A-13 — Block 03: verkürzter Vorlagenwortlaut
+
+| | |
+|---|---|
+| Betrifft | `AK-B3` (Blockfrage) |
+| Vorlage | „Wurden Auffälligkeiten (Klient:in) in den Bericht geschrieben und erfolgte eine sofortige Meldung dieser?" |
+| System | „(Klient:in)" entfallen, „erfolgte eine sofortige Meldung dieser" zu „sofort gemeldet" verkürzt |
+| Art | Undeklarierte Änderung des Kundenwortlauts |
+| Entscheidungsinstanz | `KM` |
+| **Status** | **abgelehnt** |
+| Umsetzung | In diesem Lauf am 28.07.2026 auf den Vorlagenwortlaut zurückgesetzt. |
+
+### A-14 — Block 02: Kriterium Medikamenteneinnahme umformuliert
+
+| | |
+|---|---|
+| Betrifft | `AK-B2-K3` |
+| Vorlage | „Die Klientin wurde an die Einnahme der Medikamente erinnert" |
+| System | „Erinnerung an die Einnahme der Medikamente" |
+| Art | Undeklarierte Änderung des Kundenwortlauts |
+| Entscheidungsinstanz | `KM` |
+| **Status** | **abgelehnt** |
+| Umsetzung | In diesem Lauf am 28.07.2026 auf den Vorlagenwortlaut zurückgesetzt. |
+
+### A-15 — Kriterien in Grossschreibung statt Vorlagen-Schreibweise
+
+| | |
+|---|---|
+| Betrifft | alle Kriterien (u. a. `AK-B1-K1`, `AK-B1-K2`, `AK-B4-K1`, `AK-B4-K2`) |
+| Vorlage | Schreibweise der Vorlage, z. B. „fachgerecht", „vollständig (lt Pflegeplanung)", „Hände Desinfektion", „Flächen Desinfektion" |
+| System | Grossschreibung / Zusammenschreibung, z. B. „Fachgerecht", „Vollständig (lt. Pflegeplanung)", „Händedesinfektion", „Flächendesinfektion" |
+| Art | Undeklarierte Änderung des Kundenwortlauts |
+| Entscheidungsinstanz | `KM` |
+| **Status** | **abgelehnt** |
+| Umsetzung | In diesem Lauf am 28.07.2026 auf Gross-/Kleinschreibung und Schreibweise der Vorlage zurückgesetzt. |
+
+### A-16 — Erfassungsübersicht ergänzt
+
+| | |
+|---|---|
+| Betrifft | neuer Abschnitt im Dokument (zwischen Legende und erstem Block) |
+| Vorlage | nicht vorhanden |
+| System | getönte Fläche mit vier Zahlen: Anzahl Kriterien, davon bewertet, nicht beurteilbar, nicht erfasst |
+| Art | Ergänzung |
+| Begründung | Ein Prüfer sieht die Vollständigkeit der Erfassung, bevor er die erste Tabelle liest. Ausschliesslich Arithmetik — kein Mittelwert, keine Note, keine Einstufung (das wären klinische Aussagen mit fachlichem Freigabebedarf). |
+| Entscheidungsinstanz | `KM` |
+| **Status** | **offen** |
+| Bemerkung | Kommt in der Kundenvorlage nicht vor. Zu bestätigen oder zurückzubauen. |
+
+---
+
 ## Historie
 
 | Datum | Änderung |
 |---|---|
 | 27.07.2026 | Register angelegt, A-01 bis A-11 aus der ersten Bestandsaufnahme erfasst |
 | 27.07.2026 | A-06, A-09, A-10, A-11 in diesem Lauf technisch umgesetzt (Umsetzungsvermerk je Eintrag). Status unverändert — Entscheidung offen. |
+| 28.07.2026 | Dokument an die Referenzumsetzung angeglichen. A-04 aufgelöst (drei getrennte Fragen im Dokument). A-12 bis A-15 (undeklarierte Wortlautänderungen) erfasst, Status abgelehnt, auf den Vorlagenwortlaut zurückgesetzt. A-16 (Erfassungsübersicht) erfasst, Status offen. |

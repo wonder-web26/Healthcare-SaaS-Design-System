@@ -21,22 +21,22 @@ export const BEURTEILUNGSBLOECKE: BeurteilungsBlock[] = [
     id: "pflegerische_massnahmen",
     frage: "Wurden die pflegerischen Massnahmen fachgerecht und vollständig ausgeführt?",
     kriterien: [
-      { code: "fachgerecht", label: "Fachgerecht" },
-      { code: "vollstaendig", label: "Vollständig (lt. Pflegeplanung)" },
+      { code: "fachgerecht", label: "fachgerecht" },
+      { code: "vollstaendig", label: "vollständig (lt Pflegeplanung)" },
     ],
   },
   {
     id: "dokumentation",
-    frage: "Wurden die Massnahmen und deren Wirkung klar und verständlich in der Pflegedokumentation beschrieben?",
+    frage: "Wurden die Massnahmen und Wirkung der Massnahmen klar und verständlich in der Pflegedokumentation beschrieben?",
     kriterien: [
       { code: "massnahmen_angefuehrt", label: "Massnahmen vollständig angeführt" },
       { code: "wirkung_beschrieben", label: "Wirkung klar und verständlich beschrieben" },
-      { code: "medikamenten_erinnerung", label: "Erinnerung an die Einnahme der Medikamente" },
+      { code: "medikamenten_erinnerung", label: "Die Klientin wurde an die Einnahme der Medikamente erinnert" },
     ],
   },
   {
     id: "auffaelligkeiten",
-    frage: "Wurden Auffälligkeiten in den Bericht geschrieben und sofort gemeldet?",
+    frage: "Wurden Auffälligkeiten (Klient:in) in den Bericht geschrieben und erfolgte eine sofortige Meldung dieser?",
     kriterien: [
       { code: "auffaelligkeiten_dokumentiert", label: "Auffälligkeiten dokumentiert" },
       { code: "auffaelligkeiten_gemeldet", label: "Auffälligkeiten gemeldet" },
@@ -46,8 +46,8 @@ export const BEURTEILUNGSBLOECKE: BeurteilungsBlock[] = [
     id: "hygiene",
     frage: "Wurden die Hygienevorschriften eingehalten?",
     kriterien: [
-      { code: "haendedesinfektion", label: "Händedesinfektion" },
-      { code: "flaechendesinfektion", label: "Flächendesinfektion" },
+      { code: "haendedesinfektion", label: "Hände Desinfektion" },
+      { code: "flaechendesinfektion", label: "Flächen Desinfektion" },
       { code: "schutzmassnahmen", label: "Schutzmassnahmen" },
       { code: "kleidung", label: "Kleidung" },
       { code: "entsorgung", label: "Entsorgung von Abfällen" },

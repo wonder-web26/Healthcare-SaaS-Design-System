@@ -1,343 +1,330 @@
 /**
  * Reusable document builder for generated PDFs (module-independent).
  *
- * Provides the shared visual scaffold — page setup, first-page and short
- * continuation headers, a per-page footer with "Seite n von m", a status chip,
- * a four-column metadata grid, section headings, a quoted paragraph, hairline
- * tables that repeat their column header across page breaks, and the cell
- * glyphs. A concrete document (e.g. the Arbeitskontrolle) supplies only its own
- * content; layout, pagination and chrome live here.
+ * A faithful translation of docs/referenzlayout.py to pdf-lib: the shared visual
+ * scaffold every product document uses — first-page masthead and short
+ * continuation header, a per-page footer with "Seite n von m" (page number in
+ * the footer only, reference number in the header only), the status chip, the
+ * metadata grid, the quoted paragraph, the scale legend with its abbreviation
+ * line, the completeness summary, section headings, the assessment table with
+ * its cell states, question-and-answer sections, and the signature block.
+ * Concrete documents supply only their own content.
  *
- * Coordinate note: pdf-lib's origin is bottom-left. `this.y` is the top edge of
- * the next piece of body content; drawing advances it downward.
+ * Coordinate convention matches reportlab and pdf-lib: origin bottom-left,
+ * `this.y` is the baseline of the current line; drawing decrements it.
  */
-import { PDFDocument, PDFPage, PDFFont, rgb, Color } from "pdf-lib";
+import { PDFDocument, PDFPage, PDFFont, Color } from "pdf-lib";
 import { embedPlexFonts, PlexFonts } from "./fonts";
-import { PAGE, CONTENT, MARGIN, SIZE, INK, RULE, MARK, TRACK_ORG } from "./theme";
+import { PW, PH, X0, X1, W, MB, MT, INK, SEC, MUT, HAIR, BOXL, SUMMARY_FILL, WHITE } from "./theme";
 
-/** Reserved bands so body content never collides with header/footer. */
-const HEADER_FULL_H = 80;
-const HEADER_SHORT_H = 26;
-const FOOTER_H = 24;
+/** Assessment table geometry (referenzlayout.py). */
+const CRIT_W = 232;
+const CELL_W = 30;
+const CX0 = X0 + CRIT_W;
 
 export interface DocMeta {
   org: string;
   title: string;
-  subtitle: string;
+  sub: string;
   kennung: string;
-  statusLabel: string;
+  mitarbeiterin: string;
+  erstellt: string;
   istEntwurf: boolean;
-  /** Footer left: mitarbeiter name and creation timestamp. */
-  footerName: string;
-  erstelltText: string;
 }
 
-export interface MetaEntry {
-  label: string;
-  value: string;
-  /** Secondary suffix printed in grey after the value (e.g. the interval note). */
-  suffix?: string;
-}
+export interface MetaField { label: string; value: string; }
+export interface IntervalField { label: string; value: string; qualifier: string; }
+export interface AssessRow { name: string; value: number | "nb" | null; }
+export interface QAPair { question: string; answer: string; }
+export interface SignatureEntry { role: string; kind: string; name: string; date: string; wording: string; }
 
 export class PdfBuilder {
   readonly doc: PDFDocument;
-  readonly f: PlexFonts;
-  readonly meta: DocMeta;
+  private readonly f: PlexFonts;
+  private readonly meta: DocMeta;
   private pages: PDFPage[] = [];
-  page!: PDFPage;
-  y = 0;
-  private idx = -1;
+  private page!: PDFPage;
+  private y = 0;
+
+  // Font aliases mirroring the reference (Plex / PlexM / Mono / MonoM).
+  private get plex() { return this.f.sansRegular; }
+  private get plexM() { return this.f.sansMedium; }
+  private get mono() { return this.f.monoRegular; }
+  private get monoM() { return this.f.monoMedium; }
 
   private constructor(doc: PDFDocument, fonts: PlexFonts, meta: DocMeta) {
-    this.doc = doc;
-    this.f = fonts;
-    this.meta = meta;
+    this.doc = doc; this.f = fonts; this.meta = meta;
   }
 
   static async create(meta: DocMeta): Promise<PdfBuilder> {
     const doc = await PDFDocument.create();
     const fonts = await embedPlexFonts(doc);
     const b = new PdfBuilder(doc, fonts, meta);
-    b.addPage();
+    b.addPage(true);
     return b;
   }
 
-  // ── geometry ───────────────────────────────────────────────────────────────
-  private bodyTop(pageIndex: number): number {
-    return CONTENT.top - (pageIndex === 0 ? HEADER_FULL_H : HEADER_SHORT_H);
-  }
-  private get bodyBottom(): number {
-    return CONTENT.bottom + FOOTER_H;
-  }
-  get left() { return CONTENT.left; }
-  get right() { return CONTENT.right; }
-  get width() { return CONTENT.width; }
+  // ── primitives ──────────────────────────────────────────────────────────
+  private width(font: PDFFont, size: number, s: string): number { return font.widthOfTextAtSize(s, size); }
 
-  // ── page management ──────────────────────────────────────────────────────
-  addPage(): void {
-    this.page = this.doc.addPage([PAGE.width, PAGE.height]);
-    this.pages.push(this.page);
-    this.idx += 1;
-    this.y = this.bodyTop(this.idx);
+  private text(x: number, y: number, s: string, font: PDFFont, size: number, color: Color): void {
+    this.page.drawText(s, { x, y, font, size, color });
   }
-
-  /** Break to a new page if `h` points of body no longer fit. */
-  ensure(h: number): void {
-    if (this.y - h < this.bodyBottom) this.addPage();
+  private rightText(xr: number, y: number, s: string, font: PDFFont, size: number, color: Color): void {
+    this.page.drawText(s, { x: xr - this.width(font, size, s), y, font, size, color });
   }
-
-  gap(h: number): void { this.y -= h; }
-
-  // ── text primitives ──────────────────────────────────────────────────────
-  private w(font: PDFFont, size: number, s: string): number {
-    return font.widthOfTextAtSize(s, size);
+  private centred(cx: number, y: number, s: string, font: PDFFont, size: number, color: Color): void {
+    this.page.drawText(s, { x: cx - this.width(font, size, s) / 2, y, font, size, color });
   }
-
-  /** One line at (x, current baseline = y - size). Returns text width. */
-  line(s: string, opts: { x?: number; font?: PDFFont; size?: number; color?: Color; align?: "left" | "right"; advance?: boolean } = {}): number {
-    const font = opts.font ?? this.f.sansRegular;
-    const size = opts.size ?? SIZE.body;
-    const color = opts.color ?? INK.black;
-    const width = this.w(font, size, s);
-    let x = opts.x ?? this.left;
-    if (opts.align === "right") x = (opts.x ?? this.right) - width;
-    this.page.drawText(s, { x, y: this.y - size, font, size, color });
-    if (opts.advance !== false) this.y -= size * 1.35;
-    return width;
-  }
-
-  /** Letter-spaced (tracked) line, drawn glyph by glyph. */
-  private tracked(page: PDFPage, s: string, x: number, baseline: number, font: PDFFont, size: number, color: Color, track: number): number {
+  private spaced(x: number, y: number, s: string, font: PDFFont, size: number, tracking: number, color: Color): number {
     let cx = x;
-    for (const ch of s) {
-      page.drawText(ch, { x: cx, y: baseline, font, size, color });
-      cx += this.w(font, size, ch) + track;
-    }
-    return cx - x - track;
+    for (const ch of s) { this.page.drawText(ch, { x: cx, y, font, size, color }); cx += this.width(font, size, ch) + tracking; }
+    return cx;
+  }
+  private hline(x1: number, y: number, x2: number, weight: number, color: Color): void {
+    this.page.drawLine({ start: { x: x1, y }, end: { x: x2, y }, thickness: weight, color });
+  }
+  private vline(x: number, y1: number, y2: number, weight: number, color: Color): void {
+    this.page.drawLine({ start: { x, y: y1 }, end: { x, y: y2 }, thickness: weight, color });
   }
 
-  /** Greedy word wrap. */
   wrap(s: string, font: PDFFont, size: number, maxWidth: number): string[] {
     const words = s.split(/\s+/).filter(Boolean);
     const lines: string[] = [];
     let cur = "";
-    for (const word of words) {
-      const trial = cur ? cur + " " + word : word;
-      if (this.w(font, size, trial) <= maxWidth || !cur) cur = trial;
-      else { lines.push(cur); cur = word; }
+    for (const wd of words) {
+      const t = (cur ? cur + " " + wd : wd);
+      if (this.width(font, size, t) <= maxWidth) cur = t;
+      else { if (cur) lines.push(cur); cur = wd; }
     }
     if (cur) lines.push(cur);
-    return lines.length ? lines : [""];
+    return lines;
   }
 
-  /** Wrapped paragraph starting at x; advances y. Returns height consumed. */
-  paragraph(s: string, opts: { x?: number; maxWidth?: number; font?: PDFFont; size?: number; color?: Color; lineGap?: number } = {}): number {
-    const font = opts.font ?? this.f.sansRegular;
-    const size = opts.size ?? SIZE.body;
-    const x = opts.x ?? this.left;
-    const maxWidth = opts.maxWidth ?? (this.right - x);
-    const lh = size * (opts.lineGap ?? 1.4);
-    const lines = this.wrap(s, font, size, maxWidth);
-    for (const ln of lines) {
-      this.page.drawText(ln, { x, y: this.y - size, font, size, color: opts.color ?? INK.black });
-      this.y -= lh;
-    }
-    return lines.length * lh;
+  // ── page management ─────────────────────────────────────────────────────
+  private addPage(first: boolean): void {
+    this.page = this.doc.addPage([PW, PH]);
+    this.pages.push(this.page);
+    this.y = PH - MT;
+    if (first) this.masthead(); else this.runhead();
   }
+  private newPage(): void { this.addPage(false); }
+  /** Break to a new page if `h` no longer fits above the footer band. */
+  space(h: number): void { if (this.y - h < MB + 26) this.newPage(); }
 
-  // ── rules & glyphs ────────────────────────────────────────────────────────
-  hline(x1: number, x2: number, atY: number, weight = RULE.thin, color: Color = INK.grayLine): void {
-    this.page.drawLine({ start: { x: x1, y: atY }, end: { x: x2, y: atY }, thickness: weight, color });
-  }
-
-  /** Empty cell square with a hairline border, centred in a column slot. */
-  square(cx: number, cy: number, dashed = false): void {
-    const s = MARK.square;
-    this.page.drawRectangle({
-      x: cx - s / 2, y: cy - s / 2, width: s, height: s,
-      borderColor: INK.grayLine, borderWidth: dashed ? 0.5 : RULE.thin,
-      opacity: 0, borderDashArray: dashed ? [1.2, 1.2] : undefined,
-    });
-  }
-
-  /** Chosen cell: filled square, heavier border, a cross in reverse (white). */
-  filledSquare(cx: number, cy: number): void {
-    const s = MARK.square;
-    this.page.drawRectangle({
-      x: cx - s / 2, y: cy - s / 2, width: s, height: s,
-      color: INK.fill, borderColor: INK.black, borderWidth: 0.9,
-    });
-    // Cross knocked out in white, so the mark reads through a photocopy or scan.
-    const r = s / 2 - 1.1;
-    this.page.drawLine({ start: { x: cx - r, y: cy - r }, end: { x: cx + r, y: cy + r }, thickness: 0.9, color: rgb(1, 1, 1) });
-    this.page.drawLine({ start: { x: cx - r, y: cy + r }, end: { x: cx + r, y: cy - r }, thickness: 0.9, color: rgb(1, 1, 1) });
-  }
-
-  // ── header / footer (drawn in finalize, once the page count is known) ──────
-  private drawHeader(page: PDFPage, pageIndex: number): void {
+  private masthead(): void {
     const m = this.meta;
-    if (pageIndex === 0) {
-      let hy = CONTENT.top;
-      const orgBase = hy - SIZE.org;
-      this.tracked(page, m.org.toUpperCase(), CONTENT.left, orgBase, this.f.sansRegular, SIZE.org, INK.grayText, TRACK_ORG);
-      const titleBase = orgBase - 6 - SIZE.title;
-      page.drawText(m.title, { x: CONTENT.left, y: titleBase, font: this.f.sansMedium, size: SIZE.title, color: INK.black });
-      const subBase = titleBase - 4 - SIZE.subtitle;
-      page.drawText(m.subtitle, { x: CONTENT.left, y: subBase, font: this.f.sansRegular, size: SIZE.subtitle, color: INK.grayText });
-      // right column: kennung (mono) then page
-      const kW = this.w(this.f.monoRegular, SIZE.body, m.kennung);
-      page.drawText(m.kennung, { x: CONTENT.right - kW, y: orgBase, font: this.f.monoRegular, size: SIZE.body, color: INK.black });
-      const pg = `Seite ${pageIndex + 1} von ${this.pages.length}`;
-      const pW = this.w(this.f.sansRegular, SIZE.label, pg);
-      page.drawText(pg, { x: CONTENT.right - pW, y: orgBase - 12, font: this.f.sansRegular, size: SIZE.label, color: INK.grayText });
-      const lineY = subBase - 8;
-      this.hline(CONTENT.left, CONTENT.right, lineY, RULE.thick, INK.black);
-      this.hline(CONTENT.left, CONTENT.right, lineY - 3, RULE.thin, INK.grayLine);
-    } else {
-      const base = CONTENT.top - SIZE.body;
-      page.drawText(m.title, { x: CONTENT.left, y: base, font: this.f.sansMedium, size: SIZE.body, color: INK.black });
-      const tW = this.w(this.f.sansMedium, SIZE.body, m.title);
-      page.drawText(m.kennung, { x: CONTENT.left + tW + 10, y: base, font: this.f.monoRegular, size: SIZE.label, color: INK.grayText });
-      const pg = `Seite ${pageIndex + 1} von ${this.pages.length}`;
-      const pW = this.w(this.f.sansRegular, SIZE.label, pg);
-      page.drawText(pg, { x: CONTENT.right - pW, y: base, font: this.f.sansRegular, size: SIZE.label, color: INK.grayText });
-      this.hline(CONTENT.left, CONTENT.right, base - 6, RULE.thin, INK.grayLine);
-    }
+    this.spaced(X0, this.y - 7, m.org.toUpperCase(), this.plexM, 7, 1.6, SEC);
+    this.text(X0, this.y - 28, m.title, this.plexM, 17, INK);
+    this.text(X0, this.y - 40, m.sub, this.plex, 8.5, SEC);
+    this.rightText(X1, this.y - 28, m.kennung, this.monoM, 11, INK);
+    this.y -= 52;
+    this.hline(X0, this.y, X1, 0.9, INK);
+    this.hline(X0, this.y - 2.6, X1, 0.35, HAIR);
+    this.y -= 18;
   }
 
-  private drawFooter(page: PDFPage, pageIndex: number): void {
+  private runhead(): void {
     const m = this.meta;
-    const lineY = CONTENT.bottom + FOOTER_H - 6;
-    this.hline(CONTENT.left, CONTENT.right, lineY, RULE.thin, INK.grayLine);
-    const base = CONTENT.bottom + 4;
-    const leftBits = [m.kennung, m.footerName, m.erstelltText].filter(Boolean).join("  ·  ");
-    const leftText = m.istEntwurf ? `Entwurf, nicht abgeschlossen  ·  ${leftBits}` : leftBits;
-    page.drawText(leftText, { x: CONTENT.left, y: base, font: this.f.sansRegular, size: SIZE.footer, color: INK.grayText });
-    const pg = `Seite ${pageIndex + 1} von ${this.pages.length}`;
-    const pW = this.w(this.f.sansRegular, SIZE.footer, pg);
-    page.drawText(pg, { x: CONTENT.right - pW, y: base, font: this.f.sansRegular, size: SIZE.footer, color: INK.grayText });
+    this.text(X0, this.y - 8, m.title, this.plexM, 8, SEC);
+    this.rightText(X1, this.y - 8, m.kennung, this.mono, 8, SEC);
+    this.y -= 14;
+    this.hline(X0, this.y, X1, 0.35, HAIR);
+    this.y -= 20;
   }
 
-  // ── reusable composite blocks ─────────────────────────────────────────────
-  /** Bordered status chip plus secondary date/kind text to its right. */
-  statusChip(label: string, secondary: string): void {
-    const size = SIZE.label;
-    const padX = 5, padY = 2.5, h = size + padY * 2;
-    const tw = this.w(this.f.sansMedium, size, label);
-    const boxY = this.y - h;
-    this.page.drawRectangle({ x: this.left, y: boxY, width: tw + padX * 2, height: h, borderColor: INK.black, borderWidth: RULE.thin, opacity: 0 });
-    this.page.drawText(label, { x: this.left + padX, y: boxY + padY + 0.5, font: this.f.sansMedium, size, color: INK.black });
-    this.page.drawText(secondary, { x: this.left + tw + padX * 2 + 8, y: boxY + padY + 0.5, font: this.f.sansRegular, size, color: INK.grayText });
-    this.y -= h + 6;
+  // ── reusable blocks ─────────────────────────────────────────────────────
+  statusRow(status: string, secondary: string): void {
+    const bw = this.width(this.plexM, 7, status.toUpperCase()) + 24;
+    this.page.drawRectangle({ x: X0, y: this.y - 13, width: bw, height: 15, borderColor: INK, borderWidth: 0.5, opacity: 0 });
+    this.spaced(X0 + 6, this.y - 8.5, status.toUpperCase(), this.plexM, 7, 1.0, INK);
+    this.text(X0 + bw + 10, this.y - 8.5, secondary, this.plex, 8.5, SEC);
+    this.y -= 26;
   }
 
-  /** Four-column metadata grid: label, value, label, value; hairlines between rows.
-   *  A grey suffix (e.g. the interval note) is placed inline after the value when
-   *  it fits, otherwise wrapped onto its own line(s) under the value. */
-  metaGrid(entries: MetaEntry[]): void {
-    const colLabelW = 78;
-    const colGap = 14;
-    const halfW = (this.width - colGap) / 2;
-    const valW = halfW - colLabelW;
-    const baseRow = 15;
-    const rows = Math.ceil(entries.length / 2);
-    for (let r = 0; r < rows; r++) {
-      const rowTop = this.y;
-      // Row height reserves room for the tallest wrapped suffix in the row.
-      let extra = 0;
-      for (let c = 0; c < 2; c++) {
-        const e = entries[r * 2 + c];
-        if (!e?.suffix) continue;
-        const value = e.value || "—";
-        const inline = this.w(this.f.sansRegular, SIZE.body, value) + 6 + this.w(this.f.sansRegular, SIZE.label, e.suffix) <= valW;
-        if (!inline) extra = Math.max(extra, this.wrap(e.suffix, this.f.sansRegular, SIZE.label, valW).length * (SIZE.label + 1) + 2);
-      }
-      const rowH = baseRow + extra;
-      for (let c = 0; c < 2; c++) {
-        const e = entries[r * 2 + c];
+  metaGrid(fields: MetaField[], interval: IntervalField): void {
+    const cw = W / 2, lw = 92;
+    for (let r = 0; r < 2; r++) {
+      this.hline(X0, this.y, X1, 0.35, HAIR);
+      this.y -= 13;
+      for (let i = 0; i < 2; i++) {
+        const e = fields[r * 2 + i];
         if (!e) continue;
-        const x0 = this.left + c * (halfW + colGap);
-        const labelBase = rowTop - SIZE.label - 2;
-        this.page.drawText(e.label, { x: x0, y: labelBase, font: this.f.sansRegular, size: SIZE.label, color: INK.grayText });
-        const valX = x0 + colLabelW;
-        const value = e.value || "—";
-        this.page.drawText(value, { x: valX, y: labelBase, font: this.f.sansRegular, size: SIZE.body, color: INK.black });
-        if (e.suffix) {
-          const vW = this.w(this.f.sansRegular, SIZE.body, value);
-          if (vW + 6 + this.w(this.f.sansRegular, SIZE.label, e.suffix) <= valW) {
-            this.page.drawText(e.suffix, { x: valX + vW + 6, y: labelBase, font: this.f.sansRegular, size: SIZE.label, color: INK.grayText });
-          } else {
-            let sy = labelBase - SIZE.label - 2;
-            for (const sl of this.wrap(e.suffix, this.f.sansRegular, SIZE.label, valW)) {
-              this.page.drawText(sl, { x: valX, y: sy, font: this.f.sansRegular, size: SIZE.label, color: INK.grayText });
-              sy -= SIZE.label + 1;
-            }
-          }
-        }
+        const bx = X0 + i * cw;
+        this.text(bx, this.y, e.label, this.plex, 7.5, MUT);
+        this.text(bx + lw, this.y, e.value, this.plex, 9, INK);
       }
-      this.hline(this.left, this.right, rowTop - rowH, RULE.thin, INK.grayLine);
-      this.y -= rowH;
+      this.y -= 7;
     }
-    this.y -= 4;
+    this.hline(X0, this.y, X1, 0.35, HAIR);
+    this.y -= 13;
+    this.text(X0, this.y, interval.label, this.plex, 7.5, MUT);
+    this.text(X0 + lw, this.y, interval.value, this.plex, 9, INK);
+    const vw = this.width(this.plex, 9, interval.value);
+    this.text(X0 + lw + vw + 8, this.y, interval.qualifier, this.plex, 7.5, MUT);
+    this.y -= 7;
+    this.hline(X0, this.y, X1, 0.35, HAIR);
+    this.y -= 20;
   }
 
-  /** Section heading: two-digit mono tag in grey, then the question. */
-  sectionHeading(tag: string, question: string): number {
-    const tagW = this.w(this.f.monoRegular, SIZE.blockQuestion, tag);
-    const base = this.y - SIZE.blockQuestion;
-    this.page.drawText(tag, { x: this.left, y: base, font: this.f.monoRegular, size: SIZE.blockQuestion, color: INK.grayText });
-    const qx = this.left + tagW + 8;
-    const lines = this.wrap(question, this.f.sansMedium, SIZE.blockQuestion, this.right - qx);
-    let by = base;
-    for (const ln of lines) { this.page.drawText(ln, { x: qx, y: by, font: this.f.sansMedium, size: SIZE.blockQuestion, color: INK.black }); by -= SIZE.blockQuestion * 1.3; }
-    const h = Math.max(SIZE.blockQuestion * 1.3, lines.length * SIZE.blockQuestion * 1.3);
-    this.y -= h + 4;
+  quote(text: string): void {
+    const lines = this.wrap(text, this.plex, 8.5, W - 14);
+    const h = lines.length * 11;
+    this.vline(X0 + 0.6, this.y + 2, this.y - h + 6, 1.2, BOXL);
+    lines.forEach((ln, i) => this.text(X0 + 12, this.y - i * 11, ln, this.plex, 8.5, SEC));
+    this.y -= h + 12;
+  }
+
+  legend(scale: [string, string][], abbreviations: [string, string][]): void {
+    const y = this.y;
+    let x = X0;
+    for (const [code, mean] of scale) {
+      this.text(x, y, code, this.monoM, 7.5, INK);
+      x += 9;
+      this.text(x, y, mean, this.plex, 7.5, SEC);
+      x += this.width(this.plex, 7.5, mean) + 16;
+    }
+    const y2 = y - 11;
+    let ax = X0;
+    for (const [code, mean] of abbreviations) {
+      this.text(ax, y2, code, this.monoM, 7.5, INK);
+      this.text(ax + 20, y2, mean, this.plex, 7.5, SEC);
+      ax += 20 + this.width(this.plex, 7.5, mean) + 16;
+    }
+    this.y = y2 - 18;
+  }
+
+  /** Completeness summary — arithmetic only, never interpretation. */
+  summary(items: [string, string][]): void {
+    this.page.drawRectangle({ x: X0, y: this.y - 26, width: W, height: 30, color: SUMMARY_FILL });
+    const cw = W / 4;
+    items.forEach(([lab, val], i) => {
+      const bx = X0 + i * cw + 12;
+      this.text(bx, this.y - 8, lab.toUpperCase(), this.plex, 7, MUT);
+      this.text(bx, this.y - 22, val, this.monoM, 13, INK);
+      if (i) this.vline(X0 + i * cw, this.y - 22, this.y, 0.35, HAIR);
+    });
+    this.y -= 42;
+  }
+
+  private cell(cx: number, cy: number, state: "on" | "off" | "dash"): void {
+    const s = 8.6, x = cx - s / 2, yy = cy - s / 2;
+    if (state === "on") {
+      this.page.drawRectangle({ x, y: yy, width: s, height: s, color: INK, borderColor: INK, borderWidth: 0.9 });
+      this.centred(cx, cy - 2.4, "×", this.plexM, 7, WHITE);
+    } else if (state === "dash") {
+      this.page.drawRectangle({ x, y: yy, width: s, height: s, borderColor: BOXL, borderWidth: 0.4, opacity: 0, borderDashArray: [1.2, 1.2] });
+    } else {
+      this.page.drawRectangle({ x, y: yy, width: s, height: s, borderColor: BOXL, borderWidth: 0.4, opacity: 0 });
+    }
+  }
+
+  private blockHeight(q: string, rows: AssessRow[], note: string): number {
+    let h = this.wrap(q, this.plexM, 9.5, W - 26).length * 12 + 8;
+    h += 12;
+    for (const r of rows) h += Math.max(16, this.wrap(r.name, this.plex, 8.5, CRIT_W - 10).length * 11 + 5);
+    h += 8 + this.wrap(note, this.plex, 8.5, W - 4).length * 11 + 12;
     return h;
   }
 
-  /** Quoted paragraph: indented grey text with a vertical rule at the left. */
-  quote(text: string): void {
-    const indent = 10;
-    const x = this.left + indent + 6;
-    const topY = this.y;
-    const lines = this.wrap(text, this.f.sansRegular, SIZE.body, this.right - x);
-    for (const ln of lines) { this.page.drawText(ln, { x, y: this.y - SIZE.body, font: this.f.sansRegular, size: SIZE.body, color: INK.grayText }); this.y -= SIZE.body * 1.4; }
-    this.page.drawLine({ start: { x: this.left + indent, y: topY - 1 }, end: { x: this.left + indent, y: this.y + SIZE.body * 0.4 }, thickness: 1, color: INK.grayLine });
-    this.y -= 4;
+  /** Assessment table: heading, column header (1–6, n.b.), rows with cell states, comment field. */
+  block(num: string, question: string, rows: AssessRow[], note: string): void {
+    this.space(this.blockHeight(question, rows, note));
+    this.text(X0, this.y, num, this.monoM, 8.5, MUT);
+    const qls = this.wrap(question, this.plexM, 9.5, W - 26);
+    qls.forEach((ln, i) => this.text(X0 + 22, this.y - i * 12, ln, this.plexM, 9.5, INK));
+    this.y -= qls.length * 12 + 8;
+    for (let i = 0; i < 6; i++) this.centred(CX0 + i * CELL_W + CELL_W / 2, this.y, String(i + 1), this.plex, 7, MUT);
+    this.centred(CX0 + 6 * CELL_W + CELL_W / 2, this.y, "n.b.", this.plex, 7, MUT);
+    this.y -= 5;
+    for (const row of rows) {
+      const nls = this.wrap(row.name, this.plex, 8.5, CRIT_W - 10);
+      const rh = Math.max(16, nls.length * 11 + 5);
+      this.hline(X0, this.y, X1, 0.35, HAIR);
+      const cy = this.y - rh / 2;
+      const ty = nls.length === 1 ? this.y - 11 : this.y - 10;
+      nls.forEach((ln, i) => this.text(X0, ty - i * 11, ln, this.plex, 8.5, INK));
+      for (let i = 0; i < 6; i++) this.cell(CX0 + i * CELL_W + CELL_W / 2, cy, row.value === i + 1 ? "on" : "off");
+      this.cell(CX0 + 6 * CELL_W + CELL_W / 2, cy, row.value === "nb" ? "on" : "dash");
+      if (row.value === null) this.rightText(X1, cy - 2.5, "n.e.", this.mono, 7, MUT);
+      this.y -= rh;
+    }
+    this.hline(X0, this.y, X1, 0.35, HAIR);
+    this.y -= 12;
+    this.spaced(X0, this.y, "ANMERKUNGEN", this.plex, 7, 0.8, MUT);
+    const nls = this.wrap(note, this.plex, 8.5, W - 4);
+    const noteColor = note !== "keine" ? INK : MUT;
+    nls.forEach((ln, i) => this.text(X0, this.y - 11 - i * 11, ln, this.plex, 8.5, noteColor));
+    this.y -= 11 + nls.length * 11 + 18;
   }
 
-  /** Points of body space left on the current page. */
-  remaining(): number { return this.y - this.bodyBottom; }
+  section(title: string): void {
+    this.space(40);
+    this.hline(X0, this.y + 12, X1, 0.7, INK);
+    this.text(X0, this.y, title, this.plexM, 9.5, INK);
+    this.y -= 16;
+  }
 
-  /**
-   * Hairline table. Rows break across pages when needed; the column header is
-   * redrawn on each continuation page. No vertical rules. The caller draws cell
-   * content; the engine draws the inter-row hairlines and manages breaks.
-   */
-  table<T>(o: {
-    headerHeight: number;
-    drawHeader: (yTop: number) => void;
-    rowHeight: number;
-    rows: T[];
-    drawRow: (row: T, yTop: number, h: number) => void;
-  }): void {
-    const head = () => {
-      o.drawHeader(this.y);
-      this.hline(this.left, this.right, this.y - o.headerHeight, RULE.thin, INK.grayLine);
-      this.y -= o.headerHeight;
-    };
-    head();
-    for (const row of o.rows) {
-      if (this.y - o.rowHeight < this.bodyBottom) { this.addPage(); head(); }
-      o.drawRow(row, this.y, o.rowHeight);
-      this.hline(this.left, this.right, this.y - o.rowHeight, RULE.thin, INK.grayLine);
-      this.y -= o.rowHeight;
+  /** Question-and-answer section: each question a label, its answer beneath. */
+  qaSection(title: string, pairs: QAPair[]): void {
+    this.section(title);
+    for (const { question, answer } of pairs) {
+      const als = this.wrap(answer, this.plex, 8.5, W - 4);
+      const qls = this.wrap(question, this.plex, 7.5, W);
+      this.space(14 + als.length * 11 + 12);
+      qls.forEach((ln, i) => this.text(X0, this.y - i * 10, ln, this.plex, 7.5, MUT));
+      this.y -= qls.length * 10 + 3;
+      als.forEach((ln, i) => this.text(X0, this.y - i * 11, ln, this.plex, 8.5, INK));
+      this.y -= als.length * 11 + 12;
     }
   }
 
-  // ── finalize ──────────────────────────────────────────────────────────────
+  /** Two-column labelled row inside a section (e.g. Meldungen). */
+  sectionGrid2(pairs: MetaField[]): void {
+    const cw = W / 2;
+    this.hline(X0, this.y + 4, X1, 0.35, HAIR);
+    pairs.forEach((p, i) => {
+      const bx = X0 + i * cw;
+      this.text(bx, this.y - 9, p.label, this.plex, 7.5, MUT);
+      this.text(bx + 92, this.y - 9, p.value, this.plex, 9, INK);
+    });
+    this.y -= 17;
+    this.hline(X0, this.y, X1, 0.35, HAIR);
+    this.y -= 22;
+  }
+
+  signatures(title: string, entries: SignatureEntry[]): void {
+    this.space(120);
+    this.section(title);
+    for (const s of entries) {
+      const tls = this.wrap(s.wording, this.plex, 7.5, W - 4);
+      this.hline(X0, this.y + 4, X1, 0.35, HAIR);
+      this.text(X0, this.y - 9, s.role, this.plexM, 9, INK);
+      const wr = this.width(this.plexM, 9, s.role);
+      this.text(X0 + wr + 7, this.y - 9, s.kind, this.plex, 8, MUT);
+      this.text(X0 + 232, this.y - 9, s.name, this.plex, 9, INK);
+      this.rightText(X1, this.y - 9, s.date, this.plex, 9, INK);
+      this.y -= 21;
+      tls.forEach((ln, i) => this.text(X0, this.y - i * 10, ln, this.plex, 7.5, SEC));
+      this.y -= tls.length * 10 + 14;
+    }
+    this.hline(X0, this.y + 6, X1, 0.35, HAIR);
+  }
+
+  // ── finalize: footer with the now-known total page count ──────────────────
+  private drawFooter(page: PDFPage, pageIndex: number, total: number): void {
+    const m = this.meta;
+    const yb = MB + 12;
+    page.drawLine({ start: { x: X0, y: yb }, end: { x: X1, y: yb }, thickness: 0.35, color: HAIR });
+    const left = (m.istEntwurf ? "Entwurf, nicht abgeschlossen  ·  " : "") + `${m.mitarbeiterin}  ·  erstellt ${m.erstellt}`;
+    page.drawText(left, { x: X0, y: yb - 9, font: this.plex, size: 7, color: MUT });
+    const pg = `Seite ${pageIndex + 1} von ${total}`;
+    page.drawText(pg, { x: X1 - this.width(this.plex, 7, pg), y: yb - 9, font: this.plex, size: 7, color: MUT });
+  }
+
   async finish(): Promise<Uint8Array> {
-    this.pages.forEach((p, i) => { this.drawHeader(p, i); this.drawFooter(p, i); });
+    const total = this.pages.length;
+    this.pages.forEach((p, i) => this.drawFooter(p, i, total));
     return this.doc.save();
   }
 }
