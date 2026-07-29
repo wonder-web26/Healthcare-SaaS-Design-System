@@ -1,14 +1,15 @@
 /**
  * Onboarding status — one vocabulary, valid for both header and list.
  *
- *   neu            — case created, no step begun
- *   in_bearbeitung — at least one step begun, contract not yet signed
- *   abgeschlossen  — work contract signed
- *   abgebrochen    — set manually (a reason is required)
+ *   neu            — case created, nothing done yet (the default)
+ *   in_bearbeitung — being worked on
+ *   abgeschlossen  — done
+ *   abgebrochen    — cancelled (a reason is required)
  *
- * The first three are DERIVED from progress and are never set by hand. Only
- * "abgebrochen" is set explicitly, and while it is set it overrides the
- * derivation until the cancellation is lifted (see status-store.ts).
+ * The status is set MANUALLY (via the header badge) — there is no derivation
+ * from progress. A case starts at "neu" and only changes when a person picks a
+ * value; every change is a human action recorded in the event list
+ * (status-store.ts).
  *
  * This replaces the three earlier, divergent vocabularies:
  *   - list: in_erfassung / unvollstaendig / blockiert
@@ -17,22 +18,9 @@
  */
 export type OnboardingStatus = "neu" | "in_bearbeitung" | "abgeschlossen" | "abgebrochen";
 
-/** The subset that can be derived from progress (everything except the manual abort). */
-export type AbgeleiteterStatus = Exclude<OnboardingStatus, "abgebrochen">;
-
-export interface StatusAbleitungInput {
-  /** at least one wizard step begun, or one clinical artefact present */
-  schrittBegonnen: boolean;
-  /** the work contract is signed (step3Valid) */
-  vertragUnterzeichnet: boolean;
-}
-
-/** Deterministic derivation. Never returns "abgebrochen" — that is a manual override. */
-export function leiteOnboardingStatusAb(input: StatusAbleitungInput): AbgeleiteterStatus {
-  if (input.vertragUnterzeichnet) return "abgeschlossen";
-  if (input.schrittBegonnen) return "in_bearbeitung";
-  return "neu";
-}
+/** The order shown in pickers and the default starting value. */
+export const ONBOARDING_STATUS_WERTE: OnboardingStatus[] = ["neu", "in_bearbeitung", "abgeschlossen", "abgebrochen"];
+export const ONBOARDING_STATUS_DEFAULT: OnboardingStatus = "neu";
 
 export interface StatusDarstellung {
   label: string;

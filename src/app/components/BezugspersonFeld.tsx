@@ -28,6 +28,8 @@ export interface BezugspersonFeldProps {
   onEntfernen?: () => void;
   /** Reflects an open picker — rotates the chevron; optional. */
   offen?: boolean;
+  /** Ref to the interactive surface button — lets the caller return focus on close. */
+  surfaceRef?: React.Ref<HTMLButtonElement>;
 }
 
 // Constant geometry across both states — border WIDTH never changes, only its
@@ -46,7 +48,7 @@ const surfaceBase: React.CSSProperties = {
 };
 
 export const BezugspersonFeld = forwardRef<HTMLSpanElement, BezugspersonFeldProps>(function BezugspersonFeld(
-  { label = "Bezugsperson", person, onAktivieren, onEntfernen, offen },
+  { label = "Bezugsperson", person, onAktivieren, onEntfernen, offen, surfaceRef },
   ref,
 ) {
   const interaktiv = !!onAktivieren;
@@ -80,6 +82,7 @@ export const BezugspersonFeld = forwardRef<HTMLSpanElement, BezugspersonFeldProp
       <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{label}</span>
       {interaktiv ? (
         <button
+          ref={surfaceRef}
           type="button"
           onClick={onAktivieren}
           aria-label={person ? "Bezugsperson ändern" : "Bezugsperson zuweisen"}

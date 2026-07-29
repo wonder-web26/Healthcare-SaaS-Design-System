@@ -6,21 +6,26 @@
  * logged with timestamp and acting user. Selection is single-choice and
  * searchable.
  *
- * The visible field is the shared BezugspersonFeld (empty / assigned states);
- * this component only adds the data wiring and the searchable picker.
+ * The visible field is the shared BezugspersonFeld; the picker is the shared
+ * PersonenAuswahl. This component only adds the data wiring and returns focus to
+ * the surface when the popover closes.
  */
-import { useState } from "react";
-import { Check } from "lucide-react";
+import { useRef, useState } from "react";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
-import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from "./ui/command";
+import { PersonenAuswahl, type PersonOption } from "./ui/PersonenAuswahl";
 import { BezugspersonFeld } from "./BezugspersonFeld";
 import { useCurrentUser } from "../auth";
 import { getDiplomierte, getDiplomierterById, diplomierterAnzeigename } from "../../lib/betreuung/diplomierte";
 import { getBezugspersonId, setBezugsperson } from "../../lib/betreuung/store";
 
+const personen: PersonOption[] = getDiplomierte().map(d => ({
+  id: d.id, initialen: d.initialen, nachname: d.name, vorname: d.vorname, rolle: d.funktion,
+}));
+
 export function BezugspersonAuswahl({ caseId }: { caseId: string }) {
   const currentUser = useCurrentUser();
   const [open, setOpen] = useState(false);
+  const surfaceRef = useRef<HTMLButtonElement>(null);
   // Initialise from the store so the value persists across navigation.
   const [userId, setUserId] = useState<string | null>(() => getBezugspersonId(caseId));
 
@@ -36,28 +41,31 @@ export function BezugspersonAuswahl({ caseId }: { caseId: string }) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverAnchor asChild>
-        <BezugspersonFeld
-          person={selected ? { initialen: selected.initialen, name: diplomierterAnzeigename(selected) } : null}
-          onAktivieren={() => setOpen(o => !o)}
-          onEntfernen={selected ? () => zuweisen(null) : undefined}
-          offen={open}
-        />
+        <span className="inline-flex">
+          <BezugspersonFeld
+            surfaceRef={surfaceRef}
+            person={selected ? { initialen: selected.initialen, name: diplomierterAnzeigename(selected) } : null}
+            onAktivieren={() => setOpen(o => !o)}
+            onEntfernen={selected ? () => zuweisen(null) : undefined}
+            offen={open}
+          />
+        </span>
       </PopoverAnchor>
-      <PopoverContent align="start" side="bottom" sideOffset={6} style={{ width: 280, padding: 0 }} onEscapeKeyDown={() => setOpen(false)}>
-        <Command>
-          <CommandInput placeholder="Diplomierte suchen…" />
-          <CommandList>
-            <CommandEmpty>Keine Diplomierte gefunden.</CommandEmpty>
-            {getDiplomierte().map(d => (
-              <CommandItem key={d.id} value={`${d.vorname} ${d.name} ${d.initialen}`} onSelect={() => zuweisen(d.id)}>
-                <Check style={{ width: 13, height: 13, marginRight: 8, opacity: userId === d.id ? 1 : 0 }} />
-                <span style={{ fontWeight: 600, marginRight: 6, fontVariantNumeric: "tabular-nums" }}>{d.initialen}</span>
-                <span style={{ flex: 1 }}>{diplomierterAnzeigename(d)}</span>
-                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>{d.funktion}</span>
-              </CommandItem>
-            ))}
-          </CommandList>
-        </Command>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        sideOffset={6}
+        style={{ width: 300, padding: 6 }}
+        onEscapeKeyDown={() => setOpen(false)}
+        onCloseAutoFocus={e => { e.preventDefault(); surfaceRef.current?.focus(); }}
+      >
+        <PersonenAuswahl
+          personen={personen}
+          selectedId={userId}
+          onSelect={zuweisen}
+          suchePlaceholder="Person suchen"
+          leerText="Keine Person gefunden."
+        />
       </PopoverContent>
     </Popover>
   );

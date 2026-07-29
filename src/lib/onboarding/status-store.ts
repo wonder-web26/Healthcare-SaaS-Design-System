@@ -1,22 +1,17 @@
 /**
- * Onboarding status events — in-memory, session-scoped.
+ * Onboarding status — in-memory, session-scoped, MANUALLY set.
  *
- * Per onboarding case: a list of status changes plus an optional manual
- * cancellation. The derived status (neu/in_bearbeitung/abgeschlossen) is
- * computed in the view; this store records a change whenever the EFFECTIVE
- * status differs from the last recorded entry, and holds the cancellation that
- * overrides the derivation.
+ * Per onboarding case: the current status (default "neu"), the cancellation
+ * reason when cancelled, and an append-only list of status changes. There is no
+ * derivation from progress — the status only changes when a person picks a new
+ * value, so every event corresponds to a human action.
  *
- * No database and no persistence beyond the session — the list does NOT survive
- * a reload. That is acceptable for the prototype; it is called out in the run
- * report. The shape is intentionally able to carry lead times later without a
- * metric being built here (no evaluation, no KPI in this run).
- *
- * While a case is cancelled the derived value is suppressed rather than
- * recorded; lifting the cancellation re-records the then-current derived value.
- * Intermediate derived changes during a cancellation are therefore not logged.
+ * No database and no persistence beyond the session — the value and the list do
+ * NOT survive a reload. Acceptable for the prototype; called out in the report.
+ * No metric, no lead time is computed here.
  */
-import type { OnboardingStatus, AbgeleiteterStatus } from "./status";
+import type { OnboardingStatus } from "./status";
+import { ONBOARDING_STATUS_DEFAULT } from "./status";
 
 export interface StatusWechsel {
   status: OnboardingStatus;
@@ -29,16 +24,11 @@ export interface StatusWechsel {
   grund?: string;
 }
 
-interface Abbruch {
-  grund: string;
-  ausloeserUserId: string | null;
-  ausloeserName: string | null;
-  zeitpunkt: string;
-}
-
 interface OnboardingStatusZustand {
   caseId: string;
-  abbruch: Abbruch | null;
+  status: OnboardingStatus;
+  /** Reason for the cancellation; only meaningful while status === "abgebrochen". */
+  grund: string | null;
   verlauf: StatusWechsel[];
 }
 
@@ -47,7 +37,7 @@ const STORE = new Map<string, OnboardingStatusZustand>();
 function get(caseId: string): OnboardingStatusZustand {
   let z = STORE.get(caseId);
   if (!z) {
-    z = { caseId, abbruch: null, verlauf: [] };
+    z = { caseId, status: ONBOARDING_STATUS_DEFAULT, grund: null, verlauf: [] };
     STORE.set(caseId, z);
   }
   return z;
@@ -55,76 +45,47 @@ function get(caseId: string): OnboardingStatusZustand {
 
 export type Ausloeser = { id: string; name: string } | null;
 
-export function istAbgebrochen(caseId: string): boolean {
-  return get(caseId).abbruch !== null;
+/** Current status. A never-touched case is "neu" (never empty). */
+export function getStatus(caseId: string): OnboardingStatus {
+  return get(caseId).status;
 }
 
-export function getAbbruchGrund(caseId: string): string | null {
-  return get(caseId).abbruch?.grund ?? null;
-}
-
-/** Effective status: the cancellation wins over the derivation while it stands. */
-export function getEffektiverStatus(caseId: string, abgeleitet: AbgeleiteterStatus): OnboardingStatus {
-  return get(caseId).abbruch ? "abgebrochen" : abgeleitet;
+/** Cancellation reason, or null when not cancelled. */
+export function getGrund(caseId: string): string | null {
+  const z = get(caseId);
+  return z.status === "abgebrochen" ? z.grund : null;
 }
 
 export function getStatusVerlauf(caseId: string): StatusWechsel[] {
   return get(caseId).verlauf;
 }
 
-function letzterStatus(z: OnboardingStatusZustand): OnboardingStatus | null {
-  return z.verlauf.length ? z.verlauf[z.verlauf.length - 1].status : null;
-}
-
 /**
- * Record the derived status when the effective value changed vs. the last
- * entry. Idempotent — no entry when unchanged. Suppressed while cancelled (the
- * cancellation entry already stands). Returns the new entry, or null.
+ * Set the status manually. "abgebrochen" requires a non-empty reason — without
+ * one the change is rejected (returns null). A no-op (same status, same reason)
+ * also returns null. Otherwise records an event and returns it.
  */
-export function synchronisiereAbgeleitetenStatus(
+export function setzeStatus(
   caseId: string,
-  abgeleitet: AbgeleiteterStatus,
+  status: OnboardingStatus,
   ausloeser: Ausloeser = null,
+  grund?: string,
 ): StatusWechsel | null {
   const z = get(caseId);
-  if (z.abbruch) return null; // cancelled: derivation suppressed
-  if (letzterStatus(z) === abgeleitet) return null;
+  const trimmed = (grund ?? "").trim();
+  if (status === "abgebrochen" && !trimmed) return null; // no reason → not completable
+  const neuerGrund = status === "abgebrochen" ? trimmed : null;
+  if (z.status === status && z.grund === neuerGrund) return null; // unchanged
+
+  z.status = status;
+  z.grund = neuerGrund;
   const eintrag: StatusWechsel = {
-    status: abgeleitet,
+    status,
     zeitpunkt: new Date().toISOString(),
     ausloeserUserId: ausloeser?.id ?? null,
     ausloeserName: ausloeser?.name ?? null,
+    ...(neuerGrund ? { grund: neuerGrund } : {}),
   };
   z.verlauf.push(eintrag);
   return eintrag;
-}
-
-/**
- * Cancel the case. A reason is required — without one the cancellation does not
- * happen (returns null). Appends an "abgebrochen" entry.
- */
-export function breche(caseId: string, grund: string, ausloeser: Ausloeser = null): StatusWechsel | null {
-  const trimmed = grund.trim();
-  if (!trimmed) return null; // no reason → no cancellation
-  const z = get(caseId);
-  if (z.abbruch) return null; // already cancelled
-  const zeitpunkt = new Date().toISOString();
-  z.abbruch = { grund: trimmed, ausloeserUserId: ausloeser?.id ?? null, ausloeserName: ausloeser?.name ?? null, zeitpunkt };
-  const eintrag: StatusWechsel = {
-    status: "abgebrochen",
-    zeitpunkt,
-    ausloeserUserId: ausloeser?.id ?? null,
-    ausloeserName: ausloeser?.name ?? null,
-    grund: trimmed,
-  };
-  z.verlauf.push(eintrag);
-  return eintrag;
-}
-
-/**
- * Lift the cancellation. Does NOT itself record a change — the caller then runs
- * synchronisiereAbgeleitetenStatus, which re-records the now-current derived value.
- */
-export function hebeAbbruchAuf(caseId: string): void {
-  get(caseId).abbruch = null;
 }

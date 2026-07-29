@@ -18,9 +18,9 @@ import {
   Lock,
   AlertTriangle,
   Sparkles,
-  MoreVertical,
   Ban,
-  RotateCcw,
+  Repeat,
+  ChevronDown,
 } from "lucide-react";
 import {
   StepAngehoeriger,
@@ -44,15 +44,16 @@ import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
 // import { AnnaListenEinordnung, type DetailKontext } from "../anna/AnnaListenEinordnung";
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
-import { getTicketsFuerSubjekt } from "../../lib/rhythmus/engine";
+import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
+import { formatFaelligkeit, isoZuDate } from "../../lib/datum";
 import { toast } from "sonner";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { useRecording } from "../recording/RecordingContext";
 import { Mic } from "lucide-react";
 import { getPersonByOnboardingId, getAssessmentsForPerson, createAssessment } from "../../lib/interrai/store";
 import { useCurrentUser } from "../auth";
-import { leiteOnboardingStatusAb, ONBOARDING_STATUS_CFG, type AbgeleiteterStatus } from "../../lib/onboarding/status";
-import { synchronisiereAbgeleitetenStatus, getEffektiverStatus, istAbgebrochen, breche, hebeAbbruchAuf } from "../../lib/onboarding/status-store";
+import { ONBOARDING_STATUS_CFG, ONBOARDING_STATUS_WERTE, type OnboardingStatus } from "../../lib/onboarding/status";
+import { getStatus, setzeStatus, getGrund } from "../../lib/onboarding/status-store";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "./ui/dropdown-menu";
 
 /* ══════════════════════════════════════════
@@ -387,55 +388,38 @@ export function OnboardingPage() {
 
   const fehlendeDocs = abschlussPruefung.fehlendePflichtdokumente.length;
 
-  // ── Onboarding-Status (ein Vokabular für Kopf und Liste) ──
-  // Abgeleitet aus dem Fortschritt: neu → in_bearbeitung → abgeschlossen.
-  // "abgeschlossen" = Arbeitsvertrag unterzeichnet (step3Valid). Nur "abgebrochen"
-  // wird manuell gesetzt und überschreibt die Ableitung (Status-Store).
+  // ── Onboarding-Status: manuell gesetzt (KEINE Ableitung aus dem Fortschritt) ──
+  // Kopf und Liste teilen dasselbe Vokabular (ONBOARDING_STATUS_CFG). Ein Fall
+  // startet auf "neu"; jeder Wechsel ist eine menschliche Handlung und erzeugt
+  // einen Ereignis-Eintrag (Status-Store). Es gibt keine Neuberechnung.
   const currentUser = useCurrentUser();
   const ausloeser = { id: currentUser.id, name: `${currentUser.vorname} ${currentUser.name}` };
-
-  const hasArtefakt = useMemo(
-    () => !!(MOCK_ASSESSMENTS.find(a => a.onboardingId === caseId) || MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === caseId) || MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === caseId)),
-    [caseId],
-  );
-  const abgeleiteterStatus = useMemo<AbgeleiteterStatus>(
-    () => leiteOnboardingStatusAb({ schrittBegonnen: completedCount > 0 || hasArtefakt, vertragUnterzeichnet: abschlussPruefung.arbeitsvertragOk }),
-    [completedCount, hasArtefakt, abschlussPruefung.arbeitsvertragOk],
-  );
 
   // Re-render trigger after mutating the (non-reactive) status store.
   const [statusTick, setStatusTick] = useState(0);
   const bumpStatus = () => setStatusTick(t => t + 1);
+  void statusTick; // read so the badge recomputes after store mutations
 
-  // Record every derived transition as an event, as soon as the value changes.
-  useEffect(() => {
-    if (!caseId) return;
-    if (synchronisiereAbgeleitetenStatus(caseId, abgeleiteterStatus, ausloeser)) bumpStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseId, abgeleiteterStatus]);
+  const caseStatus: OnboardingStatus = caseId ? getStatus(caseId) : "neu";
+  const statusGrund = caseId ? getGrund(caseId) : null;
+  const statusDarstellung = ONBOARDING_STATUS_CFG[caseStatus];
 
-  const effektiverStatus = caseId ? getEffektiverStatus(caseId, abgeleiteterStatus) : abgeleiteterStatus;
-  const abgebrochen = caseId ? istAbgebrochen(caseId) : false;
-  const statusDarstellung = ONBOARDING_STATUS_CFG[effektiverStatus];
-
-  // Abbruch-Dialog (Grund erforderlich)
+  // Abbruch-Dialog (Grund erforderlich) — ausgelöst über die Status-Auswahl im Abzeichen
   const [abbruchOffen, setAbbruchOffen] = useState(false);
   const [abbruchGrund, setAbbruchGrund] = useState("");
+  const waehleStatus = (s: OnboardingStatus) => {
+    if (!caseId) return;
+    if (s === "abgebrochen") { setAbbruchGrund(""); setAbbruchOffen(true); return; }
+    if (setzeStatus(caseId, s, ausloeser)) bumpStatus();
+  };
   const bestaetigeAbbruch = () => {
     if (!caseId) return;
-    if (breche(caseId, abbruchGrund, ausloeser)) {
+    if (setzeStatus(caseId, "abgebrochen", ausloeser, abbruchGrund)) {
       setAbbruchOffen(false);
       setAbbruchGrund("");
       bumpStatus();
     }
   };
-  const abbruchAufheben = () => {
-    if (!caseId) return;
-    hebeAbbruchAuf(caseId);
-    synchronisiereAbgeleitetenStatus(caseId, abgeleiteterStatus, ausloeser); // re-record the now-current derived value
-    bumpStatus();
-  };
-  void statusTick; // read so the badge/menu recompute after store mutations
 
   // Pill-Zustand: Ocker nur wenn Docs der letzte Blocker sind
   const docsAreLastBlocker = abschlussPruefung.arbeitsvertragOk && fehlendeDocs > 0;
@@ -444,12 +428,28 @@ export function OnboardingPage() {
   const [overrideBegrundung, setOverrideBegrundung] = useState("");
 
   // Workflow-Aggregat (aus Rhythmus-Engine)
+  aktualisiereUeberfaellige();
   const rhythmusTickets = getTicketsFuerSubjekt("patient", caseId);
   const workflowDone = rhythmusTickets.filter(t => t.status === "erledigt").length;
   const workflowTotal = rhythmusTickets.length;
+  // Nächstes fälliges Rhythmus-Ticket: erstes noch nicht erledigtes (aufsteigend nach
+  // faelligAm sortiert → überfällige zuerst). Nur Rhythmus-Tickets, keine WorkflowTasks.
+  const naechstesTicket = rhythmusTickets.find(t => t.status !== "erledigt") ?? null;
+
+  // Zurück-Ziel: Ursprung aus der URL (?returnTo=), sonst die Onboarding-Übersicht.
+  const returnTo = searchParams.get("returnTo") || "/onboarding";
+  const returnLabel = returnTo.startsWith("/patienten") ? "Zurück zum Patienten"
+    : returnTo.startsWith("/angehoerige") ? "Zurück zur Angehörigen"
+    : "Zurück zur Übersicht";
 
   // Tab-jump state (for header pill clicks → StepPatient tab switch)
   const [requestedPatientTab, setRequestedPatientTab] = useState<number | null>(null);
+
+  // "Öffnen" im Aufgabenstreifen → Rhythmus/Workflow-Tab im Patienten-Schritt (Index 7).
+  const oeffneRhythmus = () => {
+    if (activeStepData.key === "patient") { setRequestedPatientTab(7); }
+    else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(7), 100); }
+  };
 
   // Restore the step + tab carried in the URL when returning from the interRAI
   // form (e.g. ?step=patient&tab=interrai). Runs once on mount.
@@ -499,15 +499,16 @@ export function OnboardingPage() {
           <div ref={contentRef} className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0", marginBottom: "var(--space-3)", transition: "all 0.2s ease" }}>
             <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: collapsed ? "10px 20px" : "14px 24px", transition: "padding 0.2s ease" }}>
               <div className="flex items-start" style={{ gap: collapsed ? 8 : 12 }}>
-                {/* Zurück-Pfeil */}
+                {/* Zurück-Knopf — beschriftet, nennt das Ziel (wie im interRAI-Modul) */}
                 <button
-                  onClick={() => navigate("/onboarding")}
-                  title="Zurück zur Übersicht"
-                  className="shrink-0 flex items-center justify-center cursor-pointer transition-colors"
-                  style={{ width: 32, height: 32, minHeight: 44, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "none" }}
+                  onClick={() => navigate(returnTo)}
+                  title={returnLabel}
+                  className="shrink-0 inline-flex items-center cursor-pointer transition-colors"
+                  style={{ gap: 4, minHeight: 44, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}
                   onMouseEnter={e => e.currentTarget.style.background = "var(--bg-tertiary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-secondary)"}
                 >
-                  <ArrowLeft style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
+                  <ArrowLeft style={{ width: 15, height: 15 }} />
+                  <span>{returnLabel}</span>
                 </button>
 
                 {/* Raster: Avatar 44px · Inhalt · Aktionen. Alle Textzeilen teilen die linke Kante der Inhaltsspalte. */}
@@ -535,15 +536,45 @@ export function OnboardingPage() {
                     <span className={collapsed ? "truncate" : ""} style={{ fontSize: collapsed ? "var(--text-body)" : "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", transition: "font-size 0.2s ease", overflowWrap: "anywhere", minWidth: 0 }}>
                       {isExisting && caseInfo ? `Onboarding — ${caseInfo.patient}` : "Neues Mandat eröffnen"}
                     </span>
-                    {/* Statusabzeichen — reine Anzeige: kein Button, nicht fokussierbar */}
-                    <span
-                      className="inline-flex items-center shrink-0"
-                      aria-label={`Status: ${statusDarstellung.label}`}
-                      style={{ gap: 4, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: statusDarstellung.bg, color: statusDarstellung.text }}
-                    >
-                      <span style={{ width: 5, height: 5, borderRadius: 999, background: statusDarstellung.dot }} />
-                      {statusDarstellung.label}
-                    </span>
+                    {/* Statusabzeichen — Status manuell auswählbar (bedienbar, Chevron als
+                        Merkmal, per Tabulator erreichbar). Neues Mandat ohne Fall: reine Anzeige. */}
+                    {caseId ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={`Status ändern, aktuell ${statusDarstellung.label}`}
+                            className="inline-flex items-center shrink-0 cursor-pointer"
+                            style={{ gap: 4, padding: "2px 8px 2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: statusDarstellung.bg, color: statusDarstellung.text, border: "none", fontFamily: "inherit" }}
+                          >
+                            <span style={{ width: 5, height: 5, borderRadius: 999, background: statusDarstellung.dot }} />
+                            {statusDarstellung.label}
+                            <ChevronDown style={{ width: 11, height: 11, opacity: 0.8 }} />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          {ONBOARDING_STATUS_WERTE.map(s => {
+                            const cfg = ONBOARDING_STATUS_CFG[s];
+                            return (
+                              <DropdownMenuItem key={s} onSelect={() => waehleStatus(s)} style={{ gap: 8 }}>
+                                <span style={{ width: 6, height: 6, borderRadius: 999, background: cfg.dot }} />
+                                <span style={{ flex: 1 }}>{cfg.label}</span>
+                                <Check style={{ width: 13, height: 13, opacity: caseStatus === s ? 1 : 0 }} />
+                              </DropdownMenuItem>
+                            );
+                          })}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      <span
+                        className="inline-flex items-center shrink-0"
+                        aria-label={`Status: ${statusDarstellung.label}`}
+                        style={{ gap: 4, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: statusDarstellung.bg, color: statusDarstellung.text }}
+                      >
+                        <span style={{ width: 5, height: 5, borderRadius: 999, background: statusDarstellung.dot }} />
+                        {statusDarstellung.label}
+                      </span>
+                    )}
                   </div>
 
                   {/* Zeile 1 rechts: Aktionen + Überlaufmenü, auf derselben Achse wie der Titel */}
@@ -580,34 +611,6 @@ export function OnboardingPage() {
                         )}
                       </>
                     )}
-                    {/* Überlaufmenü: Abbruch / Abbruch aufheben */}
-                    {isExisting && caseId && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            title="Weitere Aktionen"
-                            aria-label="Weitere Aktionen"
-                            className="shrink-0 flex items-center justify-center cursor-pointer transition-colors"
-                            style={{ width: 32, height: 32, borderRadius: "var(--radius-pill)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
-                            onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
-                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                          >
-                            <MoreVertical style={{ width: 16, height: 16 }} />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {abgebrochen ? (
-                            <DropdownMenuItem onSelect={abbruchAufheben} style={{ gap: 8 }}>
-                              <RotateCcw style={{ width: 14, height: 14 }} /> Abbruch aufheben
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem onSelect={() => setAbbruchOffen(true)} style={{ gap: 8, color: "var(--status-danger)" }}>
-                              <Ban style={{ width: 14, height: 14 }} /> Fall abbrechen
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
                   </div>
 
                   {/* Zeile 2: Angehörige, danach Bezugsperson (versteckt wenn collapsed) */}
@@ -616,6 +619,10 @@ export function OnboardingPage() {
                       <span>Angehörige: {caseInfo.angehoeriger}</span>
                       {/* Bezugsperson lives on the care relationship, first set here in onboarding */}
                       {caseId && <BezugspersonAuswahl caseId={caseId} />}
+                      {/* Abbruchgrund erscheint am Fall */}
+                      {caseStatus === "abgebrochen" && statusGrund && (
+                        <span style={{ color: "var(--status-danger)" }}>Abbruchgrund: {statusGrund}</span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -625,6 +632,56 @@ export function OnboardingPage() {
             {!collapsed && <AnnaHinweisZeile
               onJumpToPflegeplanung={() => { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(5), 100); }}
             />}
+          </div>
+        );
+      })()}
+
+      {/* ═══════════════════════════════════════
+         AUFGABENSTREIFEN — nächstes fälliges Rhythmus-Ticket des Falls.
+         Bewusst nur Rhythmus-Tickets; WorkflowTasks/Service-Tickets erscheinen hier nicht.
+         ═══════════════════════════════════════ */}
+      {isExisting && caseId && (() => {
+        const faelligDate = naechstesTicket ? isoZuDate(naechstesTicket.faelligAm) : null;
+        const faelligText = faelligDate ? formatFaelligkeit(faelligDate) : (naechstesTicket?.faelligAm ?? "");
+        const ueberfaellig = naechstesTicket?.status === "ueberfaellig";
+        const leerText = rhythmusTickets.length === 0
+          ? "Noch keine Rhythmus-Tickets. Sie entstehen im Patienten-Schritt."
+          : "Alle Rhythmus-Tickets sind erledigt.";
+        return (
+          <div style={{ padding: "0 var(--space-6)", marginBottom: "var(--space-3)" }}>
+            <div className="flex items-center justify-between" style={{ gap: 12, padding: "10px 16px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
+              <div className="flex items-center min-w-0" style={{ gap: 12 }}>
+                <span className="shrink-0 flex items-center justify-center" style={{ width: 32, height: 32, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
+                  <Repeat style={{ width: 15, height: 15, color: "var(--text-secondary)" }} />
+                </span>
+                <div className="min-w-0">
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Nächster Betreuungsrhythmus</div>
+                  {naechstesTicket ? (
+                    <div className="flex items-center flex-wrap" style={{ gap: 8, marginTop: 1 }}>
+                      <span className="truncate" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{naechstesTicket.label}</span>
+                      {/* Überfällig: an Icon UND Schriftstärke erkennbar, nicht nur an der Farbe */}
+                      <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", fontWeight: ueberfaellig ? "var(--weight-semibold)" : 400, color: ueberfaellig ? "var(--status-danger)" : "var(--text-secondary)" }}>
+                        {ueberfaellig && <AlertTriangle style={{ width: 11, height: 11 }} />}
+                        {faelligText}
+                      </span>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 1 }}>{leerText}</div>
+                  )}
+                </div>
+              </div>
+              {naechstesTicket && (
+                <button
+                  onClick={oeffneRhythmus}
+                  className="shrink-0 inline-flex items-center cursor-pointer transition-colors"
+                  style={{ gap: 4, padding: "6px 14px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "0.5px solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", fontFamily: "inherit" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-tertiary)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "var(--bg-secondary)"}
+                >
+                  Öffnen
+                </button>
+              )}
+            </div>
           </div>
         );
       })()}
