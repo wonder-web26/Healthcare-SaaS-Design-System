@@ -18,6 +18,9 @@ import {
   Lock,
   AlertTriangle,
   Sparkles,
+  MoreVertical,
+  Ban,
+  RotateCcw,
 } from "lucide-react";
 import {
   StepAngehoeriger,
@@ -47,6 +50,10 @@ import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext }
 import { useRecording } from "../recording/RecordingContext";
 import { Mic } from "lucide-react";
 import { getPersonByOnboardingId, getAssessmentsForPerson, createAssessment } from "../../lib/interrai/store";
+import { useCurrentUser } from "../auth";
+import { leiteOnboardingStatusAb, ONBOARDING_STATUS_CFG, type AbgeleiteterStatus } from "../../lib/onboarding/status";
+import { synchronisiereAbgeleitetenStatus, getEffektiverStatus, istAbgebrochen, breche, hebeAbbruchAuf } from "../../lib/onboarding/status-store";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "./ui/dropdown-menu";
 
 /* ══════════════════════════════════════════
    STEP DEFINITIONS
@@ -380,16 +387,55 @@ export function OnboardingPage() {
 
   const fehlendeDocs = abschlussPruefung.fehlendePflichtdokumente.length;
 
-  // Vorgangs-Status abgeleitet aus der gemeinsamen Prüfung
-  const vorgangsStatus = useMemo(() => {
-    if (abschlussPruefung.vollstaendig) return "bereit" as const;
-    const hasArtefakt = !!(MOCK_ASSESSMENTS.find(a => a.onboardingId === caseId) || MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === caseId) || MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === caseId));
-    if (hasArtefakt || completedCount > 0) return "bearbeitung" as const;
-    return "entwurf" as const;
-  }, [abschlussPruefung.vollstaendig, completedCount, caseId]);
+  // ── Onboarding-Status (ein Vokabular für Kopf und Liste) ──
+  // Abgeleitet aus dem Fortschritt: neu → in_bearbeitung → abgeschlossen.
+  // "abgeschlossen" = Arbeitsvertrag unterzeichnet (step3Valid). Nur "abgebrochen"
+  // wird manuell gesetzt und überschreibt die Ableitung (Status-Store).
+  const currentUser = useCurrentUser();
+  const ausloeser = { id: currentUser.id, name: `${currentUser.vorname} ${currentUser.name}` };
 
-  const vorgangsStatusLabel = vorgangsStatus === "bereit" ? "Bereit zum Abschluss" : vorgangsStatus === "bearbeitung" ? "In Bearbeitung" : "Entwurf";
-  const vorgangsStatusColor = vorgangsStatus === "bereit" ? { bg: "var(--status-success-bg)", color: "var(--status-success-text)" } : vorgangsStatus === "bearbeitung" ? { bg: "var(--status-info-bg)", color: "var(--status-info)" } : { bg: "var(--bg-secondary)", color: "var(--text-secondary)" };
+  const hasArtefakt = useMemo(
+    () => !!(MOCK_ASSESSMENTS.find(a => a.onboardingId === caseId) || MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === caseId) || MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === caseId)),
+    [caseId],
+  );
+  const abgeleiteterStatus = useMemo<AbgeleiteterStatus>(
+    () => leiteOnboardingStatusAb({ schrittBegonnen: completedCount > 0 || hasArtefakt, vertragUnterzeichnet: abschlussPruefung.arbeitsvertragOk }),
+    [completedCount, hasArtefakt, abschlussPruefung.arbeitsvertragOk],
+  );
+
+  // Re-render trigger after mutating the (non-reactive) status store.
+  const [statusTick, setStatusTick] = useState(0);
+  const bumpStatus = () => setStatusTick(t => t + 1);
+
+  // Record every derived transition as an event, as soon as the value changes.
+  useEffect(() => {
+    if (!caseId) return;
+    if (synchronisiereAbgeleitetenStatus(caseId, abgeleiteterStatus, ausloeser)) bumpStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseId, abgeleiteterStatus]);
+
+  const effektiverStatus = caseId ? getEffektiverStatus(caseId, abgeleiteterStatus) : abgeleiteterStatus;
+  const abgebrochen = caseId ? istAbgebrochen(caseId) : false;
+  const statusDarstellung = ONBOARDING_STATUS_CFG[effektiverStatus];
+
+  // Abbruch-Dialog (Grund erforderlich)
+  const [abbruchOffen, setAbbruchOffen] = useState(false);
+  const [abbruchGrund, setAbbruchGrund] = useState("");
+  const bestaetigeAbbruch = () => {
+    if (!caseId) return;
+    if (breche(caseId, abbruchGrund, ausloeser)) {
+      setAbbruchOffen(false);
+      setAbbruchGrund("");
+      bumpStatus();
+    }
+  };
+  const abbruchAufheben = () => {
+    if (!caseId) return;
+    hebeAbbruchAuf(caseId);
+    synchronisiereAbgeleitetenStatus(caseId, abgeleiteterStatus, ausloeser); // re-record the now-current derived value
+    bumpStatus();
+  };
+  void statusTick; // read so the badge/menu recompute after store mutations
 
   // Pill-Zustand: Ocker nur wenn Docs der letzte Blocker sind
   const docsAreLastBlocker = abschlussPruefung.arbeitsvertragOk && fehlendeDocs > 0;
@@ -418,14 +464,8 @@ export function OnboardingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Legacy progressLabel for footer (unchanged)
-  const progressLabel = (() => {
-    if (progressPercent === 100) return "Onboarding abgeschlossen";
-    if (currentStep === totalSteps && !activeStepData.blocked) return "Bereit zum Abschluss";
-    if (completedSteps.has(currentStep)) return "Bereit für nächsten Schritt";
-    if (completedCount > 0) return "In Bearbeitung";
-    return "Nicht gestartet";
-  })();
+  // progressLabel und vorgangsStatus entfallen als eigenständige Begriffe —
+  // der Onboarding-Status (ONBOARDING_STATUS_CFG) ist die eine Wahrheit.
 
   return (
     <EinwilligungProvider onboardingId={caseId || null} patientId={null}>
@@ -458,7 +498,7 @@ export function OnboardingPage() {
         return (
           <div ref={contentRef} className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0", marginBottom: "var(--space-3)", transition: "all 0.2s ease" }}>
             <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: collapsed ? "10px 20px" : "14px 24px", transition: "padding 0.2s ease" }}>
-              <div className="flex items-center flex-wrap" style={{ gap: collapsed ? 8 : 12 }}>
+              <div className="flex items-start" style={{ gap: collapsed ? 8 : 12 }}>
                 {/* Zurück-Pfeil */}
                 <button
                   onClick={() => navigate("/onboarding")}
@@ -470,61 +510,115 @@ export function OnboardingPage() {
                   <ArrowLeft style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
                 </button>
 
-                {/* Title + Meta */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center" style={{ gap: 8 }}>
-                    <span className="truncate" style={{ fontSize: collapsed ? "var(--text-body)" : "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", transition: "font-size 0.2s ease" }}>
+                {/* Raster: Avatar 44px · Inhalt · Aktionen. Alle Textzeilen teilen die linke Kante der Inhaltsspalte. */}
+                <div
+                  className="flex-1 min-w-0"
+                  style={{ display: "grid", gridTemplateColumns: `${collapsed ? 32 : 44}px minmax(0, 1fr) auto`, columnGap: 12, rowGap: 4, alignItems: "center" }}
+                >
+                  {/* Avatar (Initialen der Angehörigen), überspannt beide Zeilen */}
+                  <div
+                    className="shrink-0 flex items-center justify-center"
+                    style={{ gridColumn: 1, gridRow: collapsed ? "auto" : "1 / span 2", alignSelf: "center", width: collapsed ? 32 : 44, height: collapsed ? 32 : 44, borderRadius: "var(--radius-pill)", background: "var(--brand-primary-light)", transition: "all 0.2s ease" }}
+                  >
+                    {caseInfo ? (
+                      <span style={{ fontSize: collapsed ? 11 : 14, fontWeight: "var(--weight-semibold)", color: "var(--brand-primary)" }}>
+                        {caseInfo.angehoeriger.trim().split(/\s+/).map(t => t[0]).slice(0, 2).join("").toUpperCase()}
+                      </span>
+                    ) : (
+                      <Users style={{ width: collapsed ? 15 : 18, height: collapsed ? 15 : 18, color: "var(--brand-primary)" }} />
+                    )}
+                  </div>
+
+                  {/* Zeile 1 links: Titel + Statusabzeichen (nicht bedienbar). Titel bricht um
+                      (kein Abschneiden), wenn collapsed einzeilig; das Raster hält Zeile 2 ausgerichtet. */}
+                  <div className="min-w-0 flex items-center flex-wrap" style={{ gridColumn: 2, gridRow: 1, gap: 8, minHeight: 24 }}>
+                    <span className={collapsed ? "truncate" : ""} style={{ fontSize: collapsed ? "var(--text-body)" : "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", transition: "font-size 0.2s ease", overflowWrap: "anywhere", minWidth: 0 }}>
                       {isExisting && caseInfo ? `Onboarding — ${caseInfo.patient}` : "Neues Mandat eröffnen"}
                     </span>
-                    {/* Vorgangs-Status-Pill (always visible) */}
-                    <span className="inline-flex items-center shrink-0" style={{ gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: vorgangsStatusColor.bg, color: vorgangsStatusColor.color }}>
-                      {vorgangsStatusLabel}
+                    {/* Statusabzeichen — reine Anzeige: kein Button, nicht fokussierbar */}
+                    <span
+                      className="inline-flex items-center shrink-0"
+                      aria-label={`Status: ${statusDarstellung.label}`}
+                      style={{ gap: 4, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: statusDarstellung.bg, color: statusDarstellung.text }}
+                    >
+                      <span style={{ width: 5, height: 5, borderRadius: 999, background: statusDarstellung.dot }} />
+                      {statusDarstellung.label}
                     </span>
                   </div>
-                  {/* Meta (hidden when collapsed) */}
+
+                  {/* Zeile 1 rechts: Aktionen + Überlaufmenü, auf derselben Achse wie der Titel */}
+                  <div className="flex items-center shrink-0 flex-wrap justify-end" style={{ gridColumn: 3, gridRow: 1, gap: 6 }}>
+                    {/* Aggregat-Pills (versteckt wenn collapsed) */}
+                    {!collapsed && (
+                      <>
+                        <button
+                          onClick={() => { if (patientStepActive) { setRequestedPatientTab(7); } else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(7), 100); } }}
+                          className="inline-flex items-center cursor-pointer"
+                          style={{ gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "0.5px solid var(--border-default)" }}
+                          onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
+                          onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                        >
+                          <Check style={{ width: 9, height: 9 }} />
+                          {completedCount} von {nonBlockedSteps.length} Schritten
+                        </button>
+                        {fehlendeDocs > 0 && (
+                          <button
+                            onClick={() => { if (patientStepActive) { setRequestedPatientTab(8); } else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(8), 100); } }}
+                            className="inline-flex items-center cursor-pointer"
+                            style={{
+                              gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500,
+                              ...(docsAreLastBlocker
+                                ? { background: "var(--status-warning-bg)", color: "var(--status-warning-text)", border: "none" }
+                                : { background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "0.5px solid var(--border-default)" }),
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                          >
+                            {docsAreLastBlocker && <AlertTriangle style={{ width: 9, height: 9 }} />}
+                            {fehlendeDocs} {docsAreLastBlocker ? "Pflichtdok. fehlen" : "Dokumente offen"}
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {/* Überlaufmenü: Abbruch / Abbruch aufheben */}
+                    {isExisting && caseId && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            title="Weitere Aktionen"
+                            aria-label="Weitere Aktionen"
+                            className="shrink-0 flex items-center justify-center cursor-pointer transition-colors"
+                            style={{ width: 32, height: 32, borderRadius: "var(--radius-pill)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
+                            onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                          >
+                            <MoreVertical style={{ width: 16, height: 16 }} />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {abgebrochen ? (
+                            <DropdownMenuItem onSelect={abbruchAufheben} style={{ gap: 8 }}>
+                              <RotateCcw style={{ width: 14, height: 14 }} /> Abbruch aufheben
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onSelect={() => setAbbruchOffen(true)} style={{ gap: 8, color: "var(--status-danger)" }}>
+                              <Ban style={{ width: 14, height: 14 }} /> Fall abbrechen
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+
+                  {/* Zeile 2: Angehörige, danach Bezugsperson (versteckt wenn collapsed) */}
                   {!collapsed && isExisting && caseInfo && (
-                    <div className="flex items-center flex-wrap" style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2, gap: 5 }}>
-                      <span>Angehörige: {caseInfo.angehoeriger} · Eintritt {caseInfo.vertragDatum} ·</span>
+                    <div className="flex items-center flex-wrap" style={{ gridColumn: "2 / 4", gridRow: 2, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", gap: 10 }}>
+                      <span>Angehörige: {caseInfo.angehoeriger}</span>
                       {/* Bezugsperson lives on the care relationship, first set here in onboarding */}
                       {caseId && <BezugspersonAuswahl caseId={caseId} />}
                     </div>
                   )}
                 </div>
-
-                {/* Aggregat-Pills (hidden when collapsed) — max. 2, als Kommentar festgehalten */}
-                {!collapsed && (
-                  <div className="flex items-center shrink-0 flex-wrap" style={{ gap: 6 }}>
-                    {/* Pill 1: Workflow-Schritte (always visible, neutral) */}
-                    <button
-                      onClick={() => { if (patientStepActive) { setRequestedPatientTab(7); } else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(7), 100); } }}
-                      className="inline-flex items-center cursor-pointer"
-                      style={{ gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "0.5px solid var(--border-default)" }}
-                      onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
-                      onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-                    >
-                      <Check style={{ width: 9, height: 9 }} />
-                      {completedCount} von {nonBlockedSteps.length} Schritten
-                    </button>
-                    {/* Pill 2: Pflichtdokumente — neutral (Outline) oder Ocker (letzter Blocker) */}
-                    {fehlendeDocs > 0 && (
-                      <button
-                        onClick={() => { if (patientStepActive) { setRequestedPatientTab(8); } else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(8), 100); } }}
-                        className="inline-flex items-center cursor-pointer"
-                        style={{
-                          gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500,
-                          ...(docsAreLastBlocker
-                            ? { background: "var(--status-warning-bg)", color: "var(--status-warning-text)", border: "none" }
-                            : { background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "0.5px solid var(--border-default)" }),
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
-                        onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-                      >
-                        {docsAreLastBlocker && <AlertTriangle style={{ width: 9, height: 9 }} />}
-                        {fehlendeDocs} {docsAreLastBlocker ? "Pflichtdok. fehlen" : "Dokumente offen"}
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
             {/* Anna-Hinweis-Zeile (deterministisch, regelbasiert, kollabiert mit) */}
@@ -534,6 +628,62 @@ export function OnboardingPage() {
           </div>
         );
       })()}
+
+      {/* ═══════════════════════════════════════
+         ABBRUCH-DIALOG — destruktiv, Grund erforderlich
+         ═══════════════════════════════════════ */}
+      {abbruchOffen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "color-mix(in srgb, var(--text-primary) 40%, transparent)", padding: 16 }}
+          onClick={() => setAbbruchOffen(false)}
+          onKeyDown={e => { if (e.key === "Escape") setAbbruchOffen(false); }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Onboarding-Fall abbrechen"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 440, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", padding: "var(--space-6)" }}
+          >
+            <div className="flex items-center" style={{ gap: 10, marginBottom: 8 }}>
+              <span className="shrink-0 flex items-center justify-center" style={{ width: 32, height: 32, borderRadius: "var(--radius-pill)", background: "var(--status-danger-bg)" }}>
+                <Ban style={{ width: 16, height: 16, color: "var(--status-danger)" }} />
+              </span>
+              <span style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-semibold)", color: "var(--text-primary)" }}>Fall abbrechen</span>
+            </div>
+            <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 14 }}>
+              Der Fall wird als abgebrochen markiert. Ein Grund ist erforderlich; er wird im Statusverlauf festgehalten. Der Abbruch lässt sich später wieder aufheben.
+            </p>
+            <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Grund</label>
+            <textarea
+              value={abbruchGrund}
+              onChange={e => setAbbruchGrund(e.target.value)}
+              autoFocus
+              rows={3}
+              placeholder="z. B. Mandat zurückgezogen, Doppelerfassung, Wechsel zu anderem Anbieter"
+              style={{ width: "100%", resize: "vertical", padding: "10px 12px", fontSize: "var(--text-small)", fontFamily: "inherit", color: "var(--text-primary)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-input)" }}
+            />
+            <div className="flex items-center justify-end" style={{ gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => { setAbbruchOffen(false); setAbbruchGrund(""); }}
+                className="cursor-pointer"
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={bestaetigeAbbruch}
+                disabled={!abbruchGrund.trim()}
+                className="cursor-pointer"
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-pill)", border: "none", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-on-dark)", background: abbruchGrund.trim() ? "var(--status-danger)" : "var(--border-default)", opacity: abbruchGrund.trim() ? 1 : 0.7, cursor: abbruchGrund.trim() ? "pointer" : "not-allowed" }}
+              >
+                Fall abbrechen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════
          AUFZEICHNUNG (Onboarding-Ebene, sichtbar in allen Schritten/Tabs)

@@ -81,6 +81,7 @@ import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
 import { getNachweiseFuerPatient } from "../../lib/schulung/nachweis-store";
 import "../../lib/schulung/demo-seed";
+import { BezugspersonFeld } from "./BezugspersonFeld";
 
 /* ── Tab definitions ─────────────────────── */
 const profileTabs = [
@@ -381,14 +382,8 @@ export function Patient360Page() {
 
               <div className="flex items-center" style={{ gap: "var(--space-2)", marginTop: 8 }}>
                 {patient.pflegefachkraft !== "—" ? (
-                  <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-                    <div className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
-                      <span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{patient.pflegefachkraftInitialen}</span>
-                    </div>
-                    <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-                      <span style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{patient.pflegefachkraft}</span> — Zugewiesen
-                    </span>
-                  </div>
+                  /* Shared Bezugsperson presentation — label before value, read-only here */
+                  <BezugspersonFeld person={{ initialen: patient.pflegefachkraftInitialen, name: patient.pflegefachkraft }} />
                 ) : (
                   <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-small)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
                     <AlertTriangle style={{ width: 12, height: 12 }} /> Nicht zugewiesen
