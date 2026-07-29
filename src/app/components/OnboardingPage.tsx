@@ -54,6 +54,9 @@ import { getPersonByOnboardingId, getAssessmentsForPerson, createAssessment } fr
 import { useCurrentUser } from "../auth";
 import { ONBOARDING_STATUS_CFG, ONBOARDING_STATUS_WERTE, type OnboardingStatus } from "../../lib/onboarding/status";
 import { getStatus, setzeStatus, getGrund } from "../../lib/onboarding/status-store";
+import { AppButton } from "./ui/AppButton";
+import { StatusMarke } from "./ui/StatusMarke";
+import { ZurueckLeiste } from "./ui/ZurueckLeiste";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "./ui/dropdown-menu";
 
 /* ══════════════════════════════════════════
@@ -437,10 +440,11 @@ export function OnboardingPage() {
   const naechstesTicket = rhythmusTickets.find(t => t.status !== "erledigt") ?? null;
 
   // Zurück-Ziel: Ursprung aus der URL (?returnTo=), sonst die Onboarding-Übersicht.
+  // Beschriftung nennt das ZIEL (Navigationsrahmen §E), nicht die Handlung.
   const returnTo = searchParams.get("returnTo") || "/onboarding";
-  const returnLabel = returnTo.startsWith("/patienten") ? "Zurück zum Patienten"
-    : returnTo.startsWith("/angehoerige") ? "Zurück zur Angehörigen"
-    : "Zurück zur Übersicht";
+  const returnLabel = returnTo.startsWith("/patienten") ? "Patienten"
+    : returnTo.startsWith("/angehoerige") ? "Angehörige"
+    : "Onboardings";
 
   // Tab-jump state (for header pill clicks → StepPatient tab switch)
   const [requestedPatientTab, setRequestedPatientTab] = useState<number | null>(null);
@@ -471,6 +475,9 @@ export function OnboardingPage() {
     <EinwilligungProvider onboardingId={caseId || null} patientId={null}>
     <ArztAnfrageProvider onboardingId={caseId || null} patientId={null} hausarztName={patientData.hausarztName} hausarztEmail={patientData.hausarztEmail}>
     <div className="flex flex-col h-full min-h-0">
+      {/* ── Navigationsrahmen: Rückweg oberhalb der Karte, nicht darin (§E) ── */}
+      <ZurueckLeiste label={returnLabel} to={returnTo} />
+
       {/* ═══════════════════════════════════════
          HEADER CARD — einzeilig, scroll-collapse
          ═══════════════════════════════════════ */}
@@ -499,18 +506,7 @@ export function OnboardingPage() {
           <div ref={contentRef} className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0", marginBottom: "var(--space-3)", transition: "all 0.2s ease" }}>
             <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: collapsed ? "10px 20px" : "14px 24px", transition: "padding 0.2s ease" }}>
               <div className="flex items-start" style={{ gap: collapsed ? 8 : 12 }}>
-                {/* Zurück-Knopf — beschriftet, nennt das Ziel (wie im interRAI-Modul) */}
-                <button
-                  onClick={() => navigate(returnTo)}
-                  title={returnLabel}
-                  className="shrink-0 inline-flex items-center cursor-pointer transition-colors"
-                  style={{ gap: 4, minHeight: 44, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-tertiary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-secondary)"}
-                >
-                  <ArrowLeft style={{ width: 15, height: 15 }} />
-                  <span>{returnLabel}</span>
-                </button>
-
+                {/* Rückweg lebt jetzt im Navigationsrahmen oberhalb der Karte (§E). */}
                 {/* Raster: Avatar 44px · Inhalt · Aktionen. Alle Textzeilen teilen die linke Kante der Inhaltsspalte. */}
                 <div
                   className="flex-1 min-w-0"
@@ -536,20 +532,21 @@ export function OnboardingPage() {
                     <span className={collapsed ? "truncate" : ""} style={{ fontSize: collapsed ? "var(--text-body)" : "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", transition: "font-size 0.2s ease", overflowWrap: "anywhere", minWidth: 0 }}>
                       {isExisting && caseInfo ? `Onboarding — ${caseInfo.patient}` : "Neues Mandat eröffnen"}
                     </span>
-                    {/* Statusabzeichen — Status manuell auswählbar (bedienbar, Chevron als
-                        Merkmal, per Tabulator erreichbar). Neues Mandat ohne Fall: reine Anzeige. */}
+                    {/* BEDIENBARE Statusmarke (§D): unterscheidet sich von einer Info-Marke —
+                        Untergrundfläche + Rahmen 0.5 + nachgestellter Winkel, per Tab erreichbar,
+                        sichtbarer Fokusring. Neues Mandat ohne Fall: reine Info-Marke. */}
                     {caseId ? (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button
                             type="button"
                             aria-label={`Status ändern, aktuell ${statusDarstellung.label}`}
-                            className="inline-flex items-center shrink-0 cursor-pointer"
-                            style={{ gap: 4, padding: "2px 8px 2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: statusDarstellung.bg, color: statusDarstellung.text, border: "none", fontFamily: "inherit" }}
+                            className="ui-fokusring inline-flex items-center shrink-0 cursor-pointer"
+                            style={{ gap: 5, height: "var(--marke-height-interaktiv)", padding: "0 8px 0 10px", borderRadius: "var(--control-radius)", fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--bg-elevated)", color: "var(--text-primary)", border: "var(--border-thin) solid var(--border-default)", fontFamily: "inherit" }}
                           >
-                            <span style={{ width: 5, height: 5, borderRadius: 999, background: statusDarstellung.dot }} />
+                            <span style={{ width: 6, height: 6, borderRadius: 999, background: statusDarstellung.dot }} />
                             {statusDarstellung.label}
-                            <ChevronDown style={{ width: 11, height: 11, opacity: 0.8 }} />
+                            <ChevronDown style={{ width: 12, height: 12, opacity: 0.7 }} />
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
@@ -566,48 +563,22 @@ export function OnboardingPage() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     ) : (
-                      <span
-                        className="inline-flex items-center shrink-0"
-                        aria-label={`Status: ${statusDarstellung.label}`}
-                        style={{ gap: 4, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: statusDarstellung.bg, color: statusDarstellung.text }}
-                      >
-                        <span style={{ width: 5, height: 5, borderRadius: 999, background: statusDarstellung.dot }} />
-                        {statusDarstellung.label}
-                      </span>
+                      <StatusMarke label={statusDarstellung.label} variante="neutral" />
                     )}
                   </div>
 
                   {/* Zeile 1 rechts: Aktionen + Überlaufmenü, auf derselben Achse wie der Titel */}
                   <div className="flex items-center shrink-0 flex-wrap justify-end" style={{ gridColumn: 3, gridRow: 1, gap: 6 }}>
-                    {/* Aggregat-Pills (versteckt wenn collapsed) */}
+                    {/* Aggregat-Marken (Information, NICHT bedienbar): keine Rahmen, neutrale
+                        Fläche. Ausnahme: fehlende Pflichtdokumente als letzter Blocker sind ein
+                        Warnzustand → semantische Marke mit Symbol. */}
                     {!collapsed && (
                       <>
-                        <button
-                          onClick={() => { if (patientStepActive) { setRequestedPatientTab(7); } else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(7), 100); } }}
-                          className="inline-flex items-center cursor-pointer"
-                          style={{ gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "0.5px solid var(--border-default)" }}
-                          onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
-                          onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-                        >
-                          <Check style={{ width: 9, height: 9 }} />
-                          {completedCount} von {nonBlockedSteps.length} Schritten
-                        </button>
+                        <StatusMarke label={`${completedCount} von ${nonBlockedSteps.length} Schritten`} variante="neutral" />
                         {fehlendeDocs > 0 && (
-                          <button
-                            onClick={() => { if (patientStepActive) { setRequestedPatientTab(8); } else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(8), 100); } }}
-                            className="inline-flex items-center cursor-pointer"
-                            style={{
-                              gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500,
-                              ...(docsAreLastBlocker
-                                ? { background: "var(--status-warning-bg)", color: "var(--status-warning-text)", border: "none" }
-                                : { background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "0.5px solid var(--border-default)" }),
-                            }}
-                            onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
-                            onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-                          >
-                            {docsAreLastBlocker && <AlertTriangle style={{ width: 9, height: 9 }} />}
-                            {fehlendeDocs} {docsAreLastBlocker ? "Pflichtdok. fehlen" : "Dokumente offen"}
-                          </button>
+                          docsAreLastBlocker
+                            ? <StatusMarke label={`${fehlendeDocs} Pflichtdok. fehlen`} variante="warnung" />
+                            : <StatusMarke label={`${fehlendeDocs} Dokumente offen`} variante="neutral" />
                         )}
                       </>
                     )}
@@ -671,15 +642,7 @@ export function OnboardingPage() {
                 </div>
               </div>
               {naechstesTicket && (
-                <button
-                  onClick={oeffneRhythmus}
-                  className="shrink-0 inline-flex items-center cursor-pointer transition-colors"
-                  style={{ gap: 4, padding: "6px 14px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "0.5px solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", fontFamily: "inherit" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-tertiary)"}
-                  onMouseLeave={e => e.currentTarget.style.background = "var(--bg-secondary)"}
-                >
-                  Öffnen
-                </button>
+                <AppButton variant="sekundaer" className="shrink-0" onClick={oeffneRhythmus}>Öffnen</AppButton>
               )}
             </div>
           </div>
@@ -765,7 +728,10 @@ export function OnboardingPage() {
                     Aus dem Gespräch entstehen Vorschläge für die Bedarfsabklärung (interRAI), Pflegeplanung und KLV-Verordnung.
                   </div>
                 </div>
-                <button
+                <AppButton
+                  variant="sekundaer"
+                  icon={Mic}
+                  className="shrink-0"
                   onClick={() => {
                     if (!caseId) return;
                     const person = getPersonByOnboardingId(caseId);
@@ -774,11 +740,9 @@ export function OnboardingPage() {
                     const target = assessments.find(a => a.status === "in_bearbeitung") ?? createAssessment(person.id, "erstabklaerung");
                     recording.startRecording(person.id, target.id, `${person.vorname} ${person.nachname}`);
                   }}
-                  className="inline-flex items-center cursor-pointer shrink-0"
-                  style={{ gap: 6, padding: "8px 20px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
                 >
-                  <Mic style={{ width: 14, height: 14 }} /> Aufzeichnen
-                </button>
+                  Aufzeichnen
+                </AppButton>
               </div>
             </div>
           )}
@@ -932,55 +896,40 @@ export function OnboardingPage() {
             {/* ── FOOTER NAVIGATION ── */}
             <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6)", background: "var(--bg-primary)", borderTop: "var(--border-thin) solid var(--border-default)" }}>
               <div className="flex items-center justify-between">
-                {/* Left: Back */}
-                <button onClick={goPrev} disabled={currentStep === 1} className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ gap: "var(--space-2)", padding: "9.5px 22px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--text-primary)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
-                  onMouseEnter={e => { if (currentStep > 1) e.currentTarget.style.background = "var(--bg-secondary)"; }} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
-                  <ChevronLeft style={{ width: 14, height: 14 }} /> Zurück
-                </button>
+                {/* Left: Back (Wizard-Schritt zurück) — Sekundär */}
+                <AppButton variant="sekundaer" icon={ChevronLeft} onClick={goPrev} disabled={currentStep === 1}>Zurück</AppButton>
 
                 {/* Center: Step indicator */}
                 <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Schritt {currentStep} von {wizardSteps.length}</span>
 
-                {/* Right: Save + Next/Finish */}
+                {/* Right: Save + Next/Finish — genau ein Primär (Weiter ODER Abschliessen) */}
                 <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-                  <button onClick={handleSave} disabled={isSaving} className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-50"
-                    style={{ gap: "var(--space-2)", padding: "9.5px 22px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--text-primary)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
-                    {isSaving ? <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" /> : <Save style={{ width: 14, height: 14 }} />}
-                    <span className="hidden lg:inline">Speichern</span>
-                  </button>
+                  <AppButton variant="sekundaer" icon={isSaving ? Loader2 : Save} iconClassName={isSaving ? "animate-spin" : undefined} onClick={handleSave} disabled={isSaving}>Speichern</AppButton>
 
                   {currentStep < wizardSteps.length ? (
                     (() => {
                       const isOnSpezialbewilligung = activeStepData.key === "spezialbewilligung";
                       const spezialbewilligungIncomplete = isOnSpezialbewilligung && !bewilligungEingereicht;
                       return (
-                        <button onClick={spezialbewilligungIncomplete ? undefined : goNext} disabled={spezialbewilligungIncomplete}
-                          className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
-                          onMouseEnter={e => { if (!spezialbewilligungIncomplete) e.currentTarget.style.background = "var(--brand-primary-dark)"; }}
-                          onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
+                        <AppButton variant="primaer" iconRight={ChevronRight}
+                          onClick={spezialbewilligungIncomplete ? undefined : goNext}
+                          disabled={spezialbewilligungIncomplete}
                           title={spezialbewilligungIncomplete ? "Erst Spezialbewilligung einreichen" : undefined}>
-                          Weiter <ChevronRight style={{ width: 14, height: 14 }} />
-                        </button>
+                          Weiter
+                        </AppButton>
                       );
                     })()
                   ) : (
                     <div>
-                      <button
+                      <AppButton variant="primaer" icon={Check}
                         onClick={() => {
                           if (!abschlussPruefung.arbeitsvertragOk) return;
                           setOverrideBegrundung("");
                           setShowAbschlussDialog(true);
                         }}
-                        disabled={isSaving || !abschlussPruefung.arbeitsvertragOk}
-                        className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
-                        onMouseEnter={e => { if (abschlussPruefung.arbeitsvertragOk) e.currentTarget.style.background = "var(--brand-primary-dark)"; }}
-                        onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
-                        <Check style={{ width: 14, height: 14 }} /> Onboarding abschliessen
-                      </button>
+                        disabled={isSaving || !abschlussPruefung.arbeitsvertragOk}>
+                        Onboarding abschliessen
+                      </AppButton>
                       {!abschlussPruefung.arbeitsvertragOk && (
                         <div style={{ marginTop: 6, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
                           Arbeitsvertrag muss zuerst im Schritt «Vertragsunterzeichnung» unterschrieben werden.
@@ -1086,8 +1035,9 @@ export function OnboardingPage() {
             })()}
 
             <div className="flex items-center justify-end" style={{ gap: "var(--space-2)", marginTop: 20 }}>
-              <button onClick={() => setShowAbschlussDialog(false)} className="cursor-pointer" style={{ padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Abbrechen</button>
-              <button
+              <AppButton variant="sekundaer" onClick={() => setShowAbschlussDialog(false)}>Abbrechen</AppButton>
+              <AppButton
+                variant="primaer"
                 disabled={abschlussPruefung.fehlendePflichtdokumente.length > 0 && !overrideBegrundung.trim()}
                 onClick={() => {
                   if (caseId) {
@@ -1124,11 +1074,9 @@ export function OnboardingPage() {
                   toast(`Onboarding abgeschlossen${overrideHint}. ${caseInfo?.patient || "Patient"} ist jetzt ein aktiver Klient.`);
                   setTimeout(() => navigate("/patienten"), 1500);
                 }}
-                className="cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-on-dark)" }}
               >
                 {abschlussPruefung.fehlendePflichtdokumente.length > 0 ? "Trotzdem abschliessen" : "Konvertieren und abschliessen"}
-              </button>
+              </AppButton>
             </div>
           </div>
         </div>
