@@ -844,11 +844,17 @@ export function InterraiNeuPage() {
       const sticky = stickyRef.current;
       if (!sticky) return;
       const line = sticky.getBoundingClientRect().bottom;
+      // Sichtbarer Bereich unterhalb der Sticky-Linie (§Bedingung 2).
+      const sichtbareHoehe = container.getBoundingClientRect().bottom - line;
       let active: string | null = null;
       for (const card of Array.from(container.querySelectorAll<HTMLElement>("[data-item]"))) {
         const code = card.getAttribute("data-item");
+        // Bedingung 1: nur Items, die überhaupt eine Legende besitzen.
         if (!code || !itemHatLegende(code)) continue;
         const r = card.getBoundingClientRect();
+        // Bedingung 2: haftet NUR, wenn das Item höher ist als der sichtbare Bereich
+        // (passt es vollständig ins Bild, bleibt die Legende an ihrem Ort am Item-Anfang).
+        if (r.height <= sichtbareHoehe) continue;
         if (r.top < line - 1 && r.bottom > line + 24) { active = code; break; }
       }
       setActiveLegendItem(active);
@@ -2642,8 +2648,9 @@ function MatrixRenderer({
 
   return (
     <div>
-      {/* Legend block — tinted, not sticky (scrolls with item content) */}
-      {mode === "legend" && (
+      {/* Legend block — tinted, not sticky (scrolls with item content).
+          Existenz (§Bedingung 1) über die eine Funktion itemHatLegende. */}
+      {itemHatLegende(item.code) && (
         <div style={{ marginBottom: 12 }}>
           <LegendBlock options={options} />
         </div>
@@ -2781,8 +2788,8 @@ function MatrixColumnsRenderer({
 
   return (
     <div>
-      {/* Legend block — tinted, not sticky */}
-      {mode === "legend" && (
+      {/* Legend block — tinted, not sticky. Existenz (§Bedingung 1) über itemHatLegende. */}
+      {itemHatLegende(item.code) && (
         <div style={{ marginBottom: 12 }}>
           <LegendBlock options={options} />
         </div>
