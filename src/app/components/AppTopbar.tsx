@@ -65,11 +65,13 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
         <span style={{ color: "var(--text-on-dark)", fontSize: 12, fontWeight: "var(--weight-medium)" }}>S</span>
       </div>
 
-      {/* Desktop search — begrenzte Breite (~220px), linke Kante auf der Inhaltsachse */}
-      <div className="relative hidden sm:block shrink-0" style={{ width: 220 }}>
+      {/* Desktop search — wächst mit dem Platz (min 260, max 360), linke Kante auf der
+          Inhaltsachse. Am längsten echten Platzhalter geprüft, nicht am kurzen Entwurfstext. */}
+      <div className="relative hidden sm:block" style={{ flex: "1 1 auto", minWidth: 260, maxWidth: 360 }}>
         <div
           className="flex items-center"
           style={{
+            gap: 8,
             borderRadius: "var(--radius-pill)",
             border: searchFocused ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
             background: "var(--bg-elevated)",
@@ -87,7 +89,7 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
             placeholder="Patienten, Angehörige, Tickets suchen…"
-            className="flex-1 bg-transparent outline-none"
+            className="flex-1 min-w-0 bg-transparent outline-none"
             style={{ fontSize: "var(--text-body)", color: "var(--text-primary)", fontWeight: "var(--weight-regular)" }}
           />
           {searchValue ? (

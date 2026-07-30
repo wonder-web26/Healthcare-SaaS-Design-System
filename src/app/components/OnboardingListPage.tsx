@@ -129,6 +129,31 @@ function buildAnnaContext(allCases: OnboardingCase[], role: UserRole): ListenKon
   return { seite: `onboarding_${role}`, totalCount: allCases.length, byStatus, highlights };
 }
 
+/**
+ * Zusammenfassung der Onboarding-Liste — eigenständig, damit jede Aussage GENAU
+ * EINMAL erscheint (§B). Die geteilte Bausteinlogik (generateMockEinordnung)
+ * rendert die Blockiert-Zahl UND hängt zusätzlich highlights[0] an — nennt
+ * highlights[0] denselben Sachverhalt, doppelt sich die Aussage. Hier wird die
+ * Blockiert-Zahl einmal genannt, und als zweite Aussage die erste NICHT-blockiert
+ * bezogene Einordnung. Singular/Plural von "Mandat" korrekt.
+ */
+function buildOnboardingEinordnung(ctx: ListenKontext): string {
+  const total = ctx.totalCount;
+  if (total === 0) return "Aktuell kein Mandat im Onboarding.";
+  const blocked = ctx.byStatus["blockiert"] || 0;
+  const wort = total === 1 ? "Mandat" : "Mandate";
+  const parts: string[] = [];
+  if (blocked > 0) {
+    parts.push(`${total} ${wort} im Onboarding, {{danger}}${blocked === 1 ? "eines davon blockiert" : `${blocked} davon blockiert`}{{/danger}}.`);
+  } else {
+    parts.push(`${total} ${wort} im Onboarding, alle laufen planmässig.`);
+  }
+  // Zweite Aussage: erste Einordnung, die NICHT die Blockiert-Zahl wiederholt.
+  const zusatz = ctx.highlights.find(h => !/blockiert|blocked/i.test(h));
+  if (zusatz) parts.push(`{{warning}}${zusatz}{{/warning}}.`);
+  return parts.join(" ");
+}
+
 /* ══════════════════════════════════════════ */
 export function OnboardingListPage() {
   const navigate = useNavigate();
@@ -190,6 +215,7 @@ export function OnboardingListPage() {
   }, []);
 
   const annaContext = useMemo(() => buildAnnaContext(cases, role), [role]);
+  const annaEinordnung = useMemo(() => buildOnboardingEinordnung(annaContext), [annaContext]);
   const viewOrder = getViewOrder(role);
 
   return (
@@ -214,7 +240,7 @@ export function OnboardingListPage() {
 
         {/* Anna einordnung */}
         <div style={{ marginBottom: "var(--space-4)" }}>
-          <AnnaListenEinordnung context={annaContext} />
+          <AnnaListenEinordnung context={annaContext} einordnung={annaEinordnung} />
         </div>
 
         {/* Search + filter */}

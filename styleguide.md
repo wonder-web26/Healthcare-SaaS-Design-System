@@ -156,8 +156,14 @@ Konsequenz für die Umsetzung: Container werden an den **längsten tatsächliche
 Werten** bemessen (nicht an kurzen Mockup-Beispielen). Ist eine feste Breite nötig,
 wird sie gross genug für Umbruch gewählt; ein zu schmaler Container kürzt nie.
 
+**Gilt auch für Platzhaltertexte.** Ein Platzhalter (z. B. im Suchfeld) wird nie
+mit Auslassungspunkten abgeschnitten. Das Eingabefeld wird am **tatsächlichen**
+Platzhalter bemessen, nicht am kurzen Entwurfstext. Reicht der Platz auch bei der
+Höchstbreite nicht, wird das gemeldet — nicht das Feld oder der Text gekürzt.
+
 Bereits verletzt (Historie, zur Warnung): interRAI-Bereichsnavigation,
-Schrittbezeichnung im Onboarding-Fortschritt, Zustandsspalte im Onboarding.
+Schrittbezeichnung im Onboarding-Fortschritt, Zustandsspalte im Onboarding,
+Suchfeld der Kopfleiste (feste 220px am kurzen Entwurfs-Platzhalter „Suchen").
 
 ---
 
