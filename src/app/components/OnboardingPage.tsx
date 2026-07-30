@@ -23,6 +23,8 @@ import {
   ChevronDown,
   MoreVertical,
   Circle,
+  CircleDot,
+  AlertCircle,
 } from "lucide-react";
 import {
   StepAngehoeriger,
@@ -143,6 +145,22 @@ function buildSteps(requiresB: boolean, bewilligungEingereicht: boolean): Wizard
     { ...baseSteps[1], id: 3 },
     { ...baseSteps[2], id: 4, icon: eingereicht ? FileSignature : Lock, blocked: !eingereicht },
   ];
+}
+
+/**
+ * Zustandssymbol einer Phase (§B). Jeder im Code mögliche Phasen-Zustand hat ein
+ * eigenes Symbol + eine eigene Farbe; die Bezeichnung nennt den Zustand für
+ * Bildschirmleser. Der Zustand ist an Symbol UND Farbe/Schnitt erkennbar, nie an
+ * der Farbe allein.
+ */
+type PhasenZustand = { icon: React.ElementType; color: string; label: string };
+function phasenZustand(f: { isCompleted: boolean; isInProgress: boolean; isBlocked: boolean; isDanger: boolean; isVisitedButIncomplete: boolean }): PhasenZustand {
+  if (f.isBlocked) return { icon: Ban, color: "var(--status-danger)", label: "blockiert" };
+  if (f.isDanger) return { icon: AlertTriangle, color: "var(--status-danger)", label: "Pflicht, ausstehend" };
+  if (f.isCompleted) return { icon: CheckCircle2, color: "var(--status-success)", label: "abgeschlossen" };
+  if (f.isInProgress) return { icon: CircleDot, color: "var(--text-primary)", label: "in Bearbeitung" };
+  if (f.isVisitedButIncomplete) return { icon: AlertCircle, color: "var(--status-warning)", label: "unvollständig" };
+  return { icon: Circle, color: "var(--text-tertiary)", label: "ausstehend" };
 }
 
 /* ══════════════════════════════════════════
@@ -679,34 +697,8 @@ export function OnboardingPage() {
          rechts über der Reiterleiste), keine Karte. Der Erklärsatz erscheint als Hinweis
          beim ersten Öffnen (siehe startGespraech). */}
 
-      {/* ═══════════════════════════════════════
-         MOBILE STEPPER
-         ═══════════════════════════════════════ */}
-      <div className="lg:hidden shrink-0 overflow-x-auto" style={{ padding: "var(--space-3) var(--space-4)" }}>
-        <div className="flex items-center" style={{ gap: "var(--space-1)" }}>
-          {wizardSteps.map((step, idx) => {
-            const isSelected = currentStep === step.id;
-            const isCompleted = completedSteps.has(step.id);
-            const isDanger = !!step.danger;
-            const isBlocked = !!step.blocked;
-            return (
-              <button key={step.key} onClick={() => !isBlocked && goToStep(step.id)} disabled={isBlocked}
-                className="inline-flex items-center whitespace-nowrap shrink-0 cursor-pointer transition-colors"
-                style={{
-                  gap: "var(--space-1)", padding: "var(--space-2) var(--space-3)", borderRadius: "var(--radius-pill)",
-                  fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
-                  opacity: isBlocked ? 0.5 : 1, cursor: isBlocked ? "not-allowed" : "pointer",
-                  background: isSelected ? "var(--brand-primary-light)" : isCompleted ? "var(--status-success-bg)" : isDanger ? "var(--status-danger-bg)" : "transparent",
-                  color: isSelected ? "var(--brand-primary)" : isCompleted ? "var(--status-success-text)" : isDanger ? "var(--status-danger)" : "var(--text-secondary)",
-                }}>
-                {isCompleted ? <Check style={{ width: 12, height: 12 }} /> : <step.icon style={{ width: 12, height: 12 }} />}
-                <span className="hidden sm:inline">{step.shortLabel}</span>
-                <span className="sm:hidden">{idx + 1}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* Mobile-Stepper entfernt (§A): die Phasen sind jetzt die erste Reiterebene
+         oben im Container und auf allen Breiten sichtbar. */}
 
       {/* ═══════════════════════════════════════
          MAIN SPLIT LAYOUT
@@ -716,64 +708,8 @@ export function OnboardingPage() {
         <div className="flex w-full min-h-0" style={{ border: "var(--border-thin) solid var(--border-default)", borderRadius: 10, background: "var(--bg-elevated)", overflow: "hidden" }}>
           {/* ── Zustandsspalte (200px fest, an den längsten echten Werten geprüft; kein Kürzen, Umbruch erlaubt) ── */}
           <div className="hidden lg:flex shrink-0 flex-col min-h-0 overflow-y-auto" style={{ width: 200, borderRight: "var(--border-thin) solid var(--border-default)", padding: "var(--space-4)" }}>
-                <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-4)" }}>
-                  Fortschritt
-                </div>
-
-                <nav className="flex flex-col" style={{ gap: "var(--space-1)" }}>
-                  {wizardSteps.map((step) => {
-                    const isSelected = currentStep === step.id;
-                    const isCompleted = completedSteps.has(step.id);
-                    const isDanger = !!step.danger;
-                    const isBlocked = !!step.blocked;
-                    const isInProgress = visitedSteps.has(step.id) && step.id === currentStep;
-
-                    const isVisitedButIncomplete = visitedSteps.has(step.id) && !isCompleted && !isInProgress;
-                    let statusText = "Ausstehend";
-                    let statusColor = "var(--text-tertiary)";
-                    if (isBlocked) { statusText = "Blockiert"; statusColor = "var(--status-danger)"; }
-                    else if (isDanger) { statusText = "Pflicht · ausstehend"; statusColor = "var(--status-danger)"; }
-                    else if (isCompleted) {
-                      statusText = step.key === "spezialbewilligung" && angehoerigerData.spezialbewilligungEinreichungsDatum
-                        ? `Eingereicht am ${angehoerigerData.spezialbewilligungEinreichungsDatum.split("-").reverse().join(".")}`
-                        : "Abgeschlossen";
-                      statusColor = "var(--status-success-text)";
-                    } else if (isInProgress) { statusText = "In Bearbeitung"; statusColor = "var(--text-secondary)"; }
-                    else if (isVisitedButIncomplete) { statusText = "Unvollständig"; statusColor = "var(--status-warning-text)"; }
-
-                    return (
-                      <button
-                        key={step.key}
-                        onClick={() => !isBlocked && goToStep(step.id)}
-                        disabled={isBlocked}
-                        className="ui-fokusring w-full flex items-start text-left cursor-pointer transition-colors"
-                        style={{
-                          gap: "var(--space-2)", padding: "8px 10px", borderRadius: "var(--radius-card)",
-                          opacity: isBlocked ? 0.6 : 1, cursor: isBlocked ? "not-allowed" : "pointer",
-                          background: isSelected ? "var(--brand-primary-light)" : "transparent",
-                        }}
-                        onMouseEnter={e => { if (!isSelected && !isBlocked) e.currentTarget.style.background = "var(--bg-secondary)"; }}
-                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
-                      >
-                        {/* Kein Symbol mehr (§A2): der Zustand steht als Text unter der Beschriftung.
-                            Beschriftungen brechen um statt zu kürzen (kein truncate). */}
-                        <div className="flex-1 min-w-0">
-                          <div style={{ fontSize: "var(--text-small)", fontWeight: isSelected ? "var(--weight-medium)" : "var(--weight-regular)", color: isSelected ? "var(--brand-primary)" : "var(--text-primary)", overflowWrap: "anywhere" }}>
-                            {step.label}
-                          </div>
-                          <div style={{ fontSize: "var(--text-micro)", color: statusColor, marginTop: 2, overflowWrap: "anywhere" }}>
-                            {statusText}
-                          </div>
-                        </div>
-                        {/* Winkel am aktiven Schritt bleibt (Navigationsangabe) */}
-                        {isSelected && !isBlocked && <ChevronRight style={{ width: 16, height: 16, color: "var(--brand-primary)", flexShrink: 0, marginTop: 2 }} />}
-                      </button>
-                    );
-                  })}
-                </nav>
-
-                {/* Trennlinie */}
-                <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "var(--space-4) 0" }} />
+                {/* Abschnitt FORTSCHRITT entfernt (§C): die Phasen sind jetzt die erste
+                   Reiterebene oben. Die Spalte zeigt nur noch, was zugewiesen ist und was ansteht. */}
 
                 {/* ── Abschnitt BEZUGSPERSON (§E): Überschrift IST die Beschriftung; der Chip
                        steht allein darunter, linksbündig, über volle Spaltenbreite (Name bricht nicht um). ── */}
@@ -838,6 +774,55 @@ export function OnboardingPage() {
 
           {/* ── Inhalt (§B): nimmt den Rest, keine eigene Karte ── */}
           <div className="flex-1 flex flex-col min-h-0 min-w-0">
+            {/* ── ERSTE Reiterebene: Phasen (§A). Höhe 40, Zustandssymbol links, aktiver
+                 Eintrag unterstrichen (2px, Textfarbe), Containerfläche ohne Tönung. ── */}
+            <div
+              role="tablist"
+              aria-label="Phasen"
+              className="shrink-0 flex overflow-x-auto"
+              style={{ background: "var(--bg-elevated)" }}
+              onKeyDown={e => {
+                if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+                const btns = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("button:not([disabled])"));
+                const i = btns.indexOf(document.activeElement as HTMLButtonElement);
+                if (i === -1) return;
+                e.preventDefault();
+                (e.key === "ArrowRight" ? btns[i + 1] : btns[i - 1])?.focus();
+              }}
+            >
+              {wizardSteps.map((step) => {
+                const isSelected = currentStep === step.id;
+                const isCompleted = completedSteps.has(step.id);
+                const isDanger = !!step.danger;
+                const isBlocked = !!step.blocked;
+                const isInProgress = visitedSteps.has(step.id) && step.id === currentStep;
+                const isVisitedButIncomplete = visitedSteps.has(step.id) && !isCompleted && !isInProgress;
+                const z = phasenZustand({ isCompleted, isInProgress, isBlocked, isDanger, isVisitedButIncomplete });
+                const ZIcon = z.icon;
+                return (
+                  <button
+                    key={step.key}
+                    role="tab"
+                    aria-selected={isSelected}
+                    onClick={() => !isBlocked && goToStep(step.id)}
+                    disabled={isBlocked}
+                    title={isBlocked ? "Blockiert — Spezialbewilligung zuerst einreichen" : undefined}
+                    className="ui-fokusring relative inline-flex items-center whitespace-nowrap shrink-0 cursor-pointer"
+                    style={{
+                      height: 40, gap: 6, padding: "0 14px", background: "transparent", border: "none", fontFamily: "inherit",
+                      fontSize: "var(--text-small)", fontWeight: isSelected ? "var(--weight-medium)" : "var(--weight-regular)",
+                      color: isSelected ? "var(--text-primary)" : z.color,
+                      opacity: isBlocked ? 0.6 : 1, cursor: isBlocked ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    <ZIcon style={{ width: 14, height: 14, color: z.color, flexShrink: 0 }} role="img" aria-label={z.label} />
+                    <span>{step.label}</span>
+                    {isSelected && <span style={{ position: "absolute", left: 14, right: 14, bottom: 0, height: 2, background: "var(--text-primary)", borderRadius: 1 }} />}
+                  </button>
+                );
+              })}
+            </div>
+
             <div data-scroll-area className="flex-1 overflow-y-auto" style={{ paddingBottom: "var(--space-4)" }}>
               {activeStepData.key === "angehoeriger" && (
                 <StepAngehoeriger
@@ -879,8 +864,9 @@ export function OnboardingPage() {
                 {/* Left: Back (Wizard-Schritt zurück) — Sekundär */}
                 <AppButton variant="sekundaer" icon={ChevronLeft} onClick={goPrev} disabled={currentStep === 1}>Zurück</AppButton>
 
-                {/* Center: Step indicator */}
-                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Schritt {currentStep} von {wizardSteps.length}</span>
+                {/* "Schritt n von 3" entfernt (§D): die Phasenzeile zeigt dieselbe Information
+                   und benennt zusätzlich die Phase. Platzhalter hält die Fusszeile ausbalanciert. */}
+                <span aria-hidden="true" />
 
                 {/* Right: Save + Next/Finish — genau ein Primär (Weiter ODER Abschliessen) */}
                 <div className="flex items-center" style={{ gap: "var(--space-2)" }}>

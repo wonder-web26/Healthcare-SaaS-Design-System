@@ -605,36 +605,46 @@ export function StepAngehoeriger({
       {/* ═══════════════════════════════════════
          HORIZONTAL TAB NAVIGATION
          ═══════════════════════════════════════ */}
-      {/* Reiterzeile: flach im Container (kein Kartenrahmen). "Gespräch" am rechten Ende, fixiert;
-          bei Platzmangel scrollen die Reiter waagrecht (§B/§D). */}
-      <div className="flex items-center" style={{ background: "var(--bg-elevated)", padding: "0 20px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+      {/* ZWEITE Reiterebene: Abschnitte der aktiven Phase (§A). Getönte Fläche über volle
+          Breite, Höhe 34, Schrift 12, KEIN Zustandssymbol, aktiver Eintrag 1.5px unterstrichen;
+          Haarlinie 0.5 oben und unten. "Gespräch" rechts, fixiert; Abschnitte scrollen waagrecht. */}
+      <div className="flex items-center" style={{ background: "var(--bg-secondary)", padding: "0 20px", borderTop: "var(--border-thin) solid var(--border-default)", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
         <div className="flex-1 overflow-x-auto">
-        <div className="flex min-w-max" style={{ gap: 0 }}>
+        <div
+          role="tablist"
+          aria-label="Abschnitte"
+          className="flex min-w-max"
+          style={{ gap: 0 }}
+          onKeyDown={e => {
+            if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+            const btns = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+            const i = btns.indexOf(document.activeElement as HTMLButtonElement);
+            if (i === -1) return;
+            e.preventDefault();
+            (e.key === "ArrowRight" ? btns[i + 1] : btns[i - 1])?.focus();
+          }}
+        >
           {subSteps.map((tab, idx) => {
             const isActive = activeTab === idx;
             const tabStatus = statuses[idx].status;
-            const TabIcon = tab.icon;
 
             return (
               <button
                 key={tab.key}
+                role="tab"
+                aria-selected={isActive}
                 onClick={() => setActiveTab(idx)}
-                className="relative flex items-center whitespace-nowrap transition-colors cursor-pointer"
+                className="ui-fokusring relative flex items-center whitespace-nowrap transition-colors cursor-pointer"
                 style={{
-                  gap: "var(--space-2)", padding: "var(--space-3) var(--space-4)",
-                  fontSize: "var(--text-small)", fontWeight: isActive ? "var(--weight-semibold)" : "var(--weight-medium)",
-                  color: isActive ? "var(--brand-primary)" : tabStatus === "complete" ? "var(--status-success-text)" : "var(--text-secondary)",
-                  background: "transparent", border: "none",
+                  height: 34, padding: "0 14px",
+                  fontSize: "var(--text-meta)", fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",
+                  color: isActive ? "var(--text-primary)" : tabStatus === "complete" ? "var(--status-success-text)" : "var(--text-secondary)",
+                  background: "transparent", border: "none", fontFamily: "inherit",
                 }}
               >
-                {tabStatus === "complete" && !isActive ? (
-                  <CheckCircle2 style={{ width: 14, height: 14, color: "var(--status-success)" }} />
-                ) : (
-                  <TabIcon style={{ width: 14, height: 14 }} />
-                )}
                 {tab.label}
                 {isActive && (
-                  <span className="absolute" style={{ bottom: 0, left: 8, right: 8, height: 2, background: "var(--brand-primary)", borderTopLeftRadius: "var(--radius-pill)", borderTopRightRadius: "var(--radius-pill)" }} />
+                  <span className="absolute" style={{ bottom: 0, left: 10, right: 10, height: 1.5, background: "var(--text-primary)", borderRadius: 1 }} />
                 )}
               </button>
             );
