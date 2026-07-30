@@ -291,6 +291,31 @@ function PeriodBadge({ period }: { period: string }) {
   );
 }
 
+/**
+ * Ob ein Item überhaupt eine Legende besitzt (§B).
+ *
+ * Eine Legende existiert ausschliesslich dort, wo die Bedienflächen nackte Codes
+ * tragen — das ist genau der Matrix-Regelfall: ein Matrix-Layout (matrix /
+ * matrix_columns), bei dem die Kurzlabel-Ausnahme NICHT greift
+ * (getMatrixDisplayMode === "legend"). Einfache Items, gestapelte Feldgruppen und
+ * Matrizen mit erfüllter Kurzlabel-Ausnahme tragen ihren Optionstext selbst → keine
+ * Legende. Nur diese Items rendern in-flow einen LegendBlock (MatrixRenderer /
+ * MatrixColumnsRenderer).
+ *
+ * Genutzt werden die bestehenden Prüfungen: getCompositeType (Layout) und
+ * getMatrixDisplayMode (Code-vs-Text) — keine zweite, parallele Prüfung.
+ */
+function itemHatLegende(code: string): boolean {
+  let ct: ReturnType<typeof getCompositeType>;
+  try {
+    ct = getCompositeType(code);
+  } catch {
+    return false;
+  }
+  if (ct !== "matrix" && ct !== "matrix_columns") return false;
+  return getMatrixDisplayMode(code) === "legend";
+}
+
 // ─── Legend block — tinted, no heading, badges match answer cells (§4.2, §5.5) ─
 
 /**
@@ -822,7 +847,7 @@ export function InterraiNeuPage() {
       let active: string | null = null;
       for (const card of Array.from(container.querySelectorAll<HTMLElement>("[data-item]"))) {
         const code = card.getAttribute("data-item");
-        if (!code || getMatrixDisplayMode(code) !== "legend") continue;
+        if (!code || !itemHatLegende(code)) continue;
         const r = card.getBoundingClientRect();
         if (r.top < line - 1 && r.bottom > line + 24) { active = code; break; }
       }
@@ -1297,7 +1322,7 @@ export function InterraiNeuPage() {
                   gap: 10,
                   padding: "5px 28px",
                   background: "var(--bg-elevated)",
-                  borderBottom: (legendHintItem && bereich.items.find(i => i.code === legendHintItem)?.options && getMatrixDisplayMode(legendHintItem) === "legend")
+                  borderBottom: (legendHintItem && bereich.items.find(i => i.code === legendHintItem)?.options && itemHatLegende(legendHintItem))
                     ? "none"
                     : "0.5px solid var(--border-default)",
                   fontSize: 12,
@@ -1347,7 +1372,7 @@ export function InterraiNeuPage() {
                   so it never oscillates. */}
               {legendHintItem && (() => {
                 const legendItem = bereich.items.find(i => i.code === legendHintItem);
-                if (!legendItem?.options || getMatrixDisplayMode(legendItem.code) !== "legend") return null;
+                if (!legendItem?.options || !itemHatLegende(legendItem.code)) return null;
                 return (
                   <div style={{
                     padding: "6px 28px 8px",

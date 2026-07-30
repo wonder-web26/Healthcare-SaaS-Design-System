@@ -47,7 +47,7 @@ import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
-import { formatFaelligkeit, isoZuDate, formatAnzeige } from "../../lib/datum";
+import { formatFaelligkeit, isoZuDate } from "../../lib/datum";
 import { toast } from "sonner";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { useRecording } from "../recording/RecordingContext";
@@ -714,23 +714,19 @@ export function OnboardingPage() {
       <div className="flex-1 flex min-h-0" style={{ padding: "var(--space-3) var(--space-6) var(--space-4)" }}>
         {/* §B: EIN Container mit Aussenlinie + Radius 10, kein Schatten; zwei Spalten, senkrechte Haarlinie 0.5. */}
         <div className="flex w-full min-h-0" style={{ border: "var(--border-thin) solid var(--border-default)", borderRadius: 10, background: "var(--bg-elevated)", overflow: "hidden" }}>
-          {/* ── Zustandsspalte (§C: 160px fest) mit rechter Haarlinie ── */}
-          <div className="hidden lg:flex shrink-0 flex-col min-h-0 overflow-y-auto" style={{ width: 160, borderRight: "var(--border-thin) solid var(--border-default)", padding: "var(--space-4)" }}>
+          {/* ── Zustandsspalte (200px fest, an den längsten echten Werten geprüft; kein Kürzen, Umbruch erlaubt) ── */}
+          <div className="hidden lg:flex shrink-0 flex-col min-h-0 overflow-y-auto" style={{ width: 200, borderRight: "var(--border-thin) solid var(--border-default)", padding: "var(--space-4)" }}>
                 <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-4)" }}>
                   Fortschritt
                 </div>
 
                 <nav className="flex flex-col" style={{ gap: "var(--space-1)" }}>
-                  {wizardSteps.map((step, idx) => {
-                    const Icon = step.icon;
+                  {wizardSteps.map((step) => {
                     const isSelected = currentStep === step.id;
                     const isCompleted = completedSteps.has(step.id);
                     const isDanger = !!step.danger;
                     const isBlocked = !!step.blocked;
                     const isInProgress = visitedSteps.has(step.id) && step.id === currentStep;
-
-                    const iconBg = isBlocked ? "var(--status-danger-bg)" : isDanger ? "var(--status-danger)" : isCompleted ? "var(--status-success)" : isInProgress ? "var(--brand-primary)" : "var(--bg-secondary)";
-                    const iconColor = isBlocked ? "var(--status-danger)" : (isDanger || isCompleted || isInProgress) ? "var(--text-on-dark)" : "var(--text-secondary)";
 
                     const isVisitedButIncomplete = visitedSteps.has(step.id) && !isCompleted && !isInProgress;
                     let statusText = "Ausstehend";
@@ -746,39 +742,32 @@ export function OnboardingPage() {
                     else if (isVisitedButIncomplete) { statusText = "Unvollständig"; statusColor = "var(--status-warning-text)"; }
 
                     return (
-                      <div key={step.key}>
-                        <button
-                          onClick={() => !isBlocked && goToStep(step.id)}
-                          disabled={isBlocked}
-                          className="w-full flex items-start text-left cursor-pointer transition-colors"
-                          style={{
-                            gap: "var(--space-2)", padding: "8px 10px", borderRadius: "var(--radius-card)",
-                            opacity: isBlocked ? 0.6 : 1, cursor: isBlocked ? "not-allowed" : "pointer",
-                            background: isSelected ? "var(--brand-primary-light)" : "transparent",
-                          }}
-                          onMouseEnter={e => { if (!isSelected && !isBlocked) e.currentTarget.style.background = "var(--bg-secondary)"; }}
-                          onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
-                        >
-                          <div className="shrink-0 flex items-center justify-center" style={{ width: 32, height: 32, borderRadius: "var(--radius-card)", background: iconBg }}>
-                            {isCompleted ? <Check style={{ width: 14, height: 14, color: iconColor }} /> : <Icon style={{ width: 14, height: 14, color: iconColor }} />}
+                      <button
+                        key={step.key}
+                        onClick={() => !isBlocked && goToStep(step.id)}
+                        disabled={isBlocked}
+                        className="ui-fokusring w-full flex items-start text-left cursor-pointer transition-colors"
+                        style={{
+                          gap: "var(--space-2)", padding: "8px 10px", borderRadius: "var(--radius-card)",
+                          opacity: isBlocked ? 0.6 : 1, cursor: isBlocked ? "not-allowed" : "pointer",
+                          background: isSelected ? "var(--brand-primary-light)" : "transparent",
+                        }}
+                        onMouseEnter={e => { if (!isSelected && !isBlocked) e.currentTarget.style.background = "var(--bg-secondary)"; }}
+                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
+                      >
+                        {/* Kein Symbol mehr (§A2): der Zustand steht als Text unter der Beschriftung.
+                            Beschriftungen brechen um statt zu kürzen (kein truncate). */}
+                        <div className="flex-1 min-w-0">
+                          <div style={{ fontSize: "var(--text-small)", fontWeight: isSelected ? "var(--weight-medium)" : "var(--weight-regular)", color: isSelected ? "var(--brand-primary)" : "var(--text-primary)", overflowWrap: "anywhere" }}>
+                            {step.label}
                           </div>
-                          <div className="flex-1 min-w-0" style={{ paddingTop: 2 }}>
-                            <div className="truncate" style={{ fontSize: "var(--text-small)", fontWeight: isSelected ? "var(--weight-medium)" : "var(--weight-regular)", color: isSelected ? "var(--brand-primary)" : "var(--text-primary)" }}>
-                              {step.label}
-                            </div>
-                            <div className="truncate" style={{ fontSize: "var(--text-micro)", color: statusColor, marginTop: 2 }}>
-                              {statusText}
-                            </div>
+                          <div style={{ fontSize: "var(--text-micro)", color: statusColor, marginTop: 2, overflowWrap: "anywhere" }}>
+                            {statusText}
                           </div>
-                          {isSelected && !isBlocked && <ChevronRight style={{ width: 16, height: 16, color: "var(--brand-primary)", flexShrink: 0, marginTop: 2 }} />}
-                          {isDanger && <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning)", flexShrink: 0, marginTop: 2 }} title="Erforderlich wegen Aufenthaltsstatus B" />}
-                        </button>
-                        {idx < wizardSteps.length - 1 && (
-                          <div style={{ display: "flex", justifyContent: "flex-start", paddingLeft: 22 }}>
-                            <div style={{ width: "var(--border-thin)", height: 8, background: isCompleted ? "var(--status-success)" : "var(--border-default)", borderRadius: "var(--radius-pill)" }} />
-                          </div>
-                        )}
-                      </div>
+                        </div>
+                        {/* Winkel am aktiven Schritt bleibt (Navigationsangabe) */}
+                        {isSelected && !isBlocked && <ChevronRight style={{ width: 16, height: 16, color: "var(--brand-primary)", flexShrink: 0, marginTop: 2 }} />}
+                      </button>
                     );
                   })}
                 </nav>
@@ -807,11 +796,9 @@ export function OnboardingPage() {
                       <div className="flex flex-col" style={{ gap: "var(--space-2)" }}>
                         {naechste3.map(t => {
                           const d = isoZuDate(t.faelligAm);
-                          const rel = d ? formatFaelligkeit(d) : t.faelligAm;
-                          const abs = d ? formatAnzeige(d) : t.faelligAm;
-                          // §G: innerhalb der Schwelle "relativ · absolut"; jenseits nur das absolute Datum, genau einmal.
-                          // (formatFaelligkeit gibt jenseits der Schwelle selbst das absolute Datum zurück → rel === abs.)
-                          const faelligText = d && rel !== abs ? `${rel} · ${abs}` : abs;
+                          // §A3: in der Spalte NUR die relative Angabe ("Heute", "in 2 Tagen",
+                          // "12 Tage überfällig"). Das absolute Datum steht im Workflow-Reiter.
+                          const faelligText = d ? formatFaelligkeit(d) : t.faelligAm;
                           const ov = t.status === "ueberfaellig";
                           return (
                             <div key={t.id} className="flex items-start" style={{ gap: 6 }}>
@@ -842,7 +829,7 @@ export function OnboardingPage() {
                     )}
                     {/* Erklärsatz nur wenn Aufgaben vorhanden (§H). Einzige Stelle, die das Domänenmodell erklärt. */}
                     <div style={{ marginTop: "var(--space-4)", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
-                      Nach Unterzeichnung erhält die Angehörige einen eigenen Workflow.
+                      Angehörige erhält nach Unterzeichnung einen eigenen Workflow.
                     </div>
                   </>
                 )}

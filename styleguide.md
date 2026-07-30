@@ -145,6 +145,20 @@ Niemals 600 oder 700 verwenden – wirkt zu schwer im Cockpit-Kontext.
 - Listen-Item-Subtitel: small, Weight 400, text-secondary
 - Meta-Infos (Datum, Verantwortlich-Kürzel): meta, Weight 400, text-secondary
 
+### Beschriftungen: kein Kürzen mit Auslassungspunkten (produktweit, verbindlich)
+
+Beschriftungen werden **nie** mit Auslassungspunkten (`…`, `text-overflow: ellipsis`,
+`truncate`, `line-clamp`) gekürzt. Reicht der Platz nicht, **bricht der Text auf
+mehrere Zeilen um** (`overflow-wrap`/normaler Umbruch). Die Regel gilt für **alle
+Module**, nicht nur dort, wo sie bisher ausdrücklich genannt wurde.
+
+Konsequenz für die Umsetzung: Container werden an den **längsten tatsächlichen
+Werten** bemessen (nicht an kurzen Mockup-Beispielen). Ist eine feste Breite nötig,
+wird sie gross genug für Umbruch gewählt; ein zu schmaler Container kürzt nie.
+
+Bereits verletzt (Historie, zur Warnung): interRAI-Bereichsnavigation,
+Schrittbezeichnung im Onboarding-Fortschritt, Zustandsspalte im Onboarding.
+
 ---
 
 ## 4 · Rundungen
