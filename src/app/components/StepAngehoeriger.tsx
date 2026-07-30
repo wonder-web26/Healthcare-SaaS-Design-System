@@ -695,14 +695,8 @@ export function StepAngehoeriger({
           {activeTab === 5 && <DokumenteFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />}
         </div>
       </div>
-
-      {/* ── Hint ── */}
-      <div className="flex items-center" style={{ gap: "var(--space-2)", padding: "var(--space-2) 2px 0" }}>
-        <Info style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
-        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-          Navigieren Sie zwischen den Tabs, um alle Angehörigen-Daten zu erfassen. Pflichtfelder sind mit * markiert.
-        </span>
-      </div>
+      {/* Hinweistext entfernt (§A): erklärte, wie Reiter funktionieren, war auf Reitern
+         ohne Pflichtfeld falsch und schwebte bei leeren Reitern in der Fläche. */}
     </div>
   );
 }

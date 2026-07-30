@@ -89,7 +89,7 @@ export function PersonalienFormV2({
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       {/* Identität */}
       <SectionHeader icon={User} label="Identität" first />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <TextInput label="Name" required value={data.name} onChange={v => set("name", v)} onBlur={() => touch("name")} placeholder="Nachname" error={touched.name && !filled(data.name) ? "Pflichtfeld" : undefined} />
         <TextInput label="Vorname" required value={data.vorname} onChange={v => set("vorname", v)} onBlur={() => touch("vorname")} placeholder="Vorname" error={touched.vorname && !filled(data.vorname) ? "Pflichtfeld" : undefined} />
         <FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => { set("geschlecht", v || ""); touch("geschlecht"); }} options={GESCHLECHT} placeholder="Geschlecht wählen" error={touched.geschlecht && !filled(data.geschlecht) ? "Pflichtfeld" : undefined} />
@@ -98,7 +98,7 @@ export function PersonalienFormV2({
       <div style={{ marginTop: "var(--space-4)" }}>
         <AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => set("ahvNummer", v)} />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <Combobox label="Nationalität" required value={data.nationalitaet || null} onChange={v => {
           touch("nationalitaet");
           if (v === "schweiz") onChange({ ...data, nationalitaet: v || "", aufenthaltsstatus: "CH" });
@@ -124,7 +124,7 @@ export function PersonalienFormV2({
           <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>
             Angaben zur Aufenthaltsbewilligung
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+          <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
             <DateField label="Einreisedatum" required wertFormat="display" bereich="past" value={data.einreisedatum || null} onChange={v => set("einreisedatum", (v as string) ?? "")} onBlur={() => touch("einreisedatum")} />
             <TextInput label="ZEMIS-Nummer" required value={data.zemisNummer} onChange={v => set("zemisNummer", v)} onBlur={() => touch("zemisNummer")} placeholder="ZEMIS-Nummer" hint="Zentrales Migrationsinformationssystem" error={touched.zemisNummer && !filled(data.zemisNummer) ? "Bitte ausfüllen" : undefined} />
             <DateField label="Einreichungsdatum Migrationsamt" required wertFormat="display" bereich="any" value={data.einreichungsdatumMigrationsamt || null} onChange={v => set("einreichungsdatumMigrationsamt", (v as string) ?? "")} onBlur={() => touch("einreichungsdatumMigrationsamt")} />
@@ -138,7 +138,7 @@ export function PersonalienFormV2({
         <SEMMeldeBanner data={data} />
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <FormSelect label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND} placeholder="Zivilstand wählen" />
         <DateField label="Zivilstand seit" required wertFormat="display" bereich="past" value={data.zivilstandSeit || null} onChange={v => set("zivilstandSeit", (v as string) ?? "")} onBlur={() => touch("zivilstandSeit")} />
       </div>
@@ -148,7 +148,7 @@ export function PersonalienFormV2({
       <div style={{ marginBottom: "var(--space-5)" }}>
         <TextInput label="Strasse & Nr." required value={data.strasse} onChange={v => set("strasse", v)} onBlur={() => touch("strasse")} placeholder="Musterstrasse 12" error={touched.strasse && !filled(data.strasse) ? "Pflichtfeld" : undefined} />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <TextInput label="PLZ" required value={data.plz} onChange={v => set("plz", v.replace(/\D/g, "").slice(0, 4))} onBlur={() => touch("plz")} placeholder="8000" />
         <TextInput label="Ort" required value={data.ort} onChange={v => set("ort", v)} onBlur={() => touch("ort")} placeholder="Zürich" error={touched.ort && !filled(data.ort) ? "Pflichtfeld" : undefined} />
         <TextInput label="E-Mail" required value={data.email} onChange={v => set("email", v)} onBlur={() => touch("email")} placeholder="name@example.com" />
@@ -157,7 +157,7 @@ export function PersonalienFormV2({
 
       {/* Krankenkasse (SP-02, SP-03) */}
       <SectionHeader icon={Shield} label="Krankenkasse" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         {/* SP-02: Picklist statt Freitext */}
         <FormSelect label="Krankenkasse" required value={data.krankenkasseName || null} onChange={v => { const bag = getBagNummer(v || ""); onChange({ ...data, krankenkasseName: v || "", ...(bag ? { bagNr: bag } : {}) }); touch("krankenkasseName"); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={touched.krankenkasseName && !filled(data.krankenkasseName) ? "Pflichtfeld" : undefined} />
         {/* SP-03: Kartennummer (umbenannt von Versicherungsnummer) */}
@@ -168,7 +168,7 @@ export function PersonalienFormV2({
 
       {/* Qualifikation */}
       <SectionHeader icon={User} label="Qualifikation" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <FormSelect label="Qualifikationsstufe" required value={data.qualifikation || null} onChange={v => { set("qualifikation", v || ""); touch("qualifikation"); }} options={QUALIFIKATION_OPTIONS} placeholder="Qualifikation wählen" error={touched.qualifikation && !filled(data.qualifikation) ? "Pflichtfeld" : undefined} />
         <FormSelect label="Deutschkenntnisse" required value={data.deutschNiveau || null} onChange={v => { set("deutschNiveau", v || ""); touch("deutschNiveau"); }} options={DEUTSCH_NIVEAU_OPTIONS} placeholder="Niveau wählen" error={touched.deutschNiveau && !filled(data.deutschNiveau) ? "Bitte ausfüllen" : undefined} />
         {data.deutschNiveau && data.deutschNiveau !== "muttersprache" && (
@@ -219,7 +219,7 @@ export function SteuerFormV2({
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={Receipt} label="Quellensteuer" first />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <SegmentedControl label="Quellensteuerpflichtig?" required value={data.quellensteuer} onChange={v => { if (v === "nein") onChange({ ...data, quellensteuer: v, quellensteuerTarif: "" }); else set("quellensteuer", v); }} options={JA_NEIN} hint="Nicht-CH-Bürger mit B/L sind i.d.R. quellensteuerpflichtig" />
         <FormSelect label="Konfession" required value={data.konfession || null} onChange={v => { set("konfession", v || ""); touch("konfession"); }} options={KONFESSION_OPTIONS} placeholder="Konfession wählen" hint="Relevant für Kirchensteuer" error={touched.konfession && !filled(data.konfession) ? "Pflichtfeld" : undefined} />
       </div>
@@ -307,7 +307,7 @@ export function SteuerFormV2({
       })()}
 
       <SectionHeader icon={Shield} label="Sozialversicherungen" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <SegmentedControl label="BVG-versichert?" required value={data.bvgVersichert} onChange={v => set("bvgVersichert", v)} options={JA_NEIN} />
         <SegmentedControl label="UVG-versichert?" required value={data.uvgVersichert} onChange={v => set("uvgVersichert", v)} options={JA_NEIN} />
         <SegmentedControl label="Sozialamt involviert?" required value={data.sozialamtInvolviert} onChange={v => { if (v === "nein") onChange({ ...data, sozialamtInvolviert: v, sozialamtKontakt: "" }); else set("sozialamtInvolviert", v); }} options={JA_NEIN} />
@@ -341,7 +341,7 @@ export function AnstellungFormV2({
       <SectionHeader icon={Briefcase} label="Externe Anstellung" first />
       <SegmentedControl label="Bereits bei einem anderen Arbeitgeber angestellt?" required value={data.arbeitetExtern} onChange={v => set("arbeitetExtern", v)} options={JA_NEIN} />
       {data.arbeitetExtern === "ja" && (
-        <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+        <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
           <TextInput label="Funktion extern" required value={data.externeFunktion} onChange={v => set("externeFunktion", v)} onBlur={() => touch("externeFunktion")} placeholder="z.B. Pflegehelferin" error={touched.externeFunktion && !filled(data.externeFunktion) ? "Bitte ausfüllen" : undefined} />
           <NumberInput label="Pensum extern" required value={data.externesPensumProzent} onChange={v => set("externesPensumProzent", v)} suffix="%" placeholder="50" />
           <DateField label="Eintritt extern" required wertFormat="display" bereich="any" value={data.externerEintritt || null} onChange={v => set("externerEintritt", (v as string) ?? "")} onBlur={() => touch("externerEintritt")} />
@@ -350,7 +350,7 @@ export function AnstellungFormV2({
       )}
       {/* Anstellung Spitex — Lohnart ist immer Stundenlohn in der Angehörigenpflege */}
       <SectionHeader icon={Briefcase} label="Anstellung" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <FormSelect label="Funktion" required value={data.funktion || null} onChange={v => { set("funktion", v || ""); touch("funktion"); }} options={FUNKTIONEN} placeholder="Funktion wählen" error={touched.funktion && !filled(data.funktion) ? "Pflichtfeld" : undefined} />
         <DateField label="Eintrittsdatum" required wertFormat="display" bereich="any" value={data.eintrittsdatum || null} onChange={v => set("eintrittsdatum", (v as string) ?? "")} onBlur={() => touch("eintrittsdatum")} />
         <NumberInput label="Stundenlohn" required value={data.stundenlohn} onChange={v => set("stundenlohn", v)} suffix="CHF" placeholder="32.00" />
@@ -373,7 +373,7 @@ export function AnstellungFormV2({
       })()}
 
       <SectionHeader icon={CreditCard} label="Auszahlung" />
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+      <div style={{ display: "flex", flexDirection: "column", rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <TextInput label="Bankname" required value={data.bankname} onChange={v => set("bankname", v)} onBlur={() => touch("bankname")} placeholder="z.B. PostFinance, UBS, Raiffeisen" error={touched.bankname && !filled(data.bankname) ? "Pflichtfeld" : undefined} />
         <IBANInput label="IBAN" required value={data.iban} onChange={v => set("iban", v)} />
       </div>

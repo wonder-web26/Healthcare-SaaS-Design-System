@@ -86,11 +86,11 @@ export function DatePicker({ label, required, error, success, hint, value, onCha
           onKeyDown={e => { if (e.key === "Escape") setOpen(false); }}
           className="w-full text-left outline-none transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
-            padding: "11px 16px 11px 42px",
+            height: "var(--field-height)", padding: "0 16px 0 42px",
             borderRadius: "var(--radius-card)",
             border: `${borderWidth} solid ${borderColor}`,
             background: "var(--bg-elevated)",
-            fontSize: "var(--text-body)",
+            fontSize: "var(--text-small)",
             color: value ? "var(--text-primary)" : "var(--text-tertiary)",
             fontWeight: "var(--weight-regular)",
           }}
@@ -110,7 +110,7 @@ export function DatePicker({ label, required, error, success, hint, value, onCha
               <button type="button" onClick={prevMonth} className="flex items-center justify-center cursor-pointer" style={{ width: 28, height: 28, borderRadius: "var(--radius-pill)", background: "transparent", border: "none" }} onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <ChevronLeft style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
               </button>
-              <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+              <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
                 {MONTHS[viewMonth]} {viewYear}
               </span>
               <button type="button" onClick={nextMonth} className="flex items-center justify-center cursor-pointer" style={{ width: 28, height: 28, borderRadius: "var(--radius-pill)", background: "transparent", border: "none" }} onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>

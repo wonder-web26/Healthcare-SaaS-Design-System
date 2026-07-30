@@ -111,14 +111,14 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
       )}
 
       <SectionHeader icon={Users} label="Partnerangaben" first />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <TextInput label="Vorname" required={istPflicht} value={data.partnerVorname} onChange={v => set("partnerVorname", v)} onBlur={() => touch("partnerVorname")} placeholder="Vorname" error={errIfPflicht("partnerVorname", data.partnerVorname)} />
         <TextInput label="Nachname" required={istPflicht} value={data.partnerName} onChange={v => set("partnerName", v)} onBlur={() => touch("partnerName")} placeholder="Nachname" error={errIfPflicht("partnerName", data.partnerName)} />
         <DateField label="Geburtsdatum" required={istPflicht} wertFormat="display" bereich="past" value={data.partnerGeburtsdatum || null} onChange={v => set("partnerGeburtsdatum", (v as string) ?? "")} onBlur={() => touch("partnerGeburtsdatum")} />
         <FormSelect label="Nationalität" value={data.partnerNationalitaet || null} onChange={v => set("partnerNationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         {/* SP-06/SP-07: Aufenthaltsbewilligung des Partners — triggert Quellensteuer-Automatik (Regel 1) */}
         <FormSelect label="Aufenthaltsbewilligung" required={istPflicht} value={data.partnerAufenthaltsstatus || null} onChange={v => {
           const bewilligung = v || "";
@@ -204,7 +204,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
       {/* Stufe 1: Anzahl Kinder (Pflicht, unabhaengig von Frage 2) */}
       {hasKids && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
+          <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
             <TextInput
               label="Anzahl unterhaltspflichtige Kinder"
               required
@@ -241,7 +241,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                     removeDisabled={data.kinder.length <= 1}
                     removeDisabledTooltip="Mindestens ein Kind erforderlich"
                   >
-                    <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-4)" }}>
+                    <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
                       <TextInput label="Vorname" required value={kind.vorname} onChange={v => updateKind(kind.id, "vorname", v)} placeholder="Vorname" />
                       <TextInput label="Nachname" required value={kind.name} onChange={v => updateKind(kind.id, "name", v)} placeholder="Nachname" />
                       <DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={kind.geburtsdatum || null} onChange={v => updateKind(kind.id, "geburtsdatum", (v as string) ?? "")} />
@@ -353,7 +353,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
         {vollstaendig} von {gesamtAnzahl} vollständig{pflichtOffen > 0 ? ` · ${pflichtOffen} Pflicht offen` : ""}
       </div>
 
-      <div className="flex flex-col" style={{ gap: "var(--space-4)" }}>
+      <div className="flex flex-col" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         {sichtbar.map(doc => {
           /* ── modus=unterschrift: Status-Anzeige, kein Upload-Slot ── */
           if (doc.modus === "unterschrift") {

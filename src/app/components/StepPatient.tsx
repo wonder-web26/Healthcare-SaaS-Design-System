@@ -47,6 +47,7 @@ import {
    ══════════════════════════════════════════ */
 
 import { useNavigate } from "react-router";
+import { LeerZustand } from "./ui/LeerZustand";
 import { TabPersonalienV2, TabSteuerV2, TabAnamneseV2 } from "./form/MigratedPatientForms";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
@@ -567,16 +568,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {activeTab === 9 && <TabDokumente data={data} onChange={onChange} />}
         </div>
       </div>
-
-      {/* ── Hint ── */}
-      <div className="flex items-center" style={{ gap: "var(--space-2)", padding: "var(--space-2) 2px 0" }}>
-        <Info style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
-        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-          Navigieren Sie zwischen den Tabs, um alle Patientendaten zu erfassen. Pflichtfelder sind mit * markiert.
-        </span>
-      </div>
-
-      {/* Recording handled globally via RecordingContext + GlobalRecordingBar */}
+      {/* Hinweistext entfernt (§A). Recording handled globally via RecordingContext + GlobalRecordingBar */}
     </div>
   );
 }
@@ -2281,12 +2273,14 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
 function OnboardingTabBA({ onboardingId }: { onboardingId: string }) {
   const person = getPersonByOnboardingId(onboardingId);
   if (!person) {
+    // Regulärer Leerzustand (vorbereitender Schritt): keine Bedarfsabklärung erfasst.
+    // Sie entsteht aus dem aufgezeichneten Gespräch ("Gespräch" in der Reiterzeile).
     return (
-      <div style={{ padding: "var(--space-8)", textAlign: "center" }}>
-        <div style={{ fontSize: "var(--text-body)", color: "var(--text-tertiary)" }}>
-          Keine Person für dieses Onboarding hinterlegt.
-        </div>
-      </div>
+      <LeerZustand
+        icon={ClipboardList}
+        titel="Noch keine Bedarfsabklärung"
+        untertitel="Sie entsteht aus dem aufgezeichneten Gespräch."
+      />
     );
   }
   return (
@@ -2298,6 +2292,7 @@ function OnboardingTabBA({ onboardingId }: { onboardingId: string }) {
 }
 
 function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {
+  const navigate = useNavigate();
   const pp = MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === onboardingId);
   const [diagnosen, setDiagnosen] = useState<Pflegediagnose[]>([]);
   const [massnahmen, setMassnahmen] = useState<Massnahme[]>([]);
@@ -2325,11 +2320,14 @@ function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {
     setArztDiagnosen(ad.map(d => ({ ...d })));
   }, [pp?.id, onboardingId]);
 
+  // §B: einheitlicher Leerzustand; Aktion ergänzt (Text sagte "manuell erstellt", Knopf fehlte).
   if (!pp) return (
-    <div style={{ padding: "var(--space-6)", textAlign: "center", color: "var(--text-tertiary)" }}>
-      <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>Noch keine Pflegeplanung</div>
-      <div style={{ fontSize: "var(--text-small)" }}>Wird aus dem Gespräch oder manuell erstellt.</div>
-    </div>
+    <LeerZustand
+      icon={ClipboardList}
+      titel="Noch keine Pflegeplanung"
+      untertitel="Wird aus dem Gespräch oder manuell erstellt."
+      aktion={{ label: "Pflegeplanung erstellen", onClick: () => navigate("/pflegeplanung/neu"), icon: Plus }}
+    />
   );
 
   const statusLabel = pp.status === "entwurf" ? "Entwurf" : pp.status === "in-bearbeitung" ? "In Bearbeitung" : pp.status === "validiert" ? "Validiert" : "Abgeschlossen";
@@ -2817,15 +2815,14 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
       )
     : SPITEX_LEISTUNGSKATALOG_2025.filter(p => p.klvKategorie !== null);
 
-  // ─── Empty state ─────────────────────────────────────
+  // ─── Empty state (§B: einheitliches Muster, sekundärer Knopf statt Primär) ───
   if (!klv) return (
-    <div style={{ padding: "var(--space-6)", textAlign: "center", color: "var(--text-tertiary)" }}>
-      <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>Noch keine KLV-Verordnung</div>
-      <div style={{ fontSize: "var(--text-small)", marginBottom: 16 }}>Wird aus dem Gespräch oder manuell erstellt.</div>
-      <button onClick={() => navigate("/klv/neu")} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}>
-        <FileText style={{ width: 14, height: 14 }} /> KLV anlegen
-      </button>
-    </div>
+    <LeerZustand
+      icon={FileText}
+      titel="Noch keine KLV-Verordnung"
+      untertitel="Wird aus dem Gespräch oder manuell erstellt."
+      aktion={{ label: "KLV anlegen", onClick: () => navigate("/klv/neu"), icon: FileText }}
+    />
   );
 
   // ─── KLV exists — full inline editor ──────────────────

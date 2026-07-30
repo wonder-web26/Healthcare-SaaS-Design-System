@@ -27,11 +27,12 @@ export function TextInput({ label, required, error, success, hint, value, onChan
         onBlur={() => setFocused(false)}
         className="w-full outline-none transition-all"
         style={{
-          padding: "11px 16px",
+          height: "var(--field-height)",
+          padding: "0 16px",
           borderRadius: "var(--radius-card)",
           border: `${borderWidth} solid ${borderColor}`,
           background: "var(--bg-elevated)",
-          fontSize: "var(--text-body)",
+          fontSize: "var(--text-small)",
           color: "var(--text-primary)",
           fontWeight: "var(--weight-regular)",
         }}

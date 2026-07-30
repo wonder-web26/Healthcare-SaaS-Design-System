@@ -5,7 +5,8 @@
  * APPEND-ONLY, Zeitstempel + Erfasser unveränderlich.
  */
 import { useState } from "react";
-import { Plus, Clock, User, AlertTriangle, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Clock, User, AlertTriangle, Check, ChevronDown, ChevronUp, Activity } from "lucide-react";
+import { LeerZustand } from "../ui/LeerZustand";
 import { AKTIVE_PARAMETER, pruefeVitalPlausibilitaet } from "../../../lib/stammdaten/vitalparameter";
 import { erfasseMessung, getMessungenFuerPatient, type Messwert, type Vitalmessung } from "../../../lib/vitaldaten/store";
 import { toast } from "sonner";
@@ -67,6 +68,20 @@ export function VitaldatenTab({ patientId, erfasser = "Sandra Weber" }: Props) {
     const d = new Date(iso);
     return d.toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }) + ", " + d.toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" });
   };
+
+  // §B: Leerzustand ohne Überschrift/Zähler/Primärknopf; sekundäre Aktion öffnet das Formular.
+  if (messungen.length === 0 && !showForm) {
+    return (
+      <div style={{ padding: "var(--space-4)" }}>
+        <LeerZustand
+          icon={Activity}
+          titel="Noch keine Vitaldaten"
+          untertitel="Erfasse die erste Messung — Blutdruck, Puls, Temperatur und mehr."
+          aktion={{ label: "Messung erfassen", onClick: () => setShowForm(true), icon: Plus }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "var(--space-4)" }}>

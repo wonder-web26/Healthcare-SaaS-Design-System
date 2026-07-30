@@ -56,11 +56,11 @@ export function Select({ label, required, error, success, hint, value, onChange,
           onKeyDown={handleKeyDown}
           className="w-full text-left outline-none transition-all flex items-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
-            padding: "11px 40px 11px 16px",
+            height: "var(--field-height)", padding: "0 40px 0 16px",
             borderRadius: "var(--radius-card)",
             border: `${borderWidth} solid ${borderColor}`,
             background: "var(--bg-elevated)",
-            fontSize: "var(--text-body)",
+            fontSize: "var(--text-small)",
             color: selectedLabel ? "var(--text-primary)" : "var(--text-tertiary)",
             fontWeight: "var(--weight-regular)",
             position: "relative",
@@ -90,7 +90,7 @@ export function Select({ label, required, error, success, hint, value, onChange,
                   style={{
                     padding: "10px 16px",
                     borderRadius: "var(--radius-card)",
-                    fontSize: "var(--text-body)",
+                    fontSize: "var(--text-small)",
                     color: isSelected ? "var(--brand-primary)" : "var(--text-primary)",
                     fontWeight: isSelected ? "var(--weight-medium)" : "var(--weight-regular)",
                     background: isSelected ? "var(--brand-primary-light)" : isFocused ? "var(--bg-secondary)" : "transparent",

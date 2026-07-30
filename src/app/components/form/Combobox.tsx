@@ -76,11 +76,11 @@ export function Combobox({ label, required, error, success, hint, value, onChang
           onBlur={() => setFocused(false)}
           className="w-full text-left outline-none transition-all flex items-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
-            padding: "11px 40px 11px 16px",
+            height: "var(--field-height)", padding: "0 40px 0 16px",
             borderRadius: "var(--radius-card)",
             border: `${borderWidth} solid ${borderColor}`,
             background: "var(--bg-elevated)",
-            fontSize: "var(--text-body)",
+            fontSize: "var(--text-small)",
             color: selectedLabel ? "var(--text-primary)" : "var(--text-tertiary)",
             fontWeight: "var(--weight-regular)",
           }}
@@ -108,7 +108,7 @@ export function Combobox({ label, required, error, success, hint, value, onChang
                 onChange={e => { setSearch(e.target.value); setFocusIdx(0); }}
                 placeholder={searchPlaceholder}
                 className="flex-1 outline-none bg-transparent"
-                style={{ fontSize: "var(--text-body)", color: "var(--text-primary)", border: "none" }}
+                style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", border: "none" }}
               />
             </div>
 
@@ -139,7 +139,7 @@ export function Combobox({ label, required, error, success, hint, value, onChang
                           className="w-full text-left flex items-center cursor-pointer transition-colors"
                           style={{
                             padding: "10px 16px", borderRadius: "var(--radius-card)",
-                            fontSize: "var(--text-body)",
+                            fontSize: "var(--text-small)",
                             color: isSelected ? "var(--brand-primary)" : "var(--text-primary)",
                             fontWeight: isSelected ? "var(--weight-medium)" : "var(--weight-regular)",
                             background: isSelected ? "var(--brand-primary-light)" : isFocused ? "var(--bg-secondary)" : "transparent",
