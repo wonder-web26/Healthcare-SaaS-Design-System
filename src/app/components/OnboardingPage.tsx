@@ -58,7 +58,6 @@ import { ONBOARDING_STATUS_CFG, ONBOARDING_STATUS_WERTE, type OnboardingStatus }
 import { getStatus, setzeStatus, getGrund } from "../../lib/onboarding/status-store";
 import { AppButton } from "./ui/AppButton";
 import { StatusMarke } from "./ui/StatusMarke";
-import { SeitenPanel } from "./ui/SeitenPanel";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "./ui/dropdown-menu";
 
 // Erklärsatz zur Aufzeichnung: einmal pro Sitzung beim ersten Öffnen (§E).
@@ -451,9 +450,7 @@ export function OnboardingPage() {
   const ueberfaelligAnzahl = offeneTickets.filter(t => t.status === "ueberfaellig").length;
   const naechste3 = offeneTickets.slice(0, 3);
 
-  // Seitenpanel Workflow (§F)
-  const [workflowPanelOffen, setWorkflowPanelOffen] = useState(false);
-  const [panelFilter, setPanelFilter] = useState<"offen" | "erledigt">("offen");
+  // "Alle N anzeigen" wechselt in den Patienten-Schritt und öffnet dort den Workflow-Reiter (§A).
 
   // Zurück-Ziel: Ursprung aus der URL (?returnTo=), sonst die Onboarding-Übersicht.
   // Beschriftung nennt das ZIEL (Navigationsrahmen §E), nicht die Handlung.
@@ -485,6 +482,19 @@ export function OnboardingPage() {
     const target = assessments.find(a => a.status === "in_bearbeitung") ?? createAssessment(person.id, "erstabklaerung");
     recording.startRecording(person.id, target.id, `${person.vorname} ${person.nachname}`);
   };
+
+  // "Gespräch" (§D): steht am rechten Ende der Reiterzeile des jeweiligen Schritts,
+  // fix sichtbar. Während der Aufzeichnung ein stiller Hinweis statt Knopf.
+  const gespraechReiter = isExisting ? (
+    isRecording ? (
+      <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-meta)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--status-danger)", animation: "pulse 1.5s ease-in-out infinite" }} />
+        Aufzeichnung läuft
+      </span>
+    ) : (
+      <AppButton variant="sekundaer" icon={Mic} onClick={startGespraech}>Gespräch</AppButton>
+    )
+  ) : null;
 
   // Restore the step + tab carried in the URL when returning from the interRAI
   // form (e.g. ?step=patient&tab=interrai). Runs once on mount.
@@ -605,73 +615,9 @@ export function OnboardingPage() {
       {/* AUFGABENSTREIFEN entfernt (§D): Inhalt ist in Abschnitt WORKFLOW der
          Zustandsspalte aufgegangen. Karte "Nächster Betreuungsrhythmus" existiert nicht mehr. */}
 
-      {/* ═══════════════════════════════════════
-         WORKFLOW-SEITENPANEL (§F) — wiederverwendbare SeitenPanel-Komponente
-         ═══════════════════════════════════════ */}
-      <SeitenPanel open={workflowPanelOffen} onClose={() => setWorkflowPanelOffen(false)} title="Workflow">
-        <div className="flex flex-col" style={{ minHeight: "100%" }}>
-          <div className="flex-1" style={{ padding: "var(--space-4) var(--space-5)" }}>
-            {/* Filter Offen / Erledigt */}
-            <div className="flex items-center" style={{ gap: 6, marginBottom: "var(--space-4)" }}>
-              {(["offen", "erledigt"] as const).map(f => {
-                const aktiv = panelFilter === f;
-                const n = f === "offen" ? offeneAnzahl : erledigteTickets.length;
-                return (
-                  <button
-                    key={f}
-                    onClick={() => setPanelFilter(f)}
-                    className="ui-fokusring cursor-pointer"
-                    style={{ height: "var(--marke-height-interaktiv)", padding: "0 12px", borderRadius: "var(--control-radius)", fontSize: "var(--text-meta)", fontWeight: 500, fontFamily: "inherit", border: aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: aktiv ? "var(--action-primary-bg)" : "var(--bg-elevated)", color: aktiv ? "var(--action-primary-fg)" : "var(--text-secondary)" }}
-                  >
-                    {f === "offen" ? "Offen" : "Erledigt"} {n}
-                  </button>
-                );
-              })}
-            </div>
-            {/* Liste */}
-            <div className="flex flex-col" style={{ gap: "var(--space-2)" }}>
-              {(panelFilter === "offen" ? offeneTickets : erledigteTickets).map(t => {
-                const d = isoZuDate(t.faelligAm);
-                const rel = d ? formatFaelligkeit(d) : t.faelligAm;
-                const abs = d ? formatAnzeige(d) : t.faelligAm;
-                const ov = t.status === "ueberfaellig";
-                const done = t.status === "erledigt";
-                return (
-                  <div key={t.id} className="flex items-start justify-between" style={{ gap: 10, padding: "8px 10px", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--control-radius)" }}>
-                    <div className="flex items-start min-w-0" style={{ gap: 8 }}>
-                      {done
-                        ? <CheckCircle2 style={{ width: 14, height: 14, color: "var(--status-success)", flexShrink: 0, marginTop: 1 }} />
-                        : ov
-                          ? <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
-                          : <Circle style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 1 }} />}
-                      <div className="min-w-0">
-                        <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{t.label}</div>
-                        {!done && (
-                          <div style={{ fontSize: "var(--text-micro)", fontWeight: ov ? "var(--weight-semibold)" : 400, color: ov ? "var(--status-danger)" : "var(--text-tertiary)" }}>{rel} · {abs}</div>
-                        )}
-                      </div>
-                    </div>
-                    {!done && (
-                      <AppButton variant="sekundaer" className="shrink-0" onClick={() => { setWorkflowPanelOffen(false); oeffneRhythmus(); }}>Öffnen</AppButton>
-                    )}
-                  </div>
-                );
-              })}
-              {(panelFilter === "offen" ? offeneTickets : erledigteTickets).length === 0 && (
-                <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-                  {panelFilter === "offen"
-                    ? (rhythmusTickets.length === 0 ? "Noch keine Aufgaben erzeugt." : "Keine offenen Aufgaben.")
-                    : "Keine erledigten Aufgaben."}
-                </div>
-              )}
-            </div>
-          </div>
-          {/* Fuss: Erklärsatz zur Aufteilung nach der Unterschrift */}
-          <div style={{ padding: "var(--space-4) var(--space-5)", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
-            Nach Unterzeichnung erhält die Angehörige einen eigenen Workflow.
-          </div>
-        </div>
-      </SeitenPanel>
+      {/* Workflow-Seitenpanel entfernt (§A): der Workflow ist bereits ein Reiter im
+         Patienten-Schritt. "Alle N anzeigen" wechselt dorthin (siehe oeffneRhythmus). */}
+
 
       {/* ═══════════════════════════════════════
          ABBRUCH-DIALOG — destruktiv, Grund erforderlich
@@ -765,12 +711,11 @@ export function OnboardingPage() {
       {/* ═══════════════════════════════════════
          MAIN SPLIT LAYOUT
          ═══════════════════════════════════════ */}
-      <div className="flex-1 flex min-h-0" style={{ padding: "0 var(--space-6)" }}>
-        <div className="flex w-full min-h-0" style={{ gap: "var(--space-5)" }}>
-          {/* ── LEFT: Sidebar (desktop) ── */}
-          <div className="hidden lg:flex shrink-0 flex-col min-h-0" style={{ width: 240 }}>
-            <div className="flex-1 overflow-y-auto" style={{ paddingRight: "var(--space-1)" }}>
-              <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-4)" }}>
+      <div className="flex-1 flex min-h-0" style={{ padding: "var(--space-3) var(--space-6) var(--space-4)" }}>
+        {/* §B: EIN Container mit Aussenlinie + Radius 10, kein Schatten; zwei Spalten, senkrechte Haarlinie 0.5. */}
+        <div className="flex w-full min-h-0" style={{ border: "var(--border-thin) solid var(--border-default)", borderRadius: 10, background: "var(--bg-elevated)", overflow: "hidden" }}>
+          {/* ── Zustandsspalte (§C: 160px fest) mit rechter Haarlinie ── */}
+          <div className="hidden lg:flex shrink-0 flex-col min-h-0 overflow-y-auto" style={{ width: 160, borderRight: "var(--border-thin) solid var(--border-default)", padding: "var(--space-4)" }}>
                 <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-4)" }}>
                   Fortschritt
                 </div>
@@ -841,75 +786,71 @@ export function OnboardingPage() {
                 {/* Trennlinie */}
                 <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "var(--space-4) 0" }} />
 
-                {/* ── Abschnitt BEZUGSPERSON: eine Zuweisung, kein Merkmal des Falls (§C) ── */}
+                {/* ── Abschnitt BEZUGSPERSON (§E): Überschrift IST die Beschriftung; der Chip
+                       steht allein darunter, linksbündig, über volle Spaltenbreite (Name bricht nicht um). ── */}
                 <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-3)" }}>Bezugsperson</div>
                 {caseId ? <BezugspersonAuswahl caseId={caseId} /> : <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>—</span>}
 
                 {/* Trennlinie */}
                 <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "var(--space-4) 0" }} />
 
-                {/* ── Abschnitt WORKFLOW: die drei nächsten offenen Aufgaben, überfällige zuerst (§C) ── */}
+                {/* ── Abschnitt WORKFLOW (§C/§E/§H): Überschrift IST die Beschriftung; darunter nur Aufgaben ── */}
                 <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-3)" }}>Workflow</div>
-                {naechste3.length > 0 ? (
-                  <div className="flex flex-col" style={{ gap: "var(--space-2)" }}>
-                    {naechste3.map(t => {
-                      const d = isoZuDate(t.faelligAm);
-                      const rel = d ? formatFaelligkeit(d) : t.faelligAm;
-                      const ov = t.status === "ueberfaellig";
-                      return (
-                        <div key={t.id} className="flex items-start" style={{ gap: 6 }}>
-                          {ov
-                            ? <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
-                            : <Circle style={{ width: 13, height: 13, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 1 }} />}
-                          <div className="min-w-0">
-                            <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{t.label}</div>
-                            {/* Überfällig an Icon UND Schriftstärke/Farbe erkennbar */}
-                            <div style={{ fontSize: "var(--text-micro)", fontWeight: ov ? "var(--weight-semibold)" : 400, color: ov ? "var(--status-danger)" : "var(--text-tertiary)" }}>{rel}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
+                {rhythmusTickets.length === 0 ? (
+                  // Leerzustand: nur der Leerzustandstext, KEIN Aufteilungssatz (§H)
                   <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-                    {rhythmusTickets.length === 0 ? "Noch keine Aufgaben erzeugt. Sie entstehen im Patienten-Schritt." : "Alle Aufgaben erledigt."}
+                    Noch keine Aufgaben erzeugt. Sie entstehen im Patienten-Schritt.
                   </div>
-                )}
-                {offeneAnzahl > 0 && (
-                  <button
-                    onClick={() => setWorkflowPanelOffen(true)}
-                    className="ui-fokusring inline-flex items-center cursor-pointer"
-                    style={{ marginTop: "var(--space-3)", gap: 4, padding: 0, background: "none", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-secondary)" }}
-                    onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
-                    onMouseLeave={e => (e.currentTarget.style.color = "var(--text-secondary)")}
-                  >
-                    Alle {offeneAnzahl} anzeigen <ChevronRight style={{ width: 13, height: 13 }} />
-                  </button>
-                )}
-                {/* Einzige Stelle, an der die Seite ihr Domänenmodell erklärt — nicht entfernen. */}
-                <div style={{ marginTop: "var(--space-4)", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
-                  Nach Unterzeichnung erhält die Angehörige einen eigenen Workflow.
-                </div>
-
-              </div>
-            </div>
-          </div>
-
-          {/* ── RIGHT: Content ── */}
-          <div className="flex-1 flex flex-col min-h-0 min-w-0">
-            {/* "Gespräch" — Aktion (sekundärer Knopf) rechts über der Reiterleiste (§E) */}
-            {isExisting && (
-              <div className="shrink-0 flex items-center justify-end" style={{ minHeight: "var(--control-height)", paddingBottom: "var(--space-2)" }}>
-                {isRecording ? (
-                  <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--status-danger)", animation: "pulse 1.5s ease-in-out infinite" }} />
-                    Aufzeichnung läuft
-                  </span>
                 ) : (
-                  <AppButton variant="sekundaer" icon={Mic} onClick={startGespraech}>Gespräch</AppButton>
+                  <>
+                    {naechste3.length > 0 ? (
+                      <div className="flex flex-col" style={{ gap: "var(--space-2)" }}>
+                        {naechste3.map(t => {
+                          const d = isoZuDate(t.faelligAm);
+                          const rel = d ? formatFaelligkeit(d) : t.faelligAm;
+                          const abs = d ? formatAnzeige(d) : t.faelligAm;
+                          // §G: innerhalb der Schwelle "relativ · absolut"; jenseits nur das absolute Datum, genau einmal.
+                          // (formatFaelligkeit gibt jenseits der Schwelle selbst das absolute Datum zurück → rel === abs.)
+                          const faelligText = d && rel !== abs ? `${rel} · ${abs}` : abs;
+                          const ov = t.status === "ueberfaellig";
+                          return (
+                            <div key={t.id} className="flex items-start" style={{ gap: 6 }}>
+                              {ov
+                                ? <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
+                                : <Circle style={{ width: 13, height: 13, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 1 }} />}
+                              <div className="min-w-0">
+                                <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{t.label}</div>
+                                <div style={{ fontSize: "var(--text-micro)", fontWeight: ov ? "var(--weight-semibold)" : 400, color: ov ? "var(--status-danger)" : "var(--text-tertiary)" }}>{faelligText}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Alle Aufgaben erledigt.</div>
+                    )}
+                    {offeneAnzahl > 0 && (
+                      <button
+                        onClick={oeffneRhythmus}
+                        className="ui-fokusring inline-flex items-center cursor-pointer"
+                        style={{ marginTop: "var(--space-3)", gap: 4, padding: 0, background: "none", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-secondary)" }}
+                        onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
+                        onMouseLeave={e => (e.currentTarget.style.color = "var(--text-secondary)")}
+                      >
+                        Alle {offeneAnzahl} anzeigen <ChevronRight style={{ width: 13, height: 13 }} />
+                      </button>
+                    )}
+                    {/* Erklärsatz nur wenn Aufgaben vorhanden (§H). Einzige Stelle, die das Domänenmodell erklärt. */}
+                    <div style={{ marginTop: "var(--space-4)", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
+                      Nach Unterzeichnung erhält die Angehörige einen eigenen Workflow.
+                    </div>
+                  </>
                 )}
+
               </div>
-            )}
+
+          {/* ── Inhalt (§B): nimmt den Rest, keine eigene Karte ── */}
+          <div className="flex-1 flex flex-col min-h-0 min-w-0">
             <div data-scroll-area className="flex-1 overflow-y-auto" style={{ paddingBottom: "var(--space-4)" }}>
               {activeStepData.key === "angehoeriger" && (
                 <StepAngehoeriger
@@ -917,6 +858,7 @@ export function OnboardingPage() {
                   onChange={setAngehoerigerData}
                   onValidityChange={setStep1Valid}
                   onOpenSpezialbewilligung={() => setShowSpezialbewilligung(true)}
+                  reiterAktion={gespraechReiter}
                 />
               )}
               {activeStepData.key === "spezialbewilligung" && (
@@ -930,6 +872,7 @@ export function OnboardingPage() {
                   onboardingId={caseId || undefined}
                   requestedTab={requestedPatientTab}
                   onTabSwitched={() => setRequestedPatientTab(null)}
+                  reiterAktion={gespraechReiter}
                 />
               )}
               {activeStepData.key === "vertrag" && (
@@ -943,8 +886,8 @@ export function OnboardingPage() {
               )}
             </div>
 
-            {/* ── FOOTER NAVIGATION ── */}
-            <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6)", background: "var(--bg-primary)", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+            {/* ── FOOTER NAVIGATION (innerhalb des Containers, keine eigene Karte) ── */}
+            <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-5)", background: "transparent", borderTop: "var(--border-thin) solid var(--border-default)" }}>
               <div className="flex items-center justify-between">
                 {/* Left: Back (Wizard-Schritt zurück) — Sekundär */}
                 <AppButton variant="sekundaer" icon={ChevronLeft} onClick={goPrev} disabled={currentStep === 1}>Zurück</AppButton>

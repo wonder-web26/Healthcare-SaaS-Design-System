@@ -3,37 +3,37 @@
  * FIELD with an empty state, not as running text.
  *
  * Two states, identical geometry so nothing shifts when a person is assigned:
- *   - empty:    label + a dashed-bordered surface with a plus and "Zuweisen"
- *   - assigned: label + a solid-bordered surface with an initials circle and name
+ *   - empty:    a dashed-bordered surface with a plus and "Zuweisen"
+ *   - assigned: a solid-bordered surface with an initials circle and the name
  *
- * The label always precedes the value. The surface differs from the surrounding
- * text by at least two signals (border + filled background + rounded shape) —
- * never by colour alone — and is reachable by keyboard when interactive.
+ * Genau EIN Bedienelement (§F): ein Klick auf die Fläche öffnet die Auswahl.
+ * Kein Winkel, kein Kreuz — das Aufheben der Zuweisung liegt in der Auswahl.
  *
- * This is purely the presentation. Data and the assign/change/remove wiring live
- * in the caller: the onboarding header drives it from the care-relationship
- * store via a search popover; the patient dossier renders it read-only. Both use
- * this one component so the look is defined once.
+ * `label` ist optional: wo eine Abschnittsüberschrift bereits die Beschriftung
+ * trägt (Onboarding-Zustandsspalte), wird es weggelassen; die Patientenansicht
+ * nutzt es weiterhin als vorangestellte Beschriftung.
+ *
+ * `voll` stellt den Chip über die volle Breite (Chip allein in der Zeile); der
+ * Name bricht nicht um, sondern wird bei Bedarf mit Ellipse gekürzt.
  */
 import { forwardRef } from "react";
-import { Plus, ChevronDown, X } from "lucide-react";
+import { Plus } from "lucide-react";
 
 export interface BezugspersonFeldProps {
-  label?: string;
+  /** Vorangestellte Beschriftung; null/"" blendet sie aus. */
+  label?: string | null;
   /** The assigned person, or null while none is assigned. */
   person: { initialen: string; name: string } | null;
   /** Click to assign or change. When omitted the field is a static, read-only display. */
   onAktivieren?: () => void;
-  /** Optional remove action (only shown when assigned and interactive). */
-  onEntfernen?: () => void;
-  /** Reflects an open picker — rotates the chevron; optional. */
+  /** Reflects an open picker (optional, for future affordances). */
   offen?: boolean;
   /** Ref to the interactive surface button — lets the caller return focus on close. */
   surfaceRef?: React.Ref<HTMLButtonElement>;
+  /** Full-width chip (chip stands alone on its line). */
+  voll?: boolean;
 }
 
-// Constant geometry across both states — border WIDTH never changes, only its
-// style/colour and the content, so assigning a person never nudges the layout.
 const surfaceBase: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -48,7 +48,7 @@ const surfaceBase: React.CSSProperties = {
 };
 
 export const BezugspersonFeld = forwardRef<HTMLSpanElement, BezugspersonFeldProps>(function BezugspersonFeld(
-  { label = "Bezugsperson", person, onAktivieren, onEntfernen, offen, surfaceRef },
+  { label = "Bezugsperson", person, onAktivieren, surfaceRef, voll },
   ref,
 ) {
   const interaktiv = !!onAktivieren;
@@ -61,8 +61,8 @@ export const BezugspersonFeld = forwardRef<HTMLSpanElement, BezugspersonFeldProp
       >
         <span style={{ fontSize: 9, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{person.initialen}</span>
       </span>
-      <span style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{person.name}</span>
-      {interaktiv && <ChevronDown style={{ width: 11, height: 11, opacity: 0.7, transform: offen ? "rotate(180deg)" : "none", transition: "transform 0.15s ease" }} />}
+      {/* Name einzeilig, bei Bedarf gekürzt (bricht nicht um) */}
+      <span className="truncate" style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)", minWidth: 0 }}>{person.name}</span>
     </>
   ) : (
     <>
@@ -75,36 +75,29 @@ export const BezugspersonFeld = forwardRef<HTMLSpanElement, BezugspersonFeldProp
     ...surfaceBase,
     border: person ? "var(--border-thin) solid var(--border-default)" : "var(--border-thin) dashed var(--border-strong, var(--border-default))",
     cursor: interaktiv ? "pointer" : "default",
+    ...(voll ? { width: "100%", justifyContent: "flex-start", minWidth: 0 } : null),
   };
 
   return (
-    <span ref={ref} className="inline-flex items-center" style={{ gap: 6 }}>
-      <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{label}</span>
+    <span
+      ref={ref}
+      className={voll ? "flex items-center" : "inline-flex items-center"}
+      style={{ gap: 6, ...(voll ? { width: "100%" } : null) }}
+    >
+      {label ? <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{label}</span> : null}
       {interaktiv ? (
         <button
           ref={surfaceRef}
           type="button"
           onClick={onAktivieren}
           aria-label={person ? "Bezugsperson ändern" : "Bezugsperson zuweisen"}
-          className="inline-flex items-center"
+          className="ui-fokusring inline-flex items-center"
           style={surfaceStyle}
         >
           {inhalt}
         </button>
       ) : (
         <span className="inline-flex items-center" style={surfaceStyle}>{inhalt}</span>
-      )}
-      {interaktiv && person && onEntfernen && (
-        <button
-          type="button"
-          onClick={onEntfernen}
-          title="Bezugsperson entfernen"
-          aria-label="Bezugsperson entfernen"
-          className="inline-flex items-center cursor-pointer"
-          style={{ background: "none", border: "none", padding: 0, color: "var(--text-tertiary)" }}
-        >
-          <X style={{ width: 11, height: 11 }} />
-        </button>
       )}
     </span>
   );

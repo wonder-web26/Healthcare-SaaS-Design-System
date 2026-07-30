@@ -391,12 +391,14 @@ interface StepPatientProps {
   /** External tab-switch request (e.g. from header pill click) */
   requestedTab?: number | null;
   onTabSwitched?: () => void;
+  /** Aktion am rechten Ende der Reiterzeile (z. B. "Gespräch"), bleibt fixiert sichtbar. */
+  reiterAktion?: React.ReactNode;
 }
 
 /* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
-export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched }: StepPatientProps) {
+export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion }: StepPatientProps) {
   const [activeTab, setActiveTab] = useState(0);
 
   // External tab-switch request
@@ -459,9 +461,11 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
       {/* ═══════════════════════════════════════
          HORIZONTAL TAB NAVIGATION + Recording-Button
          ═══════════════════════════════════════ */}
-      <div className="flex items-center" style={{ background: "var(--bg-elevated)", borderTopLeftRadius: "var(--radius-card)", borderTopRightRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", borderBottom: "none", padding: "0 20px" }}>
+      {/* Reiterzeile: flach im Container (kein Kartenrahmen). "Gespräch" am rechten Ende, fixiert;
+          bei zehn Reitern scrollen sie waagrecht, der Knopf bleibt sichtbar (§B/§D). */}
+      <div className="flex items-center" style={{ background: "var(--bg-elevated)", padding: "0 20px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
         <div className="flex-1 overflow-x-auto">
-        <div className="flex min-w-max" style={{ gap: 0, borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+        <div className="flex min-w-max" style={{ gap: 0 }}>
           {tabDefs.map((tab, idx) => {
             const isActive = activeTab === idx;
             const complete = isTabComplete(tab.key, data);
@@ -493,13 +497,15 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           })}
         </div>
         </div>
-        {/* Aufzeichnen-Button entfernt — lebt jetzt im Aufzeichnungsblock der Pflegeplanung */}
+        {reiterAktion && (
+          <div className="flex items-center shrink-0" style={{ paddingLeft: 12, alignSelf: "stretch" }}>{reiterAktion}</div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════
-         TAB CONTENT
+         TAB CONTENT (flach im Container, kein Kartenrahmen)
          ═══════════════════════════════════════ */}
-      <div style={{ background: "var(--bg-elevated)", borderBottomLeftRadius: "var(--radius-card)", borderBottomRightRadius: "var(--radius-card)", borderLeft: "var(--border-thin) solid var(--border-default)", borderRight: "var(--border-thin) solid var(--border-default)", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+      <div style={{ background: "var(--bg-elevated)" }}>
         <div style={{ padding: "20px 32px 24px" }}>
           {activeTab === 0 && (
             <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />

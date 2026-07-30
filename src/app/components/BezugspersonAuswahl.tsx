@@ -11,6 +11,7 @@
  * the surface when the popover closes.
  */
 import { useRef, useState } from "react";
+import { UserMinus } from "lucide-react";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
 import { PersonenAuswahl, type PersonOption } from "./ui/PersonenAuswahl";
 import { BezugspersonFeld } from "./BezugspersonFeld";
@@ -41,12 +42,13 @@ export function BezugspersonAuswahl({ caseId }: { caseId: string }) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverAnchor asChild>
-        <span className="inline-flex">
+        <span className="flex" style={{ width: "100%" }}>
           <BezugspersonFeld
             surfaceRef={surfaceRef}
+            label={null}
+            voll
             person={selected ? { initialen: selected.initialen, name: diplomierterAnzeigename(selected) } : null}
             onAktivieren={() => setOpen(o => !o)}
-            onEntfernen={selected ? () => zuweisen(null) : undefined}
             offen={open}
           />
         </span>
@@ -66,6 +68,22 @@ export function BezugspersonAuswahl({ caseId }: { caseId: string }) {
           suchePlaceholder="Person suchen"
           leerText="Keine Person gefunden."
         />
+        {/* §F: Aufheben der Zuweisung als Eintrag innerhalb der Auswahl (nur wenn zugewiesen). */}
+        {selected && (
+          <>
+            <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "6px 4px" }} />
+            <button
+              type="button"
+              onClick={() => zuweisen(null)}
+              className="ui-fokusring w-full inline-flex items-center cursor-pointer"
+              style={{ gap: 8, padding: "8px 10px", borderRadius: "var(--radius-input)", background: "transparent", border: "none", fontFamily: "inherit", fontSize: "var(--text-small)", color: "var(--status-danger)" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >
+              <UserMinus style={{ width: 15, height: 15 }} /> Zuweisung aufheben
+            </button>
+          </>
+        )}
       </PopoverContent>
     </Popover>
   );

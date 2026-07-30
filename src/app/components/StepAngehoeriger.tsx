@@ -550,6 +550,8 @@ interface StepAngehoerigerProps {
   onChange: (data: AngehoerigerFormData) => void;
   onValidityChange?: (isValid: boolean) => void;
   onOpenSpezialbewilligung?: () => void;
+  /** Aktion am rechten Ende der Reiterzeile (z. B. "Gespräch"), bleibt fixiert sichtbar. */
+  reiterAktion?: React.ReactNode;
 }
 
 /* ══════��═══════════════════════════════════
@@ -560,6 +562,7 @@ export function StepAngehoeriger({
   onChange,
   onValidityChange,
   onOpenSpezialbewilligung,
+  reiterAktion,
 }: StepAngehoerigerProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -602,8 +605,11 @@ export function StepAngehoeriger({
       {/* ═══════════════════════════════════════
          HORIZONTAL TAB NAVIGATION
          ═══════════════════════════════════════ */}
-      <div className="overflow-x-auto" style={{ background: "var(--bg-elevated)", borderTopLeftRadius: "var(--radius-card)", borderTopRightRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", borderBottom: "none", padding: "0 20px" }}>
-        <div className="flex min-w-max" style={{ gap: 0, borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+      {/* Reiterzeile: flach im Container (kein Kartenrahmen). "Gespräch" am rechten Ende, fixiert;
+          bei Platzmangel scrollen die Reiter waagrecht (§B/§D). */}
+      <div className="flex items-center" style={{ background: "var(--bg-elevated)", padding: "0 20px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+        <div className="flex-1 overflow-x-auto">
+        <div className="flex min-w-max" style={{ gap: 0 }}>
           {subSteps.map((tab, idx) => {
             const isActive = activeTab === idx;
             const tabStatus = statuses[idx].status;
@@ -634,12 +640,16 @@ export function StepAngehoeriger({
             );
           })}
         </div>
+        </div>
+        {reiterAktion && (
+          <div className="flex items-center shrink-0" style={{ paddingLeft: 12, alignSelf: "stretch" }}>{reiterAktion}</div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════
-         CONTENT AREA
+         CONTENT AREA (flach im Container, kein Kartenrahmen)
          ═══════════════════════════════════════ */}
-      <div style={{ background: "var(--bg-elevated)", borderBottomLeftRadius: "var(--radius-card)", borderBottomRightRadius: "var(--radius-card)", borderLeft: "var(--border-thin) solid var(--border-default)", borderRight: "var(--border-thin) solid var(--border-default)", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+      <div style={{ background: "var(--bg-elevated)" }}>
         <div style={{ padding: "20px 32px 24px" }}>
           {activeTab === 0 && <PersonalienFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />}
           {activeTab === 1 && <SteuerFormV2 data={data} onChange={onChange} />}
