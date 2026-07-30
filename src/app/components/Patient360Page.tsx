@@ -81,6 +81,18 @@ import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
 import { getNachweiseFuerPatient } from "../../lib/schulung/nachweis-store";
 import "../../lib/schulung/demo-seed";
+import { BezugspersonFeld } from "./BezugspersonFeld";
+import { AppButton } from "./ui/AppButton";
+import { StatusMarke, type StatusMarkeVariante } from "./ui/StatusMarke";
+
+/** Map the existing Tailwind bg class of a status config to a semantic StatusMarke variant. */
+function bgZuVariante(bg: string): StatusMarkeVariante {
+  if (bg.includes("success")) return "erfolg";
+  if (bg.includes("warning")) return "warnung";
+  if (bg.includes("error")) return "gefahr";
+  if (bg.includes("info")) return "info";
+  return "neutral";
+}
 
 /* ── Tab definitions ─────────────────────── */
 const profileTabs = [
@@ -295,14 +307,9 @@ export function Patient360Page() {
         <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 4 }}>
           Der Patient mit der ID «{patientId}» konnte nicht gefunden werden.
         </p>
-        <button
-          onClick={() => navigate("/patienten")}
-          className="inline-flex items-center cursor-pointer transition-colors"
-          style={{ marginTop: 16, gap: 8, padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}
-        >
-          <ArrowLeft style={{ width: 16, height: 16 }} />
+        <AppButton variant="sekundaer" icon={ArrowLeft} onClick={() => navigate("/patienten")} style={{ marginTop: 16 }}>
           Zurück zur Patientenübersicht
-        </button>
+        </AppButton>
       </div>
     );
   }
@@ -326,111 +333,51 @@ export function Patient360Page() {
 
   return (
     <>
-      {/* ── Back + Prev/Next Navigation ──────── */}
-      <div style={{ padding: "var(--space-4) var(--space-6) 0" }}>
-        <DetailNavigation
-          backLabel="Patienten"
-          backPath="/patienten"
-          currentId={patientId!}
-          allIds={allPatientIds}
-          buildPath={(id) => `/patienten/${id}`}
-          tabParam={activeTab !== "ueberblick" ? activeTab : undefined}
-        />
-      </div>
-
-      {/* ── Patient Header ─────────────────── */}
-      <div style={{ padding: "var(--space-4) var(--space-6) 0" }}>
-        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "20px 24px" }}>
-          <div className="flex flex-col md:flex-row md:items-start" style={{ gap: 20 }}>
-            {/* Avatar */}
-            <div className="shrink-0 flex items-center justify-center" style={{ width: 56, height: 56, borderRadius: "var(--radius-card)", background: "var(--brand-primary-light)" }}>
-              <span style={{ fontSize: 20, fontWeight: "var(--weight-semibold)", color: "var(--brand-primary)" }}>
-                {patient.vorname[0]}{patient.nachname[0]}
-              </span>
+      {/* ── Patient-Kopfleiste (gleiche Anatomie wie Onboarding: keine Karte, kein Avatar).
+             Zeile 1: Rückweg (+ Blättern) als Teil der Leiste; Zeile 2: Titel + Marken | Aktionen. ── */}
+      <div style={{ padding: "var(--space-3) var(--space-6) 0" }}>
+        <div style={{ marginBottom: 4 }}>
+          <DetailNavigation
+            backLabel="Patienten"
+            backPath="/patienten"
+            currentId={patientId!}
+            allIds={allPatientIds}
+            buildPath={(id) => `/patienten/${id}`}
+            tabParam={activeTab !== "ueberblick" ? activeTab : undefined}
+          />
+        </div>
+        <div className="flex items-start justify-between" style={{ gap: 16 }}>
+          <div className="min-w-0">
+            <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
+              <h2 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+                {patient.nachname}, {patient.vorname}
+              </h2>
+              {/* Status/Abrechnung/Schweregrad: Information (nicht bedienbar), je Zustand mit Symbol. */}
+              <StatusMarke label={st.label} variante={bgZuVariante(st.bg)} />
+              <StatusMarke label={ast.label} variante={bgZuVariante(ast.bg)} />
+              <StatusMarke label={sg.label} variante={bgZuVariante(sg.bg)} />
             </div>
-
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
-                <h2 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-                  {patient.nachname}, {patient.vorname}
-                </h2>
-                <button
-                  onClick={() => setStatusModal(true)}
-                  className={`inline-flex items-center cursor-pointer ${st.bg} ${st.text}`}
-                  style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", border: "none" }}
-                  title="Klicken für Statusdetails"
-                >
-                  <span className={st.dot} style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)" }} />
-                  {st.label}
-                </button>
-                <span className={`inline-flex items-center ${ast.bg} ${ast.text}`} style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)" }}>
-                  <span className={ast.dot} style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)" }} />
-                  {ast.label}
+            <div className="flex items-center flex-wrap" style={{ gap: "var(--space-3)", marginTop: 6, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+              <MaskedAhv ahv={patient.ahvNummer} />
+              <span className="hidden md:inline">·</span>
+              <span>Geb.: {patient.geburtsdatum}</span>
+              <span className="hidden md:inline">·</span>
+              {patient.pflegefachkraft !== "—" ? (
+                <BezugspersonFeld person={{ initialen: patient.pflegefachkraftInitialen, name: patient.pflegefachkraft }} />
+              ) : (
+                <span className="inline-flex items-center" style={{ gap: 4, color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
+                  <AlertTriangle style={{ width: 12, height: 12 }} /> Nicht zugewiesen
                 </span>
-                <span className={`inline-flex items-center ${sg.bg} ${sg.text}`} style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)" }}>
-                  {sg.label}
-                </span>
-              </div>
-
-              <div className="flex items-center flex-wrap" style={{ gap: "var(--space-3)", marginTop: 8, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-                <MaskedAhv ahv={patient.ahvNummer} />
-                <span className="hidden md:inline">·</span>
-                <span>Geb.: {patient.geburtsdatum}</span>
-              </div>
-
-              <div className="flex items-center" style={{ gap: "var(--space-2)", marginTop: 8 }}>
-                {patient.pflegefachkraft !== "—" ? (
-                  <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-                    <div className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
-                      <span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{patient.pflegefachkraftInitialen}</span>
-                    </div>
-                    <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-                      <span style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{patient.pflegefachkraft}</span> — Zugewiesen
-                    </span>
-                  </div>
-                ) : (
-                  <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-small)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
-                    <AlertTriangle style={{ width: 12, height: 12 }} /> Nicht zugewiesen
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center shrink-0" style={{ gap: "var(--space-2)" }}>
-              <button
-                onClick={() => navigate("/servicedesk")}
-                className="inline-flex items-center cursor-pointer transition-colors"
-                style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"}
-                onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
-              >
-                <Plus style={{ width: 14, height: 14 }} /> Ticket erstellen
-              </button>
-              <button
-                className="inline-flex items-center cursor-pointer transition-colors"
-                style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
-                onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}
-              >
-                <Edit3 style={{ width: 14, height: 14, color: "var(--text-secondary)" }} /> Bearbeiten
-              </button>
-              <button
-                className="flex items-center justify-center cursor-pointer transition-colors"
-                style={{ width: 32, height: 32, borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)" }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-              >
-                <MoreHorizontal style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
-              </button>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Anna Patient Summary */}
-        <div style={{ marginTop: 12 }}>
-          <AnnaPatientSummary patient={patient} />
+          {/* Actions — genau ein Primärknopf (Ticket erstellen), Rest Sekundär/Symbol */}
+          <div className="flex items-center shrink-0" style={{ gap: "var(--space-2)" }}>
+            <AppButton variant="primaer" icon={Plus} onClick={() => navigate("/servicedesk")}>Ticket erstellen</AppButton>
+            <AppButton variant="sekundaer" icon={Edit3}>Bearbeiten</AppButton>
+            <AppButton variant="symbol" icon={MoreHorizontal} ariaLabel="Weitere Aktionen" />
+          </div>
         </div>
       </div>
 
@@ -473,7 +420,13 @@ export function Patient360Page() {
 
       {/* ── Tab Content ────────────────────── */}
       <div style={{ padding: "20px var(--space-6) 40px" }}>
-        {activeTab === "ueberblick" && <TabUeberblick patient={patient} onNavigateTab={setActiveTab} />}
+        {activeTab === "ueberblick" && (
+          <>
+            {/* KI-Zusammenfassung gehört inhaltlich in den Überblick (nicht mehr über jeder Reiterleiste, §H) */}
+            <div style={{ marginBottom: 20 }}><AnnaPatientSummary patient={patient} /></div>
+            <TabUeberblick patient={patient} onNavigateTab={setActiveTab} />
+          </>
+        )}
         {activeTab === "anamnese" && <TabAnamnese patient={patient} />}
         {activeTab === "interrai" && <TabInterRAI patientId={patient.id} patientName={`${patient.nachname}, ${patient.vorname}`} navigate={navigate} />}
         {activeTab === "pflegeplanung" && <TabPflegeplanung patientId={patient.id} navigate={navigate} />}
@@ -2786,7 +2739,7 @@ function TabPflegeplanung({ patientId, navigate }: { patientId: string; navigate
               {baRef && <button onClick={() => navigate(`/interrai/${baRef.id}`)} className="cursor-pointer" style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", background: "transparent", border: "none", padding: 0, marginTop: 2 }}>Aus InterRAI vom {baRef.startDatum} →</button>}
               {current.onboardingId && <div style={{ fontSize: "var(--text-micro)", color: "var(--status-info)", marginTop: 2 }}>aus Onboarding</div>}
             </div>
-            <button onClick={() => navigate(`/pflegeplanung/${current?.id || "neu"}`)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> Neue Planung</button>
+            <AppButton variant="primaer" icon={Plus} onClick={() => navigate(`/pflegeplanung/${current?.id || "neu"}`)}>Neue Planung</AppButton>
           </div>
           {current.pflegediagnosen.filter(d => d.status === "akzeptiert").map(d => (
             <div key={d.id} style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "14px 18px", marginBottom: 8 }}>
@@ -2800,7 +2753,7 @@ function TabPflegeplanung({ patientId, navigate }: { patientId: string; navigate
       ) : (
         <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", marginBottom: 20 }}>
           <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>Noch keine Pflegeplanung</div>
-          <button onClick={() => navigate("/pflegeplanung/neu")} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> Pflegeplanung starten</button>
+          <AppButton variant="primaer" icon={Plus} onClick={() => navigate("/pflegeplanung/neu")}>Pflegeplanung starten</AppButton>
         </div>
       )}
       <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12, marginTop: 20 }}>Verlauf</div>
@@ -2896,7 +2849,7 @@ function TabKLV({ patientId }: { patientId: string }) {
             </div>
             <div className="flex items-center" style={{ gap: 8 }}>
               <button onClick={() => navigate(`/klv/${current.id}`)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>KLV-Arbeitsbereich öffnen</button>
-              <button onClick={() => setShowNeueKLV(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> Neue KLV</button>
+              <AppButton variant="primaer" icon={Plus} onClick={() => setShowNeueKLV(true)}>Neue KLV</AppButton>
             </div>
           </div>
 
@@ -2921,7 +2874,7 @@ function TabKLV({ patientId }: { patientId: string }) {
                 </label>
               )}
               <div className="flex items-center" style={{ gap: 8 }}>
-                <button onClick={handleCreateKLV} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> KLV erstellen</button>
+                <AppButton variant="primaer" icon={Plus} onClick={handleCreateKLV}>KLV erstellen</AppButton>
                 <button onClick={() => setShowNeueKLV(false)} className="cursor-pointer" style={{ padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Abbrechen</button>
               </div>
             </div>
@@ -2974,7 +2927,7 @@ function TabKLV({ patientId }: { patientId: string }) {
       ) : (
         <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", marginBottom: 20 }}>
           <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>Noch keine KLV-Verordnung</div>
-          <button onClick={() => setShowNeueKLV(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> KLV erstellen</button>
+          <AppButton variant="primaer" icon={Plus} onClick={() => setShowNeueKLV(true)}>KLV erstellen</AppButton>
           {showNeueKLV && (
             <div style={{ padding: "16px 20px", background: "var(--bg-primary)", border: "var(--border-thin) solid var(--brand-primary)", borderRadius: "var(--radius-card)", marginTop: 12, textAlign: "left" }}>
               <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12 }}>Neue KLV-Verordnung erstellen</div>
@@ -2989,7 +2942,7 @@ function TabKLV({ patientId }: { patientId: string }) {
                 </div>
               </div>
               <div className="flex items-center" style={{ gap: 8 }}>
-                <button onClick={handleCreateKLV} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 14, height: 14 }} /> KLV erstellen</button>
+                <AppButton variant="primaer" icon={Plus} onClick={handleCreateKLV}>KLV erstellen</AppButton>
                 <button onClick={() => setShowNeueKLV(false)} className="cursor-pointer" style={{ padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Abbrechen</button>
               </div>
             </div>

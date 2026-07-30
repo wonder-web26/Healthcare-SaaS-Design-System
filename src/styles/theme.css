@@ -83,6 +83,23 @@
   --space-10: 40px;
   --space-12: 48px;
 
+  /* ── Kontroll-Dimensionen: EINE Dichte ─────────────
+     Verbindliche Masse als Token. Eine spätere Dichteumschaltung ist eine
+     Änderung dieser Werte, kein Umbau an den Verwendungsstellen. */
+  --control-height: 36px;            /* Knopf */
+  --control-radius: 8px;             /* Knopf + Statusmarke */
+  --marke-height: 24px;              /* Statusmarke (Information / Status) */
+  --marke-height-interaktiv: 26px;   /* bedienbare Statusmarke (Auswahl) */
+  --row-height: 40px;                /* Tabellenzeile */
+  --field-height: 40px;              /* Formularfeld */
+
+  /* ── Aktionsfarbe (styleguide §2/§8): Marke ≠ Aktion ──
+     Primärknopf = Vollfläche Dark Sky. Grün bleibt ausschliesslich Erfolg
+     (--status-success); es ist keine Aktionsfarbe mehr. */
+  --action-primary-bg: #131314;      /* Dark Sky */
+  --action-primary-bg-hover: #2A2A2C;
+  --action-primary-fg: var(--text-on-dark);
+
   /* ── Breakpoints (styleguide §12) ─────────── */
   /* Usage: @media (min-width: 640px) for sm, etc.
      Mobile:  < 640px  (phones, portrait)
@@ -360,4 +377,11 @@
 /* ── Eliminate 300ms tap delay ──────────────── */
 html {
   touch-action: manipulation;
+}
+
+/* ── Sichtbarer Fokusring für Aktionen (Knopf, bedienbare Statusmarke) ──
+   Nur bei Tastatur-Fokus (:focus-visible), nie beim Mausklick. */
+.ui-fokusring:focus-visible {
+  outline: 2px solid var(--action-primary-bg);
+  outline-offset: 2px;
 }

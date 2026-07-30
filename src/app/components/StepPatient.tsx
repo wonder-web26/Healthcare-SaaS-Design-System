@@ -391,12 +391,14 @@ interface StepPatientProps {
   /** External tab-switch request (e.g. from header pill click) */
   requestedTab?: number | null;
   onTabSwitched?: () => void;
+  /** Aktion am rechten Ende der Reiterzeile (z. B. "Gespräch"), bleibt fixiert sichtbar. */
+  reiterAktion?: React.ReactNode;
 }
 
 /* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
-export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched }: StepPatientProps) {
+export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion }: StepPatientProps) {
   const [activeTab, setActiveTab] = useState(0);
 
   // External tab-switch request
@@ -459,47 +461,61 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
       {/* ═══════════════════════════════════════
          HORIZONTAL TAB NAVIGATION + Recording-Button
          ═══════════════════════════════════════ */}
-      <div className="flex items-center" style={{ background: "var(--bg-elevated)", borderTopLeftRadius: "var(--radius-card)", borderTopRightRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", borderBottom: "none", padding: "0 20px" }}>
+      {/* ZWEITE Reiterebene: Abschnitte der aktiven Phase (§A). Getönte Fläche über volle
+          Breite, Höhe 34, Schrift 12, KEIN Zustandssymbol, aktiver Eintrag 1.5px unterstrichen;
+          Haarlinie 0.5 oben und unten. "Gespräch" rechts, fixiert; bei zehn Reitern scrollen sie. */}
+      <div className="flex items-center" style={{ background: "var(--bg-secondary)", padding: "0 20px", borderTop: "var(--border-thin) solid var(--border-default)", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
         <div className="flex-1 overflow-x-auto">
-        <div className="flex min-w-max" style={{ gap: 0, borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+        <div
+          role="tablist"
+          aria-label="Abschnitte"
+          className="flex min-w-max"
+          style={{ gap: 0 }}
+          onKeyDown={e => {
+            if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+            const btns = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+            const i = btns.indexOf(document.activeElement as HTMLButtonElement);
+            if (i === -1) return;
+            e.preventDefault();
+            (e.key === "ArrowRight" ? btns[i + 1] : btns[i - 1])?.focus();
+          }}
+        >
           {tabDefs.map((tab, idx) => {
             const isActive = activeTab === idx;
             const complete = isTabComplete(tab.key, data);
-            const TabIcon = tab.icon;
 
             return (
               <button
                 key={tab.key}
+                role="tab"
+                aria-selected={isActive}
                 onClick={() => setActiveTab(idx)}
-                className="relative flex items-center whitespace-nowrap transition-colors cursor-pointer"
+                className="ui-fokusring relative flex items-center whitespace-nowrap transition-colors cursor-pointer"
                 style={{
-                  gap: "var(--space-2)", padding: "var(--space-3) var(--space-4)",
-                  fontSize: "var(--text-small)", fontWeight: isActive ? "var(--weight-semibold)" : "var(--weight-medium)",
-                  color: isActive ? "var(--brand-primary)" : complete ? "var(--status-success-text)" : "var(--text-secondary)",
-                  background: "transparent", border: "none",
+                  height: 34, padding: "0 14px",
+                  fontSize: "var(--text-meta)", fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",
+                  color: isActive ? "var(--text-primary)" : complete ? "var(--status-success-text)" : "var(--text-secondary)",
+                  background: "transparent", border: "none", fontFamily: "inherit",
                 }}
               >
-                {complete && !isActive ? (
-                  <CheckCircle2 style={{ width: 14, height: 14, color: "var(--status-success)" }} />
-                ) : (
-                  <TabIcon style={{ width: 14, height: 14 }} />
-                )}
                 {tab.label}
                 {isActive && (
-                  <span className="absolute" style={{ bottom: 0, left: 8, right: 8, height: 2, background: "var(--brand-primary)", borderTopLeftRadius: "var(--radius-pill)", borderTopRightRadius: "var(--radius-pill)" }} />
+                  <span className="absolute" style={{ bottom: 0, left: 10, right: 10, height: 1.5, background: "var(--text-primary)", borderRadius: 1 }} />
                 )}
               </button>
             );
           })}
         </div>
         </div>
-        {/* Aufzeichnen-Button entfernt — lebt jetzt im Aufzeichnungsblock der Pflegeplanung */}
+        {reiterAktion && (
+          <div className="flex items-center shrink-0" style={{ paddingLeft: 12, alignSelf: "stretch" }}>{reiterAktion}</div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════
-         TAB CONTENT
+         TAB CONTENT (flach im Container, kein Kartenrahmen)
          ═══════════════════════════════════════ */}
-      <div style={{ background: "var(--bg-elevated)", borderBottomLeftRadius: "var(--radius-card)", borderBottomRightRadius: "var(--radius-card)", borderLeft: "var(--border-thin) solid var(--border-default)", borderRight: "var(--border-thin) solid var(--border-default)", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+      <div style={{ background: "var(--bg-elevated)" }}>
         <div style={{ padding: "20px 32px 24px" }}>
           {activeTab === 0 && (
             <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />

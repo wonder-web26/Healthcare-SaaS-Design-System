@@ -4,10 +4,9 @@ import { Plus, Search, AlertTriangle, Check, Clock, Ban, ChevronRight, Clipboard
 import { AnnaListenEinordnung, type ListenKontext } from "../anna/AnnaListenEinordnung";
 import { useCurrentRole } from "../auth";
 import type { UserRole } from "../../types/user";
+import { type OnboardingStatus, ONBOARDING_STATUS_CFG } from "../../lib/onboarding/status";
 
 /* ── Types ── */
-type OnboardingStatus = "in_erfassung" | "unvollstaendig" | "blockiert";
-
 interface OnboardingCase {
   id: string;
   patientVorname: string;
@@ -25,22 +24,18 @@ interface OnboardingCase {
   kanton: string;
 }
 
-const statusCfg: Record<OnboardingStatus, { label: string; bg: string; text: string; dot: string }> = {
-  in_erfassung: { label: "In Erfassung", bg: "var(--status-info-bg)", text: "var(--status-info)", dot: "var(--status-info)" },
-  unvollstaendig: { label: "Unvollständig", bg: "var(--status-warning-bg)", text: "var(--status-warning-text)", dot: "var(--status-warning)" },
-  blockiert: { label: "Blockiert", bg: "var(--status-danger-bg)", text: "var(--status-danger)", dot: "var(--status-danger)" },
-};
+/* Status badges use the shared ONBOARDING_STATUS_CFG (one vocabulary). */
 
 /* ── Mock data ── */
 const cases: OnboardingCase[] = [
-  { id: "OB-2026-001", patientVorname: "Thomas", patientNachname: "Schmid", patientId: "P-2026-0042", angehoeriger: "Lisa Schmid", eintrittsdatum: "18.02.2026", status: "unvollstaendig", offen: 6, abrechnungsstopp: false, verantwortlich: "Kathrin Meier", verantwortlichInitialen: "KM", letzteAenderung: "26.02.2026", kanton: "ZH" },
-  { id: "OB-2026-002", patientVorname: "Peter", patientNachname: "Hoffmann", patientId: "P-2026-0046", angehoeriger: "Ruth Hoffmann", eintrittsdatum: "20.02.2026", status: "in_erfassung", offen: 14, abrechnungsstopp: false, verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", letzteAenderung: "25.02.2026", kanton: "SG" },
-  { id: "OB-2026-003", patientVorname: "Sabine", patientNachname: "Becker", patientId: "P-2026-0045", angehoeriger: "Hans Becker", eintrittsdatum: "10.02.2026", status: "blockiert", offen: 2, abrechnungsstopp: true, abrechnungsstoppGrund: "Spezialbewilligung Migrationsamt noch ausstehend", verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", letzteAenderung: "24.02.2026", kanton: "ZH" },
-  { id: "OB-2026-004", patientVorname: "Heinrich", patientNachname: "Steiner", patientId: "P-2026-0048", angehoeriger: "Ursula Steiner", eintrittsdatum: "05.02.2026", status: "blockiert", offen: 1, abrechnungsstopp: true, abrechnungsstoppGrund: "Kritische Gesundheitslage – ärztliche Freigabe ausstehend", verantwortlich: "Laura Brunner", verantwortlichInitialen: "LB", letzteAenderung: "23.02.2026", kanton: "BE" },
-  { id: "OB-2026-008", patientVorname: "Lena", patientNachname: "Graf", patientId: "P-2026-0051", angehoeriger: "Martin Graf", eintrittsdatum: "24.02.2026", status: "in_erfassung", offen: 20, abrechnungsstopp: false, verantwortlich: "Kathrin Meier", verantwortlichInitialen: "KM", letzteAenderung: "27.02.2026", kanton: "AG" },
-  { id: "OB-2026-009", patientVorname: "Fritz", patientNachname: "Huber", patientId: "P-2026-0052", angehoeriger: "Erika Huber", eintrittsdatum: "15.02.2026", status: "unvollstaendig", offen: 4, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", letzteAenderung: "26.02.2026", kanton: "LU" },
-  { id: "OB-2026-010", patientVorname: "Rosa", patientNachname: "Ammann", patientId: "P-2026-0053", angehoeriger: "Daniel Ammann", eintrittsdatum: "26.02.2026", status: "in_erfassung", offen: 26, abrechnungsstopp: false, verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", letzteAenderung: "27.02.2026", kanton: "ZH" },
-  { id: "OB-2026-011", patientVorname: "Walter", patientNachname: "Frei", patientId: "P-2026-0054", angehoeriger: "Margrit Frei", eintrittsdatum: "12.02.2026", status: "unvollstaendig", offen: 1, abrechnungsstopp: false, verantwortlich: "Laura Brunner", verantwortlichInitialen: "LB", letzteAenderung: "27.02.2026", kanton: "ZH" },
+  { id: "OB-2026-001", patientVorname: "Thomas", patientNachname: "Schmid", patientId: "P-2026-0042", angehoeriger: "Lisa Schmid", eintrittsdatum: "18.02.2026", status: "in_bearbeitung", offen: 6, abrechnungsstopp: false, verantwortlich: "Kathrin Meier", verantwortlichInitialen: "KM", letzteAenderung: "26.02.2026", kanton: "ZH" },
+  { id: "OB-2026-002", patientVorname: "Peter", patientNachname: "Hoffmann", patientId: "P-2026-0046", angehoeriger: "Ruth Hoffmann", eintrittsdatum: "20.02.2026", status: "in_bearbeitung", offen: 14, abrechnungsstopp: false, verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", letzteAenderung: "25.02.2026", kanton: "SG" },
+  { id: "OB-2026-003", patientVorname: "Sabine", patientNachname: "Becker", patientId: "P-2026-0045", angehoeriger: "Hans Becker", eintrittsdatum: "10.02.2026", status: "in_bearbeitung", offen: 2, abrechnungsstopp: true, abrechnungsstoppGrund: "Spezialbewilligung Migrationsamt noch ausstehend", verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", letzteAenderung: "24.02.2026", kanton: "ZH" },
+  { id: "OB-2026-004", patientVorname: "Heinrich", patientNachname: "Steiner", patientId: "P-2026-0048", angehoeriger: "Ursula Steiner", eintrittsdatum: "05.02.2026", status: "in_bearbeitung", offen: 1, abrechnungsstopp: true, abrechnungsstoppGrund: "Kritische Gesundheitslage – ärztliche Freigabe ausstehend", verantwortlich: "Laura Brunner", verantwortlichInitialen: "LB", letzteAenderung: "23.02.2026", kanton: "BE" },
+  { id: "OB-2026-008", patientVorname: "Lena", patientNachname: "Graf", patientId: "P-2026-0051", angehoeriger: "Martin Graf", eintrittsdatum: "24.02.2026", status: "neu", offen: 20, abrechnungsstopp: false, verantwortlich: "Kathrin Meier", verantwortlichInitialen: "KM", letzteAenderung: "27.02.2026", kanton: "AG" },
+  { id: "OB-2026-009", patientVorname: "Fritz", patientNachname: "Huber", patientId: "P-2026-0052", angehoeriger: "Erika Huber", eintrittsdatum: "15.02.2026", status: "in_bearbeitung", offen: 4, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", letzteAenderung: "26.02.2026", kanton: "LU" },
+  { id: "OB-2026-010", patientVorname: "Rosa", patientNachname: "Ammann", patientId: "P-2026-0053", angehoeriger: "Daniel Ammann", eintrittsdatum: "26.02.2026", status: "neu", offen: 26, abrechnungsstopp: false, verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", letzteAenderung: "27.02.2026", kanton: "ZH" },
+  { id: "OB-2026-011", patientVorname: "Walter", patientNachname: "Frei", patientId: "P-2026-0054", angehoeriger: "Margrit Frei", eintrittsdatum: "12.02.2026", status: "abgeschlossen", offen: 1, abrechnungsstopp: false, verantwortlich: "Laura Brunner", verantwortlichInitialen: "LB", letzteAenderung: "27.02.2026", kanton: "ZH" },
 ];
 
 /* ── Views ── */
@@ -50,9 +45,11 @@ const CURRENT_USER = "Maria Keller";
 function viewFilter(list: OnboardingCase[], view: ViewKey): OnboardingCase[] {
   switch (view) {
     case "meine": return list.filter(c => c.verantwortlich === CURRENT_USER);
-    case "blockiert": return list.filter(c => c.abrechnungsstopp || c.status === "blockiert");
+    // "blockiert" stützt sich künftig allein auf abrechnungsstopp (unabhängig vom Status).
+    case "blockiert": return list.filter(c => c.abrechnungsstopp);
     case "fast_abgeschlossen": return list.filter(c => c.offen <= 1 && !c.abrechnungsstopp);
-    case "in_erfassung": return list.filter(c => c.status === "in_erfassung");
+    // View-Key bleibt intern "in_erfassung"; zeigt die aktiven Fälle (neu + in Bearbeitung).
+    case "in_erfassung": return list.filter(c => c.status === "neu" || c.status === "in_bearbeitung");
     default: return list;
   }
 }
@@ -62,7 +59,7 @@ const VIEW_DEFS: { key: ViewKey; label: string }[] = [
   { key: "meine", label: "Meine Onboardings" },
   { key: "blockiert", label: "Blockiert" },
   { key: "fast_abgeschlossen", label: "Fast abgeschlossen" },
-  { key: "in_erfassung", label: "In Erfassung" },
+  { key: "in_erfassung", label: "In Bearbeitung" },
 ];
 
 function getDefaultView(role: UserRole): ViewKey {
@@ -80,21 +77,23 @@ const allKantone = [...new Set(cases.map(c => c.kanton))].sort();
 
 interface FilterDef { id: string; label: string; options: { value: string; label: string }[] }
 const filterDefs: FilterDef[] = [
-  { id: "status", label: "Status", options: [{ value: "in_erfassung", label: "In Erfassung" }, { value: "unvollstaendig", label: "Unvollständig" }, { value: "blockiert", label: "Blockiert" }] },
+  { id: "status", label: "Status", options: (["neu", "in_bearbeitung", "abgeschlossen", "abgebrochen"] as OnboardingStatus[]).map(s => ({ value: s, label: ONBOARDING_STATUS_CFG[s].label })) },
   { id: "verantwortlich", label: "Verantwortlich", options: allVerantwortliche.map(v => ({ value: v, label: v })) },
   { id: "kanton", label: "Kanton", options: allKantone.map(k => ({ value: k, label: k })) },
 ];
 
 /* ── Anna context ── */
 function buildAnnaContext(allCases: OnboardingCase[], role: UserRole): ListenKontext {
-  const blocked = allCases.filter(c => c.abrechnungsstopp || c.status === "blockiert");
-  const inErfassung = allCases.filter(c => c.status === "in_erfassung");
+  const blocked = allCases.filter(c => c.abrechnungsstopp);
+  const inErfassung = allCases.filter(c => c.status === "neu" || c.status === "in_bearbeitung");
   const fastAbgeschlossen = allCases.filter(c => c.offen <= 1 && !c.abrechnungsstopp);
 
   const byStatus: Record<string, number> = {
+    neu: allCases.filter(c => c.status === "neu").length,
+    in_bearbeitung: allCases.filter(c => c.status === "in_bearbeitung").length,
+    abgeschlossen: allCases.filter(c => c.status === "abgeschlossen").length,
+    abgebrochen: allCases.filter(c => c.status === "abgebrochen").length,
     blockiert: blocked.length,
-    unvollstaendig: allCases.filter(c => c.status === "unvollstaendig").length,
-    in_erfassung: inErfassung.length,
   };
 
   const highlights: string[] = [];
@@ -119,7 +118,7 @@ function buildAnnaContext(allCases: OnboardingCase[], role: UserRole): ListenKon
     }
   } else {
     // Management
-    highlights.push(`Verteilung: ${inErfassung.length} in Erfassung, ${fastAbgeschlossen.length} fast abgeschlossen, ${blocked.length} blockiert`);
+    highlights.push(`Verteilung: ${inErfassung.length} in Bearbeitung, ${fastAbgeschlossen.length} fast abgeschlossen, ${blocked.length} blockiert`);
     // Bottleneck
     const personCounts: Record<string, number> = {};
     for (const c of allCases) personCounts[c.verantwortlich] = (personCounts[c.verantwortlich] || 0) + 1;
@@ -128,6 +127,31 @@ function buildAnnaContext(allCases: OnboardingCase[], role: UserRole): ListenKon
   }
 
   return { seite: `onboarding_${role}`, totalCount: allCases.length, byStatus, highlights };
+}
+
+/**
+ * Zusammenfassung der Onboarding-Liste — eigenständig, damit jede Aussage GENAU
+ * EINMAL erscheint (§B). Die geteilte Bausteinlogik (generateMockEinordnung)
+ * rendert die Blockiert-Zahl UND hängt zusätzlich highlights[0] an — nennt
+ * highlights[0] denselben Sachverhalt, doppelt sich die Aussage. Hier wird die
+ * Blockiert-Zahl einmal genannt, und als zweite Aussage die erste NICHT-blockiert
+ * bezogene Einordnung. Singular/Plural von "Mandat" korrekt.
+ */
+function buildOnboardingEinordnung(ctx: ListenKontext): string {
+  const total = ctx.totalCount;
+  if (total === 0) return "Aktuell kein Mandat im Onboarding.";
+  const blocked = ctx.byStatus["blockiert"] || 0;
+  const wort = total === 1 ? "Mandat" : "Mandate";
+  const parts: string[] = [];
+  if (blocked > 0) {
+    parts.push(`${total} ${wort} im Onboarding, {{danger}}${blocked === 1 ? "eines davon blockiert" : `${blocked} davon blockiert`}{{/danger}}.`);
+  } else {
+    parts.push(`${total} ${wort} im Onboarding, alle laufen planmässig.`);
+  }
+  // Zweite Aussage: erste Einordnung, die NICHT die Blockiert-Zahl wiederholt.
+  const zusatz = ctx.highlights.find(h => !/blockiert|blocked/i.test(h));
+  if (zusatz) parts.push(`{{warning}}${zusatz}{{/warning}}.`);
+  return parts.join(" ");
 }
 
 /* ══════════════════════════════════════════ */
@@ -191,6 +215,7 @@ export function OnboardingListPage() {
   }, []);
 
   const annaContext = useMemo(() => buildAnnaContext(cases, role), [role]);
+  const annaEinordnung = useMemo(() => buildOnboardingEinordnung(annaContext), [annaContext]);
   const viewOrder = getViewOrder(role);
 
   return (
@@ -215,7 +240,7 @@ export function OnboardingListPage() {
 
         {/* Anna einordnung */}
         <div style={{ marginBottom: "var(--space-4)" }}>
-          <AnnaListenEinordnung context={annaContext} />
+          <AnnaListenEinordnung context={annaContext} einordnung={annaEinordnung} />
         </div>
 
         {/* Search + filter */}
@@ -334,7 +359,7 @@ export function OnboardingListPage() {
                 {filtered.length === 0 ? (
                   <tr><td colSpan={8} style={{ padding: "48px 16px", textAlign: "center", fontSize: "var(--text-body)", color: "var(--text-tertiary)" }}>Keine Ergebnisse für diesen Filter.</td></tr>
                 ) : filtered.map(c => {
-                  const st = statusCfg[c.status];
+                  const st = ONBOARDING_STATUS_CFG[c.status];
                   const isBlocked = c.abrechnungsstopp;
                   return (
                     <tr key={c.id} onClick={() => navigate(`/onboarding/${c.id}`)} className="cursor-pointer transition-colors group"

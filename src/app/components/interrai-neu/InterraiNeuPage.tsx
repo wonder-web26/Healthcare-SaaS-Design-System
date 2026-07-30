@@ -71,6 +71,8 @@ import {
   type Bestaetigung,
 } from "../../../lib/interrai/store";
 import { useRecording } from "../../recording/RecordingContext";
+import { AppButton } from "../ui/AppButton";
+import { StatusMarke } from "../ui/StatusMarke";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -287,6 +289,31 @@ function PeriodBadge({ period }: { period: string }) {
       {period}
     </span>
   );
+}
+
+/**
+ * Ob ein Item überhaupt eine Legende besitzt (§B).
+ *
+ * Eine Legende existiert ausschliesslich dort, wo die Bedienflächen nackte Codes
+ * tragen — das ist genau der Matrix-Regelfall: ein Matrix-Layout (matrix /
+ * matrix_columns), bei dem die Kurzlabel-Ausnahme NICHT greift
+ * (getMatrixDisplayMode === "legend"). Einfache Items, gestapelte Feldgruppen und
+ * Matrizen mit erfüllter Kurzlabel-Ausnahme tragen ihren Optionstext selbst → keine
+ * Legende. Nur diese Items rendern in-flow einen LegendBlock (MatrixRenderer /
+ * MatrixColumnsRenderer).
+ *
+ * Genutzt werden die bestehenden Prüfungen: getCompositeType (Layout) und
+ * getMatrixDisplayMode (Code-vs-Text) — keine zweite, parallele Prüfung.
+ */
+function itemHatLegende(code: string): boolean {
+  let ct: ReturnType<typeof getCompositeType>;
+  try {
+    ct = getCompositeType(code);
+  } catch {
+    return false;
+  }
+  if (ct !== "matrix" && ct !== "matrix_columns") return false;
+  return getMatrixDisplayMode(code) === "legend";
 }
 
 // ─── Legend block — tinted, no heading, badges match answer cells (§4.2, §5.5) ─
@@ -567,9 +594,10 @@ export function InterraiNeuPage() {
     || (assessment && getPerson(assessment.personId)?.patientId
         ? `/patienten/${getPerson(assessment.personId)!.patientId}?tab=interrai`
         : "/interrai");
-  const returnLabel = returnZiel.startsWith("/onboarding") ? "Zurück zum Onboarding"
-    : returnZiel.startsWith("/patienten") ? "Zurück zum Patienten"
-    : returnZiel.startsWith("/interrai") ? "Zurück zur Übersicht"
+  // Navigationsrahmen §E: Beschriftung nennt das ZIEL, nicht die Handlung.
+  const returnLabel = returnZiel.startsWith("/onboarding") ? "Onboardings"
+    : returnZiel.startsWith("/patienten") ? "Patienten"
+    : returnZiel.startsWith("/interrai") ? "Übersicht"
     : "Zurück";
   const person = assessment ? getPerson(assessment.personId) : undefined;
 
@@ -816,11 +844,17 @@ export function InterraiNeuPage() {
       const sticky = stickyRef.current;
       if (!sticky) return;
       const line = sticky.getBoundingClientRect().bottom;
+      // Sichtbarer Bereich unterhalb der Sticky-Linie (§Bedingung 2).
+      const sichtbareHoehe = container.getBoundingClientRect().bottom - line;
       let active: string | null = null;
       for (const card of Array.from(container.querySelectorAll<HTMLElement>("[data-item]"))) {
         const code = card.getAttribute("data-item");
-        if (!code || getMatrixDisplayMode(code) !== "legend") continue;
+        // Bedingung 1: nur Items, die überhaupt eine Legende besitzen.
+        if (!code || !itemHatLegende(code)) continue;
         const r = card.getBoundingClientRect();
+        // Bedingung 2: haftet NUR, wenn das Item höher ist als der sichtbare Bereich
+        // (passt es vollständig ins Bild, bleibt die Legende an ihrem Ort am Item-Anfang).
+        if (r.height <= sichtbareHoehe) continue;
         if (r.top < line - 1 && r.bottom > line + 24) { active = code; break; }
       }
       setActiveLegendItem(active);
@@ -917,19 +951,22 @@ export function InterraiNeuPage() {
           flexWrap: "wrap",
         }}
       >
-        {/* Return button — always visible, navigates to the origin (or fallback) */}
+        {/* Navigationsrahmen §E: Rückweg als Textlink (ohne Fläche, ohne Rahmen,
+            Sekundärfarbe), nennt das Ziel. interRAI hat keine eigene Objektkarte —
+            diese Kopfleiste IST die Navigationsleiste. */}
         <button
           type="button"
           onClick={() => navigate(returnZiel)}
+          className="ui-fokusring inline-flex items-center cursor-pointer"
           style={{
-            display: "flex", alignItems: "center", gap: 4,
-            padding: "3px 10px", borderRadius: 6,
-            background: "transparent", border: "0.5px solid var(--border-default)",
-            fontSize: 12, color: "var(--text-secondary)", cursor: "pointer",
+            gap: 6, padding: 0, background: "none", border: "none",
+            fontSize: "var(--text-small)", fontWeight: 450, color: "var(--text-secondary)",
             fontFamily: "inherit", flexShrink: 0,
           }}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
+          onMouseLeave={e => (e.currentTarget.style.color = "var(--text-secondary)")}
         >
-          <ArrowLeft style={{ width: 13, height: 13 }} />
+          <ArrowLeft style={{ width: 16, height: 16 }} />
           <span>{returnLabel}</span>
         </button>
         {person && (
@@ -938,13 +975,11 @@ export function InterraiNeuPage() {
             <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>
               {person.vorname} {person.nachname}
             </span>
-            <span style={{
-              fontSize: 10, fontWeight: 500, padding: "1px 6px", borderRadius: 4,
-              background: person.zustand === "patient" ? "var(--status-success-bg, #e6f4ea)" : "var(--status-warning-bg, #fef7e0)",
-              color: person.zustand === "patient" ? "var(--status-success-text, #1a7f37)" : "var(--status-warning-text, #9a6700)",
-            }}>
-              {person.zustand === "patient" ? "Patient" : "Mandat"}
-            </span>
+            {/* Zustand als Info-Marke mit Symbol (Farbe nie einziges Merkmal) */}
+            <StatusMarke
+              label={person.zustand === "patient" ? "Patient" : "Mandat"}
+              variante={person.zustand === "patient" ? "erfolg" : "info"}
+            />
           </>
         )}
         <span style={{ color: "var(--border-default)", fontSize: 14 }}>·</span>
@@ -1037,21 +1072,11 @@ export function InterraiNeuPage() {
             Abgeschlossen {assessment.abgeschlossenAm ? formatDateTime(assessment.abgeschlossenAm) : ""} · {assessment.abgeschlossenVon ?? ""}
           </span>
         )}
-        {/* Completion action */}
+        {/* Completion action — Primärknopf des Vorgangs (Dark Sky) */}
         {assessment && !isReadOnly && (
-          <button
-            type="button"
-            onClick={() => setAbschlussDialogOpen(true)}
-            style={{
-              display: "flex", alignItems: "center", gap: 4,
-              padding: "3px 12px", borderRadius: 6, marginLeft: 8,
-              background: "var(--brand-primary)", color: "#fff",
-              border: "none", fontSize: 12, fontWeight: 500,
-              cursor: "pointer", fontFamily: "inherit", flexShrink: 0,
-            }}
-          >
+          <AppButton variant="primaer" onClick={() => setAbschlussDialogOpen(true)} className="shrink-0" style={{ marginLeft: 8 }}>
             Abschliessen
-          </button>
+          </AppButton>
         )}
       </div>
 
@@ -1303,7 +1328,7 @@ export function InterraiNeuPage() {
                   gap: 10,
                   padding: "5px 28px",
                   background: "var(--bg-elevated)",
-                  borderBottom: (legendHintItem && bereich.items.find(i => i.code === legendHintItem)?.options && getMatrixDisplayMode(legendHintItem) === "legend")
+                  borderBottom: (legendHintItem && bereich.items.find(i => i.code === legendHintItem)?.options && itemHatLegende(legendHintItem))
                     ? "none"
                     : "0.5px solid var(--border-default)",
                   fontSize: 12,
@@ -1353,7 +1378,7 @@ export function InterraiNeuPage() {
                   so it never oscillates. */}
               {legendHintItem && (() => {
                 const legendItem = bereich.items.find(i => i.code === legendHintItem);
-                if (!legendItem?.options || getMatrixDisplayMode(legendItem.code) !== "legend") return null;
+                if (!legendItem?.options || !itemHatLegende(legendItem.code)) return null;
                 return (
                   <div style={{
                     padding: "6px 28px 8px",
@@ -1468,8 +1493,8 @@ export function InterraiNeuPage() {
               </div>
 
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => setAbschlussDialogOpen(false)} style={{ padding: "8px 16px", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", fontSize: 13, cursor: "pointer", fontFamily: "inherit", color: "var(--text-primary)" }}>Abbrechen</button>
-                <button onClick={() => {
+                <AppButton variant="sekundaer" onClick={() => setAbschlussDialogOpen(false)}>Abbrechen</AppButton>
+                <AppButton variant="primaer" onClick={() => {
                   if (!assessmentId) return;
                   // Sync current answers to store before completing
                   updateAssessmentAnswers(assessmentId, answers);
@@ -1478,7 +1503,7 @@ export function InterraiNeuPage() {
                   // Reload answers from store (now includes S1/S2)
                   const updated = getAssessment(assessmentId);
                   if (updated) setAnswers({ ...updated.answers });
-                }} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "var(--brand-primary)", color: "#fff", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>Abschliessen</button>
+                }}>Abschliessen</AppButton>
               </div>
             </div>
           </div>
@@ -2623,8 +2648,9 @@ function MatrixRenderer({
 
   return (
     <div>
-      {/* Legend block — tinted, not sticky (scrolls with item content) */}
-      {mode === "legend" && (
+      {/* Legend block — tinted, not sticky (scrolls with item content).
+          Existenz (§Bedingung 1) über die eine Funktion itemHatLegende. */}
+      {itemHatLegende(item.code) && (
         <div style={{ marginBottom: 12 }}>
           <LegendBlock options={options} />
         </div>
@@ -2762,8 +2788,8 @@ function MatrixColumnsRenderer({
 
   return (
     <div>
-      {/* Legend block — tinted, not sticky */}
-      {mode === "legend" && (
+      {/* Legend block — tinted, not sticky. Existenz (§Bedingung 1) über itemHatLegende. */}
+      {itemHatLegende(item.code) && (
         <div style={{ marginBottom: 12 }}>
           <LegendBlock options={options} />
         </div>

@@ -18,6 +18,13 @@ import {
   Lock,
   AlertTriangle,
   Sparkles,
+  Ban,
+  Repeat,
+  ChevronDown,
+  MoreVertical,
+  Circle,
+  CircleDot,
+  AlertCircle,
 } from "lucide-react";
 import {
   StepAngehoeriger,
@@ -36,16 +43,27 @@ import { SpezialbewilligungStep } from "./form/SpezialbewilligungStep";
 import { VertragsStep } from "./form/VertragsStep";
 import { EinwilligungProvider } from "./EinwilligungContext";
 import { ArztAnfrageProvider, useArztAnfrage } from "./ArztAnfrageContext";
+import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 // import { AnnaListenEinordnung, type DetailKontext } from "../anna/AnnaListenEinordnung";
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
-import { getTicketsFuerSubjekt } from "../../lib/rhythmus/engine";
+import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
+import { formatFaelligkeit, isoZuDate } from "../../lib/datum";
 import { toast } from "sonner";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { useRecording } from "../recording/RecordingContext";
 import { Mic } from "lucide-react";
 import { getPersonByOnboardingId, getAssessmentsForPerson, createAssessment } from "../../lib/interrai/store";
+import { useCurrentUser } from "../auth";
+import { ONBOARDING_STATUS_CFG, ONBOARDING_STATUS_WERTE, type OnboardingStatus } from "../../lib/onboarding/status";
+import { getStatus, setzeStatus, getGrund } from "../../lib/onboarding/status-store";
+import { AppButton } from "./ui/AppButton";
+import { StatusMarke } from "./ui/StatusMarke";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "./ui/dropdown-menu";
+
+// Erklärsatz zur Aufzeichnung: einmal pro Sitzung beim ersten Öffnen (§E).
+let gespraechHinweisGezeigt = false;
 
 /* ══════════════════════════════════════════
    STEP DEFINITIONS
@@ -127,6 +145,22 @@ function buildSteps(requiresB: boolean, bewilligungEingereicht: boolean): Wizard
     { ...baseSteps[1], id: 3 },
     { ...baseSteps[2], id: 4, icon: eingereicht ? FileSignature : Lock, blocked: !eingereicht },
   ];
+}
+
+/**
+ * Zustandssymbol einer Phase (§B). Jeder im Code mögliche Phasen-Zustand hat ein
+ * eigenes Symbol + eine eigene Farbe; die Bezeichnung nennt den Zustand für
+ * Bildschirmleser. Der Zustand ist an Symbol UND Farbe/Schnitt erkennbar, nie an
+ * der Farbe allein.
+ */
+type PhasenZustand = { icon: React.ElementType; color: string; label: string };
+function phasenZustand(f: { isCompleted: boolean; isInProgress: boolean; isBlocked: boolean; isDanger: boolean; isVisitedButIncomplete: boolean }): PhasenZustand {
+  if (f.isBlocked) return { icon: Ban, color: "var(--status-danger)", label: "blockiert" };
+  if (f.isDanger) return { icon: AlertTriangle, color: "var(--status-danger)", label: "Pflicht, ausstehend" };
+  if (f.isCompleted) return { icon: CheckCircle2, color: "var(--status-success)", label: "abgeschlossen" };
+  if (f.isInProgress) return { icon: CircleDot, color: "var(--text-primary)", label: "in Bearbeitung" };
+  if (f.isVisitedButIncomplete) return { icon: AlertCircle, color: "var(--status-warning)", label: "unvollständig" };
+  return { icon: Circle, color: "var(--text-tertiary)", label: "ausstehend" };
 }
 
 /* ══════════════════════════════════════════
@@ -379,16 +413,38 @@ export function OnboardingPage() {
 
   const fehlendeDocs = abschlussPruefung.fehlendePflichtdokumente.length;
 
-  // Vorgangs-Status abgeleitet aus der gemeinsamen Prüfung
-  const vorgangsStatus = useMemo(() => {
-    if (abschlussPruefung.vollstaendig) return "bereit" as const;
-    const hasArtefakt = !!(MOCK_ASSESSMENTS.find(a => a.onboardingId === caseId) || MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === caseId) || MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === caseId));
-    if (hasArtefakt || completedCount > 0) return "bearbeitung" as const;
-    return "entwurf" as const;
-  }, [abschlussPruefung.vollstaendig, completedCount, caseId]);
+  // ── Onboarding-Status: manuell gesetzt (KEINE Ableitung aus dem Fortschritt) ──
+  // Kopf und Liste teilen dasselbe Vokabular (ONBOARDING_STATUS_CFG). Ein Fall
+  // startet auf "neu"; jeder Wechsel ist eine menschliche Handlung und erzeugt
+  // einen Ereignis-Eintrag (Status-Store). Es gibt keine Neuberechnung.
+  const currentUser = useCurrentUser();
+  const ausloeser = { id: currentUser.id, name: `${currentUser.vorname} ${currentUser.name}` };
 
-  const vorgangsStatusLabel = vorgangsStatus === "bereit" ? "Bereit zum Abschluss" : vorgangsStatus === "bearbeitung" ? "In Bearbeitung" : "Entwurf";
-  const vorgangsStatusColor = vorgangsStatus === "bereit" ? { bg: "var(--status-success-bg)", color: "var(--status-success-text)" } : vorgangsStatus === "bearbeitung" ? { bg: "var(--status-info-bg)", color: "var(--status-info)" } : { bg: "var(--bg-secondary)", color: "var(--text-secondary)" };
+  // Re-render trigger after mutating the (non-reactive) status store.
+  const [statusTick, setStatusTick] = useState(0);
+  const bumpStatus = () => setStatusTick(t => t + 1);
+  void statusTick; // read so the badge recomputes after store mutations
+
+  const caseStatus: OnboardingStatus = caseId ? getStatus(caseId) : "neu";
+  const statusGrund = caseId ? getGrund(caseId) : null;
+  const statusDarstellung = ONBOARDING_STATUS_CFG[caseStatus];
+
+  // Abbruch-Dialog (Grund erforderlich) — ausgelöst über die Status-Auswahl im Abzeichen
+  const [abbruchOffen, setAbbruchOffen] = useState(false);
+  const [abbruchGrund, setAbbruchGrund] = useState("");
+  const waehleStatus = (s: OnboardingStatus) => {
+    if (!caseId) return;
+    if (s === "abgebrochen") { setAbbruchGrund(""); setAbbruchOffen(true); return; }
+    if (setzeStatus(caseId, s, ausloeser)) bumpStatus();
+  };
+  const bestaetigeAbbruch = () => {
+    if (!caseId) return;
+    if (setzeStatus(caseId, "abgebrochen", ausloeser, abbruchGrund)) {
+      setAbbruchOffen(false);
+      setAbbruchGrund("");
+      bumpStatus();
+    }
+  };
 
   // Pill-Zustand: Ocker nur wenn Docs der letzte Blocker sind
   const docsAreLastBlocker = abschlussPruefung.arbeitsvertragOk && fehlendeDocs > 0;
@@ -396,13 +452,67 @@ export function OnboardingPage() {
   // Override-Dialog state
   const [overrideBegrundung, setOverrideBegrundung] = useState("");
 
-  // Workflow-Aggregat (aus Rhythmus-Engine)
+  // Workflow-Aggregat (aus Rhythmus-Engine). Nur Rhythmus-Tickets, keine WorkflowTasks.
+  aktualisiereUeberfaellige();
   const rhythmusTickets = getTicketsFuerSubjekt("patient", caseId);
-  const workflowDone = rhythmusTickets.filter(t => t.status === "erledigt").length;
-  const workflowTotal = rhythmusTickets.length;
+  const erledigteTickets = rhythmusTickets.filter(t => t.status === "erledigt");
+  // Offene Aufgaben: überfällige zuerst, danach nach Fälligkeit.
+  const offeneTickets = rhythmusTickets
+    .filter(t => t.status !== "erledigt")
+    .sort((a, b) => {
+      const ao = a.status === "ueberfaellig" ? 0 : 1;
+      const bo = b.status === "ueberfaellig" ? 0 : 1;
+      return ao !== bo ? ao - bo : a.faelligAm.localeCompare(b.faelligAm);
+    });
+  const offeneAnzahl = offeneTickets.length;
+  const ueberfaelligAnzahl = offeneTickets.filter(t => t.status === "ueberfaellig").length;
+  const naechste3 = offeneTickets.slice(0, 3);
+
+  // "Alle N anzeigen" wechselt in den Patienten-Schritt und öffnet dort den Workflow-Reiter (§A).
+
+  // Zurück-Ziel: Ursprung aus der URL (?returnTo=), sonst die Onboarding-Übersicht.
+  // Beschriftung nennt das ZIEL (Navigationsrahmen §E), nicht die Handlung.
+  const returnTo = searchParams.get("returnTo") || "/onboarding";
+  const returnLabel = returnTo.startsWith("/patienten") ? "Patienten"
+    : returnTo.startsWith("/angehoerige") ? "Angehörige"
+    : "Onboardings";
 
   // Tab-jump state (for header pill clicks → StepPatient tab switch)
   const [requestedPatientTab, setRequestedPatientTab] = useState<number | null>(null);
+
+  // "Öffnen" (Workflow-Aufgabe) → Rhythmus/Workflow-Tab im Patienten-Schritt (Index 7).
+  const oeffneRhythmus = () => {
+    if (activeStepData.key === "patient") { setRequestedPatientTab(7); }
+    else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(7), 100); }
+  };
+
+  // "Gespräch" (§E): startet die Aufzeichnung. Der Erklärsatz erscheint als Hinweis
+  // beim ERSTEN Öffnen der Funktion und danach nicht mehr (einmal gelesen).
+  const startGespraech = () => {
+    if (!caseId) return;
+    const person = getPersonByOnboardingId(caseId);
+    if (!person) return;
+    if (!gespraechHinweisGezeigt) {
+      gespraechHinweisGezeigt = true;
+      toast("Aus dem Gespräch entstehen Vorschläge für die Bedarfsabklärung (interRAI), Pflegeplanung und KLV-Verordnung.");
+    }
+    const assessments = getAssessmentsForPerson(person.id);
+    const target = assessments.find(a => a.status === "in_bearbeitung") ?? createAssessment(person.id, "erstabklaerung");
+    recording.startRecording(person.id, target.id, `${person.vorname} ${person.nachname}`);
+  };
+
+  // "Gespräch" (§D): steht am rechten Ende der Reiterzeile des jeweiligen Schritts,
+  // fix sichtbar. Während der Aufzeichnung ein stiller Hinweis statt Knopf.
+  const gespraechReiter = isExisting ? (
+    isRecording ? (
+      <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-meta)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--status-danger)", animation: "pulse 1.5s ease-in-out infinite" }} />
+        Aufzeichnung läuft
+      </span>
+    ) : (
+      <AppButton variant="sekundaer" icon={Mic} onClick={startGespraech}>Gespräch</AppButton>
+    )
+  ) : null;
 
   // Restore the step + tab carried in the URL when returning from the interRAI
   // form (e.g. ?step=patient&tab=interrai). Runs once on mount.
@@ -417,275 +527,302 @@ export function OnboardingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Legacy progressLabel for footer (unchanged)
-  const progressLabel = (() => {
-    if (progressPercent === 100) return "Onboarding abgeschlossen";
-    if (currentStep === totalSteps && !activeStepData.blocked) return "Bereit zum Abschluss";
-    if (completedSteps.has(currentStep)) return "Bereit für nächsten Schritt";
-    if (completedCount > 0) return "In Bearbeitung";
-    return "Nicht gestartet";
-  })();
+  // progressLabel und vorgangsStatus entfallen als eigenständige Begriffe —
+  // der Onboarding-Status (ONBOARDING_STATUS_CFG) ist die eine Wahrheit.
 
   return (
     <EinwilligungProvider onboardingId={caseId || null} patientId={null}>
     <ArztAnfrageProvider onboardingId={caseId || null} patientId={null} hausarztName={patientData.hausarztName} hausarztEmail={patientData.hausarztEmail}>
     <div className="flex flex-col h-full min-h-0">
-      {/* ═══════════════════════════════════════
-         HEADER CARD — einzeilig, scroll-collapse
-         ═══════════════════════════════════════ */}
-      {(() => {
-        /* Scroll-collapse: track scroll position of the content area */
-        const [collapsed, setCollapsed] = React.useState(false);
-        const lastScrollY = React.useRef(0);
-        const contentRef = React.useRef<HTMLDivElement | null>(null);
+      {/* ── Kopfleiste (§B): keine Karte, kein Avatar. Der Patient ist Subjekt des Falls
+             (Titel); die Angehörige ist Kontext. Zeile 1 Rückweg, Zeile 2 Titel + Marken. ── */}
+      <div className="shrink-0" style={{ padding: "var(--space-3) var(--space-6) 0" }}>
+        {/* Zeile 1: Rückweg als Textlink — Teil der Leiste, keine eigene Bildschirmzeile */}
+        <button
+          onClick={() => navigate(returnTo)}
+          className="ui-fokusring inline-flex items-center cursor-pointer"
+          style={{ gap: 5, padding: 0, background: "none", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
+          onMouseLeave={e => (e.currentTarget.style.color = "var(--text-secondary)")}
+        >
+          <ArrowLeft style={{ width: 14, height: 14 }} /><span>{returnLabel}</span>
+        </button>
 
-        React.useEffect(() => {
-          const el = contentRef.current?.parentElement?.querySelector("[data-scroll-area]") as HTMLElement | null;
-          if (!el) return;
-          const onScroll = () => {
-            const y = el.scrollTop;
-            if (y > 60 && y > lastScrollY.current) setCollapsed(true);
-            else if (y < lastScrollY.current - 10) setCollapsed(false);
-            lastScrollY.current = y;
-          };
-          el.addEventListener("scroll", onScroll, { passive: true });
-          return () => el.removeEventListener("scroll", onScroll);
-        }, []);
-
-        const patientStepActive = activeStepData.key === "patient";
-
-        return (
-          <div ref={contentRef} className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0", marginBottom: "var(--space-3)", transition: "all 0.2s ease" }}>
-            <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: collapsed ? "10px 20px" : "14px 24px", transition: "padding 0.2s ease" }}>
-              <div className="flex items-center flex-wrap" style={{ gap: collapsed ? 8 : 12 }}>
-                {/* Zurück-Pfeil */}
-                <button
-                  onClick={() => navigate("/onboarding")}
-                  title="Zurück zur Übersicht"
-                  className="shrink-0 flex items-center justify-center cursor-pointer transition-colors"
-                  style={{ width: 32, height: 32, minHeight: 44, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "none" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-tertiary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-secondary)"}
-                >
-                  <ArrowLeft style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
-                </button>
-
-                {/* Title + Meta */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center" style={{ gap: 8 }}>
-                    <span className="truncate" style={{ fontSize: collapsed ? "var(--text-body)" : "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", transition: "font-size 0.2s ease" }}>
-                      {isExisting && caseInfo ? `Onboarding — ${caseInfo.patient}` : "Neues Mandat eröffnen"}
-                    </span>
-                    {/* Vorgangs-Status-Pill (always visible) */}
-                    <span className="inline-flex items-center shrink-0" style={{ gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: vorgangsStatusColor.bg, color: vorgangsStatusColor.color }}>
-                      {vorgangsStatusLabel}
-                    </span>
-                  </div>
-                  {/* Meta (hidden when collapsed) */}
-                  {!collapsed && isExisting && caseInfo && (
-                    <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2 }}>
-                      Angehörige: {caseInfo.angehoeriger} · Eintritt {caseInfo.vertragDatum}
-                    </div>
-                  )}
-                </div>
-
-                {/* Aggregat-Pills (hidden when collapsed) — max. 2, als Kommentar festgehalten */}
-                {!collapsed && (
-                  <div className="flex items-center shrink-0 flex-wrap" style={{ gap: 6 }}>
-                    {/* Pill 1: Workflow-Schritte (always visible, neutral) */}
-                    <button
-                      onClick={() => { if (patientStepActive) { setRequestedPatientTab(7); } else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(7), 100); } }}
-                      className="inline-flex items-center cursor-pointer"
-                      style={{ gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "0.5px solid var(--border-default)" }}
-                      onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
-                      onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-                    >
-                      <Check style={{ width: 9, height: 9 }} />
-                      {completedCount} von {nonBlockedSteps.length} Schritten
-                    </button>
-                    {/* Pill 2: Pflichtdokumente — neutral (Outline) oder Ocker (letzter Blocker) */}
-                    {fehlendeDocs > 0 && (
-                      <button
-                        onClick={() => { if (patientStepActive) { setRequestedPatientTab(8); } else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(8), 100); } }}
-                        className="inline-flex items-center cursor-pointer"
-                        style={{
-                          gap: 3, padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500,
-                          ...(docsAreLastBlocker
-                            ? { background: "var(--status-warning-bg)", color: "var(--status-warning-text)", border: "none" }
-                            : { background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "0.5px solid var(--border-default)" }),
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
-                        onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-                      >
-                        {docsAreLastBlocker && <AlertTriangle style={{ width: 9, height: 9 }} />}
-                        {fehlendeDocs} {docsAreLastBlocker ? "Pflichtdok. fehlen" : "Dokumente offen"}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            {/* Anna-Hinweis-Zeile (deterministisch, regelbasiert, kollabiert mit) */}
-            {!collapsed && <AnnaHinweisZeile
-              onJumpToPflegeplanung={() => { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(5), 100); }}
-            />}
-          </div>
-        );
-      })()}
-
-      {/* ═══════════════════════════════════════
-         AUFZEICHNUNG (Onboarding-Ebene, sichtbar in allen Schritten/Tabs)
-         ═══════════════════════════════════════ */}
-      {isExisting && (
-        <div style={{ padding: "0 var(--space-6)", marginBottom: 2 }}>
-          {isRecording ? (
-            /* During recording: quiet hint — Beenden is in the global bar only */
-            <div className="flex items-center" style={{ gap: 8, padding: "8px 16px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--status-danger)", animation: "pulse 1.5s ease-in-out infinite", flexShrink: 0 }} />
-              <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-                Aufzeichnung läuft — beenden über die Leiste oben.
+        {/* Zeile 2 */}
+        <div className="flex items-start justify-between" style={{ gap: 12 }}>
+          {/* Links: Patientenname (Titel) · bedienbare Statusmarke · Angehörige (Kontext) */}
+          <div className="min-w-0 flex items-center flex-wrap" style={{ gap: 8, rowGap: 4, minHeight: 26 }}>
+            <span style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere", minWidth: 0 }}>
+              {isExisting && caseInfo ? caseInfo.patient : "Neues Mandat eröffnen"}
+            </span>
+            {caseId ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Status ändern, aktuell ${statusDarstellung.label}`}
+                    className="ui-fokusring inline-flex items-center shrink-0 cursor-pointer"
+                    style={{ gap: 5, height: "var(--marke-height-interaktiv)", padding: "0 8px 0 10px", borderRadius: "var(--control-radius)", fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--bg-elevated)", color: "var(--text-primary)", border: "var(--border-thin) solid var(--border-default)", fontFamily: "inherit" }}
+                  >
+                    <span style={{ width: 6, height: 6, borderRadius: 999, background: statusDarstellung.dot }} />
+                    {statusDarstellung.label}
+                    <ChevronDown style={{ width: 12, height: 12, opacity: 0.7 }} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {ONBOARDING_STATUS_WERTE.map(s => {
+                    const cfg = ONBOARDING_STATUS_CFG[s];
+                    return (
+                      <DropdownMenuItem key={s} onSelect={() => waehleStatus(s)} style={{ gap: 8 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 999, background: cfg.dot }} />
+                        <span style={{ flex: 1 }}>{cfg.label}</span>
+                        <Check style={{ width: 13, height: 13, opacity: caseStatus === s ? 1 : 0 }} />
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <StatusMarke label={statusDarstellung.label} variante="neutral" />
+            )}
+            {caseInfo && (
+              <span className="inline-flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)" }}>
+                <span style={{ color: "var(--text-tertiary)" }}>Angehörige</span>
+                <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{caseInfo.angehoeriger}</span>
               </span>
+            )}
+            {caseStatus === "abgebrochen" && statusGrund && (
+              <span style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)" }}>Abbruchgrund: {statusGrund}</span>
+            )}
+          </div>
+
+          {/* Rechts: überfällig (nur wenn vorhanden) · Schrittzähler · Dokumente · Überlaufmenü */}
+          <div className="flex items-center shrink-0 flex-wrap justify-end" style={{ gap: 6 }}>
+            {ueberfaelligAnzahl > 0 && <StatusMarke label={`${ueberfaelligAnzahl} überfällig`} variante="warnung" />}
+            <StatusMarke label={`${completedCount} von ${nonBlockedSteps.length} Schritten`} variante="neutral" />
+            {fehlendeDocs > 0 && (
+              docsAreLastBlocker
+                ? <StatusMarke label={`${fehlendeDocs} Pflichtdok. fehlen`} variante="warnung" />
+                : <StatusMarke label={`${fehlendeDocs} Dokumente offen`} variante="neutral" />
+            )}
+            {caseId && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Weitere Aktionen"
+                    className="ui-fokusring flex items-center justify-center shrink-0 cursor-pointer"
+                    style={{ width: "var(--marke-height-interaktiv)", height: "var(--marke-height-interaktiv)", borderRadius: "var(--control-radius)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <MoreVertical style={{ width: 16, height: 16 }} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setAbbruchOffen(true)} style={{ gap: 8, color: "var(--status-danger)" }}>
+                    <Ban style={{ width: 14, height: 14 }} /> Fall abbrechen
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* AUFGABENSTREIFEN entfernt (§D): Inhalt ist in Abschnitt WORKFLOW der
+         Zustandsspalte aufgegangen. Karte "Nächster Betreuungsrhythmus" existiert nicht mehr. */}
+
+      {/* Workflow-Seitenpanel entfernt (§A): der Workflow ist bereits ein Reiter im
+         Patienten-Schritt. "Alle N anzeigen" wechselt dorthin (siehe oeffneRhythmus). */}
+
+
+      {/* ═══════════════════════════════════════
+         ABBRUCH-DIALOG — destruktiv, Grund erforderlich
+         ═══════════════════════════════════════ */}
+      {abbruchOffen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "color-mix(in srgb, var(--text-primary) 40%, transparent)", padding: 16 }}
+          onClick={() => setAbbruchOffen(false)}
+          onKeyDown={e => { if (e.key === "Escape") setAbbruchOffen(false); }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Onboarding-Fall abbrechen"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 440, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", padding: "var(--space-6)" }}
+          >
+            <div className="flex items-center" style={{ gap: 10, marginBottom: 8 }}>
+              <span className="shrink-0 flex items-center justify-center" style={{ width: 32, height: 32, borderRadius: "var(--radius-pill)", background: "var(--status-danger-bg)" }}>
+                <Ban style={{ width: 16, height: 16, color: "var(--status-danger)" }} />
+              </span>
+              <span style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-semibold)", color: "var(--text-primary)" }}>Fall abbrechen</span>
             </div>
-          ) : (
-            /* Vor der Aufzeichnung: Einstiegsblock */
-            <div style={{ padding: "14px 18px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>Gespräch aufzeichnen</div>
-                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>
-                    Aus dem Gespräch entstehen Vorschläge für die Bedarfsabklärung (interRAI), Pflegeplanung und KLV-Verordnung.
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    if (!caseId) return;
-                    const person = getPersonByOnboardingId(caseId);
-                    if (!person) return;
-                    const assessments = getAssessmentsForPerson(person.id);
-                    const target = assessments.find(a => a.status === "in_bearbeitung") ?? createAssessment(person.id, "erstabklaerung");
-                    recording.startRecording(person.id, target.id, `${person.vorname} ${person.nachname}`);
-                  }}
-                  className="inline-flex items-center cursor-pointer shrink-0"
-                  style={{ gap: 6, padding: "8px 20px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
-                >
-                  <Mic style={{ width: 14, height: 14 }} /> Aufzeichnen
-                </button>
-              </div>
+            <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 14 }}>
+              Der Fall wird als abgebrochen markiert. Ein Grund ist erforderlich; er wird im Statusverlauf festgehalten. Der Abbruch lässt sich später wieder aufheben.
+            </p>
+            <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Grund</label>
+            <textarea
+              value={abbruchGrund}
+              onChange={e => setAbbruchGrund(e.target.value)}
+              autoFocus
+              rows={3}
+              placeholder="z. B. Mandat zurückgezogen, Doppelerfassung, Wechsel zu anderem Anbieter"
+              style={{ width: "100%", resize: "vertical", padding: "10px 12px", fontSize: "var(--text-small)", fontFamily: "inherit", color: "var(--text-primary)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-input)" }}
+            />
+            <div className="flex items-center justify-end" style={{ gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => { setAbbruchOffen(false); setAbbruchGrund(""); }}
+                className="cursor-pointer"
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={bestaetigeAbbruch}
+                disabled={!abbruchGrund.trim()}
+                className="cursor-pointer"
+                style={{ padding: "8px 16px", borderRadius: "var(--radius-pill)", border: "none", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-on-dark)", background: abbruchGrund.trim() ? "var(--status-danger)" : "var(--border-default)", opacity: abbruchGrund.trim() ? 1 : 0.7, cursor: abbruchGrund.trim() ? "pointer" : "not-allowed" }}
+              >
+                Fall abbrechen
+              </button>
             </div>
-          )}
+          </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════
-         MOBILE STEPPER
-         ═══════════════════════════════════════ */}
-      <div className="lg:hidden shrink-0 overflow-x-auto" style={{ padding: "var(--space-3) var(--space-4)" }}>
-        <div className="flex items-center" style={{ gap: "var(--space-1)" }}>
-          {wizardSteps.map((step, idx) => {
-            const isSelected = currentStep === step.id;
-            const isCompleted = completedSteps.has(step.id);
-            const isDanger = !!step.danger;
-            const isBlocked = !!step.blocked;
-            return (
-              <button key={step.key} onClick={() => !isBlocked && goToStep(step.id)} disabled={isBlocked}
-                className="inline-flex items-center whitespace-nowrap shrink-0 cursor-pointer transition-colors"
-                style={{
-                  gap: "var(--space-1)", padding: "var(--space-2) var(--space-3)", borderRadius: "var(--radius-pill)",
-                  fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
-                  opacity: isBlocked ? 0.5 : 1, cursor: isBlocked ? "not-allowed" : "pointer",
-                  background: isSelected ? "var(--brand-primary-light)" : isCompleted ? "var(--status-success-bg)" : isDanger ? "var(--status-danger-bg)" : "transparent",
-                  color: isSelected ? "var(--brand-primary)" : isCompleted ? "var(--status-success-text)" : isDanger ? "var(--status-danger)" : "var(--text-secondary)",
-                }}>
-                {isCompleted ? <Check style={{ width: 12, height: 12 }} /> : <step.icon style={{ width: 12, height: 12 }} />}
-                <span className="hidden sm:inline">{step.shortLabel}</span>
-                <span className="sm:hidden">{idx + 1}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* AUFZEICHNUNG-Karte entfernt (§E): "Gespräch" ist eine Aktion (sekundärer Knopf
+         rechts über der Reiterleiste), keine Karte. Der Erklärsatz erscheint als Hinweis
+         beim ersten Öffnen (siehe startGespraech). */}
+
+      {/* Mobile-Stepper entfernt (§A): die Phasen sind jetzt die erste Reiterebene
+         oben im Container und auf allen Breiten sichtbar. */}
 
       {/* ═══════════════════════════════════════
          MAIN SPLIT LAYOUT
          ═══════════════════════════════════════ */}
-      <div className="flex-1 flex min-h-0" style={{ padding: "0 var(--space-6)" }}>
-        <div className="flex w-full min-h-0" style={{ gap: "var(--space-5)" }}>
-          {/* ── LEFT: Sidebar (desktop) ── */}
-          <div className="hidden lg:flex shrink-0 flex-col min-h-0" style={{ width: 240 }}>
-            <div className="flex-1 overflow-y-auto" style={{ paddingRight: "var(--space-1)" }}>
-              <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-4)" }}>
-                <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-4)" }}>
-                  Fortschritt
-                </div>
+      <div className="flex-1 flex min-h-0" style={{ padding: "var(--space-3) var(--space-6) var(--space-4)" }}>
+        {/* §B: EIN Container mit Aussenlinie + Radius 10, kein Schatten; zwei Spalten, senkrechte Haarlinie 0.5. */}
+        <div className="flex w-full min-h-0" style={{ border: "var(--border-thin) solid var(--border-default)", borderRadius: 10, background: "var(--bg-elevated)", overflow: "hidden" }}>
+          {/* ── Zustandsspalte (200px fest, an den längsten echten Werten geprüft; kein Kürzen, Umbruch erlaubt) ── */}
+          <div className="hidden lg:flex shrink-0 flex-col min-h-0 overflow-y-auto" style={{ width: 200, borderRight: "var(--border-thin) solid var(--border-default)", padding: "var(--space-4)" }}>
+                {/* Abschnitt FORTSCHRITT entfernt (§C): die Phasen sind jetzt die erste
+                   Reiterebene oben. Die Spalte zeigt nur noch, was zugewiesen ist und was ansteht. */}
 
-                <nav className="flex flex-col" style={{ gap: "var(--space-1)" }}>
-                  {wizardSteps.map((step, idx) => {
-                    const Icon = step.icon;
-                    const isSelected = currentStep === step.id;
-                    const isCompleted = completedSteps.has(step.id);
-                    const isDanger = !!step.danger;
-                    const isBlocked = !!step.blocked;
-                    const isInProgress = visitedSteps.has(step.id) && step.id === currentStep;
+                {/* ── Abschnitt BEZUGSPERSON (§E): Überschrift IST die Beschriftung; der Chip
+                       steht allein darunter, linksbündig, über volle Spaltenbreite (Name bricht nicht um). ── */}
+                <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-3)" }}>Bezugsperson</div>
+                {caseId ? <BezugspersonAuswahl caseId={caseId} /> : <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>—</span>}
 
-                    const iconBg = isBlocked ? "var(--status-danger-bg)" : isDanger ? "var(--status-danger)" : isCompleted ? "var(--status-success)" : isInProgress ? "var(--brand-primary)" : "var(--bg-secondary)";
-                    const iconColor = isBlocked ? "var(--status-danger)" : (isDanger || isCompleted || isInProgress) ? "var(--text-on-dark)" : "var(--text-secondary)";
+                {/* Trennlinie */}
+                <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "var(--space-4) 0" }} />
 
-                    const isVisitedButIncomplete = visitedSteps.has(step.id) && !isCompleted && !isInProgress;
-                    let statusText = "Ausstehend";
-                    let statusColor = "var(--text-tertiary)";
-                    if (isBlocked) { statusText = "Blockiert"; statusColor = "var(--status-danger)"; }
-                    else if (isDanger) { statusText = "Pflicht · ausstehend"; statusColor = "var(--status-danger)"; }
-                    else if (isCompleted) {
-                      statusText = step.key === "spezialbewilligung" && angehoerigerData.spezialbewilligungEinreichungsDatum
-                        ? `Eingereicht am ${angehoerigerData.spezialbewilligungEinreichungsDatum.split("-").reverse().join(".")}`
-                        : "Abgeschlossen";
-                      statusColor = "var(--status-success-text)";
-                    } else if (isInProgress) { statusText = "In Bearbeitung"; statusColor = "var(--text-secondary)"; }
-                    else if (isVisitedButIncomplete) { statusText = "Unvollständig"; statusColor = "var(--status-warning-text)"; }
-
-                    return (
-                      <div key={step.key}>
-                        <button
-                          onClick={() => !isBlocked && goToStep(step.id)}
-                          disabled={isBlocked}
-                          className="w-full flex items-start text-left cursor-pointer transition-colors"
-                          style={{
-                            gap: "var(--space-2)", padding: "8px 10px", borderRadius: "var(--radius-card)",
-                            opacity: isBlocked ? 0.6 : 1, cursor: isBlocked ? "not-allowed" : "pointer",
-                            background: isSelected ? "var(--brand-primary-light)" : "transparent",
-                          }}
-                          onMouseEnter={e => { if (!isSelected && !isBlocked) e.currentTarget.style.background = "var(--bg-secondary)"; }}
-                          onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
-                        >
-                          <div className="shrink-0 flex items-center justify-center" style={{ width: 32, height: 32, borderRadius: "var(--radius-card)", background: iconBg }}>
-                            {isCompleted ? <Check style={{ width: 14, height: 14, color: iconColor }} /> : <Icon style={{ width: 14, height: 14, color: iconColor }} />}
-                          </div>
-                          <div className="flex-1 min-w-0" style={{ paddingTop: 2 }}>
-                            <div className="truncate" style={{ fontSize: "var(--text-small)", fontWeight: isSelected ? "var(--weight-medium)" : "var(--weight-regular)", color: isSelected ? "var(--brand-primary)" : "var(--text-primary)" }}>
-                              {step.label}
+                {/* ── Abschnitt WORKFLOW (§C/§E/§H): Überschrift IST die Beschriftung; darunter nur Aufgaben ── */}
+                <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-3)" }}>Workflow</div>
+                {rhythmusTickets.length === 0 ? (
+                  // Leerzustand: nur der Leerzustandstext, KEIN Aufteilungssatz (§H)
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                    Noch keine Aufgaben erzeugt. Sie entstehen im Patienten-Schritt.
+                  </div>
+                ) : (
+                  <>
+                    {naechste3.length > 0 ? (
+                      <div className="flex flex-col" style={{ gap: "var(--space-2)" }}>
+                        {naechste3.map(t => {
+                          const d = isoZuDate(t.faelligAm);
+                          // §A3: in der Spalte NUR die relative Angabe ("Heute", "in 2 Tagen",
+                          // "12 Tage überfällig"). Das absolute Datum steht im Workflow-Reiter.
+                          const faelligText = d ? formatFaelligkeit(d) : t.faelligAm;
+                          const ov = t.status === "ueberfaellig";
+                          return (
+                            <div key={t.id} className="flex items-start" style={{ gap: 6 }}>
+                              {ov
+                                ? <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
+                                : <Circle style={{ width: 13, height: 13, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 1 }} />}
+                              <div className="min-w-0">
+                                <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{t.label}</div>
+                                <div style={{ fontSize: "var(--text-micro)", fontWeight: ov ? "var(--weight-semibold)" : 400, color: ov ? "var(--status-danger)" : "var(--text-tertiary)" }}>{faelligText}</div>
+                              </div>
                             </div>
-                            <div className="truncate" style={{ fontSize: "var(--text-micro)", color: statusColor, marginTop: 2 }}>
-                              {statusText}
-                            </div>
-                          </div>
-                          {isSelected && !isBlocked && <ChevronRight style={{ width: 16, height: 16, color: "var(--brand-primary)", flexShrink: 0, marginTop: 2 }} />}
-                          {isDanger && <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning)", flexShrink: 0, marginTop: 2 }} title="Erforderlich wegen Aufenthaltsstatus B" />}
-                        </button>
-                        {idx < wizardSteps.length - 1 && (
-                          <div style={{ display: "flex", justifyContent: "flex-start", paddingLeft: 22 }}>
-                            <div style={{ width: "var(--border-thin)", height: 8, background: isCompleted ? "var(--status-success)" : "var(--border-default)", borderRadius: "var(--radius-pill)" }} />
-                          </div>
-                        )}
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </nav>
+                    ) : (
+                      <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Alle Aufgaben erledigt.</div>
+                    )}
+                    {offeneAnzahl > 0 && (
+                      <button
+                        onClick={oeffneRhythmus}
+                        className="ui-fokusring inline-flex items-center cursor-pointer"
+                        style={{ marginTop: "var(--space-3)", gap: 4, padding: 0, background: "none", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-secondary)" }}
+                        onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
+                        onMouseLeave={e => (e.currentTarget.style.color = "var(--text-secondary)")}
+                      >
+                        Alle {offeneAnzahl} anzeigen <ChevronRight style={{ width: 13, height: 13 }} />
+                      </button>
+                    )}
+                    {/* Erklärsatz nur wenn Aufgaben vorhanden (§H). Einzige Stelle, die das Domänenmodell erklärt. */}
+                    <div style={{ marginTop: "var(--space-4)", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
+                      Angehörige erhält nach Unterzeichnung einen eigenen Workflow.
+                    </div>
+                  </>
+                )}
 
               </div>
-            </div>
-          </div>
 
-          {/* ── RIGHT: Content ── */}
+          {/* ── Inhalt (§B): nimmt den Rest, keine eigene Karte ── */}
           <div className="flex-1 flex flex-col min-h-0 min-w-0">
+            {/* ── ERSTE Reiterebene: Phasen (§A). Höhe 40, Zustandssymbol links, aktiver
+                 Eintrag unterstrichen (2px, Textfarbe), Containerfläche ohne Tönung. ── */}
+            <div
+              role="tablist"
+              aria-label="Phasen"
+              className="shrink-0 flex overflow-x-auto"
+              style={{ background: "var(--bg-elevated)" }}
+              onKeyDown={e => {
+                if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+                const btns = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("button:not([disabled])"));
+                const i = btns.indexOf(document.activeElement as HTMLButtonElement);
+                if (i === -1) return;
+                e.preventDefault();
+                (e.key === "ArrowRight" ? btns[i + 1] : btns[i - 1])?.focus();
+              }}
+            >
+              {wizardSteps.map((step) => {
+                const isSelected = currentStep === step.id;
+                const isCompleted = completedSteps.has(step.id);
+                const isDanger = !!step.danger;
+                const isBlocked = !!step.blocked;
+                const isInProgress = visitedSteps.has(step.id) && step.id === currentStep;
+                const isVisitedButIncomplete = visitedSteps.has(step.id) && !isCompleted && !isInProgress;
+                const z = phasenZustand({ isCompleted, isInProgress, isBlocked, isDanger, isVisitedButIncomplete });
+                const ZIcon = z.icon;
+                return (
+                  <button
+                    key={step.key}
+                    role="tab"
+                    aria-selected={isSelected}
+                    onClick={() => !isBlocked && goToStep(step.id)}
+                    disabled={isBlocked}
+                    title={isBlocked ? "Blockiert — Spezialbewilligung zuerst einreichen" : undefined}
+                    className="ui-fokusring relative inline-flex items-center whitespace-nowrap shrink-0 cursor-pointer"
+                    style={{
+                      height: 40, gap: 6, padding: "0 14px", background: "transparent", border: "none", fontFamily: "inherit",
+                      fontSize: "var(--text-small)", fontWeight: isSelected ? "var(--weight-medium)" : "var(--weight-regular)",
+                      color: isSelected ? "var(--text-primary)" : z.color,
+                      opacity: isBlocked ? 0.6 : 1, cursor: isBlocked ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    <ZIcon style={{ width: 14, height: 14, color: z.color, flexShrink: 0 }} role="img" aria-label={z.label} />
+                    <span>{step.label}</span>
+                    {isSelected && <span style={{ position: "absolute", left: 14, right: 14, bottom: 0, height: 2, background: "var(--text-primary)", borderRadius: 1 }} />}
+                  </button>
+                );
+              })}
+            </div>
+
             <div data-scroll-area className="flex-1 overflow-y-auto" style={{ paddingBottom: "var(--space-4)" }}>
               {activeStepData.key === "angehoeriger" && (
                 <StepAngehoeriger
@@ -693,6 +830,7 @@ export function OnboardingPage() {
                   onChange={setAngehoerigerData}
                   onValidityChange={setStep1Valid}
                   onOpenSpezialbewilligung={() => setShowSpezialbewilligung(true)}
+                  reiterAktion={gespraechReiter}
                 />
               )}
               {activeStepData.key === "spezialbewilligung" && (
@@ -706,6 +844,7 @@ export function OnboardingPage() {
                   onboardingId={caseId || undefined}
                   requestedTab={requestedPatientTab}
                   onTabSwitched={() => setRequestedPatientTab(null)}
+                  reiterAktion={gespraechReiter}
                 />
               )}
               {activeStepData.key === "vertrag" && (
@@ -719,58 +858,44 @@ export function OnboardingPage() {
               )}
             </div>
 
-            {/* ── FOOTER NAVIGATION ── */}
-            <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6)", background: "var(--bg-primary)", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+            {/* ── FOOTER NAVIGATION (innerhalb des Containers, keine eigene Karte) ── */}
+            <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-5)", background: "transparent", borderTop: "var(--border-thin) solid var(--border-default)" }}>
               <div className="flex items-center justify-between">
-                {/* Left: Back */}
-                <button onClick={goPrev} disabled={currentStep === 1} className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ gap: "var(--space-2)", padding: "9.5px 22px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--text-primary)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
-                  onMouseEnter={e => { if (currentStep > 1) e.currentTarget.style.background = "var(--bg-secondary)"; }} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
-                  <ChevronLeft style={{ width: 14, height: 14 }} /> Zurück
-                </button>
+                {/* Left: Back (Wizard-Schritt zurück) — Sekundär */}
+                <AppButton variant="sekundaer" icon={ChevronLeft} onClick={goPrev} disabled={currentStep === 1}>Zurück</AppButton>
 
-                {/* Center: Step indicator */}
-                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Schritt {currentStep} von {wizardSteps.length}</span>
+                {/* "Schritt n von 3" entfernt (§D): die Phasenzeile zeigt dieselbe Information
+                   und benennt zusätzlich die Phase. Platzhalter hält die Fusszeile ausbalanciert. */}
+                <span aria-hidden="true" />
 
-                {/* Right: Save + Next/Finish */}
+                {/* Right: Save + Next/Finish — genau ein Primär (Weiter ODER Abschliessen) */}
                 <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-                  <button onClick={handleSave} disabled={isSaving} className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-50"
-                    style={{ gap: "var(--space-2)", padding: "9.5px 22px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--text-primary)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
-                    {isSaving ? <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" /> : <Save style={{ width: 14, height: 14 }} />}
-                    <span className="hidden lg:inline">Speichern</span>
-                  </button>
+                  <AppButton variant="sekundaer" icon={isSaving ? Loader2 : Save} iconClassName={isSaving ? "animate-spin" : undefined} onClick={handleSave} disabled={isSaving}>Speichern</AppButton>
 
                   {currentStep < wizardSteps.length ? (
                     (() => {
                       const isOnSpezialbewilligung = activeStepData.key === "spezialbewilligung";
                       const spezialbewilligungIncomplete = isOnSpezialbewilligung && !bewilligungEingereicht;
                       return (
-                        <button onClick={spezialbewilligungIncomplete ? undefined : goNext} disabled={spezialbewilligungIncomplete}
-                          className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
-                          onMouseEnter={e => { if (!spezialbewilligungIncomplete) e.currentTarget.style.background = "var(--brand-primary-dark)"; }}
-                          onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
+                        <AppButton variant="primaer" iconRight={ChevronRight}
+                          onClick={spezialbewilligungIncomplete ? undefined : goNext}
+                          disabled={spezialbewilligungIncomplete}
                           title={spezialbewilligungIncomplete ? "Erst Spezialbewilligung einreichen" : undefined}>
-                          Weiter <ChevronRight style={{ width: 14, height: 14 }} />
-                        </button>
+                          Weiter
+                        </AppButton>
                       );
                     })()
                   ) : (
                     <div>
-                      <button
+                      <AppButton variant="primaer" icon={Check}
                         onClick={() => {
                           if (!abschlussPruefung.arbeitsvertragOk) return;
                           setOverrideBegrundung("");
                           setShowAbschlussDialog(true);
                         }}
-                        disabled={isSaving || !abschlussPruefung.arbeitsvertragOk}
-                        className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
-                        onMouseEnter={e => { if (abschlussPruefung.arbeitsvertragOk) e.currentTarget.style.background = "var(--brand-primary-dark)"; }}
-                        onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
-                        <Check style={{ width: 14, height: 14 }} /> Onboarding abschliessen
-                      </button>
+                        disabled={isSaving || !abschlussPruefung.arbeitsvertragOk}>
+                        Onboarding abschliessen
+                      </AppButton>
                       {!abschlussPruefung.arbeitsvertragOk && (
                         <div style={{ marginTop: 6, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
                           Arbeitsvertrag muss zuerst im Schritt «Vertragsunterzeichnung» unterschrieben werden.
@@ -876,8 +1001,9 @@ export function OnboardingPage() {
             })()}
 
             <div className="flex items-center justify-end" style={{ gap: "var(--space-2)", marginTop: 20 }}>
-              <button onClick={() => setShowAbschlussDialog(false)} className="cursor-pointer" style={{ padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Abbrechen</button>
-              <button
+              <AppButton variant="sekundaer" onClick={() => setShowAbschlussDialog(false)}>Abbrechen</AppButton>
+              <AppButton
+                variant="primaer"
                 disabled={abschlussPruefung.fehlendePflichtdokumente.length > 0 && !overrideBegrundung.trim()}
                 onClick={() => {
                   if (caseId) {
@@ -898,7 +1024,8 @@ export function OnboardingPage() {
                       aufenthaltsstatus: angehoerigerData.aufenthaltsstatus,
                       bvgAnbindungGewuenscht: angehoerigerData.bvgAnbindungGewuenscht === "ja",
                       qualifikation: angehoerigerData.qualifikation,
-                    });
+                      eintrittsdatum: angehoerigerData.eintrittsdatum,
+                    }, ausloeser);
 
                     // Qualifizierte Erfolgsmeldung
                     const a = ergebnis.konvertierteArtefakte;
@@ -914,11 +1041,9 @@ export function OnboardingPage() {
                   toast(`Onboarding abgeschlossen${overrideHint}. ${caseInfo?.patient || "Patient"} ist jetzt ein aktiver Klient.`);
                   setTimeout(() => navigate("/patienten"), 1500);
                 }}
-                className="cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-on-dark)" }}
               >
                 {abschlussPruefung.fehlendePflichtdokumente.length > 0 ? "Trotzdem abschliessen" : "Konvertieren und abschliessen"}
-              </button>
+              </AppButton>
             </div>
           </div>
         </div>

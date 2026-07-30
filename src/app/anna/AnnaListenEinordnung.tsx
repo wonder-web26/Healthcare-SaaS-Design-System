@@ -26,8 +26,11 @@ export interface DetailKontext {
 }
 
 type Props =
-  | { context: ListenKontext; detailContext?: never }
-  | { context?: never; detailContext: DetailKontext };
+  // `einordnung` überschreibt den generierten Text (optional). Erlaubt einer Liste,
+  // ihre Zusammenfassung selbst zu formulieren, ohne die geteilte Bausteinlogik zu
+  // ändern. Bestehende Verwender ohne dieses Prop bleiben unverändert.
+  | { context: ListenKontext; einordnung?: string; detailContext?: never }
+  | { context?: never; einordnung?: never; detailContext: DetailKontext };
 
 function hashKontext(ctx: ListenKontext | DetailKontext): string {
   return JSON.stringify(ctx);
@@ -143,10 +146,11 @@ export function AnnaListenEinordnung(props: Props) {
   const [streaming, setStreaming] = useState(true);
   const [displayed, setDisplayed] = useState("");
   // Compute a stable cache key and data hash for dependency tracking
+  const override = isDetail ? undefined : props.einordnung;
   const cacheId = isDetail
     ? `anna_detail_${(ctx as DetailKontext).mandatId}`
     : `anna_einordnung_${(ctx as ListenKontext).seite}`;
-  const dataHash = hashKontext(ctx);
+  const dataHash = hashKontext(ctx) + (override ? `|e:${override}` : "");
 
   useEffect(() => {
     // Check session cache
@@ -171,7 +175,7 @@ export function AnnaListenEinordnung(props: Props) {
     const timer = setTimeout(() => {
       const generated = isDetail
         ? generateDetailEinordnung(ctx as DetailKontext)
-        : generateMockEinordnung(ctx as ListenKontext);
+        : (override ?? generateMockEinordnung(ctx as ListenKontext));
       setText(generated);
 
       // Save to session cache

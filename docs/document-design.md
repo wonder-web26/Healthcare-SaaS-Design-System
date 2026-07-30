@@ -28,6 +28,10 @@ strings.
 5. **Every page identifies itself.** If a sheet gets separated from the file,
    the footer says where it belongs.
 6. **No logos.** Neither the organisation's nor the software vendor's.
+7. **Labels are never truncated with an ellipsis.** If space is short the text
+   wraps onto multiple lines; it is never cut with `…`. This holds for the
+   generated documents here and, product-wide, for the on-screen UI — the
+   binding statement for the UI lives in `styleguide.md` (§3 · Typografie).
 
 ---
 
