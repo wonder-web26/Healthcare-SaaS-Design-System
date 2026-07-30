@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Check,
   CheckCircle2,
@@ -401,6 +401,23 @@ interface StepPatientProps {
 export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion }: StepPatientProps) {
   const [activeTab, setActiveTab] = useState(0);
 
+  // §D: Verlauf am rechten Rand der Abschnittszeile, solange waagrecht scrollbar (nicht am Ende).
+  const abschnittScrollRef = useRef<HTMLDivElement>(null);
+  const [zeigtVerlauf, setZeigtVerlauf] = useState(false);
+  const pruefeVerlauf = useCallback(() => {
+    const el = abschnittScrollRef.current;
+    if (el) setZeigtVerlauf(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+  useEffect(() => {
+    pruefeVerlauf();
+    const el = abschnittScrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(pruefeVerlauf);
+    ro.observe(el);
+    window.addEventListener("resize", pruefeVerlauf);
+    return () => { ro.disconnect(); window.removeEventListener("resize", pruefeVerlauf); };
+  }, [pruefeVerlauf]);
+
   // External tab-switch request
   useEffect(() => {
     if (requestedTab != null && requestedTab !== activeTab) {
@@ -461,23 +478,27 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
       {/* ═══════════════════════════════════════
          HORIZONTAL TAB NAVIGATION + Recording-Button
          ═══════════════════════════════════════ */}
-      {/* ZWEITE Reiterebene: Abschnitte der aktiven Phase (§A). Getönte Fläche über volle
-          Breite, Höhe 34, Schrift 12, KEIN Zustandssymbol, aktiver Eintrag 1.5px unterstrichen;
-          Haarlinie 0.5 oben und unten. "Gespräch" rechts, fixiert; bei zehn Reitern scrollen sie. */}
-      <div className="flex items-center" style={{ background: "var(--bg-secondary)", padding: "0 20px", borderTop: "var(--border-thin) solid var(--border-default)", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
-        <div className="flex-1 overflow-x-auto">
+      {/* ZWEITE Reiterebene: Abschnitte der aktiven Phase (§B). KEINE Tönung (Containerfläche),
+          Höhe 48, Schrift 12, KEIN Zustandssymbol, Abstand 16, aktiver Eintrag 1.5px unterstrichen.
+          Die Ebenen-Haarlinie trägt die Phasenzeile; hier nur die untere Haarlinie zum Formular.
+          "Gespräch" rechts fixiert; zehn Abschnitte scrollen waagrecht mit Verlauf-Hinweis (§C/§D). */}
+      <div className="flex items-center" style={{ background: "transparent", padding: "0 20px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+        <div className="relative flex-1 min-w-0">
+        <div ref={abschnittScrollRef} onScroll={pruefeVerlauf} className="overflow-x-auto">
         <div
           role="tablist"
           aria-label="Abschnitte"
           className="flex min-w-max"
-          style={{ gap: 0 }}
+          style={{ gap: 16 }}
           onKeyDown={e => {
             if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
             const btns = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
             const i = btns.indexOf(document.activeElement as HTMLButtonElement);
             if (i === -1) return;
             e.preventDefault();
-            (e.key === "ArrowRight" ? btns[i + 1] : btns[i - 1])?.focus();
+            const next = e.key === "ArrowRight" ? btns[i + 1] : btns[i - 1];
+            next?.focus();
+            next?.scrollIntoView({ inline: "nearest", block: "nearest" });
           }}
         >
           {tabDefs.map((tab, idx) => {
@@ -492,7 +513,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
                 onClick={() => setActiveTab(idx)}
                 className="ui-fokusring relative flex items-center whitespace-nowrap transition-colors cursor-pointer"
                 style={{
-                  height: 34, padding: "0 14px",
+                  height: 48, padding: 0,
                   fontSize: "var(--text-meta)", fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",
                   color: isActive ? "var(--text-primary)" : complete ? "var(--status-success-text)" : "var(--text-secondary)",
                   background: "transparent", border: "none", fontFamily: "inherit",
@@ -500,15 +521,20 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
               >
                 {tab.label}
                 {isActive && (
-                  <span className="absolute" style={{ bottom: 0, left: 10, right: 10, height: 1.5, background: "var(--text-primary)", borderRadius: 1 }} />
+                  <span className="absolute" style={{ bottom: 0, left: 0, right: 0, height: 1.5, background: "var(--text-primary)", borderRadius: 1 }} />
                 )}
               </button>
             );
           })}
         </div>
         </div>
+        {/* §D: Verlauf von Flächenfarbe zu durchsichtig am rechten Rand, nur wenn scrollbar */}
+        {zeigtVerlauf && (
+          <div aria-hidden="true" style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: 28, pointerEvents: "none", background: "linear-gradient(to right, transparent, var(--bg-elevated))" }} />
+        )}
+        </div>
         {reiterAktion && (
-          <div className="flex items-center shrink-0" style={{ paddingLeft: 12, alignSelf: "stretch" }}>{reiterAktion}</div>
+          <div className="flex items-center shrink-0" style={{ paddingLeft: 12 }}>{reiterAktion}</div>
         )}
       </div>
 

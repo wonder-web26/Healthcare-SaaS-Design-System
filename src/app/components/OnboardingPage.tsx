@@ -510,7 +510,8 @@ export function OnboardingPage() {
         Aufzeichnung läuft
       </span>
     ) : (
-      <AppButton variant="sekundaer" icon={Mic} onClick={startGespraech}>Gespräch</AppButton>
+      // §C: Höhe 32 (Nebenweg, nicht 36) — style-Override, AppButton-Komponente unverändert
+      <AppButton variant="sekundaer" icon={Mic} onClick={startGespraech} style={{ height: 32 }}>Gespräch</AppButton>
     )
   ) : null;
 
@@ -774,20 +775,23 @@ export function OnboardingPage() {
 
           {/* ── Inhalt (§B): nimmt den Rest, keine eigene Karte ── */}
           <div className="flex-1 flex flex-col min-h-0 min-w-0">
-            {/* ── ERSTE Reiterebene: Phasen (§A). Höhe 40, Zustandssymbol links, aktiver
-                 Eintrag unterstrichen (2px, Textfarbe), Containerfläche ohne Tönung. ── */}
+            {/* ── ERSTE Reiterebene: Phasen (§B). Höhe 52, Zustandssymbol 16 links, Schrift 13,
+                 aktiver Eintrag mittlerer Schnitt + 2px-Unterstreichung an der Unterkante,
+                 Abstand 20. Containerfläche ohne Tönung, Haarlinie unten trennt die Ebenen. ── */}
             <div
               role="tablist"
               aria-label="Phasen"
               className="shrink-0 flex overflow-x-auto"
-              style={{ background: "var(--bg-elevated)" }}
+              style={{ background: "var(--bg-elevated)", padding: "0 20px", gap: 20, borderBottom: "var(--border-thin) solid var(--border-default)" }}
               onKeyDown={e => {
                 if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
                 const btns = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("button:not([disabled])"));
                 const i = btns.indexOf(document.activeElement as HTMLButtonElement);
                 if (i === -1) return;
                 e.preventDefault();
-                (e.key === "ArrowRight" ? btns[i + 1] : btns[i - 1])?.focus();
+                const next = e.key === "ArrowRight" ? btns[i + 1] : btns[i - 1];
+                next?.focus();
+                next?.scrollIntoView({ inline: "nearest", block: "nearest" });
               }}
             >
               {wizardSteps.map((step) => {
@@ -809,15 +813,15 @@ export function OnboardingPage() {
                     title={isBlocked ? "Blockiert — Spezialbewilligung zuerst einreichen" : undefined}
                     className="ui-fokusring relative inline-flex items-center whitespace-nowrap shrink-0 cursor-pointer"
                     style={{
-                      height: 40, gap: 6, padding: "0 14px", background: "transparent", border: "none", fontFamily: "inherit",
+                      height: 52, gap: 6, padding: 0, background: "transparent", border: "none", fontFamily: "inherit",
                       fontSize: "var(--text-small)", fontWeight: isSelected ? "var(--weight-medium)" : "var(--weight-regular)",
                       color: isSelected ? "var(--text-primary)" : z.color,
                       opacity: isBlocked ? 0.6 : 1, cursor: isBlocked ? "not-allowed" : "pointer",
                     }}
                   >
-                    <ZIcon style={{ width: 14, height: 14, color: z.color, flexShrink: 0 }} role="img" aria-label={z.label} />
+                    <ZIcon style={{ width: 16, height: 16, color: z.color, flexShrink: 0 }} role="img" aria-label={z.label} />
                     <span>{step.label}</span>
-                    {isSelected && <span style={{ position: "absolute", left: 14, right: 14, bottom: 0, height: 2, background: "var(--text-primary)", borderRadius: 1 }} />}
+                    {isSelected && <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 2, background: "var(--text-primary)", borderRadius: 1 }} />}
                   </button>
                 );
               })}
