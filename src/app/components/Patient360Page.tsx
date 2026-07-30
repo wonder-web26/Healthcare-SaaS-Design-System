@@ -333,72 +333,51 @@ export function Patient360Page() {
 
   return (
     <>
-      {/* ── Back + Prev/Next Navigation ──────── */}
-      <div style={{ padding: "var(--space-4) var(--space-6) 0" }}>
-        <DetailNavigation
-          backLabel="Patienten"
-          backPath="/patienten"
-          currentId={patientId!}
-          allIds={allPatientIds}
-          buildPath={(id) => `/patienten/${id}`}
-          tabParam={activeTab !== "ueberblick" ? activeTab : undefined}
-        />
-      </div>
-
-      {/* ── Patient Header ─────────────────── */}
-      <div style={{ padding: "var(--space-4) var(--space-6) 0" }}>
-        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "20px 24px" }}>
-          <div className="flex flex-col md:flex-row md:items-start" style={{ gap: 20 }}>
-            {/* Avatar */}
-            <div className="shrink-0 flex items-center justify-center" style={{ width: 56, height: 56, borderRadius: "var(--radius-card)", background: "var(--brand-primary-light)" }}>
-              <span style={{ fontSize: 20, fontWeight: "var(--weight-semibold)", color: "var(--brand-primary)" }}>
-                {patient.vorname[0]}{patient.nachname[0]}
-              </span>
+      {/* ── Patient-Kopfleiste (gleiche Anatomie wie Onboarding: keine Karte, kein Avatar).
+             Zeile 1: Rückweg (+ Blättern) als Teil der Leiste; Zeile 2: Titel + Marken | Aktionen. ── */}
+      <div style={{ padding: "var(--space-3) var(--space-6) 0" }}>
+        <div style={{ marginBottom: 4 }}>
+          <DetailNavigation
+            backLabel="Patienten"
+            backPath="/patienten"
+            currentId={patientId!}
+            allIds={allPatientIds}
+            buildPath={(id) => `/patienten/${id}`}
+            tabParam={activeTab !== "ueberblick" ? activeTab : undefined}
+          />
+        </div>
+        <div className="flex items-start justify-between" style={{ gap: 16 }}>
+          <div className="min-w-0">
+            <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
+              <h2 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+                {patient.nachname}, {patient.vorname}
+              </h2>
+              {/* Status/Abrechnung/Schweregrad: Information (nicht bedienbar), je Zustand mit Symbol. */}
+              <StatusMarke label={st.label} variante={bgZuVariante(st.bg)} />
+              <StatusMarke label={ast.label} variante={bgZuVariante(ast.bg)} />
+              <StatusMarke label={sg.label} variante={bgZuVariante(sg.bg)} />
             </div>
-
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
-                <h2 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-                  {patient.nachname}, {patient.vorname}
-                </h2>
-                {/* Status/Abrechnung/Schweregrad sind Information (nicht bedienbar):
-                    getönte Marke ohne Rahmen, je Zustand mit Symbol. */}
-                <StatusMarke label={st.label} variante={bgZuVariante(st.bg)} />
-                <StatusMarke label={ast.label} variante={bgZuVariante(ast.bg)} />
-                <StatusMarke label={sg.label} variante={bgZuVariante(sg.bg)} />
-              </div>
-
-              <div className="flex items-center flex-wrap" style={{ gap: "var(--space-3)", marginTop: 8, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-                <MaskedAhv ahv={patient.ahvNummer} />
-                <span className="hidden md:inline">·</span>
-                <span>Geb.: {patient.geburtsdatum}</span>
-              </div>
-
-              <div className="flex items-center" style={{ gap: "var(--space-2)", marginTop: 8 }}>
-                {patient.pflegefachkraft !== "—" ? (
-                  /* Shared Bezugsperson presentation — label before value, read-only here */
-                  <BezugspersonFeld person={{ initialen: patient.pflegefachkraftInitialen, name: patient.pflegefachkraft }} />
-                ) : (
-                  <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-small)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
-                    <AlertTriangle style={{ width: 12, height: 12 }} /> Nicht zugewiesen
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Actions — genau ein Primärknopf (Ticket erstellen), Rest Sekundär/Symbol */}
-            <div className="flex items-center shrink-0" style={{ gap: "var(--space-2)" }}>
-              <AppButton variant="primaer" icon={Plus} onClick={() => navigate("/servicedesk")}>Ticket erstellen</AppButton>
-              <AppButton variant="sekundaer" icon={Edit3}>Bearbeiten</AppButton>
-              <AppButton variant="symbol" icon={MoreHorizontal} ariaLabel="Weitere Aktionen" />
+            <div className="flex items-center flex-wrap" style={{ gap: "var(--space-3)", marginTop: 6, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+              <MaskedAhv ahv={patient.ahvNummer} />
+              <span className="hidden md:inline">·</span>
+              <span>Geb.: {patient.geburtsdatum}</span>
+              <span className="hidden md:inline">·</span>
+              {patient.pflegefachkraft !== "—" ? (
+                <BezugspersonFeld person={{ initialen: patient.pflegefachkraftInitialen, name: patient.pflegefachkraft }} />
+              ) : (
+                <span className="inline-flex items-center" style={{ gap: 4, color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
+                  <AlertTriangle style={{ width: 12, height: 12 }} /> Nicht zugewiesen
+                </span>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Anna Patient Summary */}
-        <div style={{ marginTop: 12 }}>
-          <AnnaPatientSummary patient={patient} />
+          {/* Actions — genau ein Primärknopf (Ticket erstellen), Rest Sekundär/Symbol */}
+          <div className="flex items-center shrink-0" style={{ gap: "var(--space-2)" }}>
+            <AppButton variant="primaer" icon={Plus} onClick={() => navigate("/servicedesk")}>Ticket erstellen</AppButton>
+            <AppButton variant="sekundaer" icon={Edit3}>Bearbeiten</AppButton>
+            <AppButton variant="symbol" icon={MoreHorizontal} ariaLabel="Weitere Aktionen" />
+          </div>
         </div>
       </div>
 
@@ -441,7 +420,13 @@ export function Patient360Page() {
 
       {/* ── Tab Content ────────────────────── */}
       <div style={{ padding: "20px var(--space-6) 40px" }}>
-        {activeTab === "ueberblick" && <TabUeberblick patient={patient} onNavigateTab={setActiveTab} />}
+        {activeTab === "ueberblick" && (
+          <>
+            {/* KI-Zusammenfassung gehört inhaltlich in den Überblick (nicht mehr über jeder Reiterleiste, §H) */}
+            <div style={{ marginBottom: 20 }}><AnnaPatientSummary patient={patient} /></div>
+            <TabUeberblick patient={patient} onNavigateTab={setActiveTab} />
+          </>
+        )}
         {activeTab === "anamnese" && <TabAnamnese patient={patient} />}
         {activeTab === "interrai" && <TabInterRAI patientId={patient.id} patientName={`${patient.nachname}, ${patient.vorname}`} navigate={navigate} />}
         {activeTab === "pflegeplanung" && <TabPflegeplanung patientId={patient.id} navigate={navigate} />}

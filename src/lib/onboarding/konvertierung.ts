@@ -11,7 +11,8 @@ import type { InterRAIAssessment, Pflegeplanung, KLVVerordnung, WorkflowPlan } f
 import { verwalteQuellensteuerPendenz } from "../stammdaten/quellensteuer-automatik";
 import { workflowTasks } from "../mocks/workflow-tasks";
 import { getMessungenFuerPatient } from "../vitaldaten/store";
-import { konvertiereRhythmusSubjekt } from "../rhythmus/engine";
+import { konvertiereRhythmusSubjekt, generiereRhythmusTickets, getTicketsFuerSubjekt } from "../rhythmus/engine";
+import { protokolliereAufteilung } from "./aufteilung-log";
 import { erstelleNachweis } from "../schulung/nachweis-store";
 import { MOCK_KLV_VERORDNUNGEN } from "../mocks/klinische-artefakte-mock";
 import { getPersonByOnboardingId, updatePersonZustand } from "../interrai/store";
@@ -49,7 +50,9 @@ export function konvertiereOnboarding(
     workflows: WorkflowPlan[];
   },
   /** Angehoerigen-Stammdaten fuer Pendenz-Erzeugung */
-  angehoerigenDaten?: { name: string; quellensteuerpflichtig: boolean; aufenthaltsstatus: string; bvgAnbindungGewuenscht: boolean; qualifikation?: string },
+  angehoerigenDaten?: { name: string; quellensteuerpflichtig: boolean; aufenthaltsstatus: string; bvgAnbindungGewuenscht: boolean; qualifikation?: string; eintrittsdatum?: string; pflegefachkraft?: string },
+  /** Auslösende Person für das Aufteilungs-Ereignisprotokoll (sofern bekannt). */
+  ausloeser?: { id: string; name: string },
 ): KonvertierungsErgebnis {
   // 1. Generate new patient ID (in production: server-generated)
   const patientId = `P-${Date.now()}`;
@@ -98,8 +101,33 @@ export function konvertiereOnboarding(
     (m as { patientId: string }).patientId = patientId;
   }
 
-  // WF-02: Rhythmus-Tickets von onboardingId auf patientId umhängen
+  // WF-02: Der gemeinsame Onboarding-Workflow geht an den PATIENTEN über
+  // (subjektId von onboardingId → patientId umgeschrieben; bestehende Logik).
   konvertiereRhythmusSubjekt(onboardingId, patientId, "patient");
+  const anzahlUebergegangen = getTicketsFuerSubjekt("patient", patientId).length;
+
+  // Aufteilung: für die ANGEHÖRIGE entsteht ein eigener, neuer Workflow
+  // (subjektTyp "angehoeriger" + ihre Kennung). Vor der Unterschrift existiert er
+  // nicht. Bestehende Vorlagenmechanik, keine neuen Vorlagen.
+  let anzahlNeuAngehoeriger = 0;
+  if (angehoerigenDaten) {
+    const ed = angehoerigenDaten.eintrittsdatum;
+    const ankerAng = ed && /^\d{2}\.\d{2}\.\d{4}$/.test(ed)
+      ? `${ed.slice(6, 10)}-${ed.slice(3, 5)}-${ed.slice(0, 2)}`
+      : (ed && /^\d{4}-\d{2}-\d{2}$/.test(ed) ? ed : new Date().toISOString().slice(0, 10));
+    generiereRhythmusTickets("angehoeriger", angehoerigerId, angehoerigenDaten.name, ankerAng, angehoerigenDaten.pflegefachkraft);
+    anzahlNeuAngehoeriger = getTicketsFuerSubjekt("angehoeriger", angehoerigerId).length;
+  }
+
+  // Aufteilung als Ereignis festhalten (GeKoZH Nr. 8 — nachweisrelevant).
+  protokolliereAufteilung({
+    onboardingId, patientId, angehoerigerId,
+    zeitpunkt: new Date().toISOString(),
+    ausloeserUserId: ausloeser?.id ?? null,
+    ausloeserName: ausloeser?.name ?? null,
+    anzahlUebergegangen,
+    anzahlNeuAngehoeriger,
+  });
 
   // Initialschulung: Nachweis erstellen wenn KLV-Positionen vorhanden
   const klvVerordnung = [...artefakte.klvVerordnungen, ...MOCK_KLV_VERORDNUNGEN].find(

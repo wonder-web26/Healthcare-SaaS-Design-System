@@ -21,6 +21,8 @@ import {
   Ban,
   Repeat,
   ChevronDown,
+  MoreVertical,
+  Circle,
 } from "lucide-react";
 import {
   StepAngehoeriger,
@@ -45,7 +47,7 @@ import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
-import { formatFaelligkeit, isoZuDate } from "../../lib/datum";
+import { formatFaelligkeit, isoZuDate, formatAnzeige } from "../../lib/datum";
 import { toast } from "sonner";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { useRecording } from "../recording/RecordingContext";
@@ -56,8 +58,11 @@ import { ONBOARDING_STATUS_CFG, ONBOARDING_STATUS_WERTE, type OnboardingStatus }
 import { getStatus, setzeStatus, getGrund } from "../../lib/onboarding/status-store";
 import { AppButton } from "./ui/AppButton";
 import { StatusMarke } from "./ui/StatusMarke";
-import { ZurueckLeiste } from "./ui/ZurueckLeiste";
+import { SeitenPanel } from "./ui/SeitenPanel";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "./ui/dropdown-menu";
+
+// Erklärsatz zur Aufzeichnung: einmal pro Sitzung beim ersten Öffnen (§E).
+let gespraechHinweisGezeigt = false;
 
 /* ══════════════════════════════════════════
    STEP DEFINITIONS
@@ -430,14 +435,25 @@ export function OnboardingPage() {
   // Override-Dialog state
   const [overrideBegrundung, setOverrideBegrundung] = useState("");
 
-  // Workflow-Aggregat (aus Rhythmus-Engine)
+  // Workflow-Aggregat (aus Rhythmus-Engine). Nur Rhythmus-Tickets, keine WorkflowTasks.
   aktualisiereUeberfaellige();
   const rhythmusTickets = getTicketsFuerSubjekt("patient", caseId);
-  const workflowDone = rhythmusTickets.filter(t => t.status === "erledigt").length;
-  const workflowTotal = rhythmusTickets.length;
-  // Nächstes fälliges Rhythmus-Ticket: erstes noch nicht erledigtes (aufsteigend nach
-  // faelligAm sortiert → überfällige zuerst). Nur Rhythmus-Tickets, keine WorkflowTasks.
-  const naechstesTicket = rhythmusTickets.find(t => t.status !== "erledigt") ?? null;
+  const erledigteTickets = rhythmusTickets.filter(t => t.status === "erledigt");
+  // Offene Aufgaben: überfällige zuerst, danach nach Fälligkeit.
+  const offeneTickets = rhythmusTickets
+    .filter(t => t.status !== "erledigt")
+    .sort((a, b) => {
+      const ao = a.status === "ueberfaellig" ? 0 : 1;
+      const bo = b.status === "ueberfaellig" ? 0 : 1;
+      return ao !== bo ? ao - bo : a.faelligAm.localeCompare(b.faelligAm);
+    });
+  const offeneAnzahl = offeneTickets.length;
+  const ueberfaelligAnzahl = offeneTickets.filter(t => t.status === "ueberfaellig").length;
+  const naechste3 = offeneTickets.slice(0, 3);
+
+  // Seitenpanel Workflow (§F)
+  const [workflowPanelOffen, setWorkflowPanelOffen] = useState(false);
+  const [panelFilter, setPanelFilter] = useState<"offen" | "erledigt">("offen");
 
   // Zurück-Ziel: Ursprung aus der URL (?returnTo=), sonst die Onboarding-Übersicht.
   // Beschriftung nennt das ZIEL (Navigationsrahmen §E), nicht die Handlung.
@@ -449,10 +465,25 @@ export function OnboardingPage() {
   // Tab-jump state (for header pill clicks → StepPatient tab switch)
   const [requestedPatientTab, setRequestedPatientTab] = useState<number | null>(null);
 
-  // "Öffnen" im Aufgabenstreifen → Rhythmus/Workflow-Tab im Patienten-Schritt (Index 7).
+  // "Öffnen" (Workflow-Aufgabe) → Rhythmus/Workflow-Tab im Patienten-Schritt (Index 7).
   const oeffneRhythmus = () => {
     if (activeStepData.key === "patient") { setRequestedPatientTab(7); }
     else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(7), 100); }
+  };
+
+  // "Gespräch" (§E): startet die Aufzeichnung. Der Erklärsatz erscheint als Hinweis
+  // beim ERSTEN Öffnen der Funktion und danach nicht mehr (einmal gelesen).
+  const startGespraech = () => {
+    if (!caseId) return;
+    const person = getPersonByOnboardingId(caseId);
+    if (!person) return;
+    if (!gespraechHinweisGezeigt) {
+      gespraechHinweisGezeigt = true;
+      toast("Aus dem Gespräch entstehen Vorschläge für die Bedarfsabklärung (interRAI), Pflegeplanung und KLV-Verordnung.");
+    }
+    const assessments = getAssessmentsForPerson(person.id);
+    const target = assessments.find(a => a.status === "in_bearbeitung") ?? createAssessment(person.id, "erstabklaerung");
+    recording.startRecording(person.id, target.id, `${person.vorname} ${person.nachname}`);
   };
 
   // Restore the step + tab carried in the URL when returning from the interRAI
@@ -475,179 +506,172 @@ export function OnboardingPage() {
     <EinwilligungProvider onboardingId={caseId || null} patientId={null}>
     <ArztAnfrageProvider onboardingId={caseId || null} patientId={null} hausarztName={patientData.hausarztName} hausarztEmail={patientData.hausarztEmail}>
     <div className="flex flex-col h-full min-h-0">
-      {/* ── Navigationsrahmen: Rückweg oberhalb der Karte, nicht darin (§E) ── */}
-      <ZurueckLeiste label={returnLabel} to={returnTo} />
+      {/* ── Kopfleiste (§B): keine Karte, kein Avatar. Der Patient ist Subjekt des Falls
+             (Titel); die Angehörige ist Kontext. Zeile 1 Rückweg, Zeile 2 Titel + Marken. ── */}
+      <div className="shrink-0" style={{ padding: "var(--space-3) var(--space-6) 0" }}>
+        {/* Zeile 1: Rückweg als Textlink — Teil der Leiste, keine eigene Bildschirmzeile */}
+        <button
+          onClick={() => navigate(returnTo)}
+          className="ui-fokusring inline-flex items-center cursor-pointer"
+          style={{ gap: 5, padding: 0, background: "none", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
+          onMouseLeave={e => (e.currentTarget.style.color = "var(--text-secondary)")}
+        >
+          <ArrowLeft style={{ width: 14, height: 14 }} /><span>{returnLabel}</span>
+        </button>
 
-      {/* ═══════════════════════════════════════
-         HEADER CARD — einzeilig, scroll-collapse
-         ═══════════════════════════════════════ */}
-      {(() => {
-        /* Scroll-collapse: track scroll position of the content area */
-        const [collapsed, setCollapsed] = React.useState(false);
-        const lastScrollY = React.useRef(0);
-        const contentRef = React.useRef<HTMLDivElement | null>(null);
-
-        React.useEffect(() => {
-          const el = contentRef.current?.parentElement?.querySelector("[data-scroll-area]") as HTMLElement | null;
-          if (!el) return;
-          const onScroll = () => {
-            const y = el.scrollTop;
-            if (y > 60 && y > lastScrollY.current) setCollapsed(true);
-            else if (y < lastScrollY.current - 10) setCollapsed(false);
-            lastScrollY.current = y;
-          };
-          el.addEventListener("scroll", onScroll, { passive: true });
-          return () => el.removeEventListener("scroll", onScroll);
-        }, []);
-
-        const patientStepActive = activeStepData.key === "patient";
-
-        return (
-          <div ref={contentRef} className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0", marginBottom: "var(--space-3)", transition: "all 0.2s ease" }}>
-            <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: collapsed ? "10px 20px" : "14px 24px", transition: "padding 0.2s ease" }}>
-              <div className="flex items-start" style={{ gap: collapsed ? 8 : 12 }}>
-                {/* Rückweg lebt jetzt im Navigationsrahmen oberhalb der Karte (§E). */}
-                {/* Raster: Avatar 44px · Inhalt · Aktionen. Alle Textzeilen teilen die linke Kante der Inhaltsspalte. */}
-                <div
-                  className="flex-1 min-w-0"
-                  style={{ display: "grid", gridTemplateColumns: `${collapsed ? 32 : 44}px minmax(0, 1fr) auto`, columnGap: 12, rowGap: 4, alignItems: "center" }}
-                >
-                  {/* Avatar (Initialen der Angehörigen), überspannt beide Zeilen */}
-                  <div
-                    className="shrink-0 flex items-center justify-center"
-                    style={{ gridColumn: 1, gridRow: collapsed ? "auto" : "1 / span 2", alignSelf: "center", width: collapsed ? 32 : 44, height: collapsed ? 32 : 44, borderRadius: "var(--radius-pill)", background: "var(--brand-primary-light)", transition: "all 0.2s ease" }}
+        {/* Zeile 2 */}
+        <div className="flex items-start justify-between" style={{ gap: 12 }}>
+          {/* Links: Patientenname (Titel) · bedienbare Statusmarke · Angehörige (Kontext) */}
+          <div className="min-w-0 flex items-center flex-wrap" style={{ gap: 8, rowGap: 4, minHeight: 26 }}>
+            <span style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere", minWidth: 0 }}>
+              {isExisting && caseInfo ? caseInfo.patient : "Neues Mandat eröffnen"}
+            </span>
+            {caseId ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Status ändern, aktuell ${statusDarstellung.label}`}
+                    className="ui-fokusring inline-flex items-center shrink-0 cursor-pointer"
+                    style={{ gap: 5, height: "var(--marke-height-interaktiv)", padding: "0 8px 0 10px", borderRadius: "var(--control-radius)", fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--bg-elevated)", color: "var(--text-primary)", border: "var(--border-thin) solid var(--border-default)", fontFamily: "inherit" }}
                   >
-                    {caseInfo ? (
-                      <span style={{ fontSize: collapsed ? 11 : 14, fontWeight: "var(--weight-semibold)", color: "var(--brand-primary)" }}>
-                        {caseInfo.angehoeriger.trim().split(/\s+/).map(t => t[0]).slice(0, 2).join("").toUpperCase()}
-                      </span>
-                    ) : (
-                      <Users style={{ width: collapsed ? 15 : 18, height: collapsed ? 15 : 18, color: "var(--brand-primary)" }} />
-                    )}
-                  </div>
-
-                  {/* Zeile 1 links: Titel + Statusabzeichen (nicht bedienbar). Titel bricht um
-                      (kein Abschneiden), wenn collapsed einzeilig; das Raster hält Zeile 2 ausgerichtet. */}
-                  <div className="min-w-0 flex items-center flex-wrap" style={{ gridColumn: 2, gridRow: 1, gap: 8, minHeight: 24 }}>
-                    <span className={collapsed ? "truncate" : ""} style={{ fontSize: collapsed ? "var(--text-body)" : "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", transition: "font-size 0.2s ease", overflowWrap: "anywhere", minWidth: 0 }}>
-                      {isExisting && caseInfo ? `Onboarding — ${caseInfo.patient}` : "Neues Mandat eröffnen"}
-                    </span>
-                    {/* BEDIENBARE Statusmarke (§D): unterscheidet sich von einer Info-Marke —
-                        Untergrundfläche + Rahmen 0.5 + nachgestellter Winkel, per Tab erreichbar,
-                        sichtbarer Fokusring. Neues Mandat ohne Fall: reine Info-Marke. */}
-                    {caseId ? (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            aria-label={`Status ändern, aktuell ${statusDarstellung.label}`}
-                            className="ui-fokusring inline-flex items-center shrink-0 cursor-pointer"
-                            style={{ gap: 5, height: "var(--marke-height-interaktiv)", padding: "0 8px 0 10px", borderRadius: "var(--control-radius)", fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--bg-elevated)", color: "var(--text-primary)", border: "var(--border-thin) solid var(--border-default)", fontFamily: "inherit" }}
-                          >
-                            <span style={{ width: 6, height: 6, borderRadius: 999, background: statusDarstellung.dot }} />
-                            {statusDarstellung.label}
-                            <ChevronDown style={{ width: 12, height: 12, opacity: 0.7 }} />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                          {ONBOARDING_STATUS_WERTE.map(s => {
-                            const cfg = ONBOARDING_STATUS_CFG[s];
-                            return (
-                              <DropdownMenuItem key={s} onSelect={() => waehleStatus(s)} style={{ gap: 8 }}>
-                                <span style={{ width: 6, height: 6, borderRadius: 999, background: cfg.dot }} />
-                                <span style={{ flex: 1 }}>{cfg.label}</span>
-                                <Check style={{ width: 13, height: 13, opacity: caseStatus === s ? 1 : 0 }} />
-                              </DropdownMenuItem>
-                            );
-                          })}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    ) : (
-                      <StatusMarke label={statusDarstellung.label} variante="neutral" />
-                    )}
-                  </div>
-
-                  {/* Zeile 1 rechts: Aktionen + Überlaufmenü, auf derselben Achse wie der Titel */}
-                  <div className="flex items-center shrink-0 flex-wrap justify-end" style={{ gridColumn: 3, gridRow: 1, gap: 6 }}>
-                    {/* Aggregat-Marken (Information, NICHT bedienbar): keine Rahmen, neutrale
-                        Fläche. Ausnahme: fehlende Pflichtdokumente als letzter Blocker sind ein
-                        Warnzustand → semantische Marke mit Symbol. */}
-                    {!collapsed && (
-                      <>
-                        <StatusMarke label={`${completedCount} von ${nonBlockedSteps.length} Schritten`} variante="neutral" />
-                        {fehlendeDocs > 0 && (
-                          docsAreLastBlocker
-                            ? <StatusMarke label={`${fehlendeDocs} Pflichtdok. fehlen`} variante="warnung" />
-                            : <StatusMarke label={`${fehlendeDocs} Dokumente offen`} variante="neutral" />
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  {/* Zeile 2: Angehörige, danach Bezugsperson (versteckt wenn collapsed) */}
-                  {!collapsed && isExisting && caseInfo && (
-                    <div className="flex items-center flex-wrap" style={{ gridColumn: "2 / 4", gridRow: 2, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", gap: 10 }}>
-                      <span>Angehörige: {caseInfo.angehoeriger}</span>
-                      {/* Bezugsperson lives on the care relationship, first set here in onboarding */}
-                      {caseId && <BezugspersonAuswahl caseId={caseId} />}
-                      {/* Abbruchgrund erscheint am Fall */}
-                      {caseStatus === "abgebrochen" && statusGrund && (
-                        <span style={{ color: "var(--status-danger)" }}>Abbruchgrund: {statusGrund}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            {/* Anna-Hinweis-Zeile (deterministisch, regelbasiert, kollabiert mit) */}
-            {!collapsed && <AnnaHinweisZeile
-              onJumpToPflegeplanung={() => { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(5), 100); }}
-            />}
+                    <span style={{ width: 6, height: 6, borderRadius: 999, background: statusDarstellung.dot }} />
+                    {statusDarstellung.label}
+                    <ChevronDown style={{ width: 12, height: 12, opacity: 0.7 }} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {ONBOARDING_STATUS_WERTE.map(s => {
+                    const cfg = ONBOARDING_STATUS_CFG[s];
+                    return (
+                      <DropdownMenuItem key={s} onSelect={() => waehleStatus(s)} style={{ gap: 8 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 999, background: cfg.dot }} />
+                        <span style={{ flex: 1 }}>{cfg.label}</span>
+                        <Check style={{ width: 13, height: 13, opacity: caseStatus === s ? 1 : 0 }} />
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <StatusMarke label={statusDarstellung.label} variante="neutral" />
+            )}
+            {caseInfo && (
+              <span className="inline-flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)" }}>
+                <span style={{ color: "var(--text-tertiary)" }}>Angehörige</span>
+                <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{caseInfo.angehoeriger}</span>
+              </span>
+            )}
+            {caseStatus === "abgebrochen" && statusGrund && (
+              <span style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)" }}>Abbruchgrund: {statusGrund}</span>
+            )}
           </div>
-        );
-      })()}
+
+          {/* Rechts: überfällig (nur wenn vorhanden) · Schrittzähler · Dokumente · Überlaufmenü */}
+          <div className="flex items-center shrink-0 flex-wrap justify-end" style={{ gap: 6 }}>
+            {ueberfaelligAnzahl > 0 && <StatusMarke label={`${ueberfaelligAnzahl} überfällig`} variante="warnung" />}
+            <StatusMarke label={`${completedCount} von ${nonBlockedSteps.length} Schritten`} variante="neutral" />
+            {fehlendeDocs > 0 && (
+              docsAreLastBlocker
+                ? <StatusMarke label={`${fehlendeDocs} Pflichtdok. fehlen`} variante="warnung" />
+                : <StatusMarke label={`${fehlendeDocs} Dokumente offen`} variante="neutral" />
+            )}
+            {caseId && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Weitere Aktionen"
+                    className="ui-fokusring flex items-center justify-center shrink-0 cursor-pointer"
+                    style={{ width: "var(--marke-height-interaktiv)", height: "var(--marke-height-interaktiv)", borderRadius: "var(--control-radius)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <MoreVertical style={{ width: 16, height: 16 }} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setAbbruchOffen(true)} style={{ gap: 8, color: "var(--status-danger)" }}>
+                    <Ban style={{ width: 14, height: 14 }} /> Fall abbrechen
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* AUFGABENSTREIFEN entfernt (§D): Inhalt ist in Abschnitt WORKFLOW der
+         Zustandsspalte aufgegangen. Karte "Nächster Betreuungsrhythmus" existiert nicht mehr. */}
 
       {/* ═══════════════════════════════════════
-         AUFGABENSTREIFEN — nächstes fälliges Rhythmus-Ticket des Falls.
-         Bewusst nur Rhythmus-Tickets; WorkflowTasks/Service-Tickets erscheinen hier nicht.
+         WORKFLOW-SEITENPANEL (§F) — wiederverwendbare SeitenPanel-Komponente
          ═══════════════════════════════════════ */}
-      {isExisting && caseId && (() => {
-        const faelligDate = naechstesTicket ? isoZuDate(naechstesTicket.faelligAm) : null;
-        const faelligText = faelligDate ? formatFaelligkeit(faelligDate) : (naechstesTicket?.faelligAm ?? "");
-        const ueberfaellig = naechstesTicket?.status === "ueberfaellig";
-        const leerText = rhythmusTickets.length === 0
-          ? "Noch keine Rhythmus-Tickets. Sie entstehen im Patienten-Schritt."
-          : "Alle Rhythmus-Tickets sind erledigt.";
-        return (
-          <div style={{ padding: "0 var(--space-6)", marginBottom: "var(--space-3)" }}>
-            <div className="flex items-center justify-between" style={{ gap: 12, padding: "10px 16px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
-              <div className="flex items-center min-w-0" style={{ gap: 12 }}>
-                <span className="shrink-0 flex items-center justify-center" style={{ width: 32, height: 32, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
-                  <Repeat style={{ width: 15, height: 15, color: "var(--text-secondary)" }} />
-                </span>
-                <div className="min-w-0">
-                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Nächster Betreuungsrhythmus</div>
-                  {naechstesTicket ? (
-                    <div className="flex items-center flex-wrap" style={{ gap: 8, marginTop: 1 }}>
-                      <span className="truncate" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{naechstesTicket.label}</span>
-                      {/* Überfällig: an Icon UND Schriftstärke erkennbar, nicht nur an der Farbe */}
-                      <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", fontWeight: ueberfaellig ? "var(--weight-semibold)" : 400, color: ueberfaellig ? "var(--status-danger)" : "var(--text-secondary)" }}>
-                        {ueberfaellig && <AlertTriangle style={{ width: 11, height: 11 }} />}
-                        {faelligText}
-                      </span>
+      <SeitenPanel open={workflowPanelOffen} onClose={() => setWorkflowPanelOffen(false)} title="Workflow">
+        <div className="flex flex-col" style={{ minHeight: "100%" }}>
+          <div className="flex-1" style={{ padding: "var(--space-4) var(--space-5)" }}>
+            {/* Filter Offen / Erledigt */}
+            <div className="flex items-center" style={{ gap: 6, marginBottom: "var(--space-4)" }}>
+              {(["offen", "erledigt"] as const).map(f => {
+                const aktiv = panelFilter === f;
+                const n = f === "offen" ? offeneAnzahl : erledigteTickets.length;
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setPanelFilter(f)}
+                    className="ui-fokusring cursor-pointer"
+                    style={{ height: "var(--marke-height-interaktiv)", padding: "0 12px", borderRadius: "var(--control-radius)", fontSize: "var(--text-meta)", fontWeight: 500, fontFamily: "inherit", border: aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: aktiv ? "var(--action-primary-bg)" : "var(--bg-elevated)", color: aktiv ? "var(--action-primary-fg)" : "var(--text-secondary)" }}
+                  >
+                    {f === "offen" ? "Offen" : "Erledigt"} {n}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Liste */}
+            <div className="flex flex-col" style={{ gap: "var(--space-2)" }}>
+              {(panelFilter === "offen" ? offeneTickets : erledigteTickets).map(t => {
+                const d = isoZuDate(t.faelligAm);
+                const rel = d ? formatFaelligkeit(d) : t.faelligAm;
+                const abs = d ? formatAnzeige(d) : t.faelligAm;
+                const ov = t.status === "ueberfaellig";
+                const done = t.status === "erledigt";
+                return (
+                  <div key={t.id} className="flex items-start justify-between" style={{ gap: 10, padding: "8px 10px", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--control-radius)" }}>
+                    <div className="flex items-start min-w-0" style={{ gap: 8 }}>
+                      {done
+                        ? <CheckCircle2 style={{ width: 14, height: 14, color: "var(--status-success)", flexShrink: 0, marginTop: 1 }} />
+                        : ov
+                          ? <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
+                          : <Circle style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 1 }} />}
+                      <div className="min-w-0">
+                        <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{t.label}</div>
+                        {!done && (
+                          <div style={{ fontSize: "var(--text-micro)", fontWeight: ov ? "var(--weight-semibold)" : 400, color: ov ? "var(--status-danger)" : "var(--text-tertiary)" }}>{rel} · {abs}</div>
+                        )}
+                      </div>
                     </div>
-                  ) : (
-                    <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 1 }}>{leerText}</div>
-                  )}
+                    {!done && (
+                      <AppButton variant="sekundaer" className="shrink-0" onClick={() => { setWorkflowPanelOffen(false); oeffneRhythmus(); }}>Öffnen</AppButton>
+                    )}
+                  </div>
+                );
+              })}
+              {(panelFilter === "offen" ? offeneTickets : erledigteTickets).length === 0 && (
+                <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                  {panelFilter === "offen"
+                    ? (rhythmusTickets.length === 0 ? "Noch keine Aufgaben erzeugt." : "Keine offenen Aufgaben.")
+                    : "Keine erledigten Aufgaben."}
                 </div>
-              </div>
-              {naechstesTicket && (
-                <AppButton variant="sekundaer" className="shrink-0" onClick={oeffneRhythmus}>Öffnen</AppButton>
               )}
             </div>
           </div>
-        );
-      })()}
+          {/* Fuss: Erklärsatz zur Aufteilung nach der Unterschrift */}
+          <div style={{ padding: "var(--space-4) var(--space-5)", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
+            Nach Unterzeichnung erhält die Angehörige einen eigenen Workflow.
+          </div>
+        </div>
+      </SeitenPanel>
 
       {/* ═══════════════════════════════════════
          ABBRUCH-DIALOG — destruktiv, Grund erforderlich
@@ -705,49 +729,9 @@ export function OnboardingPage() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════
-         AUFZEICHNUNG (Onboarding-Ebene, sichtbar in allen Schritten/Tabs)
-         ═══════════════════════════════════════ */}
-      {isExisting && (
-        <div style={{ padding: "0 var(--space-6)", marginBottom: 2 }}>
-          {isRecording ? (
-            /* During recording: quiet hint — Beenden is in the global bar only */
-            <div className="flex items-center" style={{ gap: 8, padding: "8px 16px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--status-danger)", animation: "pulse 1.5s ease-in-out infinite", flexShrink: 0 }} />
-              <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-                Aufzeichnung läuft — beenden über die Leiste oben.
-              </span>
-            </div>
-          ) : (
-            /* Vor der Aufzeichnung: Einstiegsblock */
-            <div style={{ padding: "14px 18px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>Gespräch aufzeichnen</div>
-                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>
-                    Aus dem Gespräch entstehen Vorschläge für die Bedarfsabklärung (interRAI), Pflegeplanung und KLV-Verordnung.
-                  </div>
-                </div>
-                <AppButton
-                  variant="sekundaer"
-                  icon={Mic}
-                  className="shrink-0"
-                  onClick={() => {
-                    if (!caseId) return;
-                    const person = getPersonByOnboardingId(caseId);
-                    if (!person) return;
-                    const assessments = getAssessmentsForPerson(person.id);
-                    const target = assessments.find(a => a.status === "in_bearbeitung") ?? createAssessment(person.id, "erstabklaerung");
-                    recording.startRecording(person.id, target.id, `${person.vorname} ${person.nachname}`);
-                  }}
-                >
-                  Aufzeichnen
-                </AppButton>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {/* AUFZEICHNUNG-Karte entfernt (§E): "Gespräch" ist eine Aktion (sekundärer Knopf
+         rechts über der Reiterleiste), keine Karte. Der Erklärsatz erscheint als Hinweis
+         beim ersten Öffnen (siehe startGespraech). */}
 
       {/* ═══════════════════════════════════════
          MOBILE STEPPER
@@ -854,12 +838,78 @@ export function OnboardingPage() {
                   })}
                 </nav>
 
+                {/* Trennlinie */}
+                <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "var(--space-4) 0" }} />
+
+                {/* ── Abschnitt BEZUGSPERSON: eine Zuweisung, kein Merkmal des Falls (§C) ── */}
+                <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-3)" }}>Bezugsperson</div>
+                {caseId ? <BezugspersonAuswahl caseId={caseId} /> : <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>—</span>}
+
+                {/* Trennlinie */}
+                <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "var(--space-4) 0" }} />
+
+                {/* ── Abschnitt WORKFLOW: die drei nächsten offenen Aufgaben, überfällige zuerst (§C) ── */}
+                <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-3)" }}>Workflow</div>
+                {naechste3.length > 0 ? (
+                  <div className="flex flex-col" style={{ gap: "var(--space-2)" }}>
+                    {naechste3.map(t => {
+                      const d = isoZuDate(t.faelligAm);
+                      const rel = d ? formatFaelligkeit(d) : t.faelligAm;
+                      const ov = t.status === "ueberfaellig";
+                      return (
+                        <div key={t.id} className="flex items-start" style={{ gap: 6 }}>
+                          {ov
+                            ? <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
+                            : <Circle style={{ width: 13, height: 13, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 1 }} />}
+                          <div className="min-w-0">
+                            <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{t.label}</div>
+                            {/* Überfällig an Icon UND Schriftstärke/Farbe erkennbar */}
+                            <div style={{ fontSize: "var(--text-micro)", fontWeight: ov ? "var(--weight-semibold)" : 400, color: ov ? "var(--status-danger)" : "var(--text-tertiary)" }}>{rel}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                    {rhythmusTickets.length === 0 ? "Noch keine Aufgaben erzeugt. Sie entstehen im Patienten-Schritt." : "Alle Aufgaben erledigt."}
+                  </div>
+                )}
+                {offeneAnzahl > 0 && (
+                  <button
+                    onClick={() => setWorkflowPanelOffen(true)}
+                    className="ui-fokusring inline-flex items-center cursor-pointer"
+                    style={{ marginTop: "var(--space-3)", gap: 4, padding: 0, background: "none", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-secondary)" }}
+                    onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "var(--text-secondary)")}
+                  >
+                    Alle {offeneAnzahl} anzeigen <ChevronRight style={{ width: 13, height: 13 }} />
+                  </button>
+                )}
+                {/* Einzige Stelle, an der die Seite ihr Domänenmodell erklärt — nicht entfernen. */}
+                <div style={{ marginTop: "var(--space-4)", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
+                  Nach Unterzeichnung erhält die Angehörige einen eigenen Workflow.
+                </div>
+
               </div>
             </div>
           </div>
 
           {/* ── RIGHT: Content ── */}
           <div className="flex-1 flex flex-col min-h-0 min-w-0">
+            {/* "Gespräch" — Aktion (sekundärer Knopf) rechts über der Reiterleiste (§E) */}
+            {isExisting && (
+              <div className="shrink-0 flex items-center justify-end" style={{ minHeight: "var(--control-height)", paddingBottom: "var(--space-2)" }}>
+                {isRecording ? (
+                  <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--status-danger)", animation: "pulse 1.5s ease-in-out infinite" }} />
+                    Aufzeichnung läuft
+                  </span>
+                ) : (
+                  <AppButton variant="sekundaer" icon={Mic} onClick={startGespraech}>Gespräch</AppButton>
+                )}
+              </div>
+            )}
             <div data-scroll-area className="flex-1 overflow-y-auto" style={{ paddingBottom: "var(--space-4)" }}>
               {activeStepData.key === "angehoeriger" && (
                 <StepAngehoeriger
@@ -1058,7 +1108,8 @@ export function OnboardingPage() {
                       aufenthaltsstatus: angehoerigerData.aufenthaltsstatus,
                       bvgAnbindungGewuenscht: angehoerigerData.bvgAnbindungGewuenscht === "ja",
                       qualifikation: angehoerigerData.qualifikation,
-                    });
+                      eintrittsdatum: angehoerigerData.eintrittsdatum,
+                    }, ausloeser);
 
                     // Qualifizierte Erfolgsmeldung
                     const a = ergebnis.konvertierteArtefakte;

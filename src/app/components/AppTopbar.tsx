@@ -41,7 +41,7 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
     <header
       className="shrink-0 sticky top-0 z-30 flex items-center gap-[var(--space-3)]"
       style={{
-        height: 64,
+        height: 52,
         background: "var(--bg-primary)",
         borderBottom: "var(--border-thin) solid var(--border-default)",
         padding: "0 var(--space-6)",
@@ -65,20 +65,20 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
         <span style={{ color: "var(--text-on-dark)", fontSize: 12, fontWeight: "var(--weight-medium)" }}>S</span>
       </div>
 
-      {/* Desktop search — pill variant */}
-      <div className={`relative flex-1 max-w-[480px] hidden sm:block transition-all ${searchFocused ? "max-w-[540px]" : ""}`}>
+      {/* Desktop search — begrenzte Breite (~220px), linke Kante auf der Inhaltsachse */}
+      <div className="relative hidden sm:block shrink-0" style={{ width: 220 }}>
         <div
-          className="flex items-center transition-all"
+          className="flex items-center"
           style={{
             borderRadius: "var(--radius-pill)",
-            border: searchFocused ? "var(--border-thick) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
+            border: searchFocused ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
             background: "var(--bg-elevated)",
-            padding: "11px 16px 11px 42px",
+            padding: "8px 12px 8px 36px",
           }}
         >
           <Search
             className="absolute"
-            style={{ left: 16, top: "50%", transform: "translateY(-50%)", width: 16, height: 16, color: searchFocused ? "var(--brand-primary)" : "var(--text-tertiary)" }}
+            style={{ left: 12, top: "50%", transform: "translateY(-50%)", width: 16, height: 16, color: searchFocused ? "var(--brand-primary)" : "var(--text-tertiary)" }}
           />
           <input
             type="text"
