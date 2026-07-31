@@ -1,0 +1,620 @@
+<title>Feld-Inventar — Spitex Cockpit</title>
+<style>
+  :root {
+    --bg: #f6f7f8;
+    --surface: #ffffff;
+    --surface-2: #f0f2f4;
+    --ink: #16201f;
+    --ink-2: #4a585a;
+    --ink-3: #7c8a8c;
+    --line: #e2e6e8;
+    --line-strong: #cdd4d6;
+    --accent: #0f6f63;        /* malachit */
+    --accent-2: #1d6fa5;      /* cerulean */
+    --accent-soft: #e6f1ef;
+    --warn: #b26a00;
+    --warn-soft: #fbf1e2;
+    --danger: #b23b3b;
+    --danger-soft: #f8ebeb;
+    --ok: #2f7d5b;
+    --ok-soft: #e7f2ec;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --maxw: 1180px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1413;
+      --surface: #151d1c;
+      --surface-2: #1b2523;
+      --ink: #e8edec;
+      --ink-2: #a9b6b6;
+      --ink-3: #74807f;
+      --line: #26312f;
+      --line-strong: #35423f;
+      --accent: #4fbfab;
+      --accent-2: #5aa9d8;
+      --accent-soft: #14302b;
+      --warn: #d99a4a;
+      --warn-soft: #2c2213;
+      --danger: #dd7d7d;
+      --danger-soft: #2e1a1a;
+      --ok: #63c096;
+      --ok-soft: #12271d;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg:#f6f7f8;--surface:#fff;--surface-2:#f0f2f4;--ink:#16201f;--ink-2:#4a585a;--ink-3:#7c8a8c;
+    --line:#e2e6e8;--line-strong:#cdd4d6;--accent:#0f6f63;--accent-2:#1d6fa5;--accent-soft:#e6f1ef;
+    --warn:#b26a00;--warn-soft:#fbf1e2;--danger:#b23b3b;--danger-soft:#f8ebeb;--ok:#2f7d5b;--ok-soft:#e7f2ec;
+  }
+  :root[data-theme="dark"] {
+    --bg:#0e1413;--surface:#151d1c;--surface-2:#1b2523;--ink:#e8edec;--ink-2:#a9b6b6;--ink-3:#74807f;
+    --line:#26312f;--line-strong:#35423f;--accent:#4fbfab;--accent-2:#5aa9d8;--accent-soft:#14302b;
+    --warn:#d99a4a;--warn-soft:#2c2213;--danger:#dd7d7d;--danger-soft:#2e1a1a;--ok:#63c096;--ok-soft:#12271d;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans);
+         line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 20px 80px; }
+
+  header.masthead {
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--accent-soft), transparent);
+  }
+  .masthead .wrap { padding-top: 34px; padding-bottom: 26px; }
+  .eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+             color: var(--accent); font-weight: 600; }
+  h1 { font-size: clamp(26px, 4vw, 40px); line-height: 1.08; margin: 10px 0 6px;
+       letter-spacing: -.02em; text-wrap: balance; }
+  .sub { color: var(--ink-2); font-size: 16px; max-width: 62ch; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .badge { font-size: 12.5px; font-weight: 500; padding: 5px 11px; border-radius: 999px;
+           background: var(--surface); border: 1px solid var(--line-strong); color: var(--ink-2);
+           display: inline-flex; gap: 6px; align-items: center; }
+  .badge b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .badge.ok { background: var(--ok-soft); border-color: transparent; color: var(--ok); }
+
+  nav.toc { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent);
+            backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  nav.toc .wrap { display: flex; gap: 4px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+  nav.toc a { font-size: 13px; color: var(--ink-2); text-decoration: none; padding: 5px 10px;
+              border-radius: 7px; font-weight: 500; white-space: nowrap; }
+  nav.toc a:hover { background: var(--surface-2); color: var(--ink); }
+
+  section { margin-top: 46px; scroll-margin-top: 60px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 2px solid var(--ink);
+              padding-bottom: 8px; margin-bottom: 4px; }
+  .sec-num { font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600; }
+  h2 { font-size: clamp(20px, 2.6vw, 27px); margin: 0; letter-spacing: -.01em; }
+  h3 { font-size: 17px; margin: 26px 0 8px; letter-spacing: -.01em; }
+  h4 { font-size: 14px; margin: 18px 0 6px; color: var(--accent-2); font-weight: 600; }
+  p { color: var(--ink-2); }
+  p.lead { color: var(--ink); font-size: 15.5px; max-width: 74ch; }
+  a.file { color: var(--accent-2); text-decoration: none; border-bottom: 1px dotted var(--line-strong); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 18px 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 15px 16px; }
+  .card .k { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); font-weight: 600; }
+  .card .v { font-size: 27px; font-weight: 650; margin-top: 4px; letter-spacing: -.02em;
+             font-variant-numeric: tabular-nums; }
+  .card .d { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; }
+
+  .twrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; margin: 12px 0 6px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  caption { text-align: left; font-size: 13px; color: var(--ink-2); padding: 10px 14px 2px; font-weight: 500; }
+  th, td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { position: sticky; top: 0; background: var(--surface-2); font-size: 11.5px; text-transform: uppercase;
+       letter-spacing: .05em; color: var(--ink-3); font-weight: 600; white-space: nowrap; z-index: 1; }
+  tbody tr:hover { background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.loc { font-family: var(--mono); font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  td.ln { font-family: var(--mono); font-size: 12px; color: var(--accent); text-align: right; font-variant-numeric: tabular-nums; }
+  td.long { color: var(--ink); }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+
+  .tag { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 5px; white-space: nowrap;
+         background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
+  .tag.code { color: var(--accent-2); }
+  .tag.mono { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+  .flag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
+  .flag.warn { background: var(--warn-soft); color: var(--warn); }
+  .flag.danger { background: var(--danger-soft); color: var(--danger); }
+  .flag.ok { background: var(--ok-soft); color: var(--ok); }
+  .flag.dead { background: var(--surface-2); color: var(--ink-3); border: 1px dashed var(--line-strong); }
+
+  .note { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+          border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-size: 14px; color: var(--ink-2); }
+  .note.warn { border-left-color: var(--warn); }
+  .note.danger { border-left-color: var(--danger); }
+  .note b { color: var(--ink); }
+
+  ul.tight { margin: 8px 0; padding-left: 20px; color: var(--ink-2); font-size: 14px; }
+  ul.tight li { margin: 4px 0; }
+  ul.tight li b, ul.tight li code { color: var(--ink); }
+
+  /* density diagram */
+  .density { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 14px; margin: 16px 0; }
+  .dcol { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .dcol .dt { font-weight: 600; font-size: 14px; }
+  .dcol .dpx { font-family: var(--mono); font-size: 30px; font-weight: 650; color: var(--accent); letter-spacing: -.02em; }
+  .dcol .dpx small { font-size: 14px; color: var(--ink-3); font-weight: 500; }
+  .stack { margin-top: 10px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); font-size: 11px; }
+  .stack div { padding: 2px 8px; color: #fff; font-family: var(--mono); }
+  .s-label { background: #64748b; } .s-gap { background: #94a3b8; color:#1a1a1a !important; }
+  .s-field { background: var(--accent); } .s-row { background: var(--accent-2); }
+
+  footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12.5px; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Spitex Cockpit · Read-only-Inventar</div>
+    <h1>Formularfeld-Inventar</h1>
+    <p class="sub">Bestandsaufnahme aller Eingabefelder, Feldbreiten und Formulardichte vor der produktweiten Vereinheitlichung. Keine Codeänderung — reine Erhebung.</p>
+    <div class="badges">
+      <span class="badge ok">✓ Arbeitsbaum unverändert</span>
+      <span class="badge"><b>~235</b> Feld-Fundstellen</span>
+      <span class="badge"><b>25</b> Dateien</span>
+      <span class="badge"><b>4</b> parallele Feld-Systeme</span>
+      <span class="badge">HEAD <b>dd721f5</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc"><div class="wrap">
+  <a href="#p1">1 · Inventar</a>
+  <a href="#p2">2 · Inhaltstypen</a>
+  <a href="#p3">3 · Geteilte Komponenten</a>
+  <a href="#p4">4 · Raster</a>
+  <a href="#p5">5 · Vertikale Dichte</a>
+  <a href="#p6">6 · Tablet / Touch</a>
+  <a href="#offen">Offene Posten</a>
+</div></nav>
+
+<div class="wrap">
+
+  <div class="cards">
+    <div class="card"><div class="k">Feld-Systeme</div><div class="v">4</div><div class="d">geteilte Primitive · 360-Eigenbau · Step-Legacy · Arbeitskontrolle/Einwilligung roh</div></div>
+    <div class="card"><div class="k">Feldhöhe-Token</div><div class="v">40px</div><div class="d"><code>--field-height</code> — nur die geteilten Primitive nutzen es</div></div>
+    <div class="card"><div class="k">Reale Feldhöhen</div><div class="v">28–44</div><div class="d">px — je nach System: 40 / ~34 / ~30 / 32 (Pills) / 44 (DateField)</div></div>
+    <div class="card"><div class="k">Zeilenhöhe</div><div class="v">74px</div><div class="d">Onboarding · Arbeitskontrolle 64px · 360-Anzeige 53px</div></div>
+    <div class="card"><div class="k">Feste px-Breite</div><div class="v">0</div><div class="d">an regulären Feldern — Breite kommt ausschliesslich aus dem Grid</div></div>
+    <div class="card"><div class="k">3+ Spalten</div><div class="v">1×</div><div class="d">nur <code>MigratedPatientForms:166</code> (md:grid-cols-3)</div></div>
+  </div>
+
+  <div class="note"><b>Vier parallel gepflegte Feld-Systeme.</b> (1) Geteilte Primitive unter <code>components/form/</code> — genutzt von den drei <code>Migrated*Forms</code>, SpezialbewilligungStep, InterraiNeuPage, Rhythmus/Workflow. (2) Eigenbau <code>PEditableField</code>/<code>EditableField</code> in den 360-Detailansichten. (3) Lokale <code>FormField</code>/<code>JaNeinToggle</code>/<code>PayrollField</code> in StepPatient/StepAngehoeriger — durchweg <b>toter Legacy-Code</b>. (4) Rohe <code>&lt;input&gt;/&lt;textarea&gt;</code> in Arbeitskontrolle, Einwilligung, KLV, Pflegeplanung. Nur System (1) folgt der 40px-Token-Höhe.</div>
+
+  <!-- ============ POINT 1 ============ -->
+  <section id="p1">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Inventar aller Formularfelder</h2></div>
+    <p class="lead">Jede Fundstelle mit Datei und Zeile. „Breite" = effektive Breite im Layout (Grid-Kontext, da fast alle Felder <code>w-full</code> sind). „Höhe" = gerenderte Feldhöhe. Datumsfelder der geteilten <code>DateField</code>-Komponente sind zusätzlich hart auf <code>maxWidth:200px</code> begrenzt.</p>
+
+    <h3>1.1 Onboarding Angehöriger <span class="flag ok">live</span></h3>
+    <div class="twrap"><table>
+      <caption>MigratedAngehoerigerForms.tsx — PersonalienFormV2 / SteuerFormV2 / AnstellungFormV2 · 2-Spalten-Grid <code>md:grid-cols-2</code></caption>
+      <thead><tr><th>Zeile</th><th>Beschriftung</th><th>Feldtyp</th><th>Breite</th><th>Höhe</th><th>Längster realistischer Inhalt</th></tr></thead>
+      <tbody>
+        <tr><td class="ln">93</td><td>Name</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">von Grünigen-Hofstetter</td></tr>
+        <tr><td class="ln">94</td><td>Vorname</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">Marie-Antoinette</td></tr>
+        <tr><td class="ln">95</td><td>Geschlecht</td><td><span class="tag">durchsuchb. Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">Männlich</td></tr>
+        <tr><td class="ln">96</td><td>Geburtsdatum</td><td><span class="tag">Datum</span></td><td>½, max 200</td><td>~44</td><td class="long">31.12.1990</td></tr>
+        <tr><td class="ln">99</td><td>AHV-Nummer</td><td><span class="tag mono">Codefeld</span></td><td>full-width</td><td>40</td><td class="long">756.1234.5678.97</td></tr>
+        <tr><td class="ln">102</td><td>Nationalität</td><td><span class="tag">durchsuchb. Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">Österreich</td></tr>
+        <tr><td class="ln">109</td><td>Heimatort <em>(cond.)</em></td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">Rechthalten (Freiburg)</td></tr>
+        <tr><td class="ln">112</td><td>Aufenthaltsstatus <em>(cond.)</em></td><td><span class="tag">Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">B – Aufenthaltsbewilligung</td></tr>
+        <tr><td class="ln">128</td><td>Einreisedatum <em>(cond.)</em></td><td><span class="tag">Datum</span></td><td>½, max 200</td><td>~44</td><td class="long">31.12.2024</td></tr>
+        <tr><td class="ln">129</td><td>ZEMIS-Nummer <em>(cond.)</em></td><td><span class="tag code">Codefeld</span></td><td>Grid ½</td><td>40</td><td class="long">12345678</td></tr>
+        <tr><td class="ln">130</td><td>Einreichungsdatum Migrationsamt <em>(cond.)</em></td><td><span class="tag">Datum</span></td><td>½, max 200</td><td>~44</td><td class="long">31.12.2026</td></tr>
+        <tr><td class="ln">131</td><td>Ablaufdatum Bewilligung <em>(cond.)</em></td><td><span class="tag">Datum</span></td><td>½, max 200</td><td>~44</td><td class="long">31.12.2028</td></tr>
+        <tr><td class="ln">142</td><td>Zivilstand</td><td><span class="tag">Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">Eingetragene Partnerschaft</td></tr>
+        <tr><td class="ln">143</td><td>Zivilstand seit</td><td><span class="tag">Datum</span></td><td>½, max 200</td><td>~44</td><td class="long">01.06.2020</td></tr>
+        <tr><td class="ln">149</td><td>Strasse &amp; Nr.</td><td><span class="tag">Freitext</span></td><td>full-width</td><td>40</td><td class="long">Untere Bahnhofstrasse 145b</td></tr>
+        <tr><td class="ln">152</td><td>PLZ</td><td><span class="tag">Freitext (num.)</span></td><td>Grid ½</td><td>40</td><td class="long">8000</td></tr>
+        <tr><td class="ln">153</td><td>Ort</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">Niederhelfenschwil</td></tr>
+        <tr><td class="ln">154</td><td>E-Mail</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">vorname.nachname@beispiel.ch</td></tr>
+        <tr><td class="ln">155</td><td>Telefon</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">+41 79 123 45 67</td></tr>
+        <tr><td class="ln">162</td><td>Krankenkasse</td><td><span class="tag">durchsuchb. Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">Glarner Krankenversicherung</td></tr>
+        <tr><td class="ln">164</td><td>Kartennummer</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">80756017123456789</td></tr>
+        <tr><td class="ln">166</td><td>BAG-Nr. der Kasse</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">0271</td></tr>
+        <tr><td class="ln">172</td><td>Qualifikationsstufe</td><td><span class="tag">Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">FaGe / Dipl</td></tr>
+        <tr><td class="ln">173</td><td>Deutschkenntnisse</td><td><span class="tag">Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">Muttersprache</td></tr>
+        <tr><td class="ln">175</td><td>Sprachzertifikat vorhanden? <em>(cond.)</em></td><td><span class="tag">Ja/Nein</span></td><td>inline</td><td>~30–36</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">177</td><td>SRK-Pflegehelfer-Zertifikat vorhanden?</td><td><span class="tag">Ja/Nein</span></td><td>inline</td><td>~30–36</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">223</td><td>Quellensteuerpflichtig?</td><td><span class="tag">Ja/Nein</span></td><td>inline</td><td>~30–36</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">224</td><td>Konfession</td><td><span class="tag">Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">Evangelisch-freikirchlich</td></tr>
+        <tr><td class="ln">272</td><td>Tarifcode <em>(cond.)</em></td><td><span class="tag code">Codefeld</span></td><td>full-width</td><td>40</td><td class="long">B2Y</td></tr>
+        <tr><td class="ln">274</td><td>Begründung der Abweichung <em>(cond.)</em></td><td><span class="tag">Freitext</span></td><td>full-width</td><td>40</td><td class="long">Grenzgänger Tarif G, gemäss Verfügung Steueramt</td></tr>
+        <tr><td class="ln">311–314</td><td>BVG- / UVG-versichert? · Sozialamt involviert? · Lohnabtretung?</td><td><span class="tag">Ja/Nein</span> ×4</td><td>inline</td><td>~30–36</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">318</td><td>Sozialamt Kontaktdaten <em>(cond.)</em></td><td><span class="tag">Freitext</span></td><td>full-width</td><td>40</td><td class="long">Sozialamt Zürich, Hr. Müller, 044 123 45 67</td></tr>
+        <tr><td class="ln">342</td><td>Bereits bei anderem Arbeitgeber angestellt?</td><td><span class="tag">Ja/Nein</span></td><td>inline</td><td>~30–36</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">345</td><td>Funktion extern <em>(cond.)</em></td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">Pflegehelferin</td></tr>
+        <tr><td class="ln">346</td><td>Pensum extern <em>(cond.)</em></td><td><span class="tag">Zahl (%)</span></td><td>Grid ½</td><td>40</td><td class="long">50</td></tr>
+        <tr><td class="ln">347</td><td>Eintritt extern <em>(cond.)</em></td><td><span class="tag">Datum</span></td><td>½, max 200</td><td>~44</td><td class="long">01.03.2026</td></tr>
+        <tr><td class="ln">348</td><td>BVG-Anbindung gewünscht? <em>(cond.)</em></td><td><span class="tag">Ja/Nein</span></td><td>inline</td><td>~30–36</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">354</td><td>Funktion</td><td><span class="tag">Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">Assistent/in Gesundheit und Soziales AGS</td></tr>
+        <tr><td class="ln">355</td><td>Eintrittsdatum</td><td><span class="tag">Datum</span></td><td>½, max 200</td><td>~44</td><td class="long">01.03.2026</td></tr>
+        <tr><td class="ln">356</td><td>Stundenlohn</td><td><span class="tag">Zahl (CHF)</span></td><td>Grid ½</td><td>40</td><td class="long">32.00</td></tr>
+        <tr><td class="ln">357</td><td>Ferienanspruch</td><td><span class="tag">Zahl (Wochen)</span></td><td>Grid ½</td><td>40</td><td class="long">5</td></tr>
+        <tr><td class="ln">377</td><td>Bankname</td><td><span class="tag">Freitext</span></td><td>full-width</td><td>40</td><td class="long">PostFinance / UBS / Raiffeisen</td></tr>
+        <tr><td class="ln">378</td><td>IBAN</td><td><span class="tag mono">Codefeld</span></td><td>full-width</td><td>40</td><td class="long">CH93 0076 2011 6238 5295 7</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="twrap"><table>
+      <caption>MigratedAngehoerigerForms2.tsx — PartnerFormV2 / KinderFormV2 / DokumenteFormV2</caption>
+      <thead><tr><th>Zeile</th><th>Beschriftung</th><th>Feldtyp</th><th>Breite</th><th>Höhe</th><th>Längster realistischer Inhalt</th></tr></thead>
+      <tbody>
+        <tr><td class="ln">115</td><td>Vorname (Partner)</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">Marie-Antoinette</td></tr>
+        <tr><td class="ln">116</td><td>Nachname (Partner)</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">von Grünigen-Hofstetter</td></tr>
+        <tr><td class="ln">117</td><td>Geburtsdatum (Partner)</td><td><span class="tag">Datum</span></td><td>½, max 200</td><td>~44</td><td class="long">01.01.1985</td></tr>
+        <tr><td class="ln">118</td><td>Nationalität (Partner)</td><td><span class="tag">durchsuchb. Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">Österreich</td></tr>
+        <tr><td class="ln">123</td><td>Aufenthaltsbewilligung</td><td><span class="tag">Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">B – Aufenthaltsbewilligung</td></tr>
+        <tr><td class="ln">144</td><td>Erwerbstätig?</td><td><span class="tag">Ja/Nein</span></td><td>inline</td><td>~30–36</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">192</td><td>Unterhaltspflichtige Kinder vorhanden?</td><td><span class="tag">Ja/Nein</span></td><td>inline</td><td>~30–36</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">208</td><td>Anzahl unterhaltspfl. Kinder <em>(cond.)</em></td><td><span class="tag">Freitext (Zahl)</span></td><td>Grid ½</td><td>40</td><td class="long">2</td></tr>
+        <tr><td class="ln">221</td><td>Kinderzulagen über Spitex abgerechnet? <em>(cond.)</em></td><td><span class="tag">Ja/Nein</span></td><td>inline</td><td>~30–36</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">245–248</td><td>Kind: Vorname · Nachname · Geburtsdatum · Geschlecht <em>(pro Kind)</em></td><td><span class="tag">Freitext/Datum/Auswahl</span></td><td>Grid ½</td><td>40 / ~44</td><td class="long">von Grünigen-Hofstetter</td></tr>
+        <tr><td class="ln">417</td><td>Mehrfach-Dokument Bezeichnung <span class="flag warn">roh &lt;input&gt;</span></td><td><span class="tag">Freitext</span></td><td>flex:1</td><td>~30</td><td class="long">Zusätzliche Vollmacht Bevollmächtigte</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="twrap"><table>
+      <caption>SpezialbewilligungStep.tsx · SpezialbewilligungDialog.tsx (Compliance-Gate)</caption>
+      <thead><tr><th>Datei:Zeile</th><th>Beschriftung</th><th>Feldtyp</th><th>Breite</th><th>Höhe</th><th>Längster realistischer Inhalt</th></tr></thead>
+      <tbody>
+        <tr><td class="loc">SpezialbewilligungStep:97</td><td>Einreichungsdatum beim Migrationsamt</td><td><span class="tag">Datum</span></td><td>max 200</td><td>~44</td><td class="long">31.12.2026</td></tr>
+        <tr><td class="loc">SpezialbewilligungDialog:271</td><td>Einreichungs-Datum <span class="flag warn">roh &lt;input type=date&gt;</span></td><td><span class="tag">Datum (ISO)</span></td><td>w-full</td><td>~36</td><td class="long">2026-03-03</td></tr>
+      </tbody>
+    </table></div>
+    <p style="font-size:13px;color:var(--ink-3)"><code>StepAngehoeriger.tsx</code> selbst rendert keine eigenen Felder (nur die MigratedForms). Der Block Z. 712–2723 (lokale <code>FormField</code>/<code>JaNeinToggle</code>/<code>PayrollField</code> + alle Legacy-Felder) ist <span class="flag dead">toter Code</span>.</p>
+
+    <h3>1.2 Onboarding Patient <span class="flag ok">live</span></h3>
+    <div class="twrap"><table>
+      <caption>MigratedPatientForms.tsx — TabPersonalienV2 / TabSteuerV2 / TabAnamneseV2</caption>
+      <thead><tr><th>Zeile</th><th>Beschriftung</th><th>Feldtyp</th><th>Breite</th><th>Höhe</th><th>Längster realistischer Inhalt</th></tr></thead>
+      <tbody>
+        <tr><td class="ln">52</td><td>Name</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">Hufschmied-Zürcher</td></tr>
+        <tr><td class="ln">53</td><td>Vorname</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">Marie-Christine</td></tr>
+        <tr><td class="ln">54</td><td>Geburtsdatum</td><td><span class="tag">Datum</span></td><td>½, max 200</td><td>~44</td><td class="long">31.12.1950</td></tr>
+        <tr><td class="ln">55</td><td>Geschlecht</td><td><span class="tag">Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">Weiblich</td></tr>
+        <tr><td class="ln">58</td><td>AHV-Nummer</td><td><span class="tag mono">Codefeld</span></td><td>full-width</td><td>40</td><td class="long">756.1234.5678.97</td></tr>
+        <tr><td class="ln">61</td><td>Nationalität</td><td><span class="tag">durchsuchb. Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">Bosnien und Herzegowina</td></tr>
+        <tr><td class="ln">62</td><td>Heimatort <em>(cond.)</em></td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">Rüschlikon ZH</td></tr>
+        <tr><td class="ln">64</td><td>Aufenthaltsstatus <em>(cond.)</em></td><td><span class="tag">Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">G</td></tr>
+        <tr><td class="ln">67</td><td>Zivilstand</td><td><span class="tag">Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">Eingetragene Partnerschaft</td></tr>
+        <tr><td class="ln">72</td><td>Strasse</td><td><span class="tag">Freitext</span></td><td>full-width</td><td>40</td><td class="long">Untere Zäune 12, Postfach 4021</td></tr>
+        <tr><td class="ln">75</td><td>PLZ</td><td><span class="tag">Freitext (num.)</span></td><td>Grid ½</td><td>40</td><td class="long">8000</td></tr>
+        <tr><td class="ln">76</td><td>Ort</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">Zürich-Altstetten</td></tr>
+        <tr><td class="ln">82</td><td>Krankenkasse</td><td><span class="tag">durchsuchb. Auswahl</span></td><td>Grid ½</td><td>40</td><td class="long">CSS Kranken-Versicherung AG</td></tr>
+        <tr><td class="ln">84</td><td>Kartennummer</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">80756000123456789012</td></tr>
+        <tr><td class="ln">86</td><td>BAG-Nr. der Kasse</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">0271</td></tr>
+        <tr><td class="ln">89–91</td><td>Hausarzt Name · Telefon · E-Mail</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">Dr. med. Katharina Brunschwiler</td></tr>
+        <tr><td class="ln">94</td><td>Spezialarzt</td><td><span class="tag">Freitext</span></td><td>full-width</td><td>40</td><td class="long">Kardiologe Dr. Weber, Onkologie USZ</td></tr>
+        <tr><td class="ln">99–100</td><td>E-Mail · Telefon</td><td><span class="tag">Freitext</span></td><td>Grid ½</td><td>40</td><td class="long">vorname.nachname@bluewin.ch</td></tr>
+        <tr><td class="ln">105–109</td><td>Notfallkontakt Name · Telefon · Beziehung</td><td><span class="tag">Freitext</span></td><td>½ / full</td><td>40</td><td class="long">Ehepartner / Sohn / Nachbar</td></tr>
+        <tr><td class="ln">123–124</td><td>Sozialamt involviert? · IV-Bezug?</td><td><span class="tag">Ja/Nein</span></td><td>inline</td><td>~34</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">128</td><td>Kontakt Sozialamt <em>(cond.)</em></td><td><span class="tag">Freitext</span></td><td>full-width</td><td>40</td><td class="long">Sozialamt Stadt Zürich, Frau Meier, 044 …</td></tr>
+        <tr><td class="ln">133</td><td>IV-Bezug % <em>(cond.)</em></td><td><span class="tag">Zahl (%)</span></td><td>full-width</td><td>40</td><td class="long">100</td></tr>
+        <tr><td class="ln">137–138</td><td>Hilflosenentschädigung? · IV-Assistenzbeitrag?</td><td><span class="tag">Ja/Nein</span></td><td>inline</td><td>~34</td><td class="long">Ja</td></tr>
+        <tr><td class="ln">142</td><td>Konfession</td><td><span class="tag">Auswahl</span></td><td>full-width</td><td>40</td><td class="long">Römisch-katholisch</td></tr>
+        <tr><td class="ln">144</td><td>Quellensteuer-Hinweise</td><td><span class="tag">mehrzeilig</span></td><td>full-width</td><td>min 80</td><td class="long">Grenzgänger DE, Tarif B, Kirchensteuer nein</td></tr>
+        <tr><td class="ln">162–163</td><td>Grösse · Gewicht</td><td><span class="tag">Zahl (cm/kg)</span></td><td>Grid ½</td><td>40</td><td class="long">178</td></tr>
+        <tr><td class="ln">167–169</td><td>Gewichtsverlust · Brille · Hörgerät</td><td><span class="tag">Ja/Nein</span></td><td>Grid ⅓ inline</td><td>~34</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">173</td><td>Chronische Erkrankungen</td><td><span class="tag">mehrzeilig</span></td><td>full-width</td><td>min 80</td><td class="long">Diabetes mellitus Typ 2, Arterielle Hypertonie, COPD Gold III</td></tr>
+        <tr><td class="ln">177</td><td>Spitalaufenthalte (letzte 90 Tage)</td><td><span class="tag">Ja/Nein</span></td><td>inline</td><td>~34</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">178</td><td>Operationen</td><td><span class="tag">mehrzeilig (rows 4)</span></td><td>Grid ½</td><td>~100</td><td class="long">Hüft-TEP re (2024), Knie-TEP li (2022), Appendektomie (2018)</td></tr>
+        <tr><td class="ln">182</td><td>Allergien / Unverträglichkeiten</td><td><span class="tag">mehrzeilig</span></td><td>full-width</td><td>min 80</td><td class="long">Penicillin, Latex, Nüsse, Kontrastmittel</td></tr>
+        <tr><td class="ln">188–191</td><td>Wohnsituation · Etage · Lift · Treppen</td><td><span class="tag">Auswahl / Freitext / Ja-Nein</span></td><td>Grid ½</td><td>40 / ~34</td><td class="long">Betreutes Wohnen</td></tr>
+        <tr><td class="ln">194</td><td>Personen im Haushalt</td><td><span class="tag">Auswahl</span></td><td>full-width</td><td>40</td><td class="long">1 (alleinlebend)</td></tr>
+        <tr><td class="ln">200</td><td>Ausführliche Anamnese</td><td><span class="tag">mehrzeilig</span></td><td>full-width</td><td>min 80</td><td class="long">langer klinischer Fliesstext</td></tr>
+        <tr><td class="ln">204</td><td>Stürze letzte 12 Monate?</td><td><span class="tag">Auswahl</span></td><td>full-width</td><td>40</td><td class="long">Ja, innerhalb 6 Monate</td></tr>
+        <tr><td class="ln">215–216</td><td>Anzahl Stürze · Bemerkungen <em>(cond.)</em></td><td><span class="tag">Zahl / mehrzeilig</span></td><td>Grid ½</td><td>40 / min 80</td><td class="long">Sturz im Bad nachts, Prellung am Arm</td></tr>
+        <tr><td class="ln">219–220</td><td>Stimmung · Behandlungsziel</td><td><span class="tag">Auswahl / mehrzeilig</span></td><td>full-width</td><td>40 / min 80</td><td class="long">Sturzprophylaxe und Erhalt der Mobilität</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="twrap"><table>
+      <caption>MigratedPatientATL.tsx (Tab Aktivitäten) · VitaldatenTab.tsx · StepPatient inline (KLV/Diagnose/Doku)</caption>
+      <thead><tr><th>Datei:Zeile</th><th>Beschriftung</th><th>Feldtyp</th><th>Breite</th><th>Höhe</th><th>Längster realistischer Inhalt</th></tr></thead>
+      <tbody>
+        <tr><td class="loc">ATL:104–113</td><td>ATL Ja/Nein je Item (24 Items)</td><td><span class="tag">Ja/Nein</span></td><td>inline Pill</td><td>~28</td><td class="long">Ja</td></tr>
+        <tr><td class="loc">ATL:127–136</td><td>Bemerkung je ATL-Item <span class="flag warn">roh</span></td><td><span class="tag">mehrzeilig (rows 2)</span></td><td>flex:1</td><td>min 48</td><td class="long">Sauerstoff 2 L nachts, Kompressionsstrümpfe Kl. II</td></tr>
+        <tr><td class="loc">Vitaldaten:118–124</td><td>9 Messwerte (Blutdruck sys/dia, Puls, Temp, SpO₂, Atemfr., BZ, Gewicht, Schmerz) <span class="flag warn">roh number</span></td><td><span class="tag">Zahl</span></td><td>Grid ¼</td><td>~30</td><td class="long">180 / 110 / 37.4 …</td></tr>
+        <tr><td class="loc">Vitaldaten:133</td><td>Kommentar <span class="flag warn">roh</span></td><td><span class="tag">Freitext</span></td><td>full-width</td><td>~30</td><td class="long">nach Belastung, nüchtern, Ruhemessung</td></tr>
+        <tr><td class="loc">StepPatient:2222</td><td>Mehrfach-Dokument Bezeichnung <span class="flag warn">roh</span></td><td><span class="tag">Freitext</span></td><td>flex:1</td><td>~30</td><td class="long">Kostengutsprache 2. Quartal</td></tr>
+        <tr><td class="loc">StepPatient:2472/2476</td><td>Arztdiagnose ICD-Code · Bezeichnung <span class="flag warn">roh</span></td><td><span class="tag code">Codefeld</span> / <span class="tag">Freitext</span></td><td>Zelle</td><td>~30</td><td class="long">Arterielle Hypertonie, essenziell</td></tr>
+        <tr><td class="loc">StepPatient:2592</td><td>Pflegediagnose Begründung <span class="flag warn">roh</span></td><td><span class="tag">mehrzeilig</span></td><td>full-width</td><td>~</td><td class="long">Erhöhtes Sturzrisiko bei Gangunsicherheit</td></tr>
+        <tr><td class="loc">StepPatient:2989–2999</td><td>KLV-Zeile: Wer · Rhythmus · Tage · Anzahl · Zeit · Pflegediagnose <span class="flag warn">roh</span></td><td><span class="tag">Auswahl / Zahl</span></td><td>Grid-Zelle</td><td>klein</td><td class="long">Spitex + Angehörige</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>1.3 Detailansichten 360 <span class="flag ok">live</span> · Eigenbau <code>PEditableField</code> / <code>EditableField</code></h3>
+    <div class="note">Beide 360-Seiten bauen eine eigene Inline-Editierkomponente (<code>Patient360:469</code> · <code>Angehoerige360:616</code>) plus 4–5 lose duplizierte <code>input</code>-Klassenstrings. <b>Kein Feld hat eine feste Breite</b> — alles <code>w-full</code>, Breite kommt aus dem Grid (<code>sm:2 lg:3</code> / <code>1fr 1fr</code>). Höhe über <code>py-1.5</code> (~30px) bzw. <code>py-2</code> (~34px), nie über ein Token. <span class="tag mono">Codefeld</span> = <code>mono</code>-Prop.</div>
+    <div class="twrap"><table>
+      <caption>Patient360Page.tsx</caption>
+      <thead><tr><th>Zeile</th><th>Beschriftung</th><th>Feldtyp</th><th>Grid</th><th>Höhe</th><th>Längster realistischer Inhalt</th></tr></thead>
+      <tbody>
+        <tr><td class="ln">727–732</td><td>Adresse · Kanton · Sprache · Leistungsart · Aufnahmedatum · Letzter Besuch</td><td><span class="tag">Freitext / Datum</span></td><td>3-Sp.</td><td>~30</td><td class="long">Untere Bahnhofstrasse 128b</td></tr>
+        <tr><td class="ln">598–606</td><td>Kontakt (2×: Angehöriger + Notfall): Name · Beziehung · Telefon <span class="flag warn">roh</span></td><td><span class="tag">Freitext / Tel</span></td><td>3-Sp.</td><td>~30</td><td class="long">Maria Müller-Bernasconi</td></tr>
+        <tr><td class="ln">793–794</td><td>Krankenkasse Name · Versicherungsnr.</td><td><span class="tag">Freitext</span> / <span class="tag mono">Codefeld</span></td><td>2-Sp.</td><td>~30</td><td class="long">CSS Versicherung / T553.91</td></tr>
+        <tr><td class="ln">800–802</td><td>Hausarzt Name · Fachgebiet · Telefon</td><td><span class="tag">Freitext / Tel</span></td><td>3-Sp.</td><td>~30</td><td class="long">Dr. med. Markus Huber</td></tr>
+        <tr><td class="ln">1265/1269</td><td>Grösse · Gewicht <span class="flag warn">roh number</span></td><td><span class="tag">Zahl</span></td><td>2-Sp.</td><td>~30</td><td class="long">180 / 82</td></tr>
+        <tr><td class="ln">1330–1332</td><td>Allergen · Reaktion · Schwere</td><td><span class="tag">Freitext / Auswahl</span></td><td>flex / w-24</td><td>~30</td><td class="long">Anaphylaktischer Schock</td></tr>
+        <tr><td class="ln">1364–1365</td><td>Hilfsmittel Bezeichnung · Details</td><td><span class="tag">Freitext</span></td><td>flex / w-36</td><td>~30</td><td class="long">Rollator mit Sitz</td></tr>
+        <tr><td class="ln">1416–1423</td><td>Spital: Einrichtung · Grund · Von · Bis · Tage</td><td><span class="tag">Freitext / Datum / Zahl</span></td><td>3-Sp.</td><td>~30</td><td class="long">Universitätsspital Zürich</td></tr>
+        <tr><td class="ln">1452–1453</td><td>OP: Eingriff · Datum</td><td><span class="tag">Freitext / Datum</span></td><td>flex / w-28</td><td>~30</td><td class="long">Hüft-Totalendoprothese rechts</td></tr>
+        <tr><td class="ln">1511 / 1548</td><td>Neue Anamnese / Anamnese bearbeiten</td><td><span class="tag">mehrzeilig (rows 10/14)</span></td><td>full</td><td>gross, 16px</td><td class="long">langer klinischer Fliesstext</td></tr>
+        <tr><td class="ln">1813</td><td>ATL Bemerkung</td><td><span class="tag">Freitext</span></td><td>full</td><td>~30</td><td class="long">Benötigt Hilfe beim Anziehen der Kompressionsstrümpfe</td></tr>
+        <tr><td class="ln">1061</td><td>Task-Fälligkeit <span class="tag">DateField</span></td><td><span class="tag">Datum</span></td><td>Komp.</td><td>~44</td><td class="long">31.12.2026</td></tr>
+        <tr><td class="ln">2145–2199</td><td>Bewilligung: Gültig ab/bis · Tägl. Minuten · Einsatztage/Wo · A-/B-Leistungen <span class="flag warn">roh</span></td><td><span class="tag">Datum / Zahl</span></td><td>2-Sp.</td><td>~34</td><td class="long">01.04.2026</td></tr>
+        <tr><td class="ln">2436–2485</td><td>Absenz: Zeitraum · Anzahl Tage · Absenztyp · Bemerkung <span class="flag warn">roh</span></td><td><span class="tag">Freitext / Zahl / Auswahl / mehrzeilig</span></td><td>2-Sp.</td><td>~34</td><td class="long">Grippaler Infekt, ärztliches Attest liegt vor</td></tr>
+        <tr><td class="ln">2863–2941</td><td>KLV: Beginn · Ende (2× inkl. Leerzustand) · „Leistungen übernehmen" <span class="flag warn">roh date/checkbox</span></td><td><span class="tag">Datum / Kontrollkästchen</span></td><td>1fr 1fr</td><td>~34 / 16</td><td class="long">2026-12-31</td></tr>
+      </tbody>
+    </table></div>
+    <div class="twrap"><table>
+      <caption>Angehoerige360Page.tsx</caption>
+      <thead><tr><th>Zeile</th><th>Beschriftung</th><th>Feldtyp</th><th>Grid</th><th>Höhe</th><th>Längster realistischer Inhalt</th></tr></thead>
+      <tbody>
+        <tr><td class="ln">864–867</td><td>Vorname · Nachname · Geschlecht · Geburtsdatum</td><td><span class="tag">Freitext / Datum</span></td><td>3-Sp.</td><td>~30</td><td class="long">Müller-Bernasconi</td></tr>
+        <tr><td class="ln">869</td><td>AHV-Nummer</td><td><span class="tag mono">Codefeld</span></td><td>3-Sp.</td><td>~30</td><td class="long">756.1234.5678.97</td></tr>
+        <tr><td class="ln">883–887</td><td>Nationalität · Heimatort · Aufenthaltsstatus · Zivilstand · Zivilstand seit</td><td><span class="tag">Freitext / Datum</span></td><td>3-Sp.</td><td>~30</td><td class="long">Bewilligung B</td></tr>
+        <tr><td class="ln">894–898</td><td>Strasse · PLZ · Ort · E-Mail · Telefon</td><td><span class="tag">Freitext / Tel</span></td><td>3-Sp.</td><td>~30</td><td class="long">peter.mueller@bluewin.ch</td></tr>
+        <tr><td class="ln">930–931</td><td>Krankenkasse · Versicherungsnummer</td><td><span class="tag">Freitext</span> / <span class="tag mono">Codefeld</span></td><td>2-Sp.</td><td>~30</td><td class="long">KK-834291</td></tr>
+        <tr><td class="ln">939–947</td><td>Quellensteuer-pflichtig · Konfession · Tarif · Steuergemeinde · Sozialamt · Kontakt · Lohnabtretung</td><td><span class="tag">Freitext</span> <em>(anderswo Auswahl!)</em></td><td>3-Sp.</td><td>~30</td><td class="long">Evangelisch-reformiert</td></tr>
+        <tr><td class="ln">955–973</td><td>Partner: Name · Geburtsdatum · AHV · ZEMIS · Aufenthaltsstatus</td><td><span class="tag">Freitext / Datum</span> / <span class="tag mono">Codefeld</span></td><td>3-Sp.</td><td>~30</td><td class="long">756.8888.9999.00</td></tr>
+        <tr><td class="ln">1000–1042</td><td>Kinder-Tabelle: Vorname · Nachname · Geburtsdatum · AHV · Zulagenart · Ausbildungsbeginn</td><td><span class="tag">Freitext / Datum / Auswahl</span> / <span class="tag code">Codefeld</span></td><td>maxW 90 / Zelle</td><td>~28</td><td class="long">756.1111.2222.33</td></tr>
+        <tr><td class="ln">1066–1088</td><td>Kinderzulagen über Spitex · Familienausgleichskasse · Funktion · Eintritt · Stundenlohn · Bankname · IBAN</td><td><span class="tag">Freitext / Datum</span> / <span class="tag mono">Codefeld</span></td><td>2/3-Sp.</td><td>~30</td><td class="long">CH93 0076 2011 6238 5295 7</td></tr>
+        <tr><td class="ln">1743–1999</td><td>Workflow Bewilligung + Absenzen (Spiegel von Patient360, hier mit <code>DateField</code>)</td><td><span class="tag">Datum / Zahl / Auswahl / mehrzeilig</span></td><td>2-Sp.</td><td>~34 / ~44</td><td class="long">Grippaler Infekt, ärztliches Attest liegt vor</td></tr>
+        <tr><td class="ln">2200–2246</td><td>Related-Kinder-Tabelle (Spiegel von 1000er)</td><td><span class="tag">Freitext / Datum / Auswahl</span></td><td>Zelle</td><td>~28</td><td class="long">Ausbildungszulage</td></tr>
+        <tr><td class="ln">2289–2418</td><td>Zulagen/Quellensteuer/Status: aktiv · über Spitex · Quellensteuerpflicht · Tarif · Konfession · Flüchtling · Grenzgänger · Aufenthaltsstatus</td><td><span class="tag">Ja/Nein / Auswahl</span></td><td>3-Sp.</td><td>~30 / ~34</td><td class="long">Evangelisch-reformiert</td></tr>
+        <tr><td class="ln">2375</td><td>Lohnsumme (CHF)</td><td><span class="tag">Zahl</span></td><td>max-w-xs</td><td>~34</td><td class="long">3'540.00</td></tr>
+        <tr><td class="ln">2648–2726</td><td>SRK/Qualifikation: Status · Angemeldet · Deadline · Abgeschlossen am</td><td><span class="tag">Auswahl / Ja-Nein / Datum</span></td><td>2-Sp.</td><td>~34 / ~44</td><td class="long">Überfällig</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>1.4 Übrige Erfassungs-Module <span class="flag ok">live</span></h3>
+    <div class="twrap"><table>
+      <caption>KLV · Pflegeplanung · Einwilligung · Arbeitskontrolle · ServiceDesk · StatusModal · ArztAnfrage · Rhythmus · Workflow · Login · Signatur</caption>
+      <thead><tr><th>Datei:Zeile</th><th>Beschriftung/Zweck</th><th>Feldtyp</th><th>Breite</th><th>Höhe</th><th>Längster realistischer Inhalt</th></tr></thead>
+      <tbody>
+        <tr><td class="loc">Arbeitskontrolle:235</td><td>Bewertungsskala 1–6 je Kriterium (14×)</td><td><span class="tag">Auswahl (Buttons)</span></td><td>6×32</td><td>32</td><td class="long">1–6</td></tr>
+        <tr><td class="loc">Arbeitskontrolle:260</td><td>„Nicht beurteilbar" je Kriterium</td><td><span class="tag">Ja/Nein</span></td><td>~120</td><td>32</td><td class="long">Nicht beurteilbar</td></tr>
+        <tr><td class="loc">Arbeitskontrolle:282</td><td>Anmerkung je Block</td><td><span class="tag">mehrzeilig (rows 2)</span></td><td>100%</td><td>~52</td><td class="long">Medikamentenkontrolle ausgelassen, mit Fallführender besprochen.</td></tr>
+        <tr><td class="loc">Arbeitskontrolle:303</td><td>Verbesserungen und Vorschläge</td><td><span class="tag">mehrzeilig (rows 4)</span></td><td>100%</td><td>~92</td><td class="long">mehrere Sätze Fliesstext</td></tr>
+        <tr><td class="loc">Arbeitskontrolle:344</td><td>Meldung an GL / Leitung erfolgt (2×)</td><td><span class="tag">Kontrollkästchen</span></td><td>16</td><td>16</td><td class="long">—</td></tr>
+        <tr><td class="loc">Arbeitskontrolle:349/350</td><td>Melde-Datum · Melde-Uhrzeit (2×) <span class="flag warn">roh</span></td><td><span class="tag">Datum / Zeit</span></td><td>~120/100</td><td>~26</td><td class="long">03.03.2026 · 14:30</td></tr>
+        <tr><td class="loc">KLV:121/125</td><td>Verordnung Beginn · Ende</td><td><span class="tag">Datum</span></td><td>130</td><td>~30</td><td class="long">31.12.2026</td></tr>
+        <tr><td class="loc">KLV:238–242</td><td>Leistungszeile: Wer · Rhythmus · Tage · Anzahl · Zeit/Einsatz</td><td><span class="tag">Auswahl / Zahl</span></td><td>Zelle ≥120</td><td>~28</td><td class="long">Spitex + Angehörige:r</td></tr>
+        <tr><td class="loc">KLV:295</td><td>Pflegeziel (administrativ, Loop)</td><td><span class="tag">Freitext</span></td><td>100%</td><td>~20</td><td class="long">Sturzprophylaxe im häuslichen Umfeld sicherstellen</td></tr>
+        <tr><td class="loc">KLV:363/379</td><td>Datum Anordnung · Kostengutsprache-Datum</td><td><span class="tag">Datum</span></td><td>100%</td><td>~32</td><td class="long">03.03.2026</td></tr>
+        <tr><td class="loc">KLV:450–453</td><td>Diagnose ICD-Code · Titel · Beschreibung</td><td><span class="tag code">Codefeld</span> / <span class="tag">Freitext / mehrzeilig</span></td><td>80 / flex</td><td>~28</td><td class="long">Chronische Herzinsuffizienz NYHA III</td></tr>
+        <tr><td class="loc">Pflegeplanung:273</td><td>Begründung (NANDA)</td><td><span class="tag">mehrzeilig (rows 2)</span></td><td>100%</td><td>~52</td><td class="long">Fliesstext</td></tr>
+        <tr><td class="loc">Pflegeplanung:295–297</td><td>Massnahme Titel · Beschreibung · Häufigkeit</td><td><span class="tag">Freitext / mehrzeilig</span></td><td>100%</td><td>~28</td><td class="long">Unterstützung Körperpflege</td></tr>
+        <tr><td class="loc">Pflegeplanung:312–315</td><td>Ziel Titel · Zeithorizont · Messbar</td><td><span class="tag">Freitext</span></td><td>100% / flex</td><td>~28</td><td class="long">Selbstständige Mobilität fördern</td></tr>
+        <tr><td class="loc">Einwilligung:169/172</td><td>Unterzeichner Patient / Vertretung</td><td><span class="tag">Ja/Nein (Radio)</span></td><td>16</td><td>16</td><td class="long">—</td></tr>
+        <tr><td class="loc">Einwilligung:181–191</td><td>Name Vertretung · Grundlage · Grundlage beschreiben</td><td><span class="tag">Freitext / Auswahl</span></td><td>Grid ½</td><td>~30</td><td class="long">Maria Bernasconi-Schneider</td></tr>
+        <tr><td class="loc">Einwilligung:208/212</td><td>Ort · Datum (auto, disabled)</td><td><span class="tag">Freitext / Datum</span></td><td>Grid ½</td><td>~30</td><td class="long">Winterthur</td></tr>
+        <tr><td class="loc">ServiceDesk:828</td><td>Kommentar (Ticket-Verlauf)</td><td><span class="tag">mehrzeilig, 16px</span></td><td>flex</td><td>~52</td><td class="long">Rückmeldung Hausarzt eingeholt, Verordnung folgt.</td></tr>
+        <tr><td class="loc">ServiceDesk:851</td><td>Ticket-Status ändern</td><td><span class="tag">Auswahl</span></td><td>auto</td><td>min 44</td><td class="long">In Bearbeitung</td></tr>
+        <tr><td class="loc">StatusModal:94</td><td>Status-Auswahl (Button-Karten)</td><td><span class="tag">Auswahl</span></td><td>Karten</td><td>auto</td><td class="long">Nicht abrechenbar</td></tr>
+        <tr><td class="loc">StatusModal:184</td><td>Grund für Abrechnungsstopp (Pflicht)</td><td><span class="tag">mehrzeilig (rows 3)</span></td><td>100%</td><td>~76</td><td class="long">Fehlende Kostengutsprache, abgelaufene Verordnung</td></tr>
+        <tr><td class="loc">ArztAnfrage:221/231</td><td>Betreff · Nachricht</td><td><span class="tag">Freitext / mehrzeilig (rows 5)</span></td><td>100%</td><td>~30 / gross</td><td class="long">Anordnung Grundpflege — Herr Meier, 04.1948</td></tr>
+        <tr><td class="loc">Rhythmus:275/277</td><td>Fälligkeit anpassen · Begründung (Pflicht)</td><td><span class="tag">Datum / mehrzeilig</span></td><td>Komp. / 100%</td><td>~44 / ~52</td><td class="long">Patient im Spital, Termin verschoben.</td></tr>
+        <tr><td class="loc">Rhythmus:316 · Sammel:168/181</td><td>Protokoll (Pflicht/optional)</td><td><span class="tag">mehrzeilig (rows 2–3)</span></td><td>100%</td><td>~52–76</td><td class="long">Beobachtungen, Massnahmen, Vereinbarungen …</td></tr>
+        <tr><td class="loc">Workflow:210</td><td>Fälligkeitsdatum je Task <span class="tag">DateField</span></td><td><span class="tag">Datum</span></td><td>Komp.</td><td>~44</td><td class="long">31.12.2026</td></tr>
+        <tr><td class="loc">SignaturModal:109</td><td>„gelesen und unterzeichne elektronisch"</td><td><span class="tag">Kontrollkästchen</span></td><td>16</td><td>16</td><td class="long">—</td></tr>
+        <tr><td class="loc">Login:48/72</td><td>Benutzername · Passwort</td><td><span class="tag">Freitext / Passwort</span></td><td>w-full</td><td>~44</td><td class="long">b.sahin@spitex-kaufmann.ch</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>1.5 InterRAI-Erfassung <span class="flag ok">live</span> · <code>InterraiNeuPage.tsx</code></h3>
+    <div class="note">Fast alle Felder werden in <code>.map()</code>-Schleifen über Seed-Daten gerendert (~20 Bereiche, 288 answerType-Items, 92 Optionslisten). <b>Kein natives Radio/Checkbox</b> — ersetzt durch <code>SelectionSurface</code>-Buttons (Def. 436) und <code>MatrixCell</code> (Def. 487, 34×34). Basis-<code>inputStyle</code> (555): <code>maxWidth:400, padding:8px 12px, fontSize:13</code> → ~34px. Die Zeilenangaben sind Render-Stellen (Templates), nicht die Laufzeit-Feldzahl.</div>
+    <div class="twrap"><table>
+      <thead><tr><th>Zeile</th><th>Zweck</th><th>Feldtyp</th><th>Breite</th><th>Höhe</th><th>Längster realistischer Inhalt</th></tr></thead>
+      <tbody>
+        <tr><td class="ln">1690</td><td>Individuelle Präzisierungen (Bereich)</td><td><span class="tag">mehrzeilig (rows 4)</span></td><td>100%</td><td>~92</td><td class="long">Patientin wirkt rasch erschöpft; nächtliche Unruhe, wiederholte Stürze im Bad.</td></tr>
+        <tr><td class="ln">2161 / 3113</td><td>Validiertes Feld — AHV (A5a), Grösse, Gewicht, ICD-10</td><td><span class="tag code">Codefeld / Zahl</span></td><td>max {breite ?? 320}</td><td>~34</td><td class="long">756.9217.0769.85</td></tr>
+        <tr><td class="ln">2224</td><td>Follow-up Staat-Auswahl <code>ComboboxPopover</code></td><td><span class="tag">durchsuchb. Auswahl</span></td><td>max 320</td><td>unklar</td><td class="long">Bosnien und Herzegowina</td></tr>
+        <tr><td class="ln">2234 / 2261 / 3142</td><td>Freitext-Werte (Follow-up / SimpleItem / Fieldgroup)</td><td><span class="tag">Freitext</span></td><td>max 400</td><td>~34</td><td class="long">Nach Schlaganfall 2023, linksseitige Parese</td></tr>
+        <tr><td class="ln">2249</td><td>SimpleItem mehrzeilig (A10)</td><td><span class="tag">mehrzeilig (rows 3)</span></td><td>max 640</td><td>~76</td><td class="long">Fliesstext</td></tr>
+        <tr><td class="ln">2283 / 3125 / 3351 / 3606</td><td>Zahlenwerte (SimpleItem / Sub-Item / N2-Tage-Minuten / Helferzahl)</td><td><span class="tag">Zahl</span></td><td>max 100–160</td><td>~34</td><td class="long">1440</td></tr>
+        <tr><td class="ln">2305 / 3134</td><td>Datum (SimpleItem / Fieldgroup) <code>DateField</code></td><td><span class="tag">Datum</span></td><td>max 200</td><td>unklar</td><td class="long">31.12.2026</td></tr>
+        <tr><td class="ln">2349 / 2467 / 3021 / 3679</td><td>Single-Choice / lange Liste / Stacked / Repeat-Optionszeilen <code>SelectionSurface</code></td><td><span class="tag">Auswahl</span></td><td>100%</td><td>min 44</td><td class="long">Vollständig abhängig, benötigt umfassende Unterstützung</td></tr>
+        <tr><td class="ln">2381 / 2499</td><td>freeText-Option „Andere"</td><td><span class="tag">Freitext</span></td><td>max 320</td><td>~34</td><td class="long">Andere: geriatrische Tagesklinik</td></tr>
+        <tr><td class="ln">2718 / 2907</td><td>Matrix-Codezellen (G1 etc.) <code>MatrixCell</code></td><td><span class="tag">Auswahl</span></td><td>min 34</td><td>min 34</td><td class="long">0–8</td></tr>
+        <tr><td class="ln">3255</td><td>Mixed-N2 Ja/Nein-Zeile</td><td><span class="tag">Ja/Nein</span></td><td>100%</td><td>min 44</td><td class="long">Nein</td></tr>
+        <tr><td class="ln">3487 / 3525 / 3713</td><td>Repeat-fixed/dynamic: Diagnose-Chip · ICD-10</td><td><span class="tag">Auswahl</span> / <span class="tag code">Codefeld</span></td><td>auto / 220</td><td>~34</td><td class="long">I50.9</td></tr>
+        <tr><td class="ln">2442</td><td>Optionslisten-Filter (≥8 Optionen) <span class="flag warn">Suche</span></td><td><span class="tag">Suche/Filter</span></td><td>100%</td><td>~34</td><td class="long">Herzinsuffizienz</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>1.6 Reine Such-/Filterfelder</h3>
+    <div class="twrap"><table>
+      <thead><tr><th>Datei:Zeile</th><th>Zweck</th><th>Feldtyp</th><th>Breite</th><th>Höhe</th><th>Längster realistischer Inhalt</th></tr></thead>
+      <tbody>
+        <tr><td class="loc">AppTopbar:85/133</td><td>Globale Suche (Desktop + Mobile-Overlay)</td><td><span class="tag">Suche</span></td><td>flex-1</td><td>~36</td><td class="long">Patienten, Angehörige, Tickets suchen …</td></tr>
+        <tr><td class="loc">PatientenPage:295</td><td>Patienten suchen</td><td><span class="tag">Suche</span></td><td>max 280</td><td>~28</td><td class="long">Bernasconi-Schneider</td></tr>
+        <tr><td class="loc">AngehoerigePage:205</td><td>Angehörige suchen</td><td><span class="tag">Suche</span></td><td>flex-1</td><td>~24</td><td class="long">Angehörige suchen …</td></tr>
+        <tr><td class="loc">OnboardingListPage:254</td><td>Onboardings suchen</td><td><span class="tag">Suche</span></td><td>flex-1</td><td>~24</td><td class="long">Onboardings suchen …</td></tr>
+        <tr><td class="loc">ZuteilungPage:207–253</td><td>Suche + 4 Filter (Kanton · Schweregrad · Sprache · Pflegefachkraft)</td><td><span class="tag">Suche / Auswahl</span></td><td>180–280 / auto</td><td>~30</td><td class="long">Nicht zugewiesen (12)</td></tr>
+        <tr><td class="loc">KLV:412 · Pflegeplanung:258</td><td>Katalog-Suche · NANDA-Suche</td><td><span class="tag">Suche</span></td><td>100%</td><td>~32</td><td class="long">NANDA-Code oder Titel suchen …</td></tr>
+        <tr><td class="loc">TabDokumente:423/698</td><td>Datei-Suche (SharePoint-Browser)</td><td><span class="tag">Suche</span></td><td>w-[180px]</td><td>~28</td><td class="long">Pflegevertrag_Patient</td></tr>
+        <tr><td class="loc">Dashboard:272 · AnnaSidebar:326</td><td>Anna-Kommando/Frage</td><td><span class="tag">mehrzeilig (Kommando)</span></td><td>flex-1</td><td>min 48 / max 80</td><td class="long">Zeig mir alle offenen SRK-Fristen dieses Monats</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="note danger"><b>Toter Legacy-Code (nicht gerendert, in der Zählung ausgewiesen, nicht Teil des Live-Inventars):</b> <code>StepPatient.tsx:587–1682</code> (lokale <code>FormField</code>/<code>TextInput</code>/<code>TextArea</code>/<code>SelectInput</code>/<code>ToggleGroup</code>/<code>RadioGroup</code> + Alt-Tabs TabPersonalien/TabSteuer/TabAnamnese/TabAktivitaeten) und <code>StepAngehoeriger.tsx:712–2723</code> (lokale <code>FormField</code>/<code>JaNeinToggle</code>/<code>PayrollField</code> + PersonalienForm/SteuerForm/PartnerForm/KinderForm/AnstellungForm). Beide sind komplette Feld-Sätze, die die V2-Migrated-Forms längst ersetzt haben — offener Aufräum-Posten.</div>
+  </section>
+
+  <!-- ============ POINT 2 ============ -->
+  <section id="p2">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Gruppierung nach Inhaltstyp</h2></div>
+    <p class="lead">Fundstellen-Zahlen aus dem Live-Inventar (ohne toten Legacy-Code). InterRAI multipliziert die meisten Typen zur Laufzeit über <code>.map()</code>-Schleifen — dort ist die Render-Stelle gezählt, nicht die hunderten Laufzeit-Instanzen. Der längste Inhalt ist die für die Breiten-Vereinheitlichung entscheidende Grösse.</p>
+    <div class="twrap"><table>
+      <thead><tr><th>Inhaltstyp</th><th>~Fundstellen (live)</th><th>Längster vorkommender Inhalt</th><th>Zeichen</th><th>Hauptorte</th></tr></thead>
+      <tbody>
+        <tr><td><b>Datum</b></td><td>~52</td><td class="long">31.12.2026 (Anzeige) · 2026-03-03 (ISO roh)</td><td>10</td><td>alle Module; <code>DateField</code> = max 200px</td></tr>
+        <tr><td><b>AHV-Nummer</b></td><td>~8</td><td class="long">756.1234.5678.97</td><td>16</td><td>Onb.·360·InterRAI, immer <span class="tag mono">mono</span></td></tr>
+        <tr><td><b>ZEMIS-Nummer</b></td><td>2</td><td class="long">756.8888.9999.00 / 12345678</td><td>16</td><td>MigrAngeh:129 · Angeh360:972</td></tr>
+        <tr><td><b>IBAN</b></td><td>2</td><td class="long">CH93 0076 2011 6238 5295 7</td><td>26</td><td>MigrAngeh:378 · Angeh360:1088</td></tr>
+        <tr><td><b>ICD-Code</b></td><td>~6</td><td class="long">I50.9</td><td>5</td><td>KLV·Patient360·InterRAI·StepPatient</td></tr>
+        <tr><td><b>Versicherungsnr. / Kartennr.</b></td><td>~4</td><td class="long">80756000123456789012</td><td>20</td><td>Onb.·360 (mono in 360)</td></tr>
+        <tr><td><b>Postleitzahl</b></td><td>3</td><td class="long">8000</td><td>4</td><td>MigrAngeh:152 · MigrPat:75 · Angeh360:895</td></tr>
+        <tr><td><b>Ort</b></td><td>3</td><td class="long">Zürich-Altstetten</td><td>17</td><td>Onboarding + 360</td></tr>
+        <tr><td><b>Strasse</b></td><td>3</td><td class="long">Untere Bahnhofstrasse 145b</td><td>26</td><td>Onboarding + 360 (full-width)</td></tr>
+        <tr><td><b>Vorname</b></td><td>~9</td><td class="long">Marie-Antoinette</td><td>16</td><td>Onb.·Partner·Kinder·360</td></tr>
+        <tr><td><b>Nachname / Name</b></td><td>~10</td><td class="long">von Grünigen-Hofstetter</td><td>23</td><td>Onb.·Partner·Kinder·360·Kontakte</td></tr>
+        <tr><td><b>Telefon</b></td><td>~7</td><td class="long">+41 44 321 65 87</td><td>16</td><td>Onboarding + 360 + Kontakte</td></tr>
+        <tr><td><b>E-Mail</b></td><td>~4</td><td class="long">praxis.brunschwiler@hin.ch</td><td>26</td><td>Onboarding + 360</td></tr>
+        <tr><td><b>Betrag (CHF)</b></td><td>~3</td><td class="long">3'540.00</td><td>8</td><td>Stundenlohn · Lohnsumme</td></tr>
+        <tr><td><b>Prozent</b></td><td>~3</td><td class="long">100</td><td>3</td><td>IV-Bezug · Pensum extern</td></tr>
+        <tr><td><b>Zahl (Mess-/Menge)</b></td><td>~30</td><td class="long">1440 (Minuten) · 180 (Grösse)</td><td>4</td><td>Vitaldaten·Anamnese·KLV·Bewilligung·InterRAI</td></tr>
+        <tr><td><b>Auswahl aus fester Liste</b></td><td>~40 + InterRAI-Loops</td><td class="long">Vollständig abhängig, benötigt umfassende Unterstützung</td><td>55</td><td>Geschlecht·Zivilstand·Status·Ja-Nein·InterRAI</td></tr>
+        <tr><td><b>Auswahl aus langer Liste</b></td><td>~10</td><td class="long">Assistent/in Gesundheit und Soziales AGS</td><td>40</td><td>Nationalität·Krankenkasse·Funktion·Staat</td></tr>
+        <tr><td><b>Ja/Nein (Toggle)</b></td><td>~30</td><td class="long">Nicht beurteilbar</td><td>17</td><td>Steuer·Anamnese·Arbeitskontrolle·InterRAI</td></tr>
+        <tr><td><b>Freitext kurz</b></td><td>~45</td><td class="long">Assistent/in Gesundheit und Soziales AGS</td><td>40</td><td>querschnitt</td></tr>
+        <tr><td><b>Freitext lang (mehrzeilig)</b></td><td>~30</td><td class="long">langer klinischer Anamnese-Fliesstext (Absätze)</td><td>200+</td><td>Anamnese·Protokoll·Grund·Nachricht·InterRAI</td></tr>
+        <tr><td><b>Kontrollkästchen</b></td><td>~5</td><td class="long">an/aus</td><td>—</td><td>Arbeitskontrolle·KLV·Signatur·Einwilligung(Radio)</td></tr>
+        <tr><td><b>Datei-Upload (versteckt)</b></td><td>~5</td><td class="long">.pdf/.jpg/.png/.doc</td><td>—</td><td>ScanUpload·DocumentUploader·ArztAnfrage·Spezialbew.</td></tr>
+        <tr><td><b>Suche/Filter</b></td><td>~15</td><td class="long">Patienten, Angehörige, Tickets suchen …</td><td>—</td><td>Topbar·Listen·Zuteilung·Kataloge</td></tr>
+      </tbody>
+    </table></div>
+    <p style="font-size:13px;color:var(--ink-3)"><b>Für die Breiten-Vereinheitlichung kritisch:</b> IBAN (26), Strasse (26), E-Mail (26), lange Auswahllabels (40) und AHV/ZEMIS/Kartennr. (16–20, monospace). Diese bestimmen die notwendige Mindestbreite pro Feldtyp — heute laufen mehrere davon (IBAN, lange Optionen) in engen Grid-Zellen bzw. unter <code>DateField</code>s 200px-Deckel über.</p>
+  </section>
+
+  <!-- ============ POINT 3 ============ -->
+  <section id="p3">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Geteilte Komponenten</h2></div>
+    <div class="cards">
+      <div class="card"><div class="k">Beschriftung (a)</div><div class="v" style="font-size:19px">FormField</div><div class="d"><code>form/FormField.tsx:20</code> — <code>&lt;label&gt;</code>, 12px</div></div>
+      <div class="card"><div class="k">Eingabefeld (b)</div><div class="v" style="font-size:19px">TextInput +8</div><div class="d"><code>TextInput.tsx:22</code> · Number, Select, Combobox, DateField, Textarea, AHV, IBAN, Segmented</div></div>
+      <div class="card"><div class="k">Hilfstext (c)</div><div class="v" style="font-size:19px">FormField</div><div class="d"><code>FormField.tsx:26–28</code> — hint/error/success, 11px</div></div>
+      <div class="card"><div class="k">Abschnittstitel (d)</div><div class="v" style="font-size:19px">SectionHeader</div><div class="d"><code>SectionHeader.tsx:13</code></div></div>
+    </div>
+    <p>Alle Eingabe-Primitive rendern Label + Hilfstext über <b>denselben</b> <code>FormField</code>-Wrapper (Import <code>./FormField</code> in TextInput, NumberInput, Select, Combobox, DateField, SegmentedControl, AHVNummerInput, IBANInput, TextareaInput, DatePicker). Label und Hilfstext sind faktisch <b>einmal</b> definiert.</p>
+
+    <h4>Wer nutzt sie — wer baut eigene Felder</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" class="split">
+      <div class="card"><div class="k" style="color:var(--ok)">Gruppe A — nutzt die Primitive</div>
+        <ul class="tight">
+          <li>MigratedAngehoerigerForms.tsx / …2.tsx</li>
+          <li>MigratedPatientForms.tsx <em>(inkl. FormField direkt)</em></li>
+          <li>SpezialbewilligungStep · DocumentUploader</li>
+          <li>InterraiNeuPage</li>
+          <li>RhythmusTimeline · WorkflowChecklist</li>
+          <li>StepPatient/StepAngehoeriger — <em>nur</em> Combobox; 360-Seiten — <em>nur</em> DateField</li>
+        </ul>
+      </div>
+      <div class="card"><div class="k" style="color:var(--warn)">Gruppe B — baut eigene Felder</div>
+        <ul class="tight">
+          <li>Patient360 <code>PEditableField:469</code> — rohes <code>&lt;input&gt;</code>, Label 11px uppercase</li>
+          <li>Angehoerige360 <code>EditableField:616</code> — identischer Klon</li>
+          <li>StepAngehoeriger <code>FormField:712</code> · StepPatient <code>FormField:587</code> — eigene Wrapper <span class="flag dead">tot</span></li>
+          <li>Arbeitskontrolle — kein Primitiv, rohe Labels/Textareas/Inputs</li>
+          <li>Einwilligung — rohe input/textarea</li>
+        </ul>
+      </div>
+    </div>
+
+    <h4>Wo sind Breiten &amp; Höhen definiert</h4>
+    <ul class="tight">
+      <li><b>Höhe = Token</b> in <code>theme.css</code>: <code>--field-height:40</code> (Z.94), <code>--control-height:36</code> (89), <code>--row-height:40</code> (93), <code>--marke-height:24</code> (91), <code>--touch-target-min:44</code> (115).</li>
+      <li><b>Token-Nutzung in den Komponenten</b> (nicht am Aufrufort): <code>TextInput:30</code>, <code>NumberInput:36</code>, <code>Select:59</code>, <code>Combobox:79</code>, <code>DatePicker:89</code>, <code>AHVNummerInput:62</code>, <code>IBANInput:98</code> setzen <code>height:var(--field-height)</code>. <code>TextareaInput:36</code> nutzt <code>minHeight:80</code> (Konstante).</li>
+      <li><b>Höhen-Abweichungen hart in der Komponente:</b> <code>DateField</code> = <code>padding:11px</code> + 14px-Body + 40px-Icon → ~44px, <b>nicht</b> 40, plus <code>maxWidth:200</code> (Z.213). <code>ComboboxPopover:46</code> = <code>padding:11px 14px</code>, kein Token.</li>
+      <li><b>Breite = am Aufrufort (Grid).</b> Alle Primitive sind <code>w-full</code> (<code>TextInput:28</code> …). Ausnahmen: <code>DateField maxWidth:200</code>, Popover via <code>--radix-popover-trigger-width</code>.</li>
+    </ul>
+  </section>
+
+  <!-- ============ POINT 4 ============ -->
+  <section id="p4">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Rasterverhalten</h2></div>
+    <ul class="tight">
+      <li><b>Standard: zweispaltig</b> <code>grid grid-cols-1 md:grid-cols-2</code> mit <code>rowGap:var(--space-3)</code>(12) + <code>columnGap:var(--space-4)</code>(16). MigratedAngehoerigerForms 11×, MigratedPatientForms 13×, …2.tsx 5×.</li>
+      <li><b>Abweichendes Raster:</b> Arbeitskontrolle nutzt <code>grid-cols-1 sm:grid-cols-2</code> mit einheitlichem <code>gap:12</code> (Breakpoint <code>sm:</code> statt <code>md:</code>). Vollbreite-Blöcke laufen als <code>flex flex-col</code> mit <code>rowGap</code>.</li>
+      <li><b>Halbe vs. volle Breite — kein <code>col-span</code>.</b> Projektweit <b>keine</b> <code>col-span</code>/<code>gridColumn</code>-Nutzung. Halb = Feld liegt direkt im 2-Spalten-Grid (Auto-Flow). Voll = Feld wird aus dem Grid herausgenommen und in einen eigenen <code>&lt;div&gt;</code> mit margin gewickelt (z.B. AHV <code>MigrAngeh:98–100</code>, Strasse <code>:148–150</code>). Folge: ungerade Feldzahl lässt die letzte Zelle leer; bedingte Felder verschieben das Auto-Flow-Layout.</li>
+      <li><b>3+ Spalten:</b> genau <b>eine</b> Formularstelle — <code>MigratedPatientForms:166</code> (<code>md:grid-cols-3</code>). Die 360-Detailansichten nutzen zur <em>Anzeige</em> häufig <code>sm:2 lg:3</code>. <code>grid-cols-4</code> in Formularen: nicht vorhanden (einzige <code>repeat(4,1fr)</code> ist ein KPI-Grid in PendenzenManagementUebersicht).</li>
+    </ul>
+  </section>
+
+  <!-- ============ POINT 5 ============ -->
+  <section id="p5">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Vertikale Dichte</h2></div>
+    <p class="lead">Abstand Beschriftungsoberkante → Beschriftungsoberkante der nächsten Feldzeile. Basiswerte: Label 12px × line-height 1.5 = 18px (<code>theme.css:316</code>) + Label→Feld margin 4 (<code>FormField:20</code>) + Feldhöhe + rowGap.</p>
+    <div class="density">
+      <div class="dcol">
+        <div class="dt">Onboarding Angehöriger</div>
+        <div class="dpx">74<small> px/Zeile</small></div>
+        <div class="stack">
+          <div class="s-label">Label 18</div><div class="s-gap">margin 4</div><div class="s-field">Feld 40</div><div class="s-row">rowGap 12</div>
+        </div>
+        <p style="font-size:12.5px;margin:8px 0 0"><code>MigratedAngehoerigerForms:92</code> · Datumszeilen ~78 (DateField 44)</p>
+      </div>
+      <div class="dcol">
+        <div class="dt">Onboarding Patient</div>
+        <div class="dpx">74<small> px/Zeile</small></div>
+        <div class="stack">
+          <div class="s-label">Label 18</div><div class="s-gap">margin 4</div><div class="s-field">Feld 40</div><div class="s-row">rowGap 12</div>
+        </div>
+        <p style="font-size:12.5px;margin:8px 0 0"><code>MigratedPatientForms:51</code> · identischer Stack</p>
+      </div>
+      <div class="dcol">
+        <div class="dt">Arbeitskontrolle</div>
+        <div class="dpx">64<small> px/Zeile</small></div>
+        <div class="stack">
+          <div class="s-label">Label 18</div><div class="s-gap">margin 4</div><div class="s-field" style="background:#64748b">Pills 32</div><div class="s-row">margin 10</div>
+        </div>
+        <p style="font-size:12.5px;margin:8px 0 0"><code>ArbeitskontrollePage:232–266</code> · Anzeigezeilen 53px</p>
+      </div>
+    </div>
+    <p style="font-size:13.5px">Onboarding 74px, Arbeitskontrolle 64px (Eingabe, ~14 % dichter) bzw. 53px (Anzeigekopf, ~28 % dichter) — weil Arbeitskontrolle 32px-Pills statt der 40px-Token-Höhe und kleinere Abstände (10/2 statt 12) nutzt. Zeilen mit sichtbarem hint/error addieren ~+20px (11px × 1.5 + margin 4).</p>
+  </section>
+
+  <!-- ============ POINT 6 ============ -->
+  <section id="p6">
+    <div class="sec-head"><span class="sec-num">06</span><h2>Tablet / Touch</h2></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px" class="split">
+      <div class="card"><div class="k" style="color:var(--ok)">Vorhanden</div>
+        <ul class="tight">
+          <li><code>@media (pointer:coarse)</code> <code>theme.css:352–360</code>: <code>button,[role=button]{min-height:44px;min-width:44px}</code> — einzige coarse-Regel</li>
+          <li><code>touch-action:manipulation</code> auf <code>html</code> (Z.379)</li>
+          <li>Token <code>--touch-target-min:44px</code> (Z.115)</li>
+          <li>iOS-Zoom-Schutz: <code>input/textarea/select{font-size:16px}</code> ≤639px (Z.344)</li>
+          <li>Breakpoint-Doku Mobile/Tablet/Desktop/Wide (Z.103–112); Formulare stapeln via <code>md:</code>/<code>sm:</code> einspaltig</li>
+          <li>Einzelne 44px-Buttons: ServiceDesk 644/859/874 · StepPatient 2534/2542/2554 · DateField 299/311</li>
+        </ul>
+      </div>
+      <div class="card"><div class="k" style="color:var(--danger)">Nicht vorhanden</div>
+        <ul class="tight">
+          <li><b>Die Styleguide-§12-Mobilkomponenten fehlen komplett:</b> <code>MobileBottomNav</code>, <code>BottomSheet</code>, <code>MobileCardList</code> — kein Treffer als Datei/Definition/Verwendung. (Nur <code>ui/use-mobile.ts</code> existiert.)</li>
+          <li><b>Kein Touch-Zweig in den Feld-Primitiven:</b> TextInput/Select/Combobox/DateField/SegmentedControl haben kein <code>pointer:coarse</code>. Die 44px-Regel trifft nur <code>button</code>, <b>nicht</b> <code>&lt;input&gt;/&lt;textarea&gt;</code> → Textfelder bleiben auf Touch 40px und unterschreiten die 44px-Mindestfläche.</li>
+          <li>Eigenbau-Felder (360 ~30px, Arbeitskontrolle-Pills 32px, date/time 4px-padding) ohne jede Touch-Rücksicht.</li>
+          <li>Migrated-Forms nutzen nur <code>md:</code> — kein <code>sm/lg/xl</code>, keine <code>hidden sm:</code>-Umschaltung.</li>
+        </ul>
+      </div>
+    </div>
+    <p style="font-size:13.5px"><b>Fazit:</b> Solide globale Touch-Grundlage (coarse-44px, touch-action, iOS-16px, Breakpoint-Doku) und einzelne 44px-Buttons — aber die dokumentierte Mobilkomponenten-Schicht ist nicht implementiert, und die Formular-<b>Eingabefelder</b> selbst haben keine Touch-Anpassung und liegen unter 44px.</p>
+  </section>
+
+  <!-- ============ OFFENE POSTEN ============ -->
+  <section id="offen">
+    <div class="sec-head"><span class="sec-num">△</span><h2>Beobachtungen für die Vereinheitlichung</h2></div>
+    <ul class="tight">
+      <li><b>Vier parallele Feld-Systeme</b> mit 4 verschiedenen Höhen (40 / ~34 / ~30 / 32) — nur die geteilten Primitive folgen dem 40px-Token. Vereinheitlichung muss die 360-Eigenbauten und Arbeitskontrolle/Einwilligung einbeziehen.</li>
+      <li><b>Doppelt gepflegte Formulare:</b> Bewilligung + Absenzen existieren identisch in Patient360 (roh, Z.2142–2491) <em>und</em> Angehoerige360 (mit DateField, Z.1740–2005); Kinder-Tabellen doppelt in Angehoerige360 (1000er + 2200er).</li>
+      <li><b>Inkonsistente Feldtypen für dieselbe Fachgrösse:</b> Aufenthaltsstatus/Konfession/Quellensteuer-Tarif sind in den 360-Personalien Freitext, in den Related-Tabs echte Auswahllisten.</li>
+      <li><b>DateField-Sonderfall:</b> ~44px hoch (nicht 40) und hart <code>maxWidth:200</code> — bricht die Höhen- und Breiten-Konsistenz in jeder Datumszeile.</li>
+      <li><b>4–5 duplizierte <code>input</code>-Klassenstrings</b> in den 360-Seiten (<code>_input</code>, <code>inputClass</code>×3, <code>inputCls</code>, <code>selectClass</code>) statt einer Quelle.</li>
+      <li><b>Toter Legacy-Feldcode</b> in StepPatient (587–1682) und StepAngehoeriger (712–2723) — sollte vor der Vereinheitlichung entfernt werden, um Verwechslung zu vermeiden.</li>
+      <li><b>Überlauf-Risiko heute:</b> IBAN (26 Z.) und lange Auswahllabels (40 Z.) in engen Grid-Zellen; Kartennummer (20 Z.).</li>
+    </ul>
+  </section>
+
+  <footer>
+    Read-only-Inventar · erhoben durch statische Analyse (grep + Volltext) über <code>src/app</code> und <code>src/styles</code> · keine Codeänderung · Arbeitsbaum unverändert (HEAD dd721f5). Zeilennummern beziehen sich auf den Stand des Branch <code>onboarding-updates-v9</code>. „~"-Höhen sind aus padding + Schriftgrösse abgeleitet, nicht Browser-gemessen.
+  </footer>
+
+</div>
