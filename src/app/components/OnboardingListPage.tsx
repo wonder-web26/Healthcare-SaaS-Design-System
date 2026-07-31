@@ -5,6 +5,16 @@ import { AnnaListenEinordnung, type ListenKontext } from "../anna/AnnaListenEino
 import { useCurrentRole } from "../auth";
 import type { UserRole } from "../../types/user";
 import { type OnboardingStatus, ONBOARDING_STATUS_CFG } from "../../lib/onboarding/status";
+import {
+  ANZAHL_SCHRITTE, schrittLabel, phaseFuerSchritt, phaseRang, PHASE_LABEL,
+  ableitenKennzeichen, tageBisStart, istVertragUnterzeichnet,
+} from "../../lib/onboarding/schritte";
+import { isoZuAnzeige } from "../../lib/datum";
+
+/* ── Bezugsdatum (Mock-Demo, entspricht der Vorgabe): alle Ableitungen laufen
+   gegen diesen Stichtag statt gegen new Date(), damit die Liste deterministisch
+   ist. Die reinen Funktionen erhalten ihn als Parameter. ── */
+const BEZUGSDATUM = new Date(2026, 6, 31); // 31.07.2026
 
 /* ── Types ── */
 interface OnboardingCase {
@@ -12,30 +22,43 @@ interface OnboardingCase {
   patientVorname: string;
   patientNachname: string;
   patientId: string;
-  angehoeriger: string;
-  eintrittsdatum: string;
+  angehoeriger: string;            // Vorname Nachname
+  /* ── Prozesszustand (neu, Lauf 1) ── */
+  currentStep: number;             // 1..ANZAHL_SCHRITTE
+  pflichtdokErledigt: number;
+  pflichtdokGefordert: number;     // 8, bei Bewilligung B 9 — aus den Daten, nicht aus einer Coderegel
+  pendenzenOffen: number;
+  pendenzenUeberfaellig: number;
+  validFrom: string;               // ISO — geplanter Start
+  responsibleUserId: string | null; // null = nicht zugewiesen
+  /* ── Retain-Felder für die (in Lauf 1 unveränderte) Filterleiste/KPIs.
+     Positional aus dem Alt-Mock übernommen; sie speisen NUR Filter/Kopf,
+     nicht die Spalten dieser Liste. ── */
   status: OnboardingStatus;
-  offen: number;
+  offen: number;                   // = pendenzenOffen
   abrechnungsstopp: boolean;
   abrechnungsstoppGrund?: string;
-  verantwortlich: string;
+  verantwortlich: string;          // Kurzname für Filter/Spalte
   verantwortlichInitialen: string;
+  eintrittsdatum: string;
   letzteAenderung: string;
   kanton: string;
 }
 
 /* Status badges use the shared ONBOARDING_STATUS_CFG (one vocabulary). */
 
-/* ── Mock data ── */
+/* ── Mock data (Bezugsdatum 31.07.2026). Prozessdaten gemäss Vorgabe;
+   Retain-Felder (status/kanton/abrechnungsstopp/…) positional aus dem
+   früheren Mock, damit Filterleiste/KPIs unverändert funktionieren. ── */
 const cases: OnboardingCase[] = [
-  { id: "OB-2026-001", patientVorname: "Thomas", patientNachname: "Schmid", patientId: "P-2026-0042", angehoeriger: "Lisa Schmid", eintrittsdatum: "18.02.2026", status: "in_bearbeitung", offen: 6, abrechnungsstopp: false, verantwortlich: "Kathrin Meier", verantwortlichInitialen: "KM", letzteAenderung: "26.02.2026", kanton: "ZH" },
-  { id: "OB-2026-002", patientVorname: "Peter", patientNachname: "Hoffmann", patientId: "P-2026-0046", angehoeriger: "Ruth Hoffmann", eintrittsdatum: "20.02.2026", status: "in_bearbeitung", offen: 14, abrechnungsstopp: false, verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", letzteAenderung: "25.02.2026", kanton: "SG" },
-  { id: "OB-2026-003", patientVorname: "Sabine", patientNachname: "Becker", patientId: "P-2026-0045", angehoeriger: "Hans Becker", eintrittsdatum: "10.02.2026", status: "in_bearbeitung", offen: 2, abrechnungsstopp: true, abrechnungsstoppGrund: "Spezialbewilligung Migrationsamt noch ausstehend", verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", letzteAenderung: "24.02.2026", kanton: "ZH" },
-  { id: "OB-2026-004", patientVorname: "Heinrich", patientNachname: "Steiner", patientId: "P-2026-0048", angehoeriger: "Ursula Steiner", eintrittsdatum: "05.02.2026", status: "in_bearbeitung", offen: 1, abrechnungsstopp: true, abrechnungsstoppGrund: "Kritische Gesundheitslage – ärztliche Freigabe ausstehend", verantwortlich: "Laura Brunner", verantwortlichInitialen: "LB", letzteAenderung: "23.02.2026", kanton: "BE" },
-  { id: "OB-2026-008", patientVorname: "Lena", patientNachname: "Graf", patientId: "P-2026-0051", angehoeriger: "Martin Graf", eintrittsdatum: "24.02.2026", status: "neu", offen: 20, abrechnungsstopp: false, verantwortlich: "Kathrin Meier", verantwortlichInitialen: "KM", letzteAenderung: "27.02.2026", kanton: "AG" },
-  { id: "OB-2026-009", patientVorname: "Fritz", patientNachname: "Huber", patientId: "P-2026-0052", angehoeriger: "Erika Huber", eintrittsdatum: "15.02.2026", status: "in_bearbeitung", offen: 4, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", letzteAenderung: "26.02.2026", kanton: "LU" },
-  { id: "OB-2026-010", patientVorname: "Rosa", patientNachname: "Ammann", patientId: "P-2026-0053", angehoeriger: "Daniel Ammann", eintrittsdatum: "26.02.2026", status: "neu", offen: 26, abrechnungsstopp: false, verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", letzteAenderung: "27.02.2026", kanton: "ZH" },
-  { id: "OB-2026-011", patientVorname: "Walter", patientNachname: "Frei", patientId: "P-2026-0054", angehoeriger: "Margrit Frei", eintrittsdatum: "12.02.2026", status: "abgeschlossen", offen: 1, abrechnungsstopp: false, verantwortlich: "Laura Brunner", verantwortlichInitialen: "LB", letzteAenderung: "27.02.2026", kanton: "ZH" },
+  { id: "OB-2026-101", patientNachname: "Steiner", patientVorname: "Hans-Rudolf", patientId: "P-2026-0101", angehoeriger: "Vera Steiner", currentStep: 6, pflichtdokErledigt: 7, pflichtdokGefordert: 8, pendenzenOffen: 3, pendenzenUeberfaellig: 1, validFrom: "2026-07-28", responsibleUserId: "keller", status: "in_bearbeitung", offen: 3, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", eintrittsdatum: "18.02.2026", letzteAenderung: "26.02.2026", kanton: "ZH" },
+  { id: "OB-2026-102", patientNachname: "Hübscher-Wiederkehr", patientVorname: "Marie-Louise", patientId: "P-2026-0102", angehoeriger: "Beatrice Hübscher-Wiederkehr", currentStep: 8, pflichtdokErledigt: 9, pflichtdokGefordert: 9, pendenzenOffen: 1, pendenzenUeberfaellig: 0, validFrom: "2026-08-01", responsibleUserId: "keller", status: "in_bearbeitung", offen: 1, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", eintrittsdatum: "20.02.2026", letzteAenderung: "25.02.2026", kanton: "SG" },
+  { id: "OB-2026-103", patientNachname: "Rexhepi", patientVorname: "Fatmire", patientId: "P-2026-0103", angehoeriger: "Arben Rexhepi", currentStep: 2, pflichtdokErledigt: 4, pflichtdokGefordert: 9, pendenzenOffen: 5, pendenzenUeberfaellig: 2, validFrom: "2026-08-03", responsibleUserId: "weber", status: "in_bearbeitung", offen: 5, abrechnungsstopp: true, abrechnungsstoppGrund: "Spezialbewilligung Migrationsamt noch ausstehend", verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", eintrittsdatum: "10.02.2026", letzteAenderung: "24.02.2026", kanton: "ZH" },
+  { id: "OB-2026-104", patientNachname: "Kaya", patientVorname: "Emine", patientId: "P-2026-0104", angehoeriger: "Yusuf Kaya", currentStep: 7, pflichtdokErledigt: 8, pflichtdokGefordert: 8, pendenzenOffen: 1, pendenzenUeberfaellig: 0, validFrom: "2026-08-06", responsibleUserId: "weber", status: "in_bearbeitung", offen: 1, abrechnungsstopp: true, abrechnungsstoppGrund: "Kritische Gesundheitslage – ärztliche Freigabe ausstehend", verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", eintrittsdatum: "05.02.2026", letzteAenderung: "23.02.2026", kanton: "BE" },
+  { id: "OB-2026-105", patientNachname: "Huber", patientVorname: "Fritz", patientId: "P-2026-0105", angehoeriger: "Erika Huber", currentStep: 4, pflichtdokErledigt: 8, pflichtdokGefordert: 8, pendenzenOffen: 2, pendenzenUeberfaellig: 0, validFrom: "2026-08-07", responsibleUserId: "keller", status: "neu", offen: 2, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", eintrittsdatum: "24.02.2026", letzteAenderung: "27.02.2026", kanton: "AG" },
+  { id: "OB-2026-106", patientNachname: "Da Silva", patientVorname: "Joaquim", patientId: "P-2026-0106", angehoeriger: "Marta Da Silva", currentStep: 1, pflichtdokErledigt: 2, pflichtdokGefordert: 8, pendenzenOffen: 4, pendenzenUeberfaellig: 1, validFrom: "2026-08-10", responsibleUserId: null, status: "in_bearbeitung", offen: 4, abrechnungsstopp: false, verantwortlich: "Nicht zugewiesen", verantwortlichInitialen: "", eintrittsdatum: "15.02.2026", letzteAenderung: "26.02.2026", kanton: "LU" },
+  { id: "OB-2026-107", patientNachname: "Bösiger", patientVorname: "Anna", patientId: "P-2026-0107", angehoeriger: "Heidi Bösiger", currentStep: 5, pflichtdokErledigt: 8, pflichtdokGefordert: 8, pendenzenOffen: 0, pendenzenUeberfaellig: 0, validFrom: "2026-08-12", responsibleUserId: "keller", status: "neu", offen: 0, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", eintrittsdatum: "26.02.2026", letzteAenderung: "27.02.2026", kanton: "ZH" },
+  { id: "OB-2026-108", patientNachname: "Ferrari", patientVorname: "Gino", patientId: "P-2026-0108", angehoeriger: "Lucia Ferrari", currentStep: 1, pflichtdokErledigt: 3, pflichtdokGefordert: 8, pendenzenOffen: 2, pendenzenUeberfaellig: 0, validFrom: "2026-08-17", responsibleUserId: "ott", status: "abgeschlossen", offen: 2, abrechnungsstopp: false, verantwortlich: "Robert Ott", verantwortlichInitialen: "RO", eintrittsdatum: "12.02.2026", letzteAenderung: "27.02.2026", kanton: "ZH" },
 ];
 
 /* ── Views ── */
@@ -155,6 +178,27 @@ function buildOnboardingEinordnung(ctx: ListenKontext): string {
 }
 
 /* ══════════════════════════════════════════ */
+/* ── Verantwortliche: Kurzname + Initialen für die Spalte (Quelle responsibleUserId) ── */
+const RESPONSIBLE: Record<string, { initialen: string; kurz: string }> = {
+  keller: { initialen: "MK", kurz: "M. Keller" },
+  weber: { initialen: "SW", kurz: "S. Weber" },
+  ott: { initialen: "RO", kurz: "R. Ott" },
+};
+
+/* ── Sortierung: Standard geplanter Start aufsteigend; klickbar in vier Spalten ── */
+type SortKey = "patient" | "phase" | "pendenzen" | "start";
+function sortCases(list: OnboardingCase[], key: SortKey, dir: "asc" | "desc"): OnboardingCase[] {
+  const f = dir === "asc" ? 1 : -1;
+  return [...list].sort((a, b) => {
+    switch (key) {
+      case "patient": return f * (a.patientNachname.localeCompare(b.patientNachname, "de") || a.patientVorname.localeCompare(b.patientVorname, "de"));
+      case "phase": return f * ((phaseRang(phaseFuerSchritt(a.currentStep)) - phaseRang(phaseFuerSchritt(b.currentStep))) || a.validFrom.localeCompare(b.validFrom));
+      case "pendenzen": return f * ((a.pendenzenOffen - b.pendenzenOffen) || a.validFrom.localeCompare(b.validFrom));
+      case "start": default: return f * a.validFrom.localeCompare(b.validFrom);
+    }
+  });
+}
+
 export function OnboardingListPage() {
   const navigate = useNavigate();
   const role = useCurrentRole();
@@ -164,6 +208,8 @@ export function OnboardingListPage() {
   const search = searchParams.get("q") || "";
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
   const [blockerTooltip, setBlockerTooltip] = useState<string | null>(null);
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "start", dir: "asc" });
+  const toggleSort = (key: SortKey) => setSort(s => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
   const filterRef = useRef<HTMLDivElement>(null);
   const prevRole = useRef(role);
 
@@ -207,6 +253,8 @@ export function OnboardingListPage() {
     if (search.trim()) { const q = search.toLowerCase(); list = list.filter(c => c.patientNachname.toLowerCase().includes(q) || c.patientVorname.toLowerCase().includes(q) || c.angehoeriger.toLowerCase().includes(q) || c.id.toLowerCase().includes(q)); }
     return list;
   }, [activeView, search, chipFilters]);
+
+  const sorted = useMemo(() => sortCases(filtered, sort.key, sort.dir), [filtered, sort]);
 
   const viewCounts = useMemo(() => {
     const counts: Record<ViewKey, number> = { alle: 0, meine: 0, blockiert: 0, fast_abgeschlossen: 0, in_erfassung: 0 };
@@ -345,69 +393,126 @@ export function OnboardingListPage() {
       <div className="flex-1 overflow-y-auto ob-list-pad" style={{ paddingTop: 0, paddingBottom: "var(--space-4)" }}>
         <div style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", overflow: "hidden" }}>
           <div className="overflow-x-auto">
-            <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
+            <table style={{ width: "100%", minWidth: 1000, borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
               <thead>
                 <tr style={{ background: "var(--bg-secondary)" }}>
-                  {["Patient", "Angehöriger", "Eintrittsdatum", "Kt.", "Status", "Offen", "Verantwortlich", "Letzte Änderung"].map(col => (
-                    <th key={col} style={{ padding: "8px 12px", textAlign: "left" }}>
-                      <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>{col}</span>
-                    </th>
-                  ))}
+                  {([
+                    { label: "", key: null },
+                    { label: "Patient", key: "patient" },
+                    { label: "Angehörige/r", key: null },
+                    { label: "Phase", key: "phase" },
+                    { label: "Aktueller Schritt", key: null },
+                    { label: "Pflichtdok.", key: null },
+                    { label: "Pendenzen", key: "pendenzen" },
+                    { label: "Start geplant", key: "start" },
+                    { label: "Verantwortlich", key: null },
+                  ] as { label: string; key: SortKey | null }[]).map((col, i) => {
+                    const active = col.key != null && sort.key === col.key;
+                    return (
+                      <th key={i} scope="col"
+                        aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
+                        onClick={col.key ? () => toggleSort(col.key!) : undefined}
+                        style={{ padding: "8px 12px", textAlign: "left", cursor: col.key ? "pointer" : "default", userSelect: "none", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: "var(--text-meta)", color: active ? "var(--text-primary)" : "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, fontWeight: "var(--weight-medium)" }}>
+                          {col.label}
+                          {active && <span aria-hidden="true" style={{ marginLeft: 4 }}>{sort.dir === "asc" ? "↑" : "↓"}</span>}
+                        </span>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
-                  <tr><td colSpan={8} style={{ padding: "48px 16px", textAlign: "center", fontSize: "var(--text-body)", color: "var(--text-tertiary)" }}>Keine Ergebnisse für diesen Filter.</td></tr>
-                ) : filtered.map(c => {
-                  const st = ONBOARDING_STATUS_CFG[c.status];
-                  const isBlocked = c.abrechnungsstopp;
+                {sorted.length === 0 ? (
+                  <tr><td colSpan={9} style={{ padding: "48px 16px", textAlign: "center", fontSize: "var(--text-body)", color: "var(--text-tertiary)" }}>Keine Ergebnisse fuer diesen Filter.</td></tr>
+                ) : sorted.map(c => {
+                  const k = ableitenKennzeichen({ currentStep: c.currentStep, validFrom: c.validFrom, pendenzenUeberfaellig: c.pendenzenUeberfaellig }, BEZUGSDATUM);
+                  const tage = tageBisStart(c.validFrom, BEZUGSDATUM);
+                  const phaseLabel = PHASE_LABEL[phaseFuerSchritt(c.currentStep)];
+                  const resp = c.responsibleUserId ? RESPONSIBLE[c.responsibleUserId] : null;
+                  const dokVoll = c.pflichtdokErledigt === c.pflichtdokGefordert;
+                  const rowBg = k.typ === "rot" ? "color-mix(in srgb, var(--status-danger-bg), transparent 62%)"
+                    : k.typ === "gelb" ? "color-mix(in srgb, var(--status-warning-bg), transparent 55%)"
+                    : "transparent";
                   return (
-                    <tr key={c.id} onClick={() => navigate(`/onboarding/${c.id}`)} className="cursor-pointer transition-colors group"
-                      style={{ borderTop: "var(--border-thin) solid var(--border-default)" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+                    <tr key={c.id} onClick={() => navigate(`/onboarding/${c.id}`)} className="cursor-pointer"
+                      style={{ borderTop: "var(--border-thin) solid var(--border-default)", background: rowBg }}
+                      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
+                      onMouseLeave={e => e.currentTarget.style.background = rowBg}>
+                      {/* Kennzeichen: Form (Dreieck), rot gefuellt / gelb offen; Grund als a11y-Label */}
+                      <td style={{ padding: "8px 10px", width: 34 }}>
+                        {k.typ && (
+                          <AlertTriangle role="img" aria-label={k.grund}
+                            style={{ width: 15, height: 15, color: k.typ === "rot" ? "var(--status-danger)" : "var(--status-warning)", fill: k.typ === "rot" ? "var(--status-danger-bg)" : "none" }} />
+                        )}
+                      </td>
+                      {/* Patient: Nachname, Vorname; kein Avatar; Umbruch statt Kuerzen */}
+                      <td style={{ padding: "8px 12px" }}>
+                        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span>
+                      </td>
+                      {/* Angehoerige/r */}
+                      <td style={{ padding: "8px 12px" }}>
+                        <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.angehoeriger}</span>
+                      </td>
+                      {/* Phase: stille Kennzeichnung (keine Pille) */}
+                      <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{phaseLabel}</span>
+                      </td>
+                      {/* Aktueller Schritt: Position (aus ANZAHL_SCHRITTE) als Praefix, dann Bezeichnung */}
+                      <td style={{ padding: "8px 12px" }}>
+                        <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
+                          <span style={{ fontFamily: "monospace", color: "var(--text-tertiary)", marginRight: 6 }}>{c.currentStep}/{ANZAHL_SCHRITTE}</span>
+                          {schrittLabel(c.currentStep)}
+                        </span>
+                      </td>
+                      {/* Pflichtdok: erledigt/gefordert + schmaler Balken */}
+                      <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
                         <div className="flex items-center" style={{ gap: 8 }}>
-                          <div className="shrink-0 flex items-center justify-center" style={{ width: 28, height: 28, borderRadius: "var(--radius-card)", background: "var(--brand-primary-light)" }}>
-                            <span style={{ fontSize: 10, fontWeight: "var(--weight-semibold)", color: "var(--brand-primary)" }}>{c.patientVorname[0]}{c.patientNachname[0]}</span>
-                          </div>
-                          <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{c.patientNachname}, {c.patientVorname}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: "10px 12px", fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{c.angehoeriger}</td>
-                      <td style={{ padding: "10px 12px", fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{c.eintrittsdatum}</td>
-                      <td style={{ padding: "10px 12px", fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)" }}>{c.kanton}</td>
-                      <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
-                        <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-                          <span className="inline-flex items-center" style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", background: st.bg, color: st.text, fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)" }}>
-                            <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: st.dot }} />
-                            {st.label}
+                          <span style={{ fontFamily: "monospace", fontSize: "var(--text-small)", color: dokVoll ? "var(--status-success-text)" : "var(--text-primary)", fontWeight: dokVoll ? "var(--weight-medium)" : "var(--weight-regular)" }}>{c.pflichtdokErledigt}/{c.pflichtdokGefordert}</span>
+                          <span aria-hidden="true" style={{ display: "inline-block", width: 40, height: 4, borderRadius: 2, background: "var(--bg-secondary)", overflow: "hidden", flexShrink: 0 }}>
+                            <span style={{ display: "block", height: "100%", width: `${Math.round(100 * c.pflichtdokErledigt / c.pflichtdokGefordert)}%`, background: dokVoll ? "var(--status-success)" : "var(--text-tertiary)" }} />
                           </span>
-                          {isBlocked && (
-                            <div className="relative" onMouseEnter={() => setBlockerTooltip(c.id)} onMouseLeave={() => setBlockerTooltip(null)}>
-                              <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning)" }} />
-                              {blockerTooltip === c.id && c.abrechnungsstoppGrund && (
-                                <div className="absolute z-50 whitespace-nowrap pointer-events-none" style={{ bottom: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)", padding: "8px 12px", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
-                                  {c.abrechnungsstoppGrund}
-                                </div>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </td>
-                      <td style={{ padding: "10px 12px", textAlign: "center" }}>
-                        {c.offen === 0
-                          ? <Check style={{ width: 16, height: 16, color: "var(--status-success)", margin: "0 auto" }} />
-                          : <span style={{ fontSize: "var(--text-body)", color: "var(--text-primary)" }}>{c.offen}</span>}
+                      {/* Pendenzen: offen; ueberfaellige abgesetzt (500); 0 = stiller Leerwert */}
+                      <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                        {c.pendenzenOffen === 0 ? (
+                          <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>&ndash;</span>
+                        ) : (
+                          <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
+                            {c.pendenzenOffen} offen
+                            {c.pendenzenUeberfaellig > 0 && (
+                              <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500 }}>&middot; {c.pendenzenUeberfaellig} ueberfaellig</span>
+                            )}
+                          </span>
+                        )}
                       </td>
-                      <td style={{ padding: "10px 12px" }}>
-                        <div className="flex items-center" style={{ gap: 6 }}>
-                          <div className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
-                            <span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{c.verantwortlichInitialen}</span>
+                      {/* Start geplant: Datum (Datums-Schicht); bei Ueberschreitung Tage (rot, 500) oder gelber Start-Grund (500) */}
+                      <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{isoZuAnzeige(c.validFrom)}</span>
+                        {tage < 0 && !istVertragUnterzeichnet(c.currentStep) && (
+                          <span style={{ marginLeft: 8, color: "var(--status-danger)", fontWeight: 500, fontSize: "var(--text-meta)" }}>{Math.abs(tage)} {Math.abs(tage) === 1 ? "Tag" : "Tage"} ueberschritten</span>
+                        )}
+                        {k.typ === "gelb" && k.spalte === "start" && (
+                          <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500, fontSize: "var(--text-meta)" }}>{k.grund}</span>
+                        )}
+                      </td>
+                      {/* Verantwortlich: Initialen + Kurzname, sonst Zuweisen-Aktion */}
+                      <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                        {resp ? (
+                          <div className="flex items-center" style={{ gap: 6 }}>
+                            <span className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
+                              <span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{resp.initialen}</span>
+                            </span>
+                            <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{resp.kurz}</span>
                           </div>
-                          <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{c.verantwortlich}</span>
-                        </div>
+                        ) : (
+                          <button type="button" onClick={e => { e.stopPropagation(); }}
+                            className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit" }}>
+                            <Plus style={{ width: 12, height: 12 }} /> Zuweisen
+                          </button>
+                        )}
                       </td>
-                      <td style={{ padding: "10px 12px", fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{c.letzteAenderung}</td>
                     </tr>
                   );
                 })}
@@ -417,7 +522,7 @@ export function OnboardingListPage() {
           {filtered.length > 0 && (
             <div className="flex items-center justify-between" style={{ padding: "8px 16px", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
               <span>{filtered.length} von {cases.length} offene Mandate</span>
-              <span>Stand: 27.02.2026</span>
+              <span>Stand: {isoZuAnzeige("2026-07-31")}</span>
             </div>
           )}
         </div>
