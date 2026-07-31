@@ -5,7 +5,8 @@ import { FormField } from "./FormField";
 interface Option { value: string; label: string; group?: string }
 
 interface ComboboxProps {
-  label: string;
+  /** Optional — ohne Label wird nur das Feld gerendert (für inline-Aufrufstellen mit eigener Beschriftung). */
+  label?: string;
   required?: boolean;
   error?: string;
   success?: string;
@@ -65,8 +66,7 @@ export function Combobox({ label, required, error, success, hint, value, onChang
     if (e.key === "Enter" && focusIdx >= 0 && focusIdx < flatFiltered.length) { e.preventDefault(); onChange(flatFiltered[focusIdx].value); setOpen(false); setSearch(""); }
   };
 
-  return (
-    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={open || focused}>
+  const feld = (
       <div ref={ref} className="relative">
         <button
           type="button"
@@ -157,6 +157,13 @@ export function Combobox({ label, required, error, success, hint, value, onChang
           </div>
         )}
       </div>
+  );
+
+  if (!label) return feld;
+
+  return (
+    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={open || focused}>
+      {feld}
     </FormField>
   );
 }

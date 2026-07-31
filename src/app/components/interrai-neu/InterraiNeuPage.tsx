@@ -2165,7 +2165,7 @@ function ValidiertesFeld({ vtyp, value, onChange, placeholder, breite, hinweis }
         onChange={(e) => onChange(mask(e.target.value))}
         placeholder={placeholder}
         aria-invalid={invalid}
-        style={{ ...inputStyle, maxWidth: breite ?? 320, ...(invalid ? { border: "1.5px solid var(--status-danger)" } : {}) }}
+        style={{ ...inputStyle, maxWidth: breite ?? "var(--field-w-lg)", ...(invalid ? { border: "1.5px solid var(--status-danger)" } : {}) }}
       />
       {invalid && (
         <div style={{ fontSize: 11, color: "var(--status-danger)", marginTop: 3 }}>{res.meldung}</div>
@@ -2219,7 +2219,7 @@ function SimpleItemInput({
   const followUpEl = followUp && onAnswer ? (
     <div style={{ marginTop: 8, marginLeft: 20, paddingLeft: 12, borderLeft: "2px solid var(--border-default)" }}>
       {followUp.kind === "land" ? (
-        <div style={{ width: "100%", maxWidth: 320 }}>
+        <div style={{ width: "100%", maxWidth: "var(--field-w-lg)" }}>
           <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>{followUp.label}</label>
           <ComboboxPopover
             value={answers?.[followUp.code] || null}
@@ -2229,13 +2229,13 @@ function SimpleItemInput({
           />
         </div>
       ) : (
-        <div style={{ width: "100%", maxWidth: 320 }}>
+        <div style={{ width: "100%", maxWidth: "var(--field-w-lg)" }}>
           <label style={{ display: "block", fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>{followUp.label}</label>
           <input
             type="text"
             value={answers?.[followUp.code] ?? ""}
             onChange={(e) => onAnswer(followUp.code, e.target.value)}
-            style={{ ...inputStyle, width: "100%", maxWidth: 320 }}
+            style={{ ...inputStyle, width: "100%", maxWidth: "var(--field-w-lg)" }}
             placeholder="Bitte angeben"
           />
         </div>
@@ -2383,7 +2383,7 @@ function SimpleItemInput({
                   value={freeTextValue}
                   onChange={(e) => setFreeTextValue(e.target.value)}
                   placeholder="Freitext…"
-                  style={{ ...inputStyle, maxWidth: 320 }}
+                  style={{ ...inputStyle, maxWidth: "var(--field-w-lg)" }}
                   autoFocus
                 />
               </div>
@@ -2506,7 +2506,7 @@ function LongOptionInput({
                       }))
                     }
                     placeholder="Freitext…"
-                    style={{ ...inputStyle, maxWidth: 320 }}
+                    style={{ ...inputStyle, maxWidth: "var(--field-w-lg)" }}
                     autoFocus
                   />
                 </div>

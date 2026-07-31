@@ -3,6 +3,8 @@
  * Diagnose cards with inline massnahmen/ziele editors, validation flow.
  */
 import { useState, useMemo } from "react";
+import { TextInput } from "./form/TextInput";
+import { TextareaInput } from "./form/TextareaInput";
 import { useParams, useNavigate } from "react-router";
 import {
   ArrowLeft, Check, X, Sparkles, ChevronDown, Plus, Edit3, Mic,
@@ -270,7 +272,7 @@ function AddDiagnoseDialog({ onAdd, onClose }: { onAdd: (d: Pflegediagnose) => v
         {selected && (
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Begründung</div>
-            <textarea value={begruendung} onChange={e => setBegruendung(e.target.value)} rows={2} style={{ width: "100%", padding: "8px 12px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", resize: "none", fontFamily: "inherit" }} />
+            <TextareaInput value={begruendung} onChange={setBegruendung} rows={2} />
           </div>
         )}
 
@@ -292,9 +294,9 @@ function MassnahmeEditor({ massnahme, onSave, onCancel }: { massnahme: Massnahme
   const [haeufigkeit, setHaeufigkeit] = useState(massnahme.haeufigkeit);
   return (
     <div className="flex flex-col" style={{ gap: 6 }}>
-      <input value={titel} onChange={e => setTitel(e.target.value)} style={{ padding: "6px 10px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontFamily: "inherit" }} />
-      <textarea value={beschreibung} onChange={e => setBeschreibung(e.target.value)} rows={2} style={{ padding: "6px 10px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", resize: "none", fontFamily: "inherit" }} />
-      <input value={haeufigkeit} onChange={e => setHaeufigkeit(e.target.value)} placeholder="Häufigkeit" style={{ padding: "6px 10px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontFamily: "inherit" }} />
+      <TextInput inhaltstyp="freitext" value={titel} onChange={setTitel} />
+      <TextareaInput value={beschreibung} onChange={setBeschreibung} rows={2} />
+      <TextInput inhaltstyp="freitext" value={haeufigkeit} onChange={setHaeufigkeit} placeholder="Häufigkeit" />
       <div className="flex" style={{ gap: 6 }}>
         <button onClick={() => onSave({ ...massnahme, titel, beschreibung, haeufigkeit })} className="cursor-pointer" style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-on-dark)" }}>Speichern</button>
         <button onClick={onCancel} className="cursor-pointer" style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", background: "transparent", border: "none", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Abbrechen</button>
@@ -309,10 +311,10 @@ function ZielEditor({ ziel, onSave, onCancel }: { ziel: Pflegeziel; onSave: (z: 
   const [messbar, setMessbar] = useState(ziel.messbar);
   return (
     <div className="flex flex-col" style={{ gap: 6 }}>
-      <input value={titel} onChange={e => setTitel(e.target.value)} style={{ padding: "6px 10px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontFamily: "inherit" }} />
+      <TextInput inhaltstyp="freitext" value={titel} onChange={setTitel} />
       <div className="flex" style={{ gap: 6 }}>
-        <input value={zeithorizont} onChange={e => setZeithorizont(e.target.value)} placeholder="Zeithorizont" style={{ flex: 1, padding: "6px 10px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontFamily: "inherit" }} />
-        <input value={messbar} onChange={e => setMessbar(e.target.value)} placeholder="Messbar" style={{ flex: 1, padding: "6px 10px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontFamily: "inherit" }} />
+        <div style={{ flex: 1, minWidth: 0 }}><TextInput inhaltstyp="freitext" value={zeithorizont} onChange={setZeithorizont} placeholder="Zeithorizont" /></div>
+        <div style={{ flex: 1, minWidth: 0 }}><TextInput inhaltstyp="freitext" value={messbar} onChange={setMessbar} placeholder="Messbar" /></div>
       </div>
       <div className="flex" style={{ gap: 6 }}>
         <button onClick={() => onSave({ ...ziel, titel, zeithorizont, messbar })} className="cursor-pointer" style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-on-dark)" }}>Speichern</button>

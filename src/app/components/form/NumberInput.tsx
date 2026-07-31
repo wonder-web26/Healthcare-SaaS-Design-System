@@ -1,9 +1,10 @@
 import { useState, type InputHTMLAttributes } from "react";
 import { FormField } from "./FormField";
-import { type Inhaltstyp } from "./inhaltstyp";
+import { breiteFuerInhalt, type Inhaltstyp } from "./inhaltstyp";
 
 interface NumberInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChange"> {
-  label: string;
+  /** Optional — ohne Label wird nur das Feld gerendert (für inline-Aufrufstellen mit eigener Beschriftung). */
+  label?: string;
   required?: boolean;
   error?: string;
   success?: string;
@@ -20,9 +21,8 @@ export function NumberInput({ label, required, error, success, hint, value, onCh
   const borderColor = error ? "var(--status-danger)" : focused ? "var(--brand-primary)" : "var(--border-default)";
   const borderWidth = error || focused ? "1.5px" : "var(--border-thin)";
 
-  return (
-    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={focused} inhaltstyp={inhaltstyp}>
-      <div className="relative">
+  const feld = (
+    <div className="relative">
         <input
           type="text"
           inputMode="decimal"
@@ -52,6 +52,13 @@ export function NumberInput({ label, required, error, success, hint, value, onCh
           </span>
         )}
       </div>
+  );
+
+  if (!label) return <div style={{ maxWidth: breiteFuerInhalt(inhaltstyp) }}>{feld}</div>;
+
+  return (
+    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={focused} inhaltstyp={inhaltstyp}>
+      {feld}
     </FormField>
   );
 }

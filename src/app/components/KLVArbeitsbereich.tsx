@@ -9,6 +9,11 @@ import { MOCK_KLV_VERORDNUNGEN, MOCK_PFLEGEPLANUNGEN } from "../../lib/mocks/kli
 import { KLV_STATUS_PIPELINE, type KLVStatus, type KLVDiagnose, type KLVLeistung, type KLVEinheit } from "../../types/klinische-artefakte";
 import { SPITEX_LEISTUNGSKATALOG_2025, type LeistungskatalogPosition } from "../../lib/klv/spitex-leistungskatalog-2025";
 import { hProWoche, berechneSummen, kompaktParams, berechnungsText, einheitLabel, werLabel, istPeriodisch, einmaligeMin, getSimultanPartner } from "../../lib/klv/berechnung";
+import { DateField } from "./form/DateField";
+import { TextInput } from "./form/TextInput";
+import { NumberInput } from "./form/NumberInput";
+import { Select } from "./form/Select";
+import { TextareaInput } from "./form/TextareaInput";
 import { toast } from "sonner";
 
 const MOCK_AERZTE = ["Dr. med. Markus Huber", "Dr. med. Petra Schmid", "Dr. med. Hans Keller", "Dr. med. Lisa Weber"];
@@ -118,11 +123,11 @@ export function KLVArbeitsbereich() {
           <div className="flex flex-wrap" style={{ gap: 12 }}>
             <div>
               <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Beginn</div>
-              {isEditable ? <input type="text" value={beginnDatum} onChange={e => setBeginnDatum(e.target.value)} placeholder="DD.MM.YYYY" style={{ padding: "6px 10px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontFamily: "inherit", width: 130 }} /> : <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)" }}>{beginnDatum || "–"}</span>}
+              {isEditable ? <DateField wertFormat="display" bereich="any" value={beginnDatum} onChange={v => setBeginnDatum((v as string) ?? "")} /> : <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)" }}>{beginnDatum || "–"}</span>}
             </div>
             <div>
               <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Ende</div>
-              {isEditable ? <input type="text" value={endDatum} onChange={e => setEndDatum(e.target.value)} placeholder="DD.MM.YYYY" style={{ padding: "6px 10px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontFamily: "inherit", width: 130 }} /> : <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)" }}>{endDatum || "–"}</span>}
+              {isEditable ? <DateField wertFormat="display" bereich="any" value={endDatum} onChange={v => setEndDatum((v as string) ?? "")} /> : <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)" }}>{endDatum || "–"}</span>}
             </div>
           </div>
           {!isEditable && <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 6 }}>Inhalte nur im Entwurf-Status editierbar.</div>}
@@ -230,16 +235,14 @@ export function KLVArbeitsbereich() {
                         const calcText = rhythmus === "täglich" ? `${tage} Tage × ${l.anzahl} Einsatz × ${l.zeitMin} min`
                           : rhythmus === "wöchentlich" ? `${l.anzahl} Einsätze/Woche × ${l.zeitMin} min`
                           : rhythmus === "monatlich" ? `${l.anzahl}× pro Monat × ${l.zeitMin} min ÷ 4.33` : "";
-                        const ss = { width: "100%", padding: "5px 8px", fontSize: "var(--text-small)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", color: "var(--text-primary)" } as const;
-                        const ssDis = { ...ss, opacity: 0.4, pointerEvents: "none" as const, background: "var(--bg-secondary)" };
                         return (
                           <div style={{ background: "var(--bg-secondary)", borderLeft: "3px solid var(--brand-primary)", borderRadius: "0 var(--radius-card) var(--radius-card) 0", padding: "12px 14px", marginBottom: 4 }}>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginBottom: 10 }}>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Wer</label><select value={l.wer} onChange={e => upd({ wer: e.target.value as KLVLeistung["wer"] })} style={ss}><option value="S">{werLabel("S")}</option><option value="A">{werLabel("A")}</option><option value="S+A">{werLabel("S+A")}</option></select></div>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Rhythmus</label><select value={rhythmus} onChange={e => setRhythmus(e.target.value)} style={ss}><option value="täglich">Täglich</option><option value="wöchentlich">Wöchentlich</option><option value="monatlich">Monatlich</option><option value="einmalig">Einmalig</option><option value="nachBedarf">Nach Bedarf</option></select></div>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>an wie vielen Tagen</label><input type="number" min={1} max={7} value={tage} onChange={e => setTage(parseInt(e.target.value) || 1)} disabled={tageDisabled} style={tageDisabled ? ssDis : ss} /></div>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Anzahl</label><input type="number" min={1} value={l.anzahl} onChange={e => upd({ anzahl: Math.max(1, parseInt(e.target.value) || 1) })} disabled={anzahlDisabled} style={anzahlDisabled ? ssDis : ss} /></div>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Zeit pro Einsatz</label><div className="flex items-center" style={{ gap: 4 }}><input type="number" min={1} value={l.zeitMin} onChange={e => upd({ zeitMin: Math.max(1, parseInt(e.target.value) || 1) })} style={{ ...ss, flex: 1 }} /><span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>min</span></div></div>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Wer</label><Select value={l.wer} onChange={v => upd({ wer: (v ?? "S") as KLVLeistung["wer"] })} options={[{ value: "S", label: werLabel("S") }, { value: "A", label: werLabel("A") }, { value: "S+A", label: werLabel("S+A") }]} /></div>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Rhythmus</label><Select value={rhythmus} onChange={v => setRhythmus(v ?? "täglich")} options={[{ value: "täglich", label: "Täglich" }, { value: "wöchentlich", label: "Wöchentlich" }, { value: "monatlich", label: "Monatlich" }, { value: "einmalig", label: "Einmalig" }, { value: "nachBedarf", label: "Nach Bedarf" }]} /></div>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>an wie vielen Tagen</label><NumberInput inhaltstyp="anzahl" value={String(tage)} onChange={v => setTage(parseInt(v) || 1)} disabled={tageDisabled} /></div>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Anzahl</label><NumberInput inhaltstyp="anzahl" value={String(l.anzahl)} onChange={v => upd({ anzahl: Math.max(1, parseInt(v) || 1) })} disabled={anzahlDisabled} /></div>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Zeit pro Einsatz</label><NumberInput inhaltstyp="anzahl" suffix="min" value={String(l.zeitMin)} onChange={v => upd({ zeitMin: Math.max(1, parseInt(v) || 1) })} /></div>
                             </div>
                             <div style={{ padding: "6px 10px", background: "var(--bg-primary)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 10 }}>
                               {rhythmus === "einmalig" ? <span>→ einmalig · <strong style={{ color: "var(--text-primary)" }}>{l.zeitMin} min</strong></span>
@@ -292,7 +295,7 @@ export function KLVArbeitsbereich() {
         <Section title="Pflegeziele (administrativ)">
           {ziele.map((z, i) => (
             <div key={i} style={{ padding: "6px 10px", background: "var(--bg-secondary)", borderRadius: "var(--radius-card)", marginBottom: 3, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
-              {isEditable ? <input value={z} onChange={e => setZiele(prev => prev.map((x, j) => j === i ? e.target.value : x))} style={{ width: "100%", background: "transparent", border: "none", outline: "none", fontSize: "var(--text-small)", fontFamily: "inherit" }} /> : z}
+              {isEditable ? <TextInput inhaltstyp="freitext" value={z} onChange={v => setZiele(prev => prev.map((x, j) => j === i ? v : x))} /> : z}
             </div>
           ))}
           {isEditable && <button onClick={() => setZiele(prev => [...prev, ""])} className="inline-flex items-center cursor-pointer" style={{ gap: 4, marginTop: 4, padding: "4px 10px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) dashed var(--border-default)", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}><Plus style={{ width: 10, height: 10 }} /> Ziel</button>}
@@ -342,9 +345,9 @@ function VersandDialog({ title, options, optionLabel, onConfirm, onClose }: { ti
       <div style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", maxWidth: 440, width: "92%", padding: 24 }}>
         <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12 }}>{title}</div>
         <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>{optionLabel}</div>
-        <select value={selected} onChange={e => setSelected(e.target.value)} style={{ width: "100%", padding: "8px 12px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", marginBottom: 16, fontFamily: "inherit" }}>
-          {options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
+        <div style={{ marginBottom: 16 }}>
+          <Select value={selected} onChange={v => setSelected(v ?? "")} options={options.map(o => ({ value: o, label: o }))} />
+        </div>
         <div className="flex justify-end" style={{ gap: 8 }}>
           <button onClick={onClose} className="cursor-pointer" style={{ padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)" }}>Abbrechen</button>
           <button onClick={onConfirm} className="cursor-pointer" style={{ padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)" }}>Senden</button>
@@ -355,12 +358,13 @@ function VersandDialog({ title, options, optionLabel, onConfirm, onClose }: { ti
 }
 
 function ErfassungsDialog({ title, label, onConfirm, onClose }: { title: string; label: string; onConfirm: () => void; onClose: () => void }) {
+  const [datum, setDatum] = useState("03.03.2026");
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: "rgba(19,19,20,0.5)" }}>
       <div style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", maxWidth: 400, width: "92%", padding: 24 }}>
         <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12 }}>{title}</div>
         <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>{label}</div>
-        <input type="text" defaultValue="03.03.2026" style={{ width: "100%", padding: "8px 12px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", marginBottom: 16, fontFamily: "inherit" }} />
+        <div style={{ marginBottom: 16 }}><DateField wertFormat="display" bereich="any" value={datum} onChange={v => setDatum((v as string) ?? "")} /></div>
         <div className="flex justify-end" style={{ gap: 8 }}>
           <button onClick={onClose} className="cursor-pointer" style={{ padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)" }}>Abbrechen</button>
           <button onClick={onConfirm} className="cursor-pointer" style={{ padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)" }}>Erfassen</button>
@@ -371,12 +375,13 @@ function ErfassungsDialog({ title, label, onConfirm, onClose }: { title: string;
 }
 
 function KKAntwortDialog({ onConfirm, onClose }: { onConfirm: (genehmigt: boolean) => void; onClose: () => void }) {
+  const [datum, setDatum] = useState("03.03.2026");
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: "rgba(19,19,20,0.5)" }}>
       <div style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", maxWidth: 400, width: "92%", padding: 24 }}>
         <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12 }}>Kostengutsprache erfassen</div>
         <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Datum</div>
-        <input type="text" defaultValue="03.03.2026" style={{ width: "100%", padding: "8px 12px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", marginBottom: 16, fontFamily: "inherit" }} />
+        <div style={{ marginBottom: 16 }}><DateField wertFormat="display" bereich="any" value={datum} onChange={v => setDatum((v as string) ?? "")} /></div>
         <div className="flex justify-end" style={{ gap: 8 }}>
           <button onClick={onClose} className="cursor-pointer" style={{ padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)" }}>Abbrechen</button>
           <button onClick={() => onConfirm(false)} className="cursor-pointer" style={{ padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--status-danger-bg)", border: "none", color: "var(--status-danger)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)" }}>Abgelehnt</button>
@@ -447,10 +452,10 @@ function DiagnoseEditor({ diagnose, onSave, onCancel }: { diagnose: KLVDiagnose;
   return (
     <div className="flex flex-col" style={{ gap: 6 }}>
       <div className="flex" style={{ gap: 6 }}>
-        <input value={icdCode} onChange={e => setIcdCode(e.target.value)} placeholder="ICD-Code" style={{ width: 80, padding: "6px 8px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontFamily: "inherit" }} />
-        <input value={titel} onChange={e => setTitel(e.target.value)} placeholder="Titel" style={{ flex: 1, padding: "6px 8px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontFamily: "inherit" }} />
+        <div style={{ width: "var(--field-w-md)", flexShrink: 0 }}><TextInput inhaltstyp="icd" value={icdCode} onChange={setIcdCode} placeholder="ICD-Code" /></div>
+        <div style={{ flex: 1, minWidth: 0 }}><TextInput inhaltstyp="freitext" value={titel} onChange={setTitel} placeholder="Titel" /></div>
       </div>
-      <textarea value={beschreibung} onChange={e => setBeschreibung(e.target.value)} placeholder="Beschreibung" rows={2} style={{ padding: "6px 8px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", resize: "none", fontFamily: "inherit" }} />
+      <TextareaInput value={beschreibung} onChange={setBeschreibung} placeholder="Beschreibung" rows={2} />
       <div className="flex" style={{ gap: 6 }}>
         <button onClick={() => onSave({ ...diagnose, icdCode: icdCode || null, titel, beschreibung })} className="cursor-pointer" style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-on-dark)" }}>Speichern</button>
         <button onClick={onCancel} className="cursor-pointer" style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", background: "transparent", border: "none", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Abbrechen</button>

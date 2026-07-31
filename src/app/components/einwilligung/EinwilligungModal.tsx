@@ -4,6 +4,9 @@
  */
 import { useState, useRef } from "react";
 import { X, Download, Check, AlertTriangle, Info, Pen } from "lucide-react";
+import { TextInput } from "../form/TextInput";
+import { Select } from "../form/Select";
+import { DateField } from "../form/DateField";
 import {
   erzeugeEinwilligungstext,
   RECHTLICHER_HINWEIS,
@@ -178,17 +181,15 @@ export function EinwilligungModal({ isOpen, onClose, onSignDigital, patientName,
                   <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 8, marginBottom: 8 }}>
                     <div>
                       <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 2 }}>Name der vertretungsberechtigten Person</label>
-                      <input value={unterzeichnerName} onChange={e => setUnterzeichnerName(e.target.value)} placeholder="Vorname Name" style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
+                      <TextInput inhaltstyp="nachname" value={unterzeichnerName} onChange={setUnterzeichnerName} placeholder="Vorname Name" />
                     </div>
                     <div>
                       <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 2 }}>Grundlage der Vertretung</label>
-                      <select value={vertretungsGrundlage} onChange={e => setVertretungsGrundlage(e.target.value as VertretungsGrundlage)} style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontFamily: "inherit" }}>
-                        {VERTRETUNG_OPTIONEN.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
+                      <Select value={vertretungsGrundlage} onChange={v => v && setVertretungsGrundlage(v as VertretungsGrundlage)} options={VERTRETUNG_OPTIONEN} />
                     </div>
                   </div>
                   {vertretungsGrundlage === "andere" && (
-                    <input value={vertretungsAndere} onChange={e => setVertretungsAndere(e.target.value)} placeholder="Grundlage beschreiben" style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontFamily: "inherit", marginBottom: 8 }} />
+                    <div style={{ marginBottom: 8 }}><TextInput inhaltstyp="freitext" value={vertretungsAndere} onChange={setVertretungsAndere} placeholder="Grundlage beschreiben" /></div>
                   )}
                   {istAngestellterAngehoeriger && (
                     <div className="flex items-center" style={{ gap: 6, padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, marginBottom: 8 }}>
@@ -205,11 +206,11 @@ export function EinwilligungModal({ isOpen, onClose, onSignDigital, patientName,
               <div className="grid grid-cols-2" style={{ gap: 8, marginBottom: 10 }}>
                 <div>
                   <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 2 }}>Ort</label>
-                  <input value={ort} onChange={e => setOrt(e.target.value)} style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
+                  <TextInput inhaltstyp="ort" value={ort} onChange={setOrt} />
                 </div>
                 <div>
                   <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 2 }}>Datum</label>
-                  <input value={new Date().toLocaleDateString("de-CH")} disabled style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-secondary)", color: "var(--text-tertiary)", fontFamily: "inherit" }} />
+                  <DateField wertFormat="display" bereich="any" value={new Date().toLocaleDateString("de-CH")} onChange={() => {}} disabled />
                 </div>
               </div>
 

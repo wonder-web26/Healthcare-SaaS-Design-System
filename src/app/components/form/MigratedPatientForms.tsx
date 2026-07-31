@@ -186,7 +186,7 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
       <SectionHeader icon={Home} label="Wohnsituation" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <FormSelect label="Wohnsituation" value={data.wohnsituation || null} onChange={v => onUpdate("wohnsituation", v || "")} options={WOHNSITUATION} placeholder="Bitte wählen" />
-        <TextInput label="Etage" inhaltstyp="freitext" value={data.etage} onChange={v => onUpdate("etage", v)} placeholder="z.B. 2. OG" />
+        <TextInput label="Etage" inhaltstyp="kurztext" value={data.etage} onChange={v => onUpdate("etage", v)} placeholder="z.B. 2. OG" />
         <SegmentedControl label="Lift vorhanden" value={data.liftVorhanden} onChange={v => onUpdate("liftVorhanden", v)} options={JA_NEIN} />
         <SegmentedControl label="Treppen" value={data.treppen} onChange={v => onUpdate("treppen", v)} options={JA_NEIN} />
       </div>

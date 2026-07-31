@@ -5,7 +5,8 @@ import { FormField } from "./FormField";
 interface Option { value: string; label: string }
 
 interface SelectProps {
-  label: string;
+  /** Optional — ohne Label wird nur das Feld gerendert (für inline-Aufrufstellen mit eigener Beschriftung). */
+  label?: string;
   required?: boolean;
   error?: string;
   success?: string;
@@ -44,8 +45,7 @@ export function Select({ label, required, error, success, hint, value, onChange,
     if (e.key === "ArrowUp") { e.preventDefault(); if (!open) { setOpen(true); } else { setFocusIdx(i => (i - 1 + options.length) % options.length); } }
   };
 
-  return (
-    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={open || focused}>
+  const feld = (
       <div ref={ref} className="relative">
         <button
           type="button"
@@ -104,6 +104,13 @@ export function Select({ label, required, error, success, hint, value, onChange,
           </div>
         )}
       </div>
+  );
+
+  if (!label) return feld;
+
+  return (
+    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={open || focused}>
+      {feld}
     </FormField>
   );
 }

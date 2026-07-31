@@ -14,6 +14,9 @@ import {
   type Arbeitskontrolle, type BlockBewertung, type Bewertung,
 } from "../../../lib/arbeitskontrolle/store";
 import { formatAnzeige, isoZuAnzeige } from "../../../lib/datum";
+import { TextareaInput } from "../form/TextareaInput";
+import { DateField } from "../form/DateField";
+import { TimeField } from "../form/TimeField";
 import { toast } from "sonner";
 
 const SKALA = [1, 2, 3, 4, 5, 6] as const;
@@ -244,7 +247,8 @@ function BeurteilungsFormular({ kontrolle, istAbgeschlossen, onSpeichern }: {
                           className="cursor-pointer disabled:cursor-default"
                           style={{
                             // Gewählt: erkennbar an Rahmen UND Schriftstärke (nicht an Farbe allein).
-                            width: 32, height: 32, borderRadius: 8, fontSize: 13,
+                            // Höhe/Breite als Token (Desktop 32 · Touch 44); Gestaltung unverändert.
+                            width: "var(--pill-height)", height: "var(--pill-height)", borderRadius: 8, fontSize: 13,
                             border: sel ? "2px solid var(--text-primary)" : "1px solid var(--border-default)",
                             fontWeight: sel ? 700 : 500,
                             background: sel ? "var(--brand-primary)" : "var(--bg-secondary)",
@@ -263,7 +267,7 @@ function BeurteilungsFormular({ kontrolle, istAbgeschlossen, onSpeichern }: {
                       aria-pressed={nichtBeurteilbar}
                       className="cursor-pointer disabled:cursor-default inline-flex items-center"
                       style={{
-                        gap: 4, height: 32, padding: "0 10px", borderRadius: 8, fontSize: 12,
+                        gap: 4, height: "var(--pill-height)", padding: "0 10px", borderRadius: 8, fontSize: 12,
                         border: nichtBeurteilbar ? "2px solid var(--status-warning)" : "1px solid var(--border-default)",
                         fontWeight: nichtBeurteilbar ? 700 : 500,
                         background: nichtBeurteilbar ? "var(--status-warning-bg)" : "var(--bg-secondary)",
@@ -279,13 +283,12 @@ function BeurteilungsFormular({ kontrolle, istAbgeschlossen, onSpeichern }: {
             })}
 
             <div style={{ marginTop: 8 }}>
-              <textarea
+              <TextareaInput
                 value={blockData?.anmerkung ?? ""}
-                onChange={e => { if (!istAbgeschlossen) { setAnmerkung(blockIdx, e.target.value); } }}
+                onChange={v => { if (!istAbgeschlossen) { setAnmerkung(blockIdx, v); } }}
                 placeholder="Anmerkungen…"
                 disabled={istAbgeschlossen}
                 rows={2}
-                style={{ width: "100%", padding: "8px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontFamily: "inherit", resize: "vertical" }}
               />
             </div>
           </div>
@@ -300,13 +303,12 @@ function BeurteilungsFormular({ kontrolle, istAbgeschlossen, onSpeichern }: {
         <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginBottom: 8 }}>
           Welche Verbesserungen wären zielführend? Gab es Vorschläge von Klient:in, Mitarbeiter:in oder Fallführender? Gibt es Vorschläge zur Fehlervermeidung?
         </div>
-        <textarea
+        <TextareaInput
           value={verbesserungen}
-          onChange={e => { if (!istAbgeschlossen) { setVerbesserungen(e.target.value); save(bloecke, e.target.value, meldungGL, meldungLP); } }}
+          onChange={v => { if (!istAbgeschlossen) { setVerbesserungen(v); save(bloecke, v, meldungGL, meldungLP); } }}
           placeholder="Freitext…"
           disabled={istAbgeschlossen}
           rows={4}
-          style={{ width: "100%", padding: "8px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontFamily: "inherit", resize: "vertical" }}
         />
       </div>
 
@@ -346,8 +348,8 @@ function MeldeZeile({ label, value, disabled, onChange }: {
       </label>
       {value.erfolgt && (
         <>
-          <input type="date" value={value.datum} disabled={disabled} onChange={e => onChange({ ...value, datum: e.target.value })} style={{ padding: "4px 8px", fontSize: "var(--text-meta)", borderRadius: 6, border: "0.5px solid var(--border-default)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
-          <input type="time" value={value.uhrzeit} disabled={disabled} onChange={e => onChange({ ...value, uhrzeit: e.target.value })} style={{ padding: "4px 8px", fontSize: "var(--text-meta)", borderRadius: 6, border: "0.5px solid var(--border-default)", background: "var(--bg-secondary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
+          <DateField wertFormat="iso" bereich="any" value={value.datum} disabled={disabled} onChange={v => onChange({ ...value, datum: (v as string) ?? "" })} />
+          <TimeField value={value.uhrzeit} disabled={disabled} onChange={v => onChange({ ...value, uhrzeit: v })} />
         </>
       )}
     </div>

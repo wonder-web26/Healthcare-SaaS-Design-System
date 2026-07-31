@@ -12,6 +12,8 @@
 export type Inhaltstyp =
   // xs — var(--field-w-xs) 120
   | "plz" | "bagNr" | "tarifcode" | "prozent" | "anzahl" | "groesse" | "gewicht"
+  | "zeit"       // Uhrzeit SS:MM
+  | "kurztext"   // kurzer Freitext fester Länge (z. B. Etage "3. OG")
   // sm — var(--field-w-sm) 180
   | "datum" | "zemis" | "betrag" | "stundenlohn" | "telefon"
   // md — var(--field-w-md) 240
@@ -28,6 +30,7 @@ const LG = "var(--field-w-lg)";
 
 const BREITE: Record<Inhaltstyp, string | undefined> = {
   plz: XS, bagNr: XS, tarifcode: XS, prozent: XS, anzahl: XS, groesse: XS, gewicht: XS,
+  zeit: XS, kurztext: XS,
   datum: SM, zemis: SM, betrag: SM, stundenlohn: SM, telefon: SM,
   ahv: MD, kartennummer: MD, iban: MD, icd: MD,
   vorname: LG, nachname: LG, ort: LG, heimatort: LG,
