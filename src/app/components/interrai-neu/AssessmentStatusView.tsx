@@ -8,6 +8,7 @@
 
 import { useNavigate } from "react-router";
 import { ClipboardList, Play, Plus, CheckCircle2, AlertTriangle, Search, MessageSquare } from "lucide-react";
+import { LeerZustand } from "../ui/LeerZustand";
 import {
   type Person,
   getAssessmentsForPerson,
@@ -41,27 +42,16 @@ export function AssessmentStatusView({ person, returnTo }: AssessmentStatusViewP
   };
 
   if (assessments.length === 0) {
+    // §A/§B: einheitlicher Leerzustand, sekundärer Knopf (kein Primär). Der Untertitel
+    // nennt beide Wege; der Knopf erzeugt eine Bedarfsabklärung über den einzigen
+    // Erzeugungsweg (handleStartNew → createAssessment) und öffnet sie im Modul.
     return (
-      <div style={{ padding: "32px 0", textAlign: "center" }}>
-        <ClipboardList style={{ width: 32, height: 32, color: "var(--text-tertiary)", margin: "0 auto 12px" }} />
-        <div style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 16 }}>
-          Noch keine interRAI-Abklärung vorhanden.
-        </div>
-        <button
-          type="button"
-          onClick={handleStartNew}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            padding: "8px 16px", borderRadius: 8,
-            background: "var(--brand-primary)", color: "#fff",
-            border: "none", fontSize: 13, fontWeight: 500,
-            cursor: "pointer", fontFamily: "inherit",
-          }}
-        >
-          <Plus style={{ width: 14, height: 14 }} />
-          Erstabklärung starten
-        </button>
-      </div>
+      <LeerZustand
+        icon={ClipboardList}
+        titel="Noch keine Bedarfsabklärung"
+        untertitel="Entsteht aus dem aufgezeichneten Gespräch oder wird manuell erfasst."
+        aktion={{ label: "Bedarfsabklärung erfassen", onClick: handleStartNew, icon: Plus }}
+      />
     );
   }
 

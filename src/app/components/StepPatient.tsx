@@ -53,7 +53,7 @@ import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
 import { MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, MOCK_ARZT_DIAGNOSEN, ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
 import { useRecording } from "../recording/RecordingContext";
-import { getPersonByOnboardingId } from "../../lib/interrai/store";
+import { getPersonByOnboardingId, getOrCreatePersonForOnboarding, createAssessment } from "../../lib/interrai/store";
 import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
 import type { KLVLeistung, KLVEinheit, Pflegediagnose, Massnahme, Pflegeziel, AerztlicheDiagnose } from "../../types/klinische-artefakte";
 import { NANDA_KATALOG } from "../../lib/mocks/nanda-enp-katalog";
@@ -413,8 +413,15 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
     pruefeVerlauf();
     const el = abschnittScrollRef.current;
     if (!el) return;
+    // §C-Ursache: Der Verlauf wurde nur beim Mount berechnet — vor dem Font-Reflow.
+    // Dann massen die Reiter zu schmal, zeigtVerlauf blieb false, und auf macOS
+    // (Overlay-Scrollbars) fehlte jedes Affordance: der letzte Reiter wirkte hart
+    // abgeschnitten ("Dokument"). Wir messen daher nach Font-Laden erneut und
+    // beobachten zusätzlich die Inhaltsbreite (nicht nur die Containerbreite).
+    document.fonts?.ready.then(pruefeVerlauf).catch(() => {});
     const ro = new ResizeObserver(pruefeVerlauf);
     ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
     window.addEventListener("resize", pruefeVerlauf);
     return () => { ro.disconnect(); window.removeEventListener("resize", pruefeVerlauf); };
   }, [pruefeVerlauf]);
@@ -512,9 +519,10 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => setActiveTab(idx)}
+                onFocus={e => e.currentTarget.scrollIntoView({ inline: "nearest", block: "nearest" })}
                 className="ui-fokusring relative flex items-center whitespace-nowrap transition-colors cursor-pointer"
                 style={{
-                  height: 48, padding: 0,
+                  height: 48, padding: 0, flexShrink: 0,
                   fontSize: "var(--text-meta)", fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",
                   color: isActive ? "var(--text-primary)" : complete ? "var(--status-success-text)" : "var(--text-secondary)",
                   background: "transparent", border: "none", fontFamily: "inherit",
@@ -557,7 +565,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {activeTab === 4 && (
             <TabAktivitaetenV2 data={data} onUpdateATL={updateATL} />
           )}
-          {activeTab === 5 && onboardingId && <OnboardingTabBA onboardingId={onboardingId} />}
+          {activeTab === 5 && onboardingId && <OnboardingTabBA onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />}
           {activeTab === 6 && onboardingId && <OnboardingTabPP onboardingId={onboardingId} />}
           {activeTab === 7 && onboardingId && <OnboardingTabKLV onboardingId={onboardingId} />}
           {activeTab === 8 && onboardingId && (() => {
@@ -2270,25 +2278,33 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
    ONBOARDING CLINICAL TABS (read by onboardingId)
    ══════════════════════════════════════════ */
 
-function OnboardingTabBA({ onboardingId }: { onboardingId: string }) {
+function OnboardingTabBA({ onboardingId, patientVorname, patientNachname }: { onboardingId: string; patientVorname: string; patientNachname: string }) {
+  const navigate = useNavigate();
   const person = getPersonByOnboardingId(onboardingId);
+  const returnTo = `/onboarding/${onboardingId}?step=patient&tab=interrai`;
+
   if (!person) {
-    // Regulärer Leerzustand (vorbereitender Schritt): keine Bedarfsabklärung erfasst.
-    // Sie entsteht aus dem aufgezeichneten Gespräch ("Gespräch" in der Reiterzeile).
+    // §A: Der Leerzustand ist keine Sackgasse mehr. Der Untertitel nennt beide Wege;
+    // der sekundäre Knopf erzeugt eine Bedarfsabklärung für den Patienten dieses
+    // Onboardings über den einzigen Erzeugungsweg (createAssessment) und öffnet sie
+    // direkt im interRAI-Erfassungsmodul. Fehlt noch eine Person (nur zwei Demofälle
+    // sind geseedet), wird sie hier an das Onboarding gebunden — die Abklärung ist
+    // danach über den Reiter wieder auffindbar, nicht verwaist.
+    const erfassen = () => {
+      const p = getOrCreatePersonForOnboarding(onboardingId, patientVorname || "Patient", patientNachname || "");
+      const a = createAssessment(p.id, "erstabklaerung");
+      navigate(`/interrai-neu/${a.id}?returnTo=${encodeURIComponent(returnTo)}`);
+    };
     return (
       <LeerZustand
         icon={ClipboardList}
         titel="Noch keine Bedarfsabklärung"
-        untertitel="Sie entsteht aus dem aufgezeichneten Gespräch."
+        untertitel="Entsteht aus dem aufgezeichneten Gespräch oder wird manuell erfasst."
+        aktion={{ label: "Bedarfsabklärung erfassen", onClick: erfassen, icon: Plus }}
       />
     );
   }
-  return (
-    <AssessmentStatusView
-      person={person}
-      returnTo={`/onboarding/${onboardingId}?step=patient&tab=interrai`}
-    />
-  );
+  return <AssessmentStatusView person={person} returnTo={returnTo} />;
 }
 
 function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {

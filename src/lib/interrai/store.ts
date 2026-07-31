@@ -263,6 +263,27 @@ export function getPersonByOnboardingId(obId: string): Person | undefined {
   return undefined;
 }
 
+/**
+ * Returns the person linked to an onboarding case, creating a lightweight
+ * mandate person on first use if none was seeded. This keeps the InterRAI
+ * tab actionable for every onboarding — a Bedarfsabklärung can be created for
+ * the patient of any case, not only the two demo cases that ship with a
+ * seeded person. The assessment-creation path itself stays the single
+ * createAssessment() below; this only ensures a person to attach it to.
+ */
+export function getOrCreatePersonForOnboarding(
+  obId: string,
+  vorname: string,
+  nachname: string,
+): Person {
+  const existing = getPersonByOnboardingId(obId);
+  if (existing) return existing;
+  const id = `PERS-${String(persons.size + 1).padStart(3, "0")}`;
+  const p: Person = { id, vorname, nachname, zustand: "mandat", onboardingId: obId };
+  persons.set(id, p);
+  return p;
+}
+
 export function getPersonByPatientId(patId: string): Person | undefined {
   for (const p of persons.values()) {
     if (p.patientId === patId) return p;

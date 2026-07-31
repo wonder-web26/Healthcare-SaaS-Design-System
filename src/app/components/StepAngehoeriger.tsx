@@ -579,8 +579,11 @@ export function StepAngehoeriger({
     pruefeVerlauf();
     const el = abschnittScrollRef.current;
     if (!el) return;
+    // §C: nach Font-Laden erneut messen + Inhaltsbreite beobachten (siehe StepPatient).
+    document.fonts?.ready.then(pruefeVerlauf).catch(() => {});
     const ro = new ResizeObserver(pruefeVerlauf);
     ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
     window.addEventListener("resize", pruefeVerlauf);
     return () => { ro.disconnect(); window.removeEventListener("resize", pruefeVerlauf); };
   }, [pruefeVerlauf]);
@@ -655,9 +658,10 @@ export function StepAngehoeriger({
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => setActiveTab(idx)}
+                onFocus={e => e.currentTarget.scrollIntoView({ inline: "nearest", block: "nearest" })}
                 className="ui-fokusring relative flex items-center whitespace-nowrap transition-colors cursor-pointer"
                 style={{
-                  height: 48, padding: 0,
+                  height: 48, padding: 0, flexShrink: 0,
                   fontSize: "var(--text-meta)", fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",
                   color: isActive ? "var(--text-primary)" : tabStatus === "complete" ? "var(--status-success-text)" : "var(--text-secondary)",
                   background: "transparent", border: "none", fontFamily: "inherit",
