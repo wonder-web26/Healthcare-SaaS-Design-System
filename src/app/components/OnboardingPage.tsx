@@ -48,7 +48,8 @@ import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
 // import { AnnaListenEinordnung, type DetailKontext } from "../anna/AnnaListenEinordnung";
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
-import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
+import { getTicketsFuerSubjekt, aktualisiereUeberfaellige, generiereRhythmusTickets, getInstanzFuerSubjekt } from "../../lib/rhythmus/engine";
+import { useRhythmus } from "./rhythmus/useRhythmus";
 import { formatFaelligkeit, isoZuDate } from "../../lib/datum";
 import { toast } from "sonner";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
@@ -242,6 +243,25 @@ export function OnboardingPage() {
   const [searchParams] = useSearchParams();
   const isExisting = !!caseId;
   const caseInfo = caseId ? onboardingCaseLookup[caseId] : null;
+
+  // Store-Abo: Zustandsspalte re-rendert bei jeder Rhythmus-Änderung (Nachziehen,
+  // Erledigen, Fälligkeit) — sonst zeigt sie den Stand ihres letzten Durchlaufs.
+  useRhythmus();
+
+  // Übergangsmassnahme (Bestandsdaten ohne Persistenz): Fehlt die Rhythmus-Instanz
+  // für diesen Fall, wird sie beim ÖFFNEN des Falls einmalig nachgezogen — nicht
+  // beim Rendern eines Reiters. Anker ist das (stabile) Vertragsdatum des Falls,
+  // nicht das Öffnungsdatum; damit sind die Fälligkeiten deterministisch. Es gibt
+  // keinen Anlege-Flow (Fälle sind Mockdaten), daher hängt die Erzeugung hier.
+  // Mit einer Persistenzschicht entfällt dieses Nachziehen und die Instanz
+  // entsteht beim Anlegen des Falls.
+  useEffect(() => {
+    if (!caseId || !caseInfo) return;
+    if (getInstanzFuerSubjekt("patient", caseId)) return;
+    const [t, m, j] = caseInfo.vertragDatum.split(".");
+    const isoAnker = t && m && j ? `${j}-${m}-${t}` : caseInfo.vertragDatum;
+    generiereRhythmusTickets("patient", caseId, caseInfo.patient, isoAnker);
+  }, [caseId, caseInfo]);
 
   const [currentStep, setCurrentStep] = useState(1);
   const [visitedSteps, setVisitedSteps] = useState<Set<number>>(new Set([1]));
@@ -725,7 +745,7 @@ export function OnboardingPage() {
                 {rhythmusTickets.length === 0 ? (
                   // Leerzustand: nur der Leerzustandstext, KEIN Aufteilungssatz (§H)
                   <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-                    Noch keine Aufgaben erzeugt. Sie entstehen im Patienten-Schritt.
+                    Keine offenen Aufgaben.
                   </div>
                 ) : (
                   <>

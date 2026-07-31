@@ -61,7 +61,6 @@ import { ReviewBlock } from "./ui/ReviewBlock";
 import { InlineSelect } from "./ui/InlineSelect";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
-import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
 import { SectionAccordion, SektionBadge } from "./ui/SectionAccordion";
 import { ItemRow } from "./ui/ItemRow";
 import { hProWoche, einmaligeMin, istPeriodisch, einheitLabel, werLabel, berechnungsText, kompaktParams, berechneSummen, getSimultanPartner } from "../../lib/klv/berechnung";
@@ -568,11 +567,9 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {activeTab === 5 && onboardingId && <OnboardingTabBA onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />}
           {activeTab === 6 && onboardingId && <OnboardingTabPP onboardingId={onboardingId} />}
           {activeTab === 7 && onboardingId && <OnboardingTabKLV onboardingId={onboardingId} />}
-          {activeTab === 8 && onboardingId && (() => {
-            // Patient-Workflow: Tickets ab Aufnahmedatum (= heute im Onboarding-Kontext)
-            generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, new Date().toISOString().slice(0, 10));
-            return <RhythmusTimeline subjektTyp="patient" subjektId={onboardingId} />;
-          })()}
+          {/* Der Reiter erzeugt nichts mehr beim Rendern. Die Rhythmus-Instanz wird
+              beim Öffnen des Falls in der OnboardingPage nachgezogen (Anker = Falldatum). */}
+          {activeTab === 8 && onboardingId && <RhythmusTimeline subjektTyp="patient" subjektId={onboardingId} />}
           {activeTab === 9 && <TabDokumente data={data} onChange={onChange} />}
         </div>
       </div>

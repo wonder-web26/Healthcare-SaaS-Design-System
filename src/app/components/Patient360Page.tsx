@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { AnnaPatientSummary } from "../anna/AnnaPatientSummary";
 import {
@@ -78,7 +78,8 @@ import { DateField } from "./form/DateField";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { ItemRow } from "./ui/ItemRow";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
-import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
+import { generiereRhythmusTickets, getInstanzFuerSubjekt } from "../../lib/rhythmus/engine";
+import { useRhythmus } from "./rhythmus/useRhythmus";
 import { getNachweiseFuerPatient } from "../../lib/schulung/nachweis-store";
 import "../../lib/schulung/demo-seed";
 import { BezugspersonFeld } from "./BezugspersonFeld";
@@ -300,6 +301,19 @@ export function Patient360Page() {
   const allPatientIds = patients.map(p => p.id);
   const patient = patients.find((p) => p.id === patientId);
 
+  // Store-Abo: re-rendert bei Rhythmus-Änderungen.
+  useRhythmus();
+  // Übergangs-Nachziehen (Bestandsdaten ohne Persistenz): Rhythmus-Instanz für
+  // diesen Patienten einmalig erzeugen, falls fehlend — im Effect, NICHT im
+  // Render. Anker ist das Aufnahmedatum, nicht das Öffnungsdatum.
+  useEffect(() => {
+    if (!patient?.aufnahmeDatum) return;
+    if (getInstanzFuerSubjekt("patient", patient.id)) return;
+    const parts = patient.aufnahmeDatum.split(".");
+    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : patient.aufnahmeDatum;
+    generiereRhythmusTickets("patient", patient.id, `${patient.nachname}, ${patient.vorname}`, isoAnker, patient.pflegefachkraft);
+  }, [patient?.id]);
+
   if (!patient) {
     return (
       <div style={{ padding: "64px 32px", textAlign: "center" }}>
@@ -312,13 +326,6 @@ export function Patient360Page() {
         </AppButton>
       </div>
     );
-  }
-
-  // WF-02: Patient-Rhythmus-Tickets generieren (idempotent)
-  if (patient.aufnahmeDatum) {
-    const parts = patient.aufnahmeDatum.split(".");
-    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : patient.aufnahmeDatum;
-    generiereRhythmusTickets("patient", patient.id, `${patient.nachname}, ${patient.vorname}`, isoAnker, patient.pflegefachkraft);
   }
 
   const st = statusConfig[patient.status];

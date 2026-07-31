@@ -35,6 +35,7 @@ import {
   type TicketStatus,
 } from "../../../lib/rhythmus/engine";
 import type { RhythmusEntitaet } from "../../../lib/rhythmus/vorlage";
+import { useRhythmus } from "./useRhythmus";
 
 /* ══════════════════════════════════════════
    PROPS
@@ -78,6 +79,7 @@ function formatDatum(iso: string): string {
    ══════════════════════════════════════════ */
 
 export function RhythmusTimeline({ subjektTyp, subjektId, aktuellerBenutzer = "Sandra Weber" }: Props) {
+  useRhythmus(); // Re-Render bei Store-Änderungen (Erledigen, Fälligkeit, neue Instanz)
   const instanz = getInstanzFuerSubjekt(subjektTyp, subjektId);
   const tickets = getTicketsFuerSubjekt(subjektTyp, subjektId);
   const [, forceUpdate] = useState(0);

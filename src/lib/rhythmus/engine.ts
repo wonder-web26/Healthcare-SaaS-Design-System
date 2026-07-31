@@ -72,6 +72,33 @@ const INSTANZEN: RhythmusInstanz[] = [];
 const TICKETS: RhythmusTicket[] = [];
 
 /* ══════════════════════════════════════════
+   BENACHRICHTIGUNG (Store → Oberfläche)
+   ══════════════════════════════════════════
+   Instanzen und Tickets liegen in Modul-Arrays. Damit lesende Ansichten eine
+   Änderung mitbekommen, führt der Store eine Versionszahl und eine
+   Listener-Liste. React-Ansichten hören über useSyncExternalStore darauf
+   (siehe app/components/rhythmus/useRhythmus.ts) — ohne neue Abhängigkeit. */
+let rhythmusVersion = 0;
+const rhythmusListeners = new Set<() => void>();
+
+/** Abonniert Änderungen am Rhythmus-Store. Gibt eine Abmelde-Funktion zurück. */
+export function subscribeRhythmus(listener: () => void): () => void {
+  rhythmusListeners.add(listener);
+  return () => rhythmusListeners.delete(listener);
+}
+
+/** Monoton steigende Versionszahl — Snapshot für useSyncExternalStore. */
+export function getRhythmusVersion(): number {
+  return rhythmusVersion;
+}
+
+/** Nach einer Store-Mutation aufrufen — erhöht die Version und benachrichtigt. */
+function notifyRhythmus(): void {
+  rhythmusVersion++;
+  rhythmusListeners.forEach(l => l());
+}
+
+/* ══════════════════════════════════════════
    DATUMS-HELFER
    ══════════════════════════════════════════ */
 
@@ -166,6 +193,7 @@ export function generiereRhythmusTickets(
     });
   }
 
+  notifyRhythmus();
   return instanz;
 }
 
@@ -225,6 +253,7 @@ export function ticketFaelligkeitAendern(
     ticket.status = "offen";
   }
 
+  notifyRhythmus();
   return { ok: true };
 }
 
@@ -260,6 +289,7 @@ export function ticketErledigen(
   ticket.protokoll = protokoll?.trim() ?? null;
   ticket.status = "erledigt";
 
+  notifyRhythmus();
   return { ok: true };
 }
 

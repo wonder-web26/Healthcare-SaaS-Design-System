@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import {
   ArrowLeft,
@@ -63,7 +63,8 @@ import { DetailNavigation } from "./DetailNavigation";
 import { AnnaAngehoerigeSummary } from "../anna/AnnaAngehoerigeSummary";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { DateField } from "./form/DateField";
-import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
+import { generiereRhythmusTickets, getInstanzFuerSubjekt } from "../../lib/rhythmus/engine";
+import { useRhythmus } from "./rhythmus/useRhythmus";
 import { getNachweiseFuerAngehoeriger } from "../../lib/schulung/nachweis-store";
 import { getKontrollenFuerAngehoeriger, erstelleKontrolle, getNaechsteFaelligkeit, type KontrolleArt } from "../../lib/arbeitskontrolle/store";
 import { exportiereArbeitskontrollePDF } from "../../lib/arbeitskontrolle/pdf-export";
@@ -426,6 +427,21 @@ export function Angehoerige360Page() {
   const allAngehoerigeIds = angehoerige.map(x => x.id);
   const a = angehoerige.find((x) => x.id === angehoerigerIdOrNew);
 
+  // Store-Abo: re-rendert bei Rhythmus-Änderungen.
+  useRhythmus();
+  // Übergangs-Nachziehen (Bestandsdaten ohne Persistenz): Rhythmus-Instanz für
+  // diese/n Angehörige/n einmalig erzeugen, falls aktiv + eintrittsdatum gesetzt
+  // — im Effect, NICHT im Render. Anker ist das Eintrittsdatum.
+  useEffect(() => {
+    if (!a || a.status !== "aktiv") return;
+    const d = getDetail(a.id);
+    if (!d.eintrittsdatum) return;
+    if (getInstanzFuerSubjekt("angehoeriger", a.id)) return;
+    const parts = d.eintrittsdatum.split(".");
+    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : d.eintrittsdatum;
+    generiereRhythmusTickets("angehoeriger", a.id, `${a.vorname} ${a.nachname}`, isoAnker, a.pflegefachkraft);
+  }, [a?.id]);
+
   if (!a) {
     return (
       <div style={{ padding: "64px 32px", textAlign: "center" }}>
@@ -446,14 +462,6 @@ export function Angehoerige360Page() {
   }
 
   const detail = getDetail(a.id);
-
-  // WF-01: Rhythmus-Tickets generieren (idempotent) wenn aktiv + eintrittsdatum gesetzt
-  if (a.status === "aktiv" && detail.eintrittsdatum) {
-    // eintrittsdatum ist im Format "DD.MM.YYYY" → ISO konvertieren
-    const parts = detail.eintrittsdatum.split(".");
-    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : detail.eintrittsdatum;
-    generiereRhythmusTickets("angehoeriger", a.id, `${a.vorname} ${a.nachname}`, isoAnker, a.pflegefachkraft);
-  }
 
   const st = statusConfig[a.status];
   const br = billingReadinessConfig[a.billingReadiness];
