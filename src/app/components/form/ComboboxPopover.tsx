@@ -42,8 +42,8 @@ export function ComboboxPopover({
           aria-expanded={open}
           style={{
             display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-            width: "100%", boxSizing: "border-box",
-            padding: "11px 14px", borderRadius: "var(--radius-card)",
+            width: "100%", boxSizing: "border-box", height: "var(--field-height)",
+            padding: "0 14px", borderRadius: "var(--radius-card)",
             border: `${open ? "1.5px" : "var(--border-thin)"} solid ${open ? "var(--brand-primary)" : "var(--border-default)"}`,
             background: disabled ? "var(--bg-secondary)" : "var(--bg-elevated)",
             fontSize: "var(--text-body)", color: selected ? "var(--text-primary)" : "var(--text-tertiary)",

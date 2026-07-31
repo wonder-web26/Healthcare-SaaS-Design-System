@@ -25,6 +25,8 @@ export function SegmentedControl({ label, required, error, hint, value, onChange
         style={{
           background: "var(--bg-secondary)",
           borderRadius: "var(--radius-pill)",
+          height: "var(--pill-height)",
+          alignItems: "stretch",
           padding: 3,
           opacity: disabled ? 0.5 : 1,
           cursor: disabled ? "not-allowed" : undefined,
@@ -57,7 +59,8 @@ export function SegmentedControl({ label, required, error, hint, value, onChange
               disabled={disabled}
               onClick={() => !disabled && onChange(opt.value)}
               style={{
-                padding: "6px 16px",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                padding: "0 16px",
                 borderRadius: "var(--radius-pill)",
                 fontSize: 13,
                 fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",

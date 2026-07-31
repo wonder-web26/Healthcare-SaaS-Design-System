@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { breiteFuerInhalt, type Inhaltstyp } from "./inhaltstyp";
 
 interface FormFieldProps {
   label: string;
@@ -8,14 +9,16 @@ interface FormFieldProps {
   hint?: string;
   children: ReactNode;
   focused?: boolean;
+  /** Inhaltstyp → Höchstbreite (Breite kommt weiter aus dem Raster, dies ist nur der Deckel). */
+  inhaltstyp?: Inhaltstyp;
 }
 
-export function FormField({ label, required, error, success, hint, children, focused }: FormFieldProps) {
+export function FormField({ label, required, error, success, hint, children, focused, inhaltstyp }: FormFieldProps) {
   const labelColor = error ? "var(--status-danger)" : focused ? "var(--brand-primary)" : "var(--text-secondary)";
   const labelWeight = focused ? "var(--weight-medium)" : "var(--weight-regular)";
 
   return (
-    <div>
+    <div style={{ maxWidth: breiteFuerInhalt(inhaltstyp) }}>
       {/* §C Formularskala: Beschriftung 12 (Beschriftungsgrau), Abstand Beschriftung/Feld 4 */}
       <label style={{ display: "block", fontSize: "var(--text-meta)", color: labelColor, fontWeight: labelWeight, marginBottom: 4 }}>
         {label}

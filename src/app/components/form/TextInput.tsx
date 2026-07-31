@@ -1,5 +1,6 @@
 import { useState, type InputHTMLAttributes } from "react";
 import { FormField } from "./FormField";
+import { type Inhaltstyp } from "./inhaltstyp";
 
 interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChange"> {
   label: string;
@@ -9,16 +10,17 @@ interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "on
   hint?: string;
   value: string;
   onChange: (value: string) => void;
+  inhaltstyp?: Inhaltstyp;
 }
 
-export function TextInput({ label, required, error, success, hint, value, onChange, ...inputProps }: TextInputProps) {
+export function TextInput({ label, required, error, success, hint, value, onChange, inhaltstyp, ...inputProps }: TextInputProps) {
   const [focused, setFocused] = useState(false);
 
   const borderColor = error ? "var(--status-danger)" : focused ? "var(--brand-primary)" : "var(--border-default)";
   const borderWidth = error || focused ? "1.5px" : "var(--border-thin)";
 
   return (
-    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={focused}>
+    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={focused} inhaltstyp={inhaltstyp}>
       <input
         type="text"
         value={value}

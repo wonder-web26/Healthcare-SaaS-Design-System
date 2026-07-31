@@ -82,7 +82,7 @@ export function IBANInput({ label, required, value, onChange, placeholder = "CH9
   }, [onChange]);
 
   return (
-    <FormField label={label} required={required} error={error} success={success} hint={!error && !success ? "Schweizer IBAN im Format CH## ####…" : undefined} focused={focused}>
+    <FormField label={label} required={required} error={error} success={success} hint={!error && !success ? "Schweizer IBAN im Format CH## ####…" : undefined} focused={focused} inhaltstyp="iban">
       <input
         type="text"
         value={displayValue}

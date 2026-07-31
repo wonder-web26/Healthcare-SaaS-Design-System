@@ -210,7 +210,7 @@ export function DateField({
         <div
           className="relative"
           style={{
-            display: "flex", alignItems: "center", width: "100%", maxWidth: 200, boxSizing: "border-box",
+            display: "flex", alignItems: "center", width: "100%", maxWidth: "var(--field-w-sm)", height: "var(--field-height)", boxSizing: "border-box",
             borderRadius: "var(--radius-card)",
             border: `${error || focused || open ? "1.5px" : "var(--border-thin)"} solid ${borderColor}`,
             background: disabled ? "var(--bg-secondary)" : "var(--bg-elevated)",
@@ -229,8 +229,8 @@ export function DateField({
             onFocus={() => setFocused(true)}
             onBlur={() => { setFocused(false); commit(); }}
             style={{
-              flex: 1, minWidth: 0,
-              padding: "11px 8px 11px 14px",
+              flex: 1, minWidth: 0, height: "100%",
+              padding: "0 8px 0 14px",
               border: "none", outline: "none", background: "transparent",
               fontSize: "var(--text-body)", color: "var(--text-primary)",
               fontFamily: "inherit", fontVariantNumeric: "tabular-nums",
@@ -247,7 +247,7 @@ export function DateField({
               onClick={() => !disabled && setOpen((o) => !o)}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "center",
-                width: 40, height: 40, flexShrink: 0,
+                width: 40, height: "var(--field-height)", flexShrink: 0,
                 background: "transparent", border: "none",
                 cursor: disabled ? "not-allowed" : "pointer",
               }}

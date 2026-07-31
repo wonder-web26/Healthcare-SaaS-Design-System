@@ -112,8 +112,8 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
 
       <SectionHeader icon={Users} label="Partnerangaben" first />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="Vorname" required={istPflicht} value={data.partnerVorname} onChange={v => set("partnerVorname", v)} onBlur={() => touch("partnerVorname")} placeholder="Vorname" error={errIfPflicht("partnerVorname", data.partnerVorname)} />
-        <TextInput label="Nachname" required={istPflicht} value={data.partnerName} onChange={v => set("partnerName", v)} onBlur={() => touch("partnerName")} placeholder="Nachname" error={errIfPflicht("partnerName", data.partnerName)} />
+        <TextInput label="Vorname" inhaltstyp="vorname" required={istPflicht} value={data.partnerVorname} onChange={v => set("partnerVorname", v)} onBlur={() => touch("partnerVorname")} placeholder="Vorname" error={errIfPflicht("partnerVorname", data.partnerVorname)} />
+        <TextInput label="Nachname" inhaltstyp="nachname" required={istPflicht} value={data.partnerName} onChange={v => set("partnerName", v)} onBlur={() => touch("partnerName")} placeholder="Nachname" error={errIfPflicht("partnerName", data.partnerName)} />
         <DateField label="Geburtsdatum" required={istPflicht} wertFormat="display" bereich="past" value={data.partnerGeburtsdatum || null} onChange={v => set("partnerGeburtsdatum", (v as string) ?? "")} onBlur={() => touch("partnerGeburtsdatum")} />
         <FormSelect label="Nationalität" value={data.partnerNationalitaet || null} onChange={v => set("partnerNationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" />
       </div>
@@ -206,7 +206,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
         <>
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
             <TextInput
-              label="Anzahl unterhaltspflichtige Kinder"
+              label="Anzahl unterhaltspflichtige Kinder" inhaltstyp="anzahl"
               required
               value={data.anzahlKinder}
               onChange={v => set("anzahlKinder", v)}
@@ -242,8 +242,8 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                     removeDisabledTooltip="Mindestens ein Kind erforderlich"
                   >
                     <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-                      <TextInput label="Vorname" required value={kind.vorname} onChange={v => updateKind(kind.id, "vorname", v)} placeholder="Vorname" />
-                      <TextInput label="Nachname" required value={kind.name} onChange={v => updateKind(kind.id, "name", v)} placeholder="Nachname" />
+                      <TextInput label="Vorname" inhaltstyp="vorname" required value={kind.vorname} onChange={v => updateKind(kind.id, "vorname", v)} placeholder="Vorname" />
+                      <TextInput label="Nachname" inhaltstyp="nachname" required value={kind.name} onChange={v => updateKind(kind.id, "name", v)} placeholder="Nachname" />
                       <DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={kind.geburtsdatum || null} onChange={v => updateKind(kind.id, "geburtsdatum", (v as string) ?? "")} />
                       <FormSelect label="Geschlecht" value={kind.geschlecht || null} onChange={v => updateKind(kind.id, "geschlecht", v || "")} options={GESCHLECHT} placeholder="Waehlen" />
                     </div>

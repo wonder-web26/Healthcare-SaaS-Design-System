@@ -1,5 +1,6 @@
 import { useState, type InputHTMLAttributes } from "react";
 import { FormField } from "./FormField";
+import { type Inhaltstyp } from "./inhaltstyp";
 
 interface NumberInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChange"> {
   label: string;
@@ -10,16 +11,17 @@ interface NumberInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "
   value: string;
   onChange: (value: string) => void;
   suffix?: string;
+  inhaltstyp?: Inhaltstyp;
 }
 
-export function NumberInput({ label, required, error, success, hint, value, onChange, suffix, ...inputProps }: NumberInputProps) {
+export function NumberInput({ label, required, error, success, hint, value, onChange, suffix, inhaltstyp, ...inputProps }: NumberInputProps) {
   const [focused, setFocused] = useState(false);
 
   const borderColor = error ? "var(--status-danger)" : focused ? "var(--brand-primary)" : "var(--border-default)";
   const borderWidth = error || focused ? "1.5px" : "var(--border-thin)";
 
   return (
-    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={focused}>
+    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={focused} inhaltstyp={inhaltstyp}>
       <div className="relative">
         <input
           type="text"

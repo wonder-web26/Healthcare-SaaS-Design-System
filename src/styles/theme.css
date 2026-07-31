@@ -91,7 +91,32 @@
   --marke-height: 24px;              /* Statusmarke (Information / Status) */
   --marke-height-interaktiv: 26px;   /* bedienbare Statusmarke (Auswahl) */
   --row-height: 40px;                /* Tabellenzeile */
-  --field-height: 40px;              /* Formularfeld */
+
+  /* ── Feld-Höhen je Geräteklasse (Desktop-Basis; Touch-Werte in der
+     @media-(max-width:1279.98px)-Regel unten). Ein Token pro Feldklasse,
+     damit eine Höhenänderung auf alle Felder der Klasse wirkt. ── */
+  --field-height: 40px;              /* Eingabefeld — Desktop 40 · Tablet/Mobil 44 */
+  --pill-height: 32px;               /* Ja/Nein-Pille — Desktop 32 · Tablet/Mobil 44 */
+  --interrai-option-height: 44px;    /* interRAI Auswahlfläche — überall 44 */
+  --interrai-matrix-size: 34px;      /* interRAI Matrixzelle — Desktop 34 · Tablet/Mobil 44 */
+
+  /* ── Feld-Höchstbreiten nach Inhaltstyp ────────────
+     Die Breite kommt weiterhin aus dem Raster; dies ist nur der Deckel.
+     Unterhalb füllt das Feld die Rasterzelle (w-full + max-width). Der
+     Inhaltstyp wird am Feld gesetzt, die Zahl steht ausschliesslich hier. */
+  --field-w-xs: 120px;   /* PLZ · BAG-Nr. · Tarifcode · Prozent · Anzahl · Grösse · Gewicht */
+  --field-w-sm: 180px;   /* Datum · ZEMIS-Nr. · Betrag · Stundenlohn · Telefon */
+  --field-w-md: 240px;   /* AHV-Nr. · Kartennummer · IBAN · ICD-Code */
+  --field-w-lg: 320px;   /* Vorname · Nachname · Ort · Heimatort */
+
+  /* ── Geräteklassen-Haltepunkte (Feld-Sizing) — Referenzwerte.
+     CSS-Variablen wirken nicht in @media-Bedingungen; die verbindliche
+     Grenze steht in der Query unten. Fingerbedienung gilt auf Tablet+Mobil.
+       mobil    < 768
+       tablet   768 – 1279  (z. B. iPad quer 1024 = Tablet, Finger)
+       desktop  >= 1280 */
+  --bp-tablet: 768px;
+  --bp-desktop: 1280px;
 
   /* ── Aktionsfarbe (styleguide §2/§8): Marke ≠ Aktion ──
      Primärknopf = Vollfläche Dark Sky. Grün bleibt ausschliesslich Erfolg
@@ -345,6 +370,20 @@
     input, textarea, select {
       font-size: 16px;
     }
+  }
+}
+
+/* ── Feld-Höhen für Fingerbedienung (Tablet 768–1279 + Mobil <768) ──
+   Unterhalb 1280 gilt Touch: Eingabefelder, Ja/Nein-Pillen und interRAI-
+   Matrixzellen wachsen auf das 44er-Mindestmass. Desktop (>=1280) behält
+   die kompakten Basiswerte aus :root. Ein Umschalten der Grenze oder der
+   Werte ist eine Token-Änderung, kein Umbau an den Verwendungsstellen. */
+@media (max-width: 1279.98px) {
+  :root {
+    --field-height: 44px;
+    --pill-height: 44px;
+    --interrai-matrix-size: 44px;
+    /* --interrai-option-height bleibt 44 (bereits Touch-tauglich) */
   }
 }
 

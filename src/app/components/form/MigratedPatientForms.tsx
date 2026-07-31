@@ -49,8 +49,8 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={User} label="Identität" first />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="Name" required value={data.name} onChange={v => onUpdate("name", v)} onBlur={() => onBlur("name")} placeholder="Nachname" error={t("name") && !filled(data.name) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Vorname" required value={data.vorname} onChange={v => onUpdate("vorname", v)} onBlur={() => onBlur("vorname")} placeholder="Vorname" error={t("vorname") && !filled(data.vorname) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Name" inhaltstyp="nachname" required value={data.name} onChange={v => onUpdate("name", v)} onBlur={() => onBlur("name")} placeholder="Nachname" error={t("name") && !filled(data.name) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Vorname" inhaltstyp="vorname" required value={data.vorname} onChange={v => onUpdate("vorname", v)} onBlur={() => onBlur("vorname")} placeholder="Vorname" error={t("vorname") && !filled(data.vorname) ? "Pflichtfeld" : undefined} />
         <DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => onUpdate("geburtsdatum", (v as string) ?? "")} onBlur={() => onBlur("geburtsdatum")} />
         <FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => onUpdate("geschlecht", v || "")} options={GESCHLECHT} placeholder="Geschlecht wählen" />
       </div>
@@ -59,7 +59,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <FormSelect label="Nationalität" value={data.nationalitaet || null} onChange={v => onUpdate("nationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" />
-        {isSwiss && <TextInput label="Heimatort" value={data.heimatort} onChange={v => onUpdate("heimatort", v)} placeholder="z.B. Bern" />}
+        {isSwiss && <TextInput label="Heimatort" inhaltstyp="heimatort" value={data.heimatort} onChange={v => onUpdate("heimatort", v)} placeholder="z.B. Bern" />}
         {!isSwiss && filled(data.nationalitaet) && (
           <FormSelect label="Aufenthaltsstatus" value={data.aufenthaltsstatus || null} onChange={v => onUpdate("aufenthaltsstatus", v || "")}
             options={[{ value: "B", label: "B" }, { value: "C", label: "C" }, { value: "L", label: "L" }, { value: "G", label: "G" }, { value: "F", label: "F" }, { value: "N", label: "N" }]} placeholder="Status wählen" />
@@ -69,11 +69,11 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
 
       <SectionHeader icon={MapPin} label="Adresse" />
       <div style={{ marginBottom: "var(--space-5)" }}>
-        <TextInput label="Strasse" required value={data.adresseStrasse} onChange={v => onUpdate("adresseStrasse", v)} onBlur={() => onBlur("adresseStrasse")} placeholder="Musterstrasse 12" error={t("adresseStrasse") && !filled(data.adresseStrasse) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Strasse" inhaltstyp="strasse" required value={data.adresseStrasse} onChange={v => onUpdate("adresseStrasse", v)} onBlur={() => onBlur("adresseStrasse")} placeholder="Musterstrasse 12" error={t("adresseStrasse") && !filled(data.adresseStrasse) ? "Pflichtfeld" : undefined} />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="PLZ" required value={data.adressePlz} onChange={v => onUpdate("adressePlz", v.replace(/\D/g, "").slice(0, 4))} onBlur={() => onBlur("adressePlz")} placeholder="8000" />
-        <TextInput label="Ort" required value={data.adresseOrt} onChange={v => onUpdate("adresseOrt", v)} onBlur={() => onBlur("adresseOrt")} placeholder="Zürich" error={t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined} />
+        <TextInput label="PLZ" inhaltstyp="plz" required value={data.adressePlz} onChange={v => onUpdate("adressePlz", v.replace(/\D/g, "").slice(0, 4))} onBlur={() => onBlur("adressePlz")} placeholder="8000" />
+        <TextInput label="Ort" inhaltstyp="ort" required value={data.adresseOrt} onChange={v => onUpdate("adresseOrt", v)} onBlur={() => onBlur("adresseOrt")} placeholder="Zürich" error={t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined} />
       </div>
 
       <SectionHeader icon={Shield} label="Krankenkasse & Aerzte" />
@@ -81,32 +81,32 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
         {/* SP-02: Picklist statt Freitext */}
         <FormSelect label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { const bag = getBagNummer(v || ""); onUpdate("krankenkasse", v || ""); if (bag) setTimeout(() => onUpdate("bagNr", bag), 0); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} />
         {/* SP-03: Kartennummer (umbenannt) */}
-        <TextInput label="Kartennummer" required value={data.kartennummer} onChange={v => onUpdate("kartennummer", v)} onBlur={() => onBlur("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Kartennummer" inhaltstyp="kartennummer" required value={data.kartennummer} onChange={v => onUpdate("kartennummer", v)} onBlur={() => onBlur("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} />
         {/* SP-03: BAG-Nr. */}
-        <TextInput label="BAG-Nr. der Kasse" value={data.bagNr} onChange={v => onUpdate("bagNr", v)} placeholder="z.B. 0271" />
+        <TextInput label="BAG-Nr. der Kasse" inhaltstyp="bagNr" value={data.bagNr} onChange={v => onUpdate("bagNr", v)} placeholder="z.B. 0271" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="Hausarzt Name" required value={data.hausarztName} onChange={v => onUpdate("hausarztName", v)} onBlur={() => onBlur("hausarztName")} placeholder="Dr. Müller" error={t("hausarztName") && !filled(data.hausarztName) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Hausarzt Telefon" value={data.hausarztTelefon} onChange={v => onUpdate("hausarztTelefon", v)} placeholder="+41 44 123 45 67" />
-        <TextInput label="Hausarzt E-Mail" value={data.hausarztEmail} onChange={v => onUpdate("hausarztEmail", v)} placeholder="praxis@example.ch" />
+        <TextInput label="Hausarzt Name" inhaltstyp="freitext" required value={data.hausarztName} onChange={v => onUpdate("hausarztName", v)} onBlur={() => onBlur("hausarztName")} placeholder="Dr. Müller" error={t("hausarztName") && !filled(data.hausarztName) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Hausarzt Telefon" inhaltstyp="telefon" value={data.hausarztTelefon} onChange={v => onUpdate("hausarztTelefon", v)} placeholder="+41 44 123 45 67" />
+        <TextInput label="Hausarzt E-Mail" inhaltstyp="email" value={data.hausarztEmail} onChange={v => onUpdate("hausarztEmail", v)} placeholder="praxis@example.ch" />
       </div>
       <div style={{ marginTop: "var(--space-4)" }}>
-        <TextInput label="Spezialarzt" value={data.spezialAerzte} onChange={v => onUpdate("spezialAerzte", v)} placeholder="Optional — z.B. Kardiologe Dr. Weber" />
+        <TextInput label="Spezialarzt" inhaltstyp="freitext" value={data.spezialAerzte} onChange={v => onUpdate("spezialAerzte", v)} placeholder="Optional — z.B. Kardiologe Dr. Weber" />
       </div>
 
       <SectionHeader icon={Mail} label="Kontaktdaten" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="E-Mail" value={data.email} onChange={v => onUpdate("email", v)} placeholder="Optional" />
-        <TextInput label="Telefon" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="Optional" />
+        <TextInput label="E-Mail" inhaltstyp="email" value={data.email} onChange={v => onUpdate("email", v)} placeholder="Optional" />
+        <TextInput label="Telefon" inhaltstyp="telefon" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="Optional" />
       </div>
 
       <SectionHeader icon={Phone} label="Notfallkontakt" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="Name" required value={data.notfallkontaktName} onChange={v => onUpdate("notfallkontaktName", v)} onBlur={() => onBlur("notfallkontaktName")} placeholder="Kontaktperson" error={t("notfallkontaktName") && !filled(data.notfallkontaktName) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Telefon" required value={data.notfallkontaktTelefon} onChange={v => onUpdate("notfallkontaktTelefon", v)} onBlur={() => onBlur("notfallkontaktTelefon")} placeholder="+41 79 ..." error={t("notfallkontaktTelefon") && !filled(data.notfallkontaktTelefon) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Name" inhaltstyp="nachname" required value={data.notfallkontaktName} onChange={v => onUpdate("notfallkontaktName", v)} onBlur={() => onBlur("notfallkontaktName")} placeholder="Kontaktperson" error={t("notfallkontaktName") && !filled(data.notfallkontaktName) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Telefon" inhaltstyp="telefon" required value={data.notfallkontaktTelefon} onChange={v => onUpdate("notfallkontaktTelefon", v)} onBlur={() => onBlur("notfallkontaktTelefon")} placeholder="+41 79 ..." error={t("notfallkontaktTelefon") && !filled(data.notfallkontaktTelefon) ? "Pflichtfeld" : undefined} />
       </div>
       <div style={{ marginTop: "var(--space-4)" }}>
-        <TextInput label="Beziehung" value={data.notfallkontaktBeziehung} onChange={v => onUpdate("notfallkontaktBeziehung", v)} placeholder="z.B. Ehepartner, Kind, Nachbar" />
+        <TextInput label="Beziehung" inhaltstyp="freitext" value={data.notfallkontaktBeziehung} onChange={v => onUpdate("notfallkontaktBeziehung", v)} placeholder="z.B. Ehepartner, Kind, Nachbar" />
       </div>
     </div>
   );
@@ -125,12 +125,12 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
       </div>
       {data.sozialamtKontakt === "ja" && (
         <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
-          <TextInput label="Kontakt Sozialamt" required value={data.sozialamtKontaktDetail} onChange={v => onUpdate("sozialamtKontaktDetail", v)} onBlur={() => onBlur("sozialamtKontaktDetail")} placeholder="Name und Kontaktangaben" />
+          <TextInput label="Kontakt Sozialamt" inhaltstyp="freitext" required value={data.sozialamtKontaktDetail} onChange={v => onUpdate("sozialamtKontaktDetail", v)} onBlur={() => onBlur("sozialamtKontaktDetail")} placeholder="Name und Kontaktangaben" />
         </div>
       )}
       {data.ivBezug === "ja" && (
         <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
-          <NumberInput label="IV-Bezug" required value={data.ivBezugProzent} onChange={v => onUpdate("ivBezugProzent", v)} suffix="%" placeholder="z.B. 100" />
+          <NumberInput label="IV-Bezug" inhaltstyp="prozent" required value={data.ivBezugProzent} onChange={v => onUpdate("ivBezugProzent", v)} suffix="%" placeholder="z.B. 100" />
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
@@ -159,8 +159,8 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
       <SectionHeader icon={Stethoscope} label="Basisanamnese" first />
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <NumberInput label="Grösse" required value={data.groesse} onChange={v => onUpdate("groesse", v)} suffix="cm" placeholder="170" error={t("groesse") && !filled(data.groesse) ? "Pflichtfeld" : undefined} />
-        <NumberInput label="Gewicht" required value={data.gewicht} onChange={v => onUpdate("gewicht", v)} suffix="kg" placeholder="72" error={t("gewicht") && !filled(data.gewicht) ? "Pflichtfeld" : undefined} />
+        <NumberInput label="Grösse" inhaltstyp="groesse" required value={data.groesse} onChange={v => onUpdate("groesse", v)} suffix="cm" placeholder="170" error={t("groesse") && !filled(data.groesse) ? "Pflichtfeld" : undefined} />
+        <NumberInput label="Gewicht" inhaltstyp="gewicht" required value={data.gewicht} onChange={v => onUpdate("gewicht", v)} suffix="kg" placeholder="72" error={t("gewicht") && !filled(data.gewicht) ? "Pflichtfeld" : undefined} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
@@ -186,7 +186,7 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
       <SectionHeader icon={Home} label="Wohnsituation" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <FormSelect label="Wohnsituation" value={data.wohnsituation || null} onChange={v => onUpdate("wohnsituation", v || "")} options={WOHNSITUATION} placeholder="Bitte wählen" />
-        <TextInput label="Etage" value={data.etage} onChange={v => onUpdate("etage", v)} placeholder="z.B. 2. OG" />
+        <TextInput label="Etage" inhaltstyp="freitext" value={data.etage} onChange={v => onUpdate("etage", v)} placeholder="z.B. 2. OG" />
         <SegmentedControl label="Lift vorhanden" value={data.liftVorhanden} onChange={v => onUpdate("liftVorhanden", v)} options={JA_NEIN} />
         <SegmentedControl label="Treppen" value={data.treppen} onChange={v => onUpdate("treppen", v)} options={JA_NEIN} />
       </div>
@@ -212,7 +212,7 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
         ]} placeholder="Bitte wählen" />
         {data.sturzLetzte12m && data.sturzLetzte12m !== "kein_sturz" && (
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-3)" }}>
-            <NumberInput label="Anzahl Stürze" value={data.sturzAnzahl} onChange={v => onUpdate("sturzAnzahl", v)} placeholder="z.B. 2" />
+            <NumberInput label="Anzahl Stürze" inhaltstyp="anzahl" value={data.sturzAnzahl} onChange={v => onUpdate("sturzAnzahl", v)} placeholder="z.B. 2" />
             <TextareaInput label="Bemerkungen (Umstände, Verletzungen, Ort)" value={data.sturzKommentar} onChange={v => onUpdate("sturzKommentar", v)} placeholder="z.B. Sturz im Bad, Prellung am Arm" />
           </div>
         )}

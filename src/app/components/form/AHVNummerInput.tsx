@@ -46,7 +46,7 @@ export function AHVNummerInput({ label, required, value, onChange, placeholder =
   }, [onChange]);
 
   return (
-    <FormField label={label} required={required} error={error} success={success} hint={!error && !success ? "Format: 756.XXXX.XXXX.XX" : undefined} focused={focused}>
+    <FormField label={label} required={required} error={error} success={success} hint={!error && !success ? "Format: 756.XXXX.XXXX.XX" : undefined} focused={focused} inhaltstyp="ahv">
       <input
         type="text"
         value={value}

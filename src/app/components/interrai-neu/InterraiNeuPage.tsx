@@ -419,8 +419,8 @@ function RawFieldAffordance({
 interface SelectionSurfaceProps {
   selected: boolean;
   onToggle: () => void;
-  minHeight?: number;
-  minWidth?: number;
+  minHeight?: number | string;
+  minWidth?: number | string;
   fullWidth?: boolean;
   children: React.ReactNode;
   disabled?: boolean;
@@ -436,7 +436,7 @@ interface SelectionSurfaceProps {
 function SelectionSurface({
   selected,
   onToggle,
-  minHeight = 44,
+  minHeight = "var(--interrai-option-height)",
   minWidth,
   fullWidth = false,
   children,
@@ -510,8 +510,8 @@ function MatrixCell({
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        minWidth: 34,
-        minHeight: 34,
+        minWidth: "var(--interrai-matrix-size)",
+        minHeight: "var(--interrai-matrix-size)",
         padding: showLabel ? "4px 8px" : "4px",
         background: suggested && !selected
           ? "rgba(71, 174, 209, 0.06)"
@@ -2349,7 +2349,7 @@ function SimpleItemInput({
             <SelectionSurface
               selected={selected}
               onToggle={() => onChange(opt.code)}
-              minHeight={44}
+              minHeight="var(--interrai-option-height)"
               fullWidth
               suggested={isSuggested}
             >
@@ -2467,7 +2467,7 @@ function LongOptionInput({
               <SelectionSurface
                 selected={selected}
                 onToggle={() => onChange(opt.code)}
-                minHeight={44}
+                minHeight="var(--interrai-option-height)"
                 fullWidth
               >
                 <CodeBadge code={opt.code} />
@@ -3022,7 +3022,7 @@ function StackedRenderer({
                       key={opt.code}
                       selected={selected}
                       onToggle={() => onAnswer(sub.code, opt.code)}
-                      minHeight={44}
+                      minHeight="var(--interrai-option-height)"
                       fullWidth
                       suggested={isSuggested}
                     >
@@ -3256,7 +3256,7 @@ function MixedN2Renderer({
                     key={opt.code}
                     selected={selected}
                     onToggle={() => onAnswer(sub.code, opt.code)}
-                    minHeight={44}
+                    minHeight="var(--interrai-option-height)"
                     fullWidth
                     suggested={isSuggested}
                   >
@@ -3494,7 +3494,7 @@ function RepeatFixedRenderer({
                               gap: 6,
                               padding: "6px 12px",
                               borderRadius: 6,
-                              minHeight: 34,
+                              minHeight: "var(--interrai-matrix-size)",
                               background: selected
                                 ? "var(--brand-primary)"
                                 : "var(--bg-elevated)",
@@ -3680,7 +3680,7 @@ function RepeatDynamicRenderer({
                               key={opt.code}
                               selected={selected}
                               onToggle={() => onAnswer(fieldCode, opt.code)}
-                              minHeight={44}
+                              minHeight="var(--interrai-option-height)"
                               fullWidth
                             >
                               <CodeBadge code={opt.code} />

@@ -90,8 +90,8 @@ export function PersonalienFormV2({
       {/* Identität */}
       <SectionHeader icon={User} label="Identität" first />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="Name" required value={data.name} onChange={v => set("name", v)} onBlur={() => touch("name")} placeholder="Nachname" error={touched.name && !filled(data.name) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Vorname" required value={data.vorname} onChange={v => set("vorname", v)} onBlur={() => touch("vorname")} placeholder="Vorname" error={touched.vorname && !filled(data.vorname) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Name" inhaltstyp="nachname" required value={data.name} onChange={v => set("name", v)} onBlur={() => touch("name")} placeholder="Nachname" error={touched.name && !filled(data.name) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Vorname" inhaltstyp="vorname" required value={data.vorname} onChange={v => set("vorname", v)} onBlur={() => touch("vorname")} placeholder="Vorname" error={touched.vorname && !filled(data.vorname) ? "Pflichtfeld" : undefined} />
         <FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => { set("geschlecht", v || ""); touch("geschlecht"); }} options={GESCHLECHT} placeholder="Geschlecht wählen" error={touched.geschlecht && !filled(data.geschlecht) ? "Pflichtfeld" : undefined} />
         <DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => set("geburtsdatum", (v as string) ?? "")} onBlur={() => touch("geburtsdatum")} />
       </div>
@@ -106,7 +106,7 @@ export function PersonalienFormV2({
         }} options={NATIONALITAETEN} placeholder="Nationalität wählen" error={touched.nationalitaet && !filled(data.nationalitaet) ? "Pflichtfeld" : undefined} />
 
         {isSwiss && (
-          <TextInput label="Heimatort" required value={data.heimatort} onChange={v => set("heimatort", v)} onBlur={() => touch("heimatort")} placeholder="z.B. Zürich" error={touched.heimatort && !filled(data.heimatort) ? "Pflichtfeld" : undefined} />
+          <TextInput label="Heimatort" inhaltstyp="heimatort" required value={data.heimatort} onChange={v => set("heimatort", v)} onBlur={() => touch("heimatort")} placeholder="z.B. Zürich" error={touched.heimatort && !filled(data.heimatort) ? "Pflichtfeld" : undefined} />
         )}
         {showAufenthalt && (
           <FormSelect label="Aufenthaltsstatus" required value={data.aufenthaltsstatus || null} onChange={v => {
@@ -126,7 +126,7 @@ export function PersonalienFormV2({
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
             <DateField label="Einreisedatum" required wertFormat="display" bereich="past" value={data.einreisedatum || null} onChange={v => set("einreisedatum", (v as string) ?? "")} onBlur={() => touch("einreisedatum")} />
-            <TextInput label="ZEMIS-Nummer" required value={data.zemisNummer} onChange={v => set("zemisNummer", v)} onBlur={() => touch("zemisNummer")} placeholder="ZEMIS-Nummer" hint="Zentrales Migrationsinformationssystem" error={touched.zemisNummer && !filled(data.zemisNummer) ? "Bitte ausfüllen" : undefined} />
+            <TextInput label="ZEMIS-Nummer" inhaltstyp="zemis" required value={data.zemisNummer} onChange={v => set("zemisNummer", v)} onBlur={() => touch("zemisNummer")} placeholder="ZEMIS-Nummer" hint="Zentrales Migrationsinformationssystem" error={touched.zemisNummer && !filled(data.zemisNummer) ? "Bitte ausfüllen" : undefined} />
             <DateField label="Einreichungsdatum Migrationsamt" required wertFormat="display" bereich="any" value={data.einreichungsdatumMigrationsamt || null} onChange={v => set("einreichungsdatumMigrationsamt", (v as string) ?? "")} onBlur={() => touch("einreichungsdatumMigrationsamt")} />
             <DateField label="Ablaufdatum Bewilligung" wertFormat="display" bereich="any" value={data.bewilligungAblaufdatum || null} onChange={v => set("bewilligungAblaufdatum", (v as string) ?? "")} hint="Optional — bei Eingabe wird 30 Tage vor Ablauf eine Erneuerungs-Pendenz erstellt" />
           </div>
@@ -146,13 +146,13 @@ export function PersonalienFormV2({
       {/* Kontaktdaten */}
       <SectionHeader icon={Mail} label="Kontaktdaten" />
       <div style={{ marginBottom: "var(--space-5)" }}>
-        <TextInput label="Strasse & Nr." required value={data.strasse} onChange={v => set("strasse", v)} onBlur={() => touch("strasse")} placeholder="Musterstrasse 12" error={touched.strasse && !filled(data.strasse) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Strasse & Nr." inhaltstyp="strasse" required value={data.strasse} onChange={v => set("strasse", v)} onBlur={() => touch("strasse")} placeholder="Musterstrasse 12" error={touched.strasse && !filled(data.strasse) ? "Pflichtfeld" : undefined} />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="PLZ" required value={data.plz} onChange={v => set("plz", v.replace(/\D/g, "").slice(0, 4))} onBlur={() => touch("plz")} placeholder="8000" />
-        <TextInput label="Ort" required value={data.ort} onChange={v => set("ort", v)} onBlur={() => touch("ort")} placeholder="Zürich" error={touched.ort && !filled(data.ort) ? "Pflichtfeld" : undefined} />
-        <TextInput label="E-Mail" required value={data.email} onChange={v => set("email", v)} onBlur={() => touch("email")} placeholder="name@example.com" />
-        <TextInput label="Telefon" required value={data.telefon} onChange={v => set("telefon", v)} onBlur={() => touch("telefon")} placeholder="+41 79 123 45 67" />
+        <TextInput label="PLZ" inhaltstyp="plz" required value={data.plz} onChange={v => set("plz", v.replace(/\D/g, "").slice(0, 4))} onBlur={() => touch("plz")} placeholder="8000" />
+        <TextInput label="Ort" inhaltstyp="ort" required value={data.ort} onChange={v => set("ort", v)} onBlur={() => touch("ort")} placeholder="Zürich" error={touched.ort && !filled(data.ort) ? "Pflichtfeld" : undefined} />
+        <TextInput label="E-Mail" inhaltstyp="email" required value={data.email} onChange={v => set("email", v)} onBlur={() => touch("email")} placeholder="name@example.com" />
+        <TextInput label="Telefon" inhaltstyp="telefon" required value={data.telefon} onChange={v => set("telefon", v)} onBlur={() => touch("telefon")} placeholder="+41 79 123 45 67" />
       </div>
 
       {/* Krankenkasse (SP-02, SP-03) */}
@@ -161,9 +161,9 @@ export function PersonalienFormV2({
         {/* SP-02: Picklist statt Freitext */}
         <FormSelect label="Krankenkasse" required value={data.krankenkasseName || null} onChange={v => { const bag = getBagNummer(v || ""); onChange({ ...data, krankenkasseName: v || "", ...(bag ? { bagNr: bag } : {}) }); touch("krankenkasseName"); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={touched.krankenkasseName && !filled(data.krankenkasseName) ? "Pflichtfeld" : undefined} />
         {/* SP-03: Kartennummer (umbenannt von Versicherungsnummer) */}
-        <TextInput label="Kartennummer" required value={data.kartennummer} onChange={v => set("kartennummer", v)} onBlur={() => touch("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={touched.kartennummer && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Kartennummer" inhaltstyp="kartennummer" required value={data.kartennummer} onChange={v => set("kartennummer", v)} onBlur={() => touch("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={touched.kartennummer && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} />
         {/* SP-03: BAG-Nr. (vorbefuellt aus Krankenkasse, manuell ueberschreibbar) */}
-        <TextInput label="BAG-Nr. der Kasse" value={data.bagNr} onChange={v => set("bagNr", v)} placeholder="z.B. 0271" />
+        <TextInput label="BAG-Nr. der Kasse" inhaltstyp="bagNr" value={data.bagNr} onChange={v => set("bagNr", v)} placeholder="z.B. 0271" />
       </div>
 
       {/* Qualifikation */}
@@ -269,9 +269,9 @@ export function SteuerFormV2({
             {tarifOverrideOpen && (
               <div style={{ marginTop: "var(--space-3)", padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
                 <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>Tarifcode abweichend festlegen</div>
-                <TextInput label="Tarifcode" required value={data.quellensteuerTarif} onChange={v => set("quellensteuerTarif", v)} placeholder="z.B. B2Y, A0N, H1Y" />
+                <TextInput label="Tarifcode" inhaltstyp="tarifcode" required value={data.quellensteuerTarif} onChange={v => set("quellensteuerTarif", v)} placeholder="z.B. B2Y, A0N, H1Y" />
                 <div style={{ marginTop: "var(--space-3)" }}>
-                  <TextInput label="Begründung der Abweichung" required value={data.tarifcodeOverrideBegruendung} onChange={v => set("tarifcodeOverrideBegruendung", v)} placeholder="z.B. Grenzgänger Tarif G, gemäss Verfügung Steueramt" hint="Pflichtfeld — wird an die Buchhaltung zur Prüfung weitergeleitet" />
+                  <TextInput label="Begründung der Abweichung" inhaltstyp="freitext" required value={data.tarifcodeOverrideBegruendung} onChange={v => set("tarifcodeOverrideBegruendung", v)} placeholder="z.B. Grenzgänger Tarif G, gemäss Verfügung Steueramt" hint="Pflichtfeld — wird an die Buchhaltung zur Prüfung weitergeleitet" />
                 </div>
                 <div className="flex items-center" style={{ gap: 8, marginTop: "var(--space-3)" }}>
                   <button
@@ -315,7 +315,7 @@ export function SteuerFormV2({
       </div>
       {data.sozialamtInvolviert === "ja" && (
         <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
-          <TextInput label="Sozialamt Kontaktdaten" required value={data.sozialamtKontakt} onChange={v => set("sozialamtKontakt", v)} onBlur={() => touch("sozialamtKontakt")} placeholder="z.B. Sozialamt Zürich, Hr. Müller, 044 123 45 67" hint="Name, Telefon und E-Mail der zuständigen Person" error={touched.sozialamtKontakt && !filled(data.sozialamtKontakt) ? "Pflichtfeld" : undefined} />
+          <TextInput label="Sozialamt Kontaktdaten" inhaltstyp="freitext" required value={data.sozialamtKontakt} onChange={v => set("sozialamtKontakt", v)} onBlur={() => touch("sozialamtKontakt")} placeholder="z.B. Sozialamt Zürich, Hr. Müller, 044 123 45 67" hint="Name, Telefon und E-Mail der zuständigen Person" error={touched.sozialamtKontakt && !filled(data.sozialamtKontakt) ? "Pflichtfeld" : undefined} />
         </div>
       )}
     </div>
@@ -342,8 +342,8 @@ export function AnstellungFormV2({
       <SegmentedControl label="Bereits bei einem anderen Arbeitgeber angestellt?" required value={data.arbeitetExtern} onChange={v => set("arbeitetExtern", v)} options={JA_NEIN} />
       {data.arbeitetExtern === "ja" && (
         <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-          <TextInput label="Funktion extern" required value={data.externeFunktion} onChange={v => set("externeFunktion", v)} onBlur={() => touch("externeFunktion")} placeholder="z.B. Pflegehelferin" error={touched.externeFunktion && !filled(data.externeFunktion) ? "Bitte ausfüllen" : undefined} />
-          <NumberInput label="Pensum extern" required value={data.externesPensumProzent} onChange={v => set("externesPensumProzent", v)} suffix="%" placeholder="50" />
+          <TextInput label="Funktion extern" inhaltstyp="freitext" required value={data.externeFunktion} onChange={v => set("externeFunktion", v)} onBlur={() => touch("externeFunktion")} placeholder="z.B. Pflegehelferin" error={touched.externeFunktion && !filled(data.externeFunktion) ? "Bitte ausfüllen" : undefined} />
+          <NumberInput label="Pensum extern" inhaltstyp="prozent" required value={data.externesPensumProzent} onChange={v => set("externesPensumProzent", v)} suffix="%" placeholder="50" />
           <DateField label="Eintritt extern" required wertFormat="display" bereich="any" value={data.externerEintritt || null} onChange={v => set("externerEintritt", (v as string) ?? "")} onBlur={() => touch("externerEintritt")} />
           <SegmentedControl label="BVG-Anbindung gewünscht?" value={data.bvgAnbindungGewuenscht} onChange={v => set("bvgAnbindungGewuenscht", v)} options={JA_NEIN} />
         </div>
@@ -353,8 +353,8 @@ export function AnstellungFormV2({
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <FormSelect label="Funktion" required value={data.funktion || null} onChange={v => { set("funktion", v || ""); touch("funktion"); }} options={FUNKTIONEN} placeholder="Funktion wählen" error={touched.funktion && !filled(data.funktion) ? "Pflichtfeld" : undefined} />
         <DateField label="Eintrittsdatum" required wertFormat="display" bereich="any" value={data.eintrittsdatum || null} onChange={v => set("eintrittsdatum", (v as string) ?? "")} onBlur={() => touch("eintrittsdatum")} />
-        <NumberInput label="Stundenlohn" required value={data.stundenlohn} onChange={v => set("stundenlohn", v)} suffix="CHF" placeholder="32.00" />
-        <NumberInput label="Ferienanspruch" required value={data.ferienanspruchWochen} onChange={v => set("ferienanspruchWochen", v)} suffix="Wochen" placeholder="5" />
+        <NumberInput label="Stundenlohn" inhaltstyp="stundenlohn" required value={data.stundenlohn} onChange={v => set("stundenlohn", v)} suffix="CHF" placeholder="32.00" />
+        <NumberInput label="Ferienanspruch" inhaltstyp="anzahl" required value={data.ferienanspruchWochen} onChange={v => set("ferienanspruchWochen", v)} suffix="Wochen" placeholder="5" />
         {/* Ferienzuschlag abgeleitet aus Wochen */}
         {parseFloat(data.ferienanspruchWochen) > 0 && (
           <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", alignSelf: "end", paddingBottom: 10 }}>
@@ -374,7 +374,7 @@ export function AnstellungFormV2({
 
       <SectionHeader icon={CreditCard} label="Auszahlung" />
       <div style={{ display: "flex", flexDirection: "column", rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="Bankname" required value={data.bankname} onChange={v => set("bankname", v)} onBlur={() => touch("bankname")} placeholder="z.B. PostFinance, UBS, Raiffeisen" error={touched.bankname && !filled(data.bankname) ? "Pflichtfeld" : undefined} />
+        <TextInput label="Bankname" inhaltstyp="freitext" required value={data.bankname} onChange={v => set("bankname", v)} onBlur={() => touch("bankname")} placeholder="z.B. PostFinance, UBS, Raiffeisen" error={touched.bankname && !filled(data.bankname) ? "Pflichtfeld" : undefined} />
         <IBANInput label="IBAN" required value={data.iban} onChange={v => set("iban", v)} />
       </div>
     </div>
