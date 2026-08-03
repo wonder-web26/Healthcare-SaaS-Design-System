@@ -44,6 +44,9 @@ import { VertragsStep } from "./form/VertragsStep";
 import { EinwilligungProvider } from "./EinwilligungContext";
 import { ArztAnfrageProvider, useArztAnfrage } from "./ArztAnfrageContext";
 import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
+import { fallById, patientRef, angehoerigerRef, patientAnzeigeName, angehoerigerAnzeigeName } from "../../lib/onboarding/faelle";
+import { NotizSpur } from "./notizen/NotizSpur";
+import { type NotizReferenz } from "../../lib/notizen/notizen";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
@@ -365,6 +368,19 @@ export function OnboardingPage() {
   }, [requiresB, wizardSteps.length]);
 
   const activeStepData = wizardSteps.find((s) => s.id === currentStep) ?? wizardSteps[0];
+
+  /* ── Notizspur: Person des aktiven Schritts (aus der geteilten Fall-Quelle).
+     angehoeriger/spezialbewilligung → Angehörige, patient → Patient, vertrag →
+     keiner Einzelperson zugeordnet, daher keine Spur. Ohne Fall (z. B. 001er-
+     Demofälle ohne Kennungen) bleibt die Spur aus. ── */
+  const notizFall = fallById(caseId);
+  const notizPerson: { referenz: NotizReferenz; name: string } | null = (() => {
+    if (!notizFall) return null;
+    const k = activeStepData.key;
+    if (k === "patient") return { referenz: patientRef(notizFall), name: patientAnzeigeName(notizFall) };
+    if (k === "angehoeriger" || k === "spezialbewilligung") return { referenz: angehoerigerRef(notizFall), name: angehoerigerAnzeigeName(notizFall) };
+    return null;
+  })();
 
   const completedCount = completedSteps.size;
   const totalSteps = wizardSteps.length;
@@ -767,6 +783,15 @@ export function OnboardingPage() {
                     <div style={{ marginTop: "var(--space-4)", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
                       Angehörige erhält nach Unterzeichnung einen eigenen Workflow.
                     </div>
+                  </>
+                )}
+
+                {/* ── Abschnitt NOTIZEN: Spur der Person des aktiven Schritts.
+                       Beim Vertragsschritt (keiner Einzelperson zugeordnet) ausgeblendet. ── */}
+                {notizPerson && (
+                  <>
+                    <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "var(--space-4) 0" }} />
+                    <NotizSpur referenz={notizPerson.referenz} personName={notizPerson.name} />
                   </>
                 )}
 

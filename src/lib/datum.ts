@@ -42,6 +42,16 @@ export function formatDatumZeit(d: Date): string {
   return format(d, "dd.MM.yyyy HH:mm");
 }
 
+/** Monat und Jahr ausgeschrieben, z. B. "Februar 2026" (Monatsgruppen-Kopf). */
+export function formatMonatJahr(d: Date): string {
+  return format(d, "MMMM yyyy", { locale: de });
+}
+
+/** Tag und Monat ohne Jahr, z. B. "14.02." (innerhalb einer Monatsgruppe). */
+export function formatTagMonat(d: Date): string {
+  return format(d, "dd.MM.");
+}
+
 /**
  * Relative Fälligkeitsbezeichnung. Wird in diesem Lauf nur bereitgestellt,
  * nicht angewendet.

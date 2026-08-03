@@ -1,58 +1,20 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Plus, Search, AlertTriangle, X, ChevronDown, Check } from "lucide-react";
-import { type OnboardingStatus } from "../../lib/onboarding/status";
+import { Plus, Search, AlertTriangle, X, ChevronDown, Check, Pin } from "lucide-react";
 import { ANZAHL_SCHRITTE, schrittLabel, phaseFuerSchritt, phaseRang, PHASE_LABEL, type OnboardingPhase, ableitenKennzeichen, tageBisStart, istVertragUnterzeichnet } from "../../lib/onboarding/schritte";
 import { isoZuAnzeige } from "../../lib/datum";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
+import { type OnboardingFall as OnboardingCase, onboardingFaelle as cases, patientRef, angehoerigerRef } from "../../lib/onboarding/faelle";
+import { useAlleNotizen } from "../../lib/notizen/store";
+import { angehefteteNotiz } from "../../lib/notizen/notizen";
 
 /* ── Bezugsdatum (Mock-Demo, entspricht der Vorgabe): alle Ableitungen laufen
    gegen diesen Stichtag statt gegen new Date(), damit die Liste deterministisch
    ist. Die reinen Funktionen erhalten ihn als Parameter. ── */
 const BEZUGSDATUM = new Date(2026, 6, 31); // 31.07.2026
 
-/* ── Types ── */
-interface OnboardingCase {
-  id: string;
-  patientVorname: string;
-  patientNachname: string;
-  patientId: string;
-  angehoeriger: string;            // Vorname Nachname
-  /* ── Prozesszustand (neu, Lauf 1) ── */
-  currentStep: number;             // 1..ANZAHL_SCHRITTE
-  pflichtdokErledigt: number;
-  pflichtdokGefordert: number;     // 8, bei Bewilligung B 9 — aus den Daten, nicht aus einer Coderegel
-  pendenzenOffen: number;
-  pendenzenUeberfaellig: number;
-  validFrom: string;               // ISO — geplanter Start
-  responsibleUserId: string | null; // null = nicht zugewiesen
-  /* ── Retain-Felder für die (in Lauf 1 unveränderte) Filterleiste/KPIs.
-     Positional aus dem Alt-Mock übernommen; sie speisen NUR Filter/Kopf,
-     nicht die Spalten dieser Liste. ── */
-  status: OnboardingStatus;
-  offen: number;                   // = pendenzenOffen
-  abrechnungsstopp: boolean;
-  abrechnungsstoppGrund?: string;
-  verantwortlich: string;          // Kurzname für Filter/Spalte
-  verantwortlichInitialen: string;
-  eintrittsdatum: string;
-  letzteAenderung: string;
-  kanton: string;
-}
-
-/* ── Mock data (Bezugsdatum 31.07.2026). Prozessdaten gemäss Vorgabe;
-   Retain-Felder (status/kanton/abrechnungsstopp/…) positional aus dem
-   früheren Mock, damit Filterleiste/KPIs unverändert funktionieren. ── */
-const cases: OnboardingCase[] = [
-  { id: "OB-2026-101", patientNachname: "Steiner", patientVorname: "Hans-Rudolf", patientId: "P-2026-0101", angehoeriger: "Vera Steiner", currentStep: 6, pflichtdokErledigt: 7, pflichtdokGefordert: 8, pendenzenOffen: 3, pendenzenUeberfaellig: 1, validFrom: "2026-07-28", responsibleUserId: "keller", status: "in_bearbeitung", offen: 3, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", eintrittsdatum: "18.02.2026", letzteAenderung: "26.02.2026", kanton: "ZH" },
-  { id: "OB-2026-102", patientNachname: "Hübscher-Wiederkehr", patientVorname: "Marie-Louise", patientId: "P-2026-0102", angehoeriger: "Beatrice Hübscher-Wiederkehr", currentStep: 8, pflichtdokErledigt: 9, pflichtdokGefordert: 9, pendenzenOffen: 1, pendenzenUeberfaellig: 0, validFrom: "2026-08-01", responsibleUserId: "keller", status: "in_bearbeitung", offen: 1, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", eintrittsdatum: "20.02.2026", letzteAenderung: "25.02.2026", kanton: "SG" },
-  { id: "OB-2026-103", patientNachname: "Rexhepi", patientVorname: "Fatmire", patientId: "P-2026-0103", angehoeriger: "Arben Rexhepi", currentStep: 2, pflichtdokErledigt: 4, pflichtdokGefordert: 9, pendenzenOffen: 5, pendenzenUeberfaellig: 2, validFrom: "2026-08-03", responsibleUserId: "weber", status: "in_bearbeitung", offen: 5, abrechnungsstopp: true, abrechnungsstoppGrund: "Spezialbewilligung Migrationsamt noch ausstehend", verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", eintrittsdatum: "10.02.2026", letzteAenderung: "24.02.2026", kanton: "ZH" },
-  { id: "OB-2026-104", patientNachname: "Kaya", patientVorname: "Emine", patientId: "P-2026-0104", angehoeriger: "Yusuf Kaya", currentStep: 7, pflichtdokErledigt: 8, pflichtdokGefordert: 8, pendenzenOffen: 1, pendenzenUeberfaellig: 0, validFrom: "2026-08-06", responsibleUserId: "weber", status: "in_bearbeitung", offen: 1, abrechnungsstopp: true, abrechnungsstoppGrund: "Kritische Gesundheitslage – ärztliche Freigabe ausstehend", verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", eintrittsdatum: "05.02.2026", letzteAenderung: "23.02.2026", kanton: "BE" },
-  { id: "OB-2026-105", patientNachname: "Huber", patientVorname: "Fritz", patientId: "P-2026-0105", angehoeriger: "Erika Huber", currentStep: 4, pflichtdokErledigt: 8, pflichtdokGefordert: 8, pendenzenOffen: 2, pendenzenUeberfaellig: 0, validFrom: "2026-08-07", responsibleUserId: "keller", status: "neu", offen: 2, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", eintrittsdatum: "24.02.2026", letzteAenderung: "27.02.2026", kanton: "AG" },
-  { id: "OB-2026-106", patientNachname: "Da Silva", patientVorname: "Joaquim", patientId: "P-2026-0106", angehoeriger: "Marta Da Silva", currentStep: 1, pflichtdokErledigt: 2, pflichtdokGefordert: 8, pendenzenOffen: 4, pendenzenUeberfaellig: 1, validFrom: "2026-08-10", responsibleUserId: null, status: "in_bearbeitung", offen: 4, abrechnungsstopp: false, verantwortlich: "Nicht zugewiesen", verantwortlichInitialen: "", eintrittsdatum: "15.02.2026", letzteAenderung: "26.02.2026", kanton: "LU" },
-  { id: "OB-2026-107", patientNachname: "Bösiger", patientVorname: "Anna", patientId: "P-2026-0107", angehoeriger: "Heidi Bösiger", currentStep: 5, pflichtdokErledigt: 8, pflichtdokGefordert: 8, pendenzenOffen: 0, pendenzenUeberfaellig: 0, validFrom: "2026-08-12", responsibleUserId: "keller", status: "neu", offen: 0, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", eintrittsdatum: "26.02.2026", letzteAenderung: "27.02.2026", kanton: "ZH" },
-  { id: "OB-2026-108", patientNachname: "Ferrari", patientVorname: "Gino", patientId: "P-2026-0108", angehoeriger: "Lucia Ferrari", currentStep: 1, pflichtdokErledigt: 3, pflichtdokGefordert: 8, pendenzenOffen: 2, pendenzenUeberfaellig: 0, validFrom: "2026-08-17", responsibleUserId: "ott", status: "abgeschlossen", offen: 2, abrechnungsstopp: false, verantwortlich: "Robert Ott", verantwortlichInitialen: "RO", eintrittsdatum: "12.02.2026", letzteAenderung: "27.02.2026", kanton: "ZH" },
-];
+/* Fälle + OnboardingCase-Typ liegen jetzt in lib/onboarding/faelle.ts (geteilte
+   Quelle für Liste und Assistent). Hier nur noch importiert (siehe oben). */
 
 /* ── Zugehörigkeit (Segmentumschalter, genau eine Auswahl) ──
    "Meine" = Mandate der angemeldeten Benutzerin. Ohne echte Benutzer-ID im
@@ -172,6 +134,12 @@ function AuswahlDropdown({ label, optionen, ausgewaehlt, onToggle }: {
 
 export function OnboardingListPage() {
   const navigate = useNavigate();
+  const alleNotizen = useAlleNotizen();
+  // Kleines Symbol, wenn die Person eine angeheftete Notiz trägt. Zeilenhöhe
+  // bleibt unverändert (Inline-Icon 12px); Inhalt erscheint bei Auswahl der Zeile.
+  const notizPin = (ref: ReturnType<typeof patientRef>) => angehefteteNotiz(alleNotizen, ref)
+    ? <Pin role="img" aria-label="Angeheftete Notiz vorhanden" style={{ width: 12, height: 12, color: "var(--text-tertiary)", flexShrink: 0, marginLeft: 6, verticalAlign: "middle" }} />
+    : null;
   const [filter, setFilter] = useState<FilterZustand>(LEERER_FILTER);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "start", dir: "asc" });
   const toggleSort = (key: SortKey) => setSort(s => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
@@ -227,7 +195,7 @@ export function OnboardingListPage() {
 
   const onboardingKarteTitel = (c: OnboardingCase) => (
     <>
-      <span style={{ fontSize: "0.9375rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span>
+      <span style={{ fontSize: "0.9375rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}{notizPin(patientRef(c))}</span>
       {kennzeichenIcon(c)}
     </>
   );
@@ -235,9 +203,9 @@ export function OnboardingListPage() {
   const onboardingSpalten: SpalteDef<OnboardingCase>[] = [
     { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", ausKarte: true, render: kennzeichenIcon },
     { id: "patient", label: "Patient", anteil: 20, minCh: 22, align: "left", sortierbar: true, ausKarte: true,
-      render: c => <span style={{ fontSize: "0.8125rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span> },
+      render: c => <span style={{ fontSize: "0.8125rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}{notizPin(patientRef(c))}</span> },
     { id: "angehoeriger", label: "Angehörige/r", anteil: 17, minCh: 20, align: "left", zweitzeileUnter: "patient", ausKarte: true,
-      render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.angehoeriger}</span> },
+      render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.angehoeriger}{notizPin(angehoerigerRef(c))}</span> },
     { id: "phase", label: "Phase", anteil: 7, minCh: 11, align: "left", sortierbar: true, ausblendenUnter: "eng", ausKarte: true,
       render: c => <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{PHASE_LABEL[phaseFuerSchritt(c.currentStep)]}</span> },
     { id: "schritt", label: "Aktueller Schritt", anteil: 16, minCh: 24, align: "left",
