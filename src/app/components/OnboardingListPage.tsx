@@ -6,6 +6,7 @@ import type { UserRole } from "../../types/user";
 import { type OnboardingStatus, ONBOARDING_STATUS_CFG } from "../../lib/onboarding/status";
 import { ANZAHL_SCHRITTE, schrittLabel, phaseFuerSchritt, phaseRang, PHASE_LABEL, ableitenKennzeichen, tageBisStart, istVertragUnterzeichnet } from "../../lib/onboarding/schritte";
 import { isoZuAnzeige } from "../../lib/datum";
+import { DataTable, type SpalteDef } from "./ui/DataTable";
 
 /* ── Bezugsdatum (Mock-Demo, entspricht der Vorgabe): alle Ableitungen laufen
    gegen diesen Stichtag statt gegen new Date(), damit die Liste deterministisch
@@ -186,6 +187,61 @@ export function OnboardingListPage() {
     return counts;
   }, []);
 
+
+  /* ── Spaltenbeschreibung für die geteilte DataTable (Anteile/Mindestbreiten/
+     Ausrichtung an der Aufrufstelle; die Komponente kennt keine Fachspalten). ── */
+  const kz = (c: OnboardingCase) => ableitenKennzeichen({ currentStep: c.currentStep, validFrom: c.validFrom, pendenzenUeberfaellig: c.pendenzenUeberfaellig }, BEZUGSDATUM);
+
+  const onboardingZeilenHintergrund = (c: OnboardingCase): string | undefined => {
+    const t = kz(c).typ;
+    // Korrektur #2: Zeilentönung folgt der Schwere — Rot deutlich kräftiger als Gelb.
+    return t === "rot" ? "color-mix(in srgb, var(--status-danger-bg), transparent 40%)"
+      : t === "gelb" ? "color-mix(in srgb, var(--status-warning-bg), transparent 68%)"
+      : undefined;
+  };
+
+  const kennzeichenIcon = (c: OnboardingCase) => {
+    const k = kz(c);
+    if (!k.typ) return null;
+    // Form-Unterschied unabhängig von Farbe: Rot gefüllt, Gelb offen.
+    return <AlertTriangle role="img" aria-label={k.grund} style={{ width: 15, height: 15, flexShrink: 0, color: k.typ === "rot" ? "var(--status-danger)" : "var(--status-warning)", fill: k.typ === "rot" ? "var(--status-danger)" : "none" }} />;
+  };
+
+  const onboardingKarteTitel = (c: OnboardingCase) => (
+    <>
+      <span style={{ fontSize: "0.9375rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span>
+      {kennzeichenIcon(c)}
+    </>
+  );
+
+  const onboardingSpalten: SpalteDef<OnboardingCase>[] = [
+    { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", ausKarte: true, render: kennzeichenIcon },
+    { id: "patient", label: "Patient", anteil: 18, minCh: 20, align: "left", sortierbar: true, ausKarte: true,
+      render: c => <span style={{ fontSize: "0.8125rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span> },
+    { id: "angehoeriger", label: "Angehörige/r", anteil: 15, minCh: 18, align: "left", zweitzeileUnter: "patient", ausKarte: true,
+      render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.angehoeriger}</span> },
+    { id: "phase", label: "Phase", anteil: 8, minCh: 10, align: "left", sortierbar: true, ausblendenUnter: "eng", ausKarte: true,
+      render: c => <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{PHASE_LABEL[phaseFuerSchritt(c.currentStep)]}</span> },
+    { id: "schritt", label: "Aktueller Schritt", anteil: 22, minCh: 24, align: "left",
+      render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}><span style={{ fontFamily: "monospace", color: "var(--text-tertiary)", marginRight: 6 }}>{c.currentStep}/{ANZAHL_SCHRITTE}</span>{schrittLabel(c.currentStep)}</span> },
+    { id: "pflichtdok", label: "Pflichtdok.", anteil: 9, minCh: 9, align: "left",
+      // Korrektur #5: Balken entfällt — bei 40px war 7/8 vs 8/8 nicht auf einen Blick
+      // unterscheidbar; der Bruch ist das eindeutige Signal, vollständig zusätzlich farblich.
+      render: c => { const voll = c.pflichtdokErledigt === c.pflichtdokGefordert; return <span style={{ fontFamily: "monospace", fontSize: "0.8125rem", color: voll ? "var(--status-success-text)" : "var(--text-primary)", fontWeight: voll ? "var(--weight-medium)" : "var(--weight-regular)" }}>{c.pflichtdokErledigt}/{c.pflichtdokGefordert}</span>; } },
+    { id: "pendenzen", label: "Pendenzen", anteil: 7, minCh: 7, align: "right", sortierbar: true,
+      // Korrektur #3: kein "offen" in der Zelle — nur die Zahl (rechtsbündig, tabellarisch),
+      // der überfällige Anteil abgesetzt dahinter. 0 = stiller Leerwert.
+      render: c => c.pendenzenOffen === 0
+        ? <span style={{ fontSize: "0.8125rem", color: "var(--text-tertiary)" }}>–</span>
+        : <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{c.pendenzenOffen}{c.pendenzenUeberfaellig > 0 && <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500 }}>· {c.pendenzenUeberfaellig} überfällig</span>}</span> },
+    { id: "start", label: "Start geplant", anteil: 12, minCh: 16, align: "left", sortierbar: true,
+      render: c => { const t = tageBisStart(c.validFrom, BEZUGSDATUM); const k = kz(c); return <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{isoZuAnzeige(c.validFrom)}{t < 0 && !istVertragUnterzeichnet(c.currentStep) && <span style={{ marginLeft: 8, color: "var(--status-danger)", fontWeight: 500, fontSize: "0.75rem" }}>{Math.abs(t)} {Math.abs(t) === 1 ? "Tag" : "Tage"} überschritten</span>}{k.typ === "gelb" && k.spalte === "start" && <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500, fontSize: "0.75rem" }}>{k.grund}</span>}</span>; } },
+    { id: "verantwortlich", label: "Verantwortlich", anteil: 9, minCh: 12, align: "left",
+      render: c => { const resp = c.responsibleUserId ? RESPONSIBLE[c.responsibleUserId] : null; return resp
+        ? <div className="flex items-center" style={{ gap: 6 }}><span className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}><span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{resp.initialen}</span></span><span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{resp.kurz}</span></div>
+        : <button type="button" onClick={e => { e.stopPropagation(); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "0.75rem", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit" }}><Plus style={{ width: 12, height: 12 }} /> Zuweisen</button>; } },
+  ];
+
   const viewOrder = getViewOrder(role);
 
   return (
@@ -308,141 +364,18 @@ export function OnboardingListPage() {
          TABLE
          ═══════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto ob-list-pad" style={{ paddingTop: 0, paddingBottom: "var(--space-4)" }}>
-        <div style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", overflow: "hidden" }}>
-          <div className="overflow-x-auto">
-            <table style={{ width: "100%", minWidth: 1000, borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
-              <thead>
-                <tr style={{ background: "var(--bg-secondary)" }}>
-                  {([
-                    { label: "", key: null },
-                    { label: "Patient", key: "patient" },
-                    { label: "Angehörige/r", key: null },
-                    { label: "Phase", key: "phase" },
-                    { label: "Aktueller Schritt", key: null },
-                    { label: "Pflichtdok.", key: null },
-                    { label: "Pendenzen", key: "pendenzen" },
-                    { label: "Start geplant", key: "start" },
-                    { label: "Verantwortlich", key: null },
-                  ] as { label: string; key: SortKey | null }[]).map((col, i) => {
-                    const active = col.key != null && sort.key === col.key;
-                    return (
-                      <th key={i} scope="col"
-                        aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
-                        onClick={col.key ? () => toggleSort(col.key!) : undefined}
-                        style={{ padding: "8px 12px", textAlign: "left", cursor: col.key ? "pointer" : "default", userSelect: "none", whiteSpace: "nowrap" }}>
-                        <span style={{ fontSize: "var(--text-meta)", color: active ? "var(--text-primary)" : "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, fontWeight: "var(--weight-medium)" }}>
-                          {col.label}
-                          {active && <span aria-hidden="true" style={{ marginLeft: 4 }}>{sort.dir === "asc" ? "↑" : "↓"}</span>}
-                        </span>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.length === 0 ? (
-                  <tr><td colSpan={9} style={{ padding: "48px 16px", textAlign: "center", fontSize: "var(--text-body)", color: "var(--text-tertiary)" }}>Keine Ergebnisse fuer diesen Filter.</td></tr>
-                ) : sorted.map(c => {
-                  const k = ableitenKennzeichen({ currentStep: c.currentStep, validFrom: c.validFrom, pendenzenUeberfaellig: c.pendenzenUeberfaellig }, BEZUGSDATUM);
-                  const tage = tageBisStart(c.validFrom, BEZUGSDATUM);
-                  const phaseLabel = PHASE_LABEL[phaseFuerSchritt(c.currentStep)];
-                  const resp = c.responsibleUserId ? RESPONSIBLE[c.responsibleUserId] : null;
-                  const dokVoll = c.pflichtdokErledigt === c.pflichtdokGefordert;
-                  const rowBg = k.typ === "rot" ? "color-mix(in srgb, var(--status-danger-bg), transparent 62%)"
-                    : k.typ === "gelb" ? "color-mix(in srgb, var(--status-warning-bg), transparent 55%)"
-                    : "transparent";
-                  return (
-                    <tr key={c.id} onClick={() => navigate(`/onboarding/${c.id}`)} className="cursor-pointer"
-                      style={{ borderTop: "var(--border-thin) solid var(--border-default)", background: rowBg }}
-                      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
-                      onMouseLeave={e => e.currentTarget.style.background = rowBg}>
-                      {/* Kennzeichen: Form (Dreieck), rot gefuellt / gelb offen; Grund als a11y-Label */}
-                      <td style={{ padding: "8px 10px", width: 34 }}>
-                        {k.typ && (
-                          <AlertTriangle role="img" aria-label={k.grund}
-                            style={{ width: 15, height: 15, color: k.typ === "rot" ? "var(--status-danger)" : "var(--status-warning)", fill: k.typ === "rot" ? "var(--status-danger-bg)" : "none" }} />
-                        )}
-                      </td>
-                      {/* Patient: Nachname, Vorname; kein Avatar; Umbruch statt Kuerzen */}
-                      <td style={{ padding: "8px 12px" }}>
-                        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span>
-                      </td>
-                      {/* Angehoerige/r */}
-                      <td style={{ padding: "8px 12px" }}>
-                        <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.angehoeriger}</span>
-                      </td>
-                      {/* Phase: stille Kennzeichnung (keine Pille) */}
-                      <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
-                        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{phaseLabel}</span>
-                      </td>
-                      {/* Aktueller Schritt: Position (aus ANZAHL_SCHRITTE) als Praefix, dann Bezeichnung */}
-                      <td style={{ padding: "8px 12px" }}>
-                        <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
-                          <span style={{ fontFamily: "monospace", color: "var(--text-tertiary)", marginRight: 6 }}>{c.currentStep}/{ANZAHL_SCHRITTE}</span>
-                          {schrittLabel(c.currentStep)}
-                        </span>
-                      </td>
-                      {/* Pflichtdok: erledigt/gefordert + schmaler Balken */}
-                      <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
-                        <div className="flex items-center" style={{ gap: 8 }}>
-                          <span style={{ fontFamily: "monospace", fontSize: "var(--text-small)", color: dokVoll ? "var(--status-success-text)" : "var(--text-primary)", fontWeight: dokVoll ? "var(--weight-medium)" : "var(--weight-regular)" }}>{c.pflichtdokErledigt}/{c.pflichtdokGefordert}</span>
-                          <span aria-hidden="true" style={{ display: "inline-block", width: 40, height: 4, borderRadius: 2, background: "var(--bg-secondary)", overflow: "hidden", flexShrink: 0 }}>
-                            <span style={{ display: "block", height: "100%", width: `${Math.round(100 * c.pflichtdokErledigt / c.pflichtdokGefordert)}%`, background: dokVoll ? "var(--status-success)" : "var(--text-tertiary)" }} />
-                          </span>
-                        </div>
-                      </td>
-                      {/* Pendenzen: offen; ueberfaellige abgesetzt (500); 0 = stiller Leerwert */}
-                      <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
-                        {c.pendenzenOffen === 0 ? (
-                          <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>&ndash;</span>
-                        ) : (
-                          <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
-                            {c.pendenzenOffen} offen
-                            {c.pendenzenUeberfaellig > 0 && (
-                              <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500 }}>&middot; {c.pendenzenUeberfaellig} ueberfaellig</span>
-                            )}
-                          </span>
-                        )}
-                      </td>
-                      {/* Start geplant: Datum (Datums-Schicht); bei Ueberschreitung Tage (rot, 500) oder gelber Start-Grund (500) */}
-                      <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
-                        <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{isoZuAnzeige(c.validFrom)}</span>
-                        {tage < 0 && !istVertragUnterzeichnet(c.currentStep) && (
-                          <span style={{ marginLeft: 8, color: "var(--status-danger)", fontWeight: 500, fontSize: "var(--text-meta)" }}>{Math.abs(tage)} {Math.abs(tage) === 1 ? "Tag" : "Tage"} ueberschritten</span>
-                        )}
-                        {k.typ === "gelb" && k.spalte === "start" && (
-                          <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500, fontSize: "var(--text-meta)" }}>{k.grund}</span>
-                        )}
-                      </td>
-                      {/* Verantwortlich: Initialen + Kurzname, sonst Zuweisen-Aktion */}
-                      <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
-                        {resp ? (
-                          <div className="flex items-center" style={{ gap: 6 }}>
-                            <span className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
-                              <span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{resp.initialen}</span>
-                            </span>
-                            <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{resp.kurz}</span>
-                          </div>
-                        ) : (
-                          <button type="button" onClick={e => { e.stopPropagation(); }}
-                            className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit" }}>
-                            <Plus style={{ width: 12, height: 12 }} /> Zuweisen
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {filtered.length > 0 && (
-            <div className="flex items-center justify-between" style={{ padding: "8px 16px", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-              <span>{filtered.length} von {cases.length} offene Mandate</span>
-              <span>Stand: {isoZuAnzeige("2026-07-31")}</span>
-            </div>
-          )}
-        </div>
+        <DataTable<OnboardingCase>
+          spalten={onboardingSpalten}
+          zeilen={sorted}
+          zeilenKey={c => c.id}
+          onZeileKlick={c => navigate(`/onboarding/${c.id}`)}
+          zeilenHintergrund={onboardingZeilenHintergrund}
+          sort={sort}
+          onSort={k => toggleSort(k as SortKey)}
+          karteTitel={onboardingKarteTitel}
+          fusszeile={<><span>{filtered.length} von {cases.length} offenen Mandaten</span><span>Stand: {isoZuAnzeige("2026-07-31")}</span></>}
+          leerText="Keine Ergebnisse für diesen Filter."
+        />
       </div>
     </div>
   );

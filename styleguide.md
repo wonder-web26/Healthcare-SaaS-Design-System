@@ -1170,5 +1170,53 @@ Auf Tablet und Desktop wird die klassische Tabelle angezeigt:
 
 ---
 
+## 15 · Listentabellen
+
+Geteilte, responsive Listentabelle: `components/ui/DataTable.tsx`. Sie kennt keine
+Fachlogik – sie bekommt je Spalte eine Beschreibung (Kennung, Beschriftung, Anteil,
+Mindestbreite, Ausrichtung, Ausblende-Haltepunkt, Sortierbarkeit) und eine render-Funktion.
+Fachliche Regeln (Kennzeichen, Zeilentönung, Feldnamen) leben ausschliesslich an der
+Aufrufstelle. Erste Verwendung: Onboarding-Liste.
+
+### Grundsatz: fluid ist der Rahmen, nicht der Inhalt
+
+- **Inhaltsbreite:** Der Inhaltsbereich wächst fluid bis **1600px** und wird darüber
+  zentriert (darüber wächst nur Leerfläche, kein Inhalt). Die Seiten-Polsterung skaliert
+  separat (`--mobile-page-padding` → `--space-6` ab 640px).
+- **Spaltenbreiten:** Anteile (Prozent bzw. `fr`-Gewicht) setzen die Proportion,
+  Mindestbreiten in `ch` sichern die Lesbarkeit. Umgesetzt als CSS-Grid
+  `minmax(<minCh>ch, <anteil>fr)`. Feste Pixel **nur** wo physisch bedeutsam
+  (Kennzeichen-Spalte, Klickflächen, Haarlinien).
+- **Einheiten:** Schrift und Abstände in `rem` (folgen der Systemschriftgrösse).
+  Klickflächen und Haarlinien in festen `px`.
+
+### Haltepunkte (Fensterbreite)
+
+Verbindlich, an einer Stelle definiert: `TABELLE_LAYOUT.haltepunktePx` in `DataTable.tsx`.
+
+| Bereich | Verhalten |
+|---|---|
+| ≥ 1400px | alle Spalten nebeneinander |
+| 1100 – 1400px | als Zweitzeile markierte Spalte rutscht unter ihre Leitspalte |
+| 900 – 1100px | zusätzlich entfallen die als „eng" markierten Spalten |
+| < 900px | Kartendarstellung statt Tabelle, **kein** horizontales Scrollen |
+
+Diese Tabellen-Haltepunkte sind bewusst grösser als die allgemeinen App-Breakpoints
+(640/1024/1280): eine breite Datentabelle bricht früher, weil sie mehr Spaltenbreite
+braucht als ein Formular oder eine Card-Fläche.
+
+### Kartendarstellung (< 900px)
+
+Kopf: die als `ausKarte` markierten Spalten (z. B. Name + Kennzeichen). Körper: die
+übrigen Spalten als beschriftete Wertepaare in einem zweispaltigen Raster. Nie horizontal
+scrollen.
+
+### Einzige Stelle für Layoutwerte
+
+Inhaltsbreite und Haltepunkte stehen ausschliesslich in `TABELLE_LAYOUT` (`DataTable.tsx`).
+Nicht an der Aufrufstelle duplizieren.
+
+---
+
 Letzte Aktualisierung: Juni 2026
 Version: 1.2
