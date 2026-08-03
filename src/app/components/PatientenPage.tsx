@@ -13,6 +13,7 @@ import {
   patients as initialPatients,
   type Patient,
 } from "./patientData";
+import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
 import { StatusModal } from "./StatusModal";
 import { PflegefachkraftSidebar, type Caregiver } from "./PflegefachkraftSidebar";
 import { useCurrentRole } from "../auth";
@@ -81,6 +82,21 @@ function buildFilterDefs(patients: Patient[]): FilterDef[] {
 /* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
+
+type SortKey = "name" | "schweregrad" | "reassessment" | "tasks";
+const SCHWEREGRAD_RANK: Record<string, number> = { leicht: 0, mittel: 1, schwer: 2, kritisch: 3 };
+function sortPatients(list: Patient[], key: SortKey, dir: "asc" | "desc"): Patient[] {
+  const f = dir === "asc" ? 1 : -1;
+  return [...list].sort((a, b) => {
+    switch (key) {
+      case "name": return f * (a.nachname.localeCompare(b.nachname, "de") || a.vorname.localeCompare(b.vorname, "de"));
+      case "schweregrad": return f * ((SCHWEREGRAD_RANK[a.schweregrad] ?? 0) - (SCHWEREGRAD_RANK[b.schweregrad] ?? 0));
+      case "reassessment": return f * ((a.reAssessmentTage ?? Infinity) - (b.reAssessmentTage ?? Infinity));
+      case "tasks": return f * (a.offeneActionTasks - b.offeneActionTasks);
+      default: return 0;
+    }
+  });
+}
 
 export function PatientenPage() {
   const navigate = useNavigate();
@@ -205,6 +221,71 @@ export function PatientenPage() {
     updateChipFilter(filterId, next);
   };
 
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
+  const toggleSort = (key: string) => setSort(s => s?.key === key ? { key: key as SortKey, dir: s.dir === "asc" ? "desc" : "asc" } : { key: key as SortKey, dir: "asc" });
+  const sorted = useMemo(() => sort ? sortPatients(filtered, sort.key, sort.dir) : filtered, [filtered, sort]);
+
+  const inhaltRahmen = { maxWidth: TABELLE_LAYOUT.inhaltMaxPx, margin: "0 auto", width: "100%" } as const;
+
+  const nameZelle = (p: Patient) => {
+    const isUn = p.pflegefachkraft === "—";
+    return (
+      <div className="flex items-center" style={{ gap: 8 }}>
+        <div className="shrink-0 flex items-center justify-center" style={{ width: 28, height: 28, borderRadius: "var(--radius-card)", background: isUn ? "var(--status-warning-bg)" : "var(--brand-primary-light)" }}>
+          <span style={{ fontSize: 10, fontWeight: "var(--weight-semibold)", color: isUn ? "var(--status-warning-text)" : "var(--brand-primary)" }}>{p.vorname[0]}{p.nachname[0]}</span>
+        </div>
+        <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{p.nachname}, {p.vorname}</span>
+      </div>
+    );
+  };
+
+  /* ── Spaltenbeschreibung für die geteilte DataTable (Anteile/Mindestbreiten an
+     der Aufrufstelle; Zahlen rechtsbündig/tabellarisch). Inhalte unverändert. ── */
+  const patientSpalten: SpalteDef<Patient>[] = [
+    { id: "name", label: "Name", anteil: 18, minCh: 24, align: "left", sortierbar: true, ausKarte: true, render: nameZelle },
+    { id: "angehoeriger", label: "Angehöriger", anteil: 15, minCh: 22, align: "left", zweitzeileUnter: "name",
+      render: p => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{p.angehoeriger.split(" (")[0]}</span> },
+    { id: "status", label: "Status", anteil: 9, minCh: 13, align: "left",
+      render: p => { const st = STATUS_STYLE[p.status] || STATUS_STYLE.aktiv; return (
+        <button onClick={e => { e.stopPropagation(); setStatusModal({ open: true, patient: p }); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: st.bg, color: st.color, border: "none", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+          <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: st.dot }} />{st.label}
+        </button>); } },
+    { id: "schweregrad", label: "Schweregrad", anteil: 7, minCh: 9, align: "left", sortierbar: true,
+      render: p => { const sg = SCHWEREGRAD_STYLE[p.schweregrad] || SCHWEREGRAD_STYLE.leicht; return <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: sg.bg, color: sg.color, whiteSpace: "nowrap" }}>{sg.label}</span>; } },
+    { id: "pflegefachkraft", label: "Pflegefachkraft", anteil: 11, minCh: 15, align: "left",
+      render: p => { const isUn = p.pflegefachkraft === "—"; return (
+        <button onClick={e => { e.stopPropagation(); setAssignSidebar({ open: true, patient: p }); }} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors" style={{ gap: 6, padding: "3px 8px", borderRadius: "var(--radius-card)", background: "transparent", border: "none", fontSize: "var(--text-small)", color: isUn ? "var(--status-warning-text)" : "var(--text-primary)", fontWeight: isUn ? "var(--weight-medium)" : "var(--weight-regular)", fontFamily: "inherit", whiteSpace: "nowrap" }} onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+          {isUn ? (<><AlertTriangle style={{ width: 12, height: 12, color: "var(--status-warning)" }} /> Nicht zugewiesen</>) : (<><div className="shrink-0 flex items-center justify-center" style={{ width: 20, height: 20, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}><span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{p.pflegefachkraftInitialen}</span></div>{p.pflegefachkraft}</>)}
+        </button>); } },
+    { id: "prozessstatus", label: "Prozessstatus", anteil: 16, minCh: 20, align: "left", ausblendenUnter: "eng",
+      render: p => p.prozessStatus ? (
+        <div>
+          <div className="flex items-center" style={{ gap: 4 }}>
+            {p.prozessStatus.ueberfaellig ? <AlertTriangle style={{ width: 12, height: 12, color: "var(--status-danger)", flexShrink: 0 }} /> : <Clock style={{ width: 12, height: 12, color: "var(--text-tertiary)", flexShrink: 0 }} />}
+            <span style={{ fontSize: "var(--text-small)", color: p.prozessStatus.ueberfaellig ? "var(--status-danger)" : "var(--text-primary)", fontWeight: p.prozessStatus.ueberfaellig ? "var(--weight-medium)" : "var(--weight-regular)", overflowWrap: "anywhere" }}>{p.prozessStatus.naechsteAufgabe}</span>
+          </div>
+          <div style={{ fontSize: "var(--text-micro)", marginLeft: 16, color: p.prozessStatus.ueberfaellig ? "var(--status-danger)" : "var(--text-tertiary)" }}>{p.prozessStatus.ueberfaellig ? "Überfällig · " : "Fällig "}{p.prozessStatus.faelligDatum}</div>
+        </div>
+      ) : (
+        <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", color: "var(--status-success-text)", fontWeight: "var(--weight-medium)" }}><CheckCircle2 style={{ width: 12, height: 12 }} /> Aktuell</span>
+      ) },
+    { id: "reassessment", label: "Re-Assessment", anteil: 8, minCh: 11, align: "right", sortierbar: true,
+      render: p => p.reAssessmentTage !== null ? (
+        <div className="flex items-center justify-end" style={{ gap: 6 }}>
+          <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-semibold)", fontVariantNumeric: "tabular-nums", color: p.reAssessmentTage <= 14 ? "var(--status-danger)" : p.reAssessmentTage <= 30 ? "var(--status-warning-text)" : "var(--text-primary)" }}>{p.reAssessmentTage}d</span>
+          <div style={{ width: 48, height: 6, background: "var(--bg-secondary)", borderRadius: "var(--radius-pill)", overflow: "hidden", flexShrink: 0 }}>
+            <div style={{ height: "100%", borderRadius: "var(--radius-pill)", width: `${Math.max(5, Math.min(100, ((90 - p.reAssessmentTage) / 90) * 100))}%`, background: p.reAssessmentTage <= 14 ? "var(--status-danger)" : p.reAssessmentTage <= 30 ? "var(--status-warning)" : "var(--status-success)" }} />
+          </div>
+        </div>
+      ) : <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>—</span> },
+    { id: "tasks", label: "Tasks", anteil: 6, minCh: 7, align: "right", sortierbar: true,
+      render: p => p.offeneActionTasks > 0 ? (
+        <span className="inline-flex items-center justify-center" style={{ minWidth: 22, height: 22, borderRadius: "var(--radius-card)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-semibold)", fontVariantNumeric: "tabular-nums" }}>{p.offeneActionTasks}</span>
+      ) : <CheckCircle2 style={{ width: 16, height: 16, color: "var(--status-success)" }} /> },
+    { id: "aktivitaet", label: "Aktivität", anteil: 10, minCh: 12, align: "left",
+      render: p => <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{p.letzteAktivitaet}</span> },
+  ];
+
   return (
     <>
       <div className="flex flex-col h-full min-h-0">
@@ -212,6 +293,7 @@ export function PatientenPage() {
            HEADER
            ═══════════════════════════════════════ */}
         <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0" }}>
+          <div style={inhaltRahmen}>
           {/* Title row */}
           <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
             <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>
@@ -379,199 +461,24 @@ export function PatientenPage() {
               );
             })}
           </div>
+          </div>
         </div>
 
         {/* ═══════════════════════════════════════
            TABLE
            ═══════════════════════════════════════ */}
         <div className="flex-1 overflow-y-auto" style={{ padding: "0 var(--space-6) var(--space-4)" }}>
-          <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", minWidth: 1000, borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: "var(--bg-secondary)" }}>
-                    {["Name", "Angehöriger", "Status", "Schweregrad", "Pflegefachkraft", "Prozessstatus", "Re-Assessment", "Tasks", "Aktivität"].map(col => (
-                      <th key={col} style={{ padding: "8px 12px", textAlign: "left" }}>
-                        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>
-                          {col}
-                        </span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
-                    <tr><td colSpan={9} style={{ padding: "48px 16px", textAlign: "center", fontSize: "var(--text-body)", color: "var(--text-tertiary)" }}>Keine Patienten für diesen Filter gefunden.</td></tr>
-                  ) : filtered.map(p => {
-                    const st = STATUS_STYLE[p.status] || STATUS_STYLE.aktiv;
-                    const sg = SCHWEREGRAD_STYLE[p.schweregrad] || SCHWEREGRAD_STYLE.leicht;
-                    const isUn = p.pflegefachkraft === "—";
-                    return (
-                      <tr
-                        key={p.id}
-                        onClick={() => navigate(`/patienten/${p.id}`)}
-                        className="cursor-pointer transition-colors"
-                        style={{ borderTop: "var(--border-thin) solid var(--border-default)" }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
-                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                      >
-                        {/* Name */}
-                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
-                          <div className="flex items-center" style={{ gap: 8 }}>
-                            <div className="shrink-0 flex items-center justify-center" style={{
-                              width: 28, height: 28, borderRadius: "var(--radius-card)",
-                              background: isUn ? "var(--status-warning-bg)" : "var(--brand-primary-light)",
-                            }}>
-                              <span style={{ fontSize: 10, fontWeight: "var(--weight-semibold)", color: isUn ? "var(--status-warning-text)" : "var(--brand-primary)" }}>
-                                {p.vorname[0]}{p.nachname[0]}
-                              </span>
-                            </div>
-                            <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-                              {p.nachname}, {p.vorname}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* Angehöriger */}
-                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap", fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
-                          {p.angehoeriger.split(" (")[0]}
-                        </td>
-
-                        {/* Status */}
-                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
-                          <button
-                            onClick={e => { e.stopPropagation(); setStatusModal({ open: true, patient: p }); }}
-                            className="inline-flex items-center cursor-pointer"
-                            style={{
-                              gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)",
-                              fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
-                              background: st.bg, color: st.color, border: "none",
-                            }}
-                          >
-                            <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: st.dot }} />
-                            {st.label}
-                          </button>
-                        </td>
-
-                        {/* Schweregrad */}
-                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
-                          <span style={{
-                            padding: "2px 8px", borderRadius: "var(--radius-pill)",
-                            fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
-                            background: sg.bg, color: sg.color,
-                          }}>
-                            {sg.label}
-                          </span>
-                        </td>
-
-                        {/* Pflegefachkraft */}
-                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
-                          <button
-                            onClick={e => { e.stopPropagation(); setAssignSidebar({ open: true, patient: p }); }}
-                            className="inline-flex items-center cursor-pointer transition-colors"
-                            style={{
-                              gap: 6, padding: "3px 8px", borderRadius: "var(--radius-card)",
-                              background: "transparent", border: "none",
-                              fontSize: "var(--text-small)", color: isUn ? "var(--status-warning-text)" : "var(--text-primary)",
-                              fontWeight: isUn ? "var(--weight-medium)" : "var(--weight-regular)",
-                            }}
-                            onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
-                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                          >
-                            {isUn ? (
-                              <><AlertTriangle style={{ width: 12, height: 12, color: "var(--status-warning)" }} /> Nicht zugewiesen</>
-                            ) : (
-                              <><div className="shrink-0 flex items-center justify-center" style={{ width: 20, height: 20, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
-                                <span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{p.pflegefachkraftInitialen}</span>
-                              </div>{p.pflegefachkraft}</>
-                            )}
-                          </button>
-                        </td>
-
-                        {/* Prozessstatus */}
-                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
-                          {p.prozessStatus ? (
-                            <div>
-                              <div className="flex items-center" style={{ gap: 4 }}>
-                                {p.prozessStatus.ueberfaellig
-                                  ? <AlertTriangle style={{ width: 12, height: 12, color: "var(--status-danger)", flexShrink: 0 }} />
-                                  : <Clock style={{ width: 12, height: 12, color: "var(--text-tertiary)", flexShrink: 0 }} />}
-                                <span style={{
-                                  fontSize: "var(--text-small)",
-                                  color: p.prozessStatus.ueberfaellig ? "var(--status-danger)" : "var(--text-primary)",
-                                  fontWeight: p.prozessStatus.ueberfaellig ? "var(--weight-medium)" : "var(--weight-regular)",
-                                }}>
-                                  {p.prozessStatus.naechsteAufgabe}
-                                </span>
-                              </div>
-                              <div style={{
-                                fontSize: "var(--text-micro)", marginLeft: 16,
-                                color: p.prozessStatus.ueberfaellig ? "var(--status-danger)" : "var(--text-tertiary)",
-                              }}>
-                                {p.prozessStatus.ueberfaellig ? "Überfällig · " : "Fällig "}{p.prozessStatus.faelligDatum}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", color: "var(--status-success-text)", fontWeight: "var(--weight-medium)" }}>
-                              <CheckCircle2 style={{ width: 12, height: 12 }} /> Aktuell
-                            </span>
-                          )}
-                        </td>
-
-                        {/* Re-Assessment */}
-                        <td style={{ padding: "10px 12px" }}>
-                          {p.reAssessmentTage !== null ? (
-                            <div className="flex items-center" style={{ gap: 6 }}>
-                              <span style={{
-                                fontSize: "var(--text-body)", fontWeight: "var(--weight-semibold)",
-                                color: p.reAssessmentTage <= 14 ? "var(--status-danger)" : p.reAssessmentTage <= 30 ? "var(--status-warning-text)" : "var(--text-primary)",
-                              }}>
-                                {p.reAssessmentTage}d
-                              </span>
-                              <div style={{ width: 48, height: 6, background: "var(--bg-secondary)", borderRadius: "var(--radius-pill)", overflow: "hidden" }}>
-                                <div style={{
-                                  height: "100%", borderRadius: "var(--radius-pill)",
-                                  width: `${Math.max(5, Math.min(100, ((90 - p.reAssessmentTage) / 90) * 100))}%`,
-                                  background: p.reAssessmentTage <= 14 ? "var(--status-danger)" : p.reAssessmentTage <= 30 ? "var(--status-warning)" : "var(--status-success)",
-                                }} />
-                              </div>
-                            </div>
-                          ) : (
-                            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>—</span>
-                          )}
-                        </td>
-
-                        {/* Tasks */}
-                        <td style={{ padding: "10px 12px", textAlign: "center" }}>
-                          {p.offeneActionTasks > 0 ? (
-                            <span className="inline-flex items-center justify-center" style={{
-                              minWidth: 22, height: 22, borderRadius: "var(--radius-card)",
-                              background: "var(--status-warning-bg)", color: "var(--status-warning-text)",
-                              fontSize: "var(--text-meta)", fontWeight: "var(--weight-semibold)",
-                            }}>
-                              {p.offeneActionTasks}
-                            </span>
-                          ) : (
-                            <CheckCircle2 style={{ width: 16, height: 16, color: "var(--status-success)", margin: "0 auto" }} />
-                          )}
-                        </td>
-
-                        {/* Aktivität */}
-                        <td style={{ padding: "10px 12px", fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>
-                          {p.letzteAktivitaet}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between" style={{ padding: "8px 16px", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-              <span>{filtered.length} von {patients.length} Patienten</span>
-            </div>
-          </div>
+          <DataTable<Patient>
+            spalten={patientSpalten}
+            zeilen={sorted}
+            zeilenKey={p => p.id}
+            onZeileKlick={p => navigate(`/patienten/${p.id}`)}
+            sort={sort ?? undefined}
+            onSort={toggleSort}
+            karteTitel={nameZelle}
+            fusszeile={<span>{filtered.length} von {patients.length} Patienten</span>}
+            leerText="Keine Patienten für diesen Filter gefunden."
+          />
         </div>
       </div>
 
