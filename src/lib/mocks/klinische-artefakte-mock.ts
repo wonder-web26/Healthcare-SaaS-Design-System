@@ -397,13 +397,88 @@ const HUBER_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [
 ];
 
 /* ══════════════════════════════════════════
+   SZENARIO 5: Hans-Rudolf Steiner (OB-2026-101) — vollständiger Demo-Fall
+   Klinisch kohärent zu den vorbefüllten Formularen: Hypertonie, Diabetes Typ 2,
+   Herzinsuffizienz (NYHA II); Sturzrisiko, Insulinbedarf, Hilfe bei Körperpflege.
+   ══════════════════════════════════════════ */
+
+const STEINER_BA: InterRAIAssessment = {
+  id: "BA-2026-101", onboardingId: "OB-2026-101", patientId: null,
+  patientName: "Steiner, Hans-Rudolf", typ: "erstassessment", status: "abgeschlossen",
+  durchgefuehrtVon: "Maria Keller", startDatum: "19.02.2026", abschlussDatum: "22.02.2026",
+  erfassungsgrad: 100,
+  items: DEMO_ITEMS.map(i => ({ ...i, id: `item-${i.code}-BA-2026-101`, assessmentId: "BA-2026-101", validiert: true, status: "erfasst" as const })),
+  getriggerteCaps: [], outcomeScales: [],
+};
+
+const STEINER_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [
+  { id: "AD-S1", onboardingId: "OB-2026-101", patientId: null, icdCode: "I10", bezeichnung: "Arterielle Hypertonie", quelle: "Arzt-Antwort Dr. R. Lüthi, 21.02.2026", status: "bestaetigt" },
+  { id: "AD-S2", onboardingId: "OB-2026-101", patientId: null, icdCode: "E11", bezeichnung: "Diabetes mellitus Typ 2", quelle: "Arzt-Antwort Dr. R. Lüthi, 21.02.2026", status: "bestaetigt" },
+  { id: "AD-S3", onboardingId: "OB-2026-101", patientId: null, icdCode: "I50.1", bezeichnung: "Linksherzinsuffizienz (NYHA II)", quelle: "Arzt-Antwort Dr. R. Lüthi, 21.02.2026", status: "bestaetigt" },
+];
+
+const STEINER_DIAGNOSEN: Pflegediagnose[] = [
+  { id: "PD-S1", nandaCode: "00085", titel: "Beeinträchtigte körperliche Mobilität", bezugCap: null, begruendung: "Zunehmende Gangunsicherheit bei Herzinsuffizienz (I50.1), Mobilität nur mit Rollator, Sturzrisiko erhöht.", status: "akzeptiert", icdIds: ["AD-S3"] },
+  { id: "PD-S2", nandaCode: "00155", titel: "Sturzgefahr", bezugCap: null, begruendung: "Zwei Stürze im Bad in den letzten 12 Monaten, eingeschränkte Standsicherheit, Wohnung mit Treppen.", status: "akzeptiert", icdIds: ["AD-S3"] },
+  { id: "PD-S3", nandaCode: "00108", titel: "Selbstpflegedefizit Körperpflege", bezugCap: null, begruendung: "Hilfe beim Duschen an drei Tagen pro Woche nötig, teilweise Unterstützung beim An-/Auskleiden der unteren Extremität.", status: "akzeptiert", icdIds: ["AD-S3"] },
+  { id: "PD-S4", nandaCode: "00078", titel: "Ineffektives Gesundheitsmanagement", bezugCap: null, begruendung: "Diabetes Typ 2 (E11) mit Insulinbedarf und Hypertonie (I10); benötigt Unterstützung bei Blutzucker-/Blutdruckkontrolle und Medikamentenmanagement.", status: "akzeptiert", icdIds: ["AD-S1", "AD-S2"] },
+];
+
+const STEINER_MASSNAHMEN: Massnahme[] = [
+  { id: "MA-S1", titel: "Mobilisationsförderung mit Rollator", bezugDiagnoseId: "PD-S1", beschreibung: "Tägliches Gehtraining in der Wohnung, Steigerung der Gehstrecke, Kontrolle der Rollator-Handhabung.", haeufigkeit: "täglich", status: "akzeptiert" },
+  { id: "MA-S2", titel: "Sturzprophylaxe im Wohnraum", bezugDiagnoseId: "PD-S2", beschreibung: "Wohnungsbegehung, Haltegriffe im Bad, rutschfeste Matten, Nachtbeleuchtung; Angehörige einbeziehen.", haeufigkeit: "einmalig", status: "akzeptiert" },
+  { id: "MA-S3", titel: "Unterstützung Körperpflege", bezugDiagnoseId: "PD-S3", beschreibung: "Hilfe beim Duschen an drei Tagen, Teilwäsche mit Anleitung, Förderung der Eigenaktivität am Oberkörper.", haeufigkeit: "3×/Woche", status: "akzeptiert" },
+  { id: "MA-S4", titel: "Insulin- und Blutzucker-Management", bezugDiagnoseId: "PD-S4", beschreibung: "Insulin-Gabe morgens, Kapillarblutzucker-Messung, Dokumentation, Schulung Hypoglykämie-Zeichen.", haeufigkeit: "täglich", status: "akzeptiert" },
+  { id: "MA-S5", titel: "Blutdruck-Monitoring und Medikamenten-Management", bezugDiagnoseId: "PD-S4", beschreibung: "Tägliche BD-Messung (Ziel < 140/90), Wochendispenser richten, Rückmeldung an Hausarzt bei BD > 160.", haeufigkeit: "täglich", status: "akzeptiert" },
+];
+
+const STEINER_ZIELE: Pflegeziel[] = [
+  { id: "Z-S1", titel: "Sichere Mobilität mit Rollator", bezugDiagnoseId: "PD-S1", zeithorizont: "6 Wochen", messbar: "Gehstrecke ≥ 150m mit Rollator ohne Pause, sichere Transfers an 7/7 Tagen", status: "akzeptiert" },
+  { id: "Z-S2", titel: "Keine Stürze", bezugDiagnoseId: "PD-S2", zeithorizont: "3 Monate", messbar: "Kein Sturzereignis im Beobachtungszeitraum, Sturzprophylaxe-Massnahmen umgesetzt", status: "akzeptiert" },
+  { id: "Z-S3", titel: "Selbstständigkeit Oberkörperpflege", bezugDiagnoseId: "PD-S3", zeithorizont: "8 Wochen", messbar: "Oberkörper-Wäsche selbstständig an 7/7 Tagen", status: "akzeptiert" },
+  { id: "Z-S4", titel: "Stabile Blutzucker- und Blutdruckwerte", bezugDiagnoseId: "PD-S4", zeithorizont: "8 Wochen", messbar: "BZ im Zielbereich und BD < 140/90 an mind. 5 von 7 Messtagen", status: "akzeptiert" },
+];
+
+const STEINER_PP: Pflegeplanung = {
+  id: "PP-2026-101", onboardingId: "OB-2026-101", patientId: null,
+  patientName: "Steiner, Hans-Rudolf", interRAIAssessmentId: "BA-2026-101",
+  status: "validiert", erstelltVon: "Maria Keller",
+  erstellDatum: "23.02.2026", abschlussDatum: "24.02.2026",
+  pflegediagnosen: STEINER_DIAGNOSEN, massnahmen: STEINER_MASSNAHMEN, ziele: STEINER_ZIELE,
+};
+
+const STEINER_KLV: KLVVerordnung = {
+  id: "KLV-2026-101", onboardingId: "OB-2026-101", patientId: null,
+  patientName: "Steiner, Hans-Rudolf", pflegeplanungId: "PP-2026-101",
+  status: "kostengutsprache-erhalten", erstelltVon: "Maria Keller",
+  erstellDatum: "24.02.2026", beginnDatum: "01.03.2026", endDatum: "31.08.2026",
+  diagnosen: [
+    { id: "KD-S1", icdCode: "I10", titel: "Arterielle Hypertonie", beschreibung: "Langjährig, medikamentös." },
+    { id: "KD-S2", icdCode: "E11", titel: "Diabetes mellitus Typ 2", beschreibung: "Insulinpflichtig." },
+    { id: "KD-S3", icdCode: "I50.1", titel: "Linksherzinsuffizienz (NYHA II)", beschreibung: "Belastungsdyspnoe, Gangunsicherheit." },
+  ],
+  leistungspositionen: [
+    { id: "LP-S1", klvNummer: "10901", bezeichnung: "Erstassessment", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 60, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
+    { id: "LP-S2", klvNummer: "10904", bezeichnung: "Pflegeplanung erstmalig im Rahmen der Bedarfsabklärung", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 30, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
+    { id: "LP-S3", klvNummer: "10602", bezeichnung: "Verabreichung gerichtete Medikamente (Insulin)", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 6, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-S1", bezugMassnahmeId: "MA-S4", diagnoseIds: ["PD-S4"], wzwBegruendung: null },
+    { id: "LP-S4", klvNummer: "10808", bezeichnung: "Kapillarblutentnahme inkl. Glucosebestimmung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 10, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-S1", bezugMassnahmeId: "MA-S4", diagnoseIds: ["PD-S4"], wzwBegruendung: null },
+    { id: "LP-S5", klvNummer: "10802", bezeichnung: "Blutdruckmessung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 5, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-S1", bezugMassnahmeId: "MA-S5", diagnoseIds: ["PD-S4"], wzwBegruendung: null },
+    { id: "LP-S6", klvNummer: "10104", bezeichnung: "Teilwäsche am Lavabo (inkl. Intimpflege)", kategorie: "c", wer: "A", training: "T", anzahl: 1, einheit: "t3", zeitMin: 26, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: "MA-S3", diagnoseIds: ["PD-S3"], wzwBegruendung: null },
+    { id: "LP-S7", klvNummer: "10114", bezeichnung: "Hilfe An-/Auskleiden", kategorie: "c", wer: "A", training: "T", anzahl: 1, einheit: "t3", zeitMin: 15, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: "MA-S3", diagnoseIds: ["PD-S3"], wzwBegruendung: null },
+    { id: "LP-S8", klvNummer: "10505", bezeichnung: "Hilfe beim Gehen", kategorie: "c", wer: "S+A", training: "T", anzahl: 1, einheit: "t7", zeitMin: 8, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: "MA-S1", diagnoseIds: ["PD-S1"], wzwBegruendung: null },
+  ],
+  zielformulierungen: ["Sturzprävention", "Erhalt der Selbstständigkeit", "Stabile Blutzucker- und Blutdruckwerte"],
+  arztAngeordnetAm: "24.02.2026", krankenkasseGutspracheAm: "28.02.2026", ablehnungsgrund: null,
+};
+
+/* ══════════════════════════════════════════
    COLLECTED EXPORTS
    ══════════════════════════════════════════ */
 
-export const MOCK_ASSESSMENTS: InterRAIAssessment[] = [ANNA_BA, ANNA_RE, HUBER_BA, FREI_BA];
-export const MOCK_PFLEGEPLANUNGEN: Pflegeplanung[] = [ANNA_PP, HUBER_PP];
-export const MOCK_KLV_VERORDNUNGEN: KLVVerordnung[] = [ANNA_KLV, HUBER_KLV];
-export const MOCK_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [...ANNA_ARZT_DIAGNOSEN, ...HUBER_ARZT_DIAGNOSEN];
+export const MOCK_ASSESSMENTS: InterRAIAssessment[] = [ANNA_BA, ANNA_RE, HUBER_BA, FREI_BA, STEINER_BA];
+export const MOCK_PFLEGEPLANUNGEN: Pflegeplanung[] = [ANNA_PP, HUBER_PP, STEINER_PP];
+export const MOCK_KLV_VERORDNUNGEN: KLVVerordnung[] = [ANNA_KLV, HUBER_KLV, STEINER_KLV];
+export const MOCK_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [...ANNA_ARZT_DIAGNOSEN, ...HUBER_ARZT_DIAGNOSEN, ...STEINER_ARZT_DIAGNOSEN];
 /** @deprecated Ersetzt durch Rhythmus-Engine (src/lib/rhythmus/). Nur noch für Typ-Referenz behalten. */
 export const MOCK_WORKFLOWS: WorkflowPlan[] = [];
 export { ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE };
