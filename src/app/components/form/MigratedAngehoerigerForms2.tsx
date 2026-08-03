@@ -14,6 +14,7 @@ import { Combobox as FormSelect } from "./Combobox";
 import { GroupBox } from "./GroupBox";
 import { DokumentScanUpload, type ScanFile } from "./DokumentScanUpload";
 import type { AngehoerigerFormData } from "../StepAngehoeriger";
+import { createEmptyKind } from "../StepAngehoeriger";
 import { pruefeQuellensteuerAutomatik } from "../../../lib/stammdaten/quellensteuer-automatik";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../../lib/stammdaten/dokumenttypen";
 import { SEMMeldeBanner, NATIONALITAETEN } from "./MigratedAngehoerigerForms";
@@ -169,8 +170,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
   const anzahlNum = parseInt(data.anzahlKinder) || 0;
 
   const addKind = () => {
-    const id = `kind-${Date.now()}`;
-    onChange({ ...data, kinder: [...data.kinder, { id, name: "", vorname: "", geburtsdatum: "", ahvNummer: "", geschlecht: "", zulagenart: "K", ausbildungsstatus: "", ausbildungsbeginn: "" }] });
+    onChange({ ...data, kinder: [...data.kinder, createEmptyKind()] });
   };
 
   const removeKind = (id: string) => {

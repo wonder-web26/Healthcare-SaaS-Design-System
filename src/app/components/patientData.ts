@@ -259,6 +259,7 @@ export const patients: Patient[] = [
     letzteAktivitaet: "24.02.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
+    krankenkasse: "Helsana",
     /* ── Prozessstatus / Workflow ──────────── */
     prozessStatus: {
       naechsteAufgabe: "Re-Assessment durchführen",
@@ -291,6 +292,7 @@ export const patients: Patient[] = [
     letzteAktivitaet: "10.02.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
+    krankenkasse: "Groupe Mutuel",
     /* ── Prozessstatus / Workflow ──────────── */
     prozessStatus: null,
   },
@@ -319,6 +321,7 @@ export const patients: Patient[] = [
     letzteAktivitaet: "23.02.2026",
     abrechnungsstoppGrund: "Fehlende Kostengutsprache",
     medlinkSync: "error",
+    krankenkasse: "Swica",
     /* ── Prozessstatus / Workflow ──────────── */
     prozessStatus: {
       naechsteAufgabe: "Kostengutsprache einholen",
@@ -351,6 +354,7 @@ export const patients: Patient[] = [
     letzteAktivitaet: "22.02.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "pending",
+    krankenkasse: "Sanitas",
     /* ── Prozessstatus / Workflow ──────────── */
     prozessStatus: {
       naechsteAufgabe: "Bedarfsmeldung erstellen",
@@ -383,6 +387,7 @@ export const patients: Patient[] = [
     letzteAktivitaet: "26.02.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
+    krankenkasse: "Visana",
     /* ── Prozessstatus / Workflow ──────────── */
     prozessStatus: {
       naechsteAufgabe: "Re-Assessment planen",
@@ -415,6 +420,7 @@ export const patients: Patient[] = [
     letzteAktivitaet: "21.02.2026",
     abrechnungsstoppGrund: "Kritische Gesundheitslage",
     medlinkSync: "error",
+    krankenkasse: "KPT",
     /* ── Prozessstatus / Workflow ──────────── */
     prozessStatus: {
       naechsteAufgabe: "Arztbericht einholen",
@@ -447,6 +453,7 @@ export const patients: Patient[] = [
     letzteAktivitaet: "25.02.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
+    krankenkasse: "CSS",
     /* ── Prozessstatus / Workflow ──────────── */
     prozessStatus: null,
   },
@@ -475,6 +482,7 @@ export const patients: Patient[] = [
     letzteAktivitaet: "24.02.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
+    krankenkasse: "Concordia",
     /* ── Prozessstatus / Workflow ──────────── */
     prozessStatus: {
       naechsteAufgabe: "Bewilligung prüfen",

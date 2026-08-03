@@ -182,7 +182,7 @@ export interface KindEntry {
   doppelbezug: string;
 }
 
-function createEmptyKind(): KindEntry {
+export function createEmptyKind(): KindEntry {
   return {
     id: crypto.randomUUID(),
     vorname: "",
