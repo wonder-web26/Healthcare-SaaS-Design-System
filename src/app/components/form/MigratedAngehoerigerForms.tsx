@@ -18,6 +18,7 @@ import type { AngehoerigerFormData } from "../StepAngehoeriger";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
 import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
+import { FELD_MAX } from "./feldbreiten";
 import { leiteTarifcodeAb } from "../../../lib/stammdaten/quellensteuer-tarif";
 import { formDataToSEM, erstelleSEMFormular, ermittleFehlendeFelderSEM, downloadBlob } from "../../../lib/sem/meldeformular";
 import { FUNKTIONEN_OPTIONS } from "../../../lib/stammdaten/funktionen";
@@ -70,16 +71,6 @@ const FUNKTIONEN = FUNKTIONEN_OPTIONS;
 /* ══════════════════════════════════════════
    TAB 1: PERSONALIEN (migrated)
    ══════════════════════════════════════════ */
-/* ── Feldbreitenklassen — EINZIGE Stelle. schmal/mittel begrenzen die Maximalbreite,
-   "voll" = Rasterzelle (keine Begrenzung). Die Klasse wird je Feld an der Aufrufstelle
-   zugewiesen, nicht aus dem Feldnamen abgeleitet. Ein schmales Feld füllt seine
-   Rasterzelle nicht aus; die Lücke rechts ist beabsichtigt. ── */
-export const FELD_MAX = { schmal: "12rem", mittel: "22rem", voll: "none" } as const;
-
-/* ── Maximalbreite des Formularbereichs — EINZIGE Stelle. Gilt für Raster,
-   Abschnittsüberschriften, Trennlinien und "voll"-Felder gemeinsam (dieselbe rechte
-   Kante, keine Stufe), linksbündig. Die Reiterzeile ist NICHT betroffen. ── */
-export const FORMULAR_MAX = 880;
 
 export function PersonalienFormV2({
   data, onChange, onOpenSpezialbewilligung,

@@ -49,7 +49,8 @@ import {
 } from "./ui/select";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { PersonalienFormV2, SteuerFormV2, AnstellungFormV2, FORMULAR_MAX } from "./form/MigratedAngehoerigerForms";
+import { PersonalienFormV2, SteuerFormV2, AnstellungFormV2 } from "./form/MigratedAngehoerigerForms";
+import { FORMULAR_MAX } from "./form/feldbreiten";
 import { PartnerFormV2, KinderFormV2, DokumenteFormV2 } from "./form/MigratedAngehoerigerForms2";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";

@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { Users, IdCard, Coins, FileText, Plus, Upload, Eye, Check, FileSignature, Trash2, Shield, FileCheck } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
+import { FELD_MAX } from "./feldbreiten";
 import { TextInput } from "./TextInput";
 import { DateField } from "./DateField";
 import { AHVNummerInput } from "./AHVNummerInput";

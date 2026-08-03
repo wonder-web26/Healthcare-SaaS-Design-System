@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { User, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ChevronDown, ChevronUp } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
+import { FELD_MAX } from "./feldbreiten";
 import { TextInput } from "./TextInput";
 import { TextareaInput } from "./TextareaInput";
 import { NumberInput } from "./NumberInput";
