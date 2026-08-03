@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Search, Plus, ExternalLink, AlertCircle, GraduationCap, CheckCircle2, Clock, AlertTriangle, X, SlidersHorizontal } from "lucide-react";
 import { angehoerige, type Angehoeriger } from "./angehoerigeData";
+import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
 import { useCurrentRole } from "../auth";
 import type { UserRole } from "../../types/user";
 
@@ -68,6 +69,24 @@ function buildFilterDefs(): FilterDef[] {
 /* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
+type SortKey = "name" | "qualifikation" | "pflegefachkraft" | "monatsschritt" | "mutation";
+const QUAL_RANK: Record<string, number> = { ohne_srk: 0, srk: 1, fage_dipl: 2 };
+function msProgress(a: Angehoeriger): number { const ms = a.monatsSchritt; return ms.abgeschlossen ? 1 : ms.total ? (ms.aktuell - 1) / ms.total : 0; }
+function mutKey(d: string): string { const [dd, mm, yy] = d.split("."); return `${yy ?? ""}${mm ?? ""}${dd ?? ""}`; }
+function sortAngehoerige(list: Angehoeriger[], key: SortKey, dir: "asc" | "desc"): Angehoeriger[] {
+  const f = dir === "asc" ? 1 : -1;
+  return [...list].sort((a, b) => {
+    switch (key) {
+      case "name": return f * (a.nachname.localeCompare(b.nachname, "de") || a.vorname.localeCompare(b.vorname, "de"));
+      case "qualifikation": return f * ((QUAL_RANK[a.qualifikation] ?? 0) - (QUAL_RANK[b.qualifikation] ?? 0));
+      case "pflegefachkraft": return f * a.pflegefachkraft.localeCompare(b.pflegefachkraft, "de");
+      case "monatsschritt": return f * (msProgress(a) - msProgress(b));
+      case "mutation": return f * mutKey(a.letzteMutationDatum).localeCompare(mutKey(b.letzteMutationDatum));
+      default: return 0;
+    }
+  });
+}
+
 export function AngehoerigePage() {
   const navigate = useNavigate();
   const role = useCurrentRole();
@@ -128,12 +147,109 @@ export function AngehoerigePage() {
 
   const viewOrder = getViewOrder(role);
 
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
+  const toggleSort = (key: string) => setSort(s => s?.key === key ? { key: key as SortKey, dir: s.dir === "asc" ? "desc" : "asc" } : { key: key as SortKey, dir: "asc" });
+  const sorted = useMemo(() => sort ? sortAngehoerige(filtered, sort.key, sort.dir) : filtered, [filtered, sort]);
+
+  const inhaltRahmen = { maxWidth: TABELLE_LAYOUT.inhaltMaxPx, margin: "0 auto", width: "100%" } as const;
+
+  const nameZelle = (a: Angehoeriger) => {
+    const blocked = isBillingBlocked(a);
+    return (
+      <div className="flex items-center" style={{ gap: 8 }}>
+        <div className="shrink-0 flex items-center justify-center" style={{ width: 28, height: 28, borderRadius: "var(--radius-card)", background: blocked ? "var(--status-danger-bg)" : "var(--brand-primary-light)" }}>
+          <span style={{ fontSize: 10, fontWeight: "var(--weight-semibold)", color: blocked ? "var(--status-danger)" : "var(--brand-primary)" }}>{a.vorname[0]}{a.nachname[0]}</span>
+        </div>
+        <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{a.nachname}, {a.vorname}</span>
+      </div>
+    );
+  };
+
+  /* ── Spaltenbeschreibung für die geteilte DataTable (Anteile/Mindestbreiten an
+     der Aufrufstelle, an den längsten realen Werten bemessen). Inhalte unverändert. ── */
+  const angehoerigeSpalten: SpalteDef<Angehoeriger>[] = [
+    { id: "name", label: "Name", anteil: 16, minCh: 24, align: "left", sortierbar: true, ausKarte: true, render: nameZelle },
+    { id: "patienten", label: "Zugeordnete Patienten", anteil: 18, minCh: 24, align: "left", zweitzeileUnter: "name",
+      render: a => a.zugeordnetePatientenList.length === 0 ? (
+        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontStyle: "italic" }}>Keine Zuordnung</span>
+      ) : (
+        <div className="flex flex-col" style={{ gap: 2 }}>
+          {a.zugeordnetePatientenList.slice(0, 2).map(p => (
+            <button key={p.id} onClick={e => { e.stopPropagation(); navigate(`/patienten/${p.id}`); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, fontSize: "var(--text-small)", color: "var(--brand-primary)", background: "transparent", border: "none", textAlign: "left", padding: 0, fontFamily: "inherit" }}>
+              <ExternalLink style={{ width: 10, height: 10, opacity: 0.5 }} />{p.name}
+            </button>
+          ))}
+          {a.zugeordnetePatientenList.length > 2 && <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>+{a.zugeordnetePatientenList.length - 2} weitere</span>}
+        </div>
+      ) },
+    { id: "pflegefachkraft", label: "Pflegefachkraft", anteil: 12, minCh: 16, align: "left", sortierbar: true,
+      render: a => (
+        <div className="flex items-center" style={{ gap: 6 }}>
+          <div className="shrink-0 flex items-center justify-center" style={{ width: 20, height: 20, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
+            <span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{a.pflegefachkraftInitialen}</span>
+          </div>
+          <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{a.pflegefachkraft}</span>
+        </div>
+      ) },
+    { id: "qualifikation", label: "Qualifikation", anteil: 9, minCh: 12, align: "left", sortierbar: true,
+      render: a => { const qs = QUAL_STYLE[a.qualifikation] || QUAL_STYLE.ohne_srk; return <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: qs.bg, color: qs.color, whiteSpace: "nowrap" }}>{qs.label}</span>; } },
+    { id: "srk", label: "SRK Kurs", anteil: 11, minCh: 13, align: "left",
+      render: a => a.srkKursDatum ? (
+        <div className="flex items-center" style={{ gap: 4 }}>
+          <GraduationCap style={{ width: 14, height: 14, color: "var(--status-success)", flexShrink: 0 }} />
+          <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{new Date(a.srkKursDatum).toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
+        </div>
+      ) : a.qualifikation === "ohne_srk" ? (
+        <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>
+          <AlertCircle style={{ width: 14, height: 14 }} /> Ausstehend
+        </span>
+      ) : (
+        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>n/a</span>
+      ) },
+    { id: "monatsschritt", label: "Monatsschritt", anteil: 20, minCh: 20, align: "left", sortierbar: true,
+      render: a => {
+        const ms = a.monatsSchritt;
+        const pct = Math.round(((ms.abgeschlossen ? ms.total : ms.aktuell - 1) / ms.total) * 100);
+        const barColor = ms.abgeschlossen ? "var(--status-success)" : ms.ueberfaellig ? "var(--status-danger)" : "var(--brand-primary)";
+        const textColor = ms.abgeschlossen ? "var(--status-success-text)" : ms.ueberfaellig ? "var(--status-danger)" : "var(--text-primary)";
+        return (
+          <div>
+            <div className="flex items-center" style={{ gap: 4, marginBottom: 4 }}>
+              {ms.abgeschlossen ? <CheckCircle2 style={{ width: 12, height: 12, color: "var(--status-success)", flexShrink: 0 }} />
+                : ms.ueberfaellig ? <AlertTriangle style={{ width: 12, height: 12, color: "var(--status-danger)", flexShrink: 0 }} />
+                : <Clock style={{ width: 12, height: 12, color: "var(--brand-primary)", flexShrink: 0 }} />}
+              <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: textColor, overflowWrap: "anywhere" }}>{ms.label}</span>
+            </div>
+            <div className="flex items-center" style={{ gap: 6 }}>
+              <div style={{ flex: 1, height: 4, background: "var(--bg-secondary)", borderRadius: "var(--radius-pill)", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${pct}%`, background: barColor, borderRadius: "var(--radius-pill)" }} />
+              </div>
+              <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{ms.abgeschlossen ? ms.total : ms.aktuell}/{ms.total}</span>
+            </div>
+            {ms.faellig && !ms.abgeschlossen && (
+              <div style={{ fontSize: "var(--text-micro)", marginTop: 2, color: ms.ueberfaellig ? "var(--status-danger)" : "var(--text-tertiary)" }}>
+                {ms.ueberfaellig ? "Überfällig" : `Fällig ${ms.faellig}`}
+              </div>
+            )}
+          </div>
+        );
+      } },
+    { id: "mutation", label: "Letzte Mutation", anteil: 14, minCh: 14, align: "left", sortierbar: true, ausblendenUnter: "eng",
+      render: a => (
+        <div style={{ whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{a.letzteMutationDatum}</div>
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{a.letzteMutationUser}</div>
+        </div>
+      ) },
+  ];
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* ═══════════════════════════════════════
          HEADER
          ═══════════════════════════════════════ */}
       <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0" }}>
+        <div style={inhaltRahmen}>
         <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
           <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Angehörige</h1>
           <button onClick={() => navigate("/onboarding/neu")} className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
@@ -217,132 +333,24 @@ export function AngehoerigePage() {
             );
           })}
         </div>
+        </div>
       </div>
 
       {/* ═══════════════════════════════════════
          TABLE
          ═══════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto" style={{ padding: "0 var(--space-6) var(--space-4)" }}>
-        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", minWidth: 900, borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: "var(--bg-secondary)" }}>
-                  {["Name", "Zugeordnete Patienten", "Pflegefachkraft", "Qualifikation", "SRK Kurs", "Monatsschritt", "Letzte Mutation"].map(col => (
-                    <th key={col} style={{ padding: "8px 12px", textAlign: "left" }}>
-                      <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>{col}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr><td colSpan={7} style={{ padding: "48px 16px", textAlign: "center", fontSize: "var(--text-body)", color: "var(--text-tertiary)" }}>Keine Angehörigen für diesen Filter gefunden.</td></tr>
-                ) : filtered.map(a => {
-                  const qs = QUAL_STYLE[a.qualifikation] || QUAL_STYLE.ohne_srk;
-                  const blocked = isBillingBlocked(a);
-                  return (
-                    <tr key={a.id} onClick={() => navigate(`/angehoerige/${a.id}`)} className="cursor-pointer transition-colors"
-                      style={{ borderTop: "var(--border-thin) solid var(--border-default)" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      {/* Name */}
-                      <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
-                        <div className="flex items-center" style={{ gap: 8 }}>
-                          <div className="shrink-0 flex items-center justify-center" style={{ width: 28, height: 28, borderRadius: "var(--radius-card)", background: blocked ? "var(--status-danger-bg)" : "var(--brand-primary-light)" }}>
-                            <span style={{ fontSize: 10, fontWeight: "var(--weight-semibold)", color: blocked ? "var(--status-danger)" : "var(--brand-primary)" }}>{a.vorname[0]}{a.nachname[0]}</span>
-                          </div>
-                          <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{a.nachname}, {a.vorname}</span>
-                        </div>
-                      </td>
-                      {/* Patienten */}
-                      <td style={{ padding: "10px 12px" }}>
-                        {a.zugeordnetePatientenList.length === 0 ? (
-                          <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontStyle: "italic" }}>Keine Zuordnung</span>
-                        ) : (
-                          <div className="flex flex-col" style={{ gap: 2 }}>
-                            {a.zugeordnetePatientenList.slice(0, 2).map(p => (
-                              <button key={p.id} onClick={e => { e.stopPropagation(); navigate(`/patienten/${p.id}`); }} className="inline-flex items-center cursor-pointer"
-                                style={{ gap: 4, fontSize: "var(--text-small)", color: "var(--brand-primary)", background: "transparent", border: "none", textAlign: "left", padding: 0 }}>
-                                <ExternalLink style={{ width: 10, height: 10, opacity: 0.5 }} />{p.name}
-                              </button>
-                            ))}
-                            {a.zugeordnetePatientenList.length > 2 && <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>+{a.zugeordnetePatientenList.length - 2} weitere</span>}
-                          </div>
-                        )}
-                      </td>
-                      {/* Pflegefachkraft */}
-                      <td style={{ padding: "10px 12px" }}>
-                        <div className="flex items-center" style={{ gap: 6 }}>
-                          <div className="shrink-0 flex items-center justify-center" style={{ width: 20, height: 20, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}>
-                            <span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{a.pflegefachkraftInitialen}</span>
-                          </div>
-                          <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{a.pflegefachkraft}</span>
-                        </div>
-                      </td>
-                      {/* Qualifikation */}
-                      <td style={{ padding: "10px 12px" }}>
-                        <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: qs.bg, color: qs.color }}>{qs.label}</span>
-                      </td>
-                      {/* SRK */}
-                      <td style={{ padding: "10px 12px" }}>
-                        {a.srkKursDatum ? (
-                          <div className="flex items-center" style={{ gap: 4 }}>
-                            <GraduationCap style={{ width: 14, height: 14, color: "var(--status-success)" }} />
-                            <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{new Date(a.srkKursDatum).toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" })}</span>
-                          </div>
-                        ) : a.qualifikation === "ohne_srk" ? (
-                          <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
-                            <AlertCircle style={{ width: 14, height: 14 }} /> Ausstehend
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>n/a</span>
-                        )}
-                      </td>
-                      {/* Monatsschritt */}
-                      <td style={{ padding: "10px 12px" }}>
-                        {(() => {
-                          const ms = a.monatsSchritt;
-                          const pct = Math.round(((ms.abgeschlossen ? ms.total : ms.aktuell - 1) / ms.total) * 100);
-                          const barColor = ms.abgeschlossen ? "var(--status-success)" : ms.ueberfaellig ? "var(--status-danger)" : "var(--brand-primary)";
-                          const textColor = ms.abgeschlossen ? "var(--status-success-text)" : ms.ueberfaellig ? "var(--status-danger)" : "var(--text-primary)";
-                          return (
-                            <div style={{ minWidth: 120 }}>
-                              <div className="flex items-center" style={{ gap: 4, marginBottom: 4 }}>
-                                {ms.abgeschlossen ? <CheckCircle2 style={{ width: 12, height: 12, color: "var(--status-success)", flexShrink: 0 }} />
-                                  : ms.ueberfaellig ? <AlertTriangle style={{ width: 12, height: 12, color: "var(--status-danger)", flexShrink: 0 }} />
-                                  : <Clock style={{ width: 12, height: 12, color: "var(--brand-primary)", flexShrink: 0 }} />}
-                                <span className="truncate" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: textColor }}>{ms.label}</span>
-                              </div>
-                              <div className="flex items-center" style={{ gap: 6 }}>
-                                <div style={{ flex: 1, height: 4, background: "var(--bg-secondary)", borderRadius: "var(--radius-pill)", overflow: "hidden" }}>
-                                  <div style={{ height: "100%", width: `${pct}%`, background: barColor, borderRadius: "var(--radius-pill)" }} />
-                                </div>
-                                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontWeight: "var(--weight-medium)" }}>{ms.abgeschlossen ? ms.total : ms.aktuell}/{ms.total}</span>
-                              </div>
-                              {ms.faellig && !ms.abgeschlossen && (
-                                <div style={{ fontSize: "var(--text-micro)", marginTop: 2, color: ms.ueberfaellig ? "var(--status-danger)" : "var(--text-tertiary)" }}>
-                                  {ms.ueberfaellig ? "Überfällig" : `Fällig ${ms.faellig}`}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      {/* Letzte Mutation */}
-                      <td style={{ padding: "10px 12px" }}>
-                        <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{a.letzteMutationDatum}</div>
-                        <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{a.letzteMutationUser}</div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex items-center justify-between" style={{ padding: "8px 16px", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-            <span>{filtered.length} von {angehoerige.length} Angehörige</span>
-          </div>
-        </div>
+        <DataTable<Angehoeriger>
+          spalten={angehoerigeSpalten}
+          zeilen={sorted}
+          zeilenKey={a => a.id}
+          onZeileKlick={a => navigate(`/angehoerige/${a.id}`)}
+          sort={sort ?? undefined}
+          onSort={toggleSort}
+          karteTitel={nameZelle}
+          fusszeile={<span>{filtered.length} von {angehoerige.length} Angehörige</span>}
+          leerText="Keine Angehörigen für diesen Filter gefunden."
+        />
       </div>
     </div>
   );
