@@ -240,23 +240,27 @@ export function OnboardingListPage() {
       render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.angehoeriger}</span> },
     { id: "phase", label: "Phase", anteil: 7, minCh: 11, align: "left", sortierbar: true, ausblendenUnter: "eng", ausKarte: true,
       render: c => <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{PHASE_LABEL[phaseFuerSchritt(c.currentStep)]}</span> },
-    { id: "schritt", label: "Aktueller Schritt", anteil: 20, minCh: 24, align: "left",
+    { id: "schritt", label: "Aktueller Schritt", anteil: 16, minCh: 24, align: "left",
       render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}><span style={{ fontFamily: "monospace", color: "var(--text-tertiary)", marginRight: 6 }}>{c.currentStep}/{ANZAHL_SCHRITTE}</span>{schrittLabel(c.currentStep)}</span> },
     { id: "pflichtdok", label: "Pflichtdok.", anteil: 7, minCh: 11, align: "left",
       // Korrektur #5: Balken entfällt — bei 40px war 7/8 vs 8/8 nicht auf einen Blick
       // unterscheidbar; der Bruch ist das eindeutige Signal, vollständig zusätzlich farblich.
       render: c => { const voll = c.pflichtdokErledigt === c.pflichtdokGefordert; return <span style={{ fontFamily: "monospace", fontSize: "0.8125rem", color: voll ? "var(--status-success-text)" : "var(--text-primary)", fontWeight: voll ? "var(--weight-medium)" : "var(--weight-regular)" }}>{c.pflichtdokErledigt}/{c.pflichtdokGefordert}</span>; } },
     { id: "pendenzen", label: "Pendenzen", anteil: 10, minCh: 14, align: "right", sortierbar: true,
-      // Korrektur #3: kein "offen" in der Zelle — nur die Zahl (rechtsbündig, tabellarisch),
-      // der überfällige Anteil abgesetzt dahinter. 0 = stiller Leerwert.
-      render: c => c.pendenzenOffen === 0
-        ? <span style={{ fontSize: "0.8125rem", color: "var(--text-tertiary)" }}>–</span>
-        : <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{c.pendenzenOffen}{c.pendenzenUeberfaellig > 0 && <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500 }}>· {c.pendenzenUeberfaellig} überfällig</span>}</span> },
+      // Zwei Elemente statt einer Zeichenkette: die Zahl bleibt rechtsbündig auf fester
+      // Linie (monospace/tabellarisch), der überfällige Zusatz sitzt links davon in der
+      // Warnfarbe und drängt die Zahl nie von ihrer Linie. 0 = stiller Leerwert.
+      render: c => (
+        <span style={{ display: "flex", justifyContent: "flex-end", alignItems: "baseline", gap: 8, whiteSpace: "nowrap" }}>
+          {c.pendenzenUeberfaellig > 0 && <span style={{ color: "var(--status-warning-text)", fontWeight: 500, fontSize: "0.75rem" }}>· {c.pendenzenUeberfaellig} überfällig</span>}
+          <span style={{ fontFamily: "monospace", fontVariantNumeric: "tabular-nums", fontSize: "0.8125rem", color: c.pendenzenOffen === 0 ? "var(--text-tertiary)" : "var(--text-primary)" }}>{c.pendenzenOffen === 0 ? "–" : c.pendenzenOffen}</span>
+        </span>
+      ) },
     { id: "start", label: "Start geplant", anteil: 11, minCh: 16, align: "left", sortierbar: true,
       // Korrektur C: Abweichungsangabe einzeilig, ohne Umbruch — +N Tage bei Überschreitung,
       // in N Tagen bei bevorstehendem Start. Die Zelle bricht nie (whiteSpace nowrap).
       render: c => { const t = tageBisStart(c.validFrom, BEZUGSDATUM); const ueber = t < 0 && !istVertragUnterzeichnet(c.currentStep); const bevor = kz(c).typ === "gelb" && kz(c).spalte === "start"; return <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{isoZuAnzeige(c.validFrom)}{ueber && <span style={{ marginLeft: 8, color: "var(--status-danger)", fontWeight: 500, fontSize: "0.75rem" }}>+{Math.abs(t)} {Math.abs(t) === 1 ? "Tag" : "Tage"}</span>}{!ueber && bevor && <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500, fontSize: "0.75rem" }}>{t === 0 ? "heute" : `in ${t} ${t === 1 ? "Tag" : "Tagen"}`}</span>}</span>; } },
-    { id: "verantwortlich", label: "Verantwortlich", anteil: 8, minCh: 12, align: "left",
+    { id: "verantwortlich", label: "Verantw.", anteil: 12, minCh: 12, align: "left",
       render: c => { const resp = c.responsibleUserId ? RESPONSIBLE[c.responsibleUserId] : null; return resp
         ? <div className="flex items-center" style={{ gap: 6 }}><span className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}><span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{resp.initialen}</span></span><span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{resp.kurz}</span></div>
         : <button type="button" onClick={e => { e.stopPropagation(); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "0.75rem", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit" }}><Plus style={{ width: 12, height: 12 }} /> Zuweisen</button>; } },
