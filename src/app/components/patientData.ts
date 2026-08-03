@@ -170,8 +170,8 @@ export const statusExplanations: Record<
 export const patients: Patient[] = [
   {
     id: "P-2026-0041",
-    vorname: "Anna",
-    nachname: "Müller",
+    vorname: "Hans-Rudolf",
+    nachname: "Steiner",
     angehoeriger: "Peter Müller (Ehemann)",
     angehoerigerTelefon: "+41 44 312 55 01",
     status: "aktiv",
@@ -203,8 +203,8 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0042",
-    vorname: "Thomas",
-    nachname: "Schmid",
+    vorname: "Marie-Louise",
+    nachname: "Hübscher-Wiederkehr",
     angehoeriger: "Lisa Schmid (Tochter)",
     angehoerigerTelefon: "+41 44 320 18 44",
     status: "aktiv",
@@ -236,8 +236,8 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0043",
-    vorname: "Maria",
-    nachname: "Weber",
+    vorname: "Fatmire",
+    nachname: "Rexhepi",
     angehoeriger: "Johannes Weber (Sohn)",
     angehoerigerTelefon: "+41 44 555 22 10",
     status: "aktiv",
@@ -269,8 +269,8 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0044",
-    vorname: "Klaus",
-    nachname: "Fischer",
+    vorname: "Emine",
+    nachname: "Kaya",
     angehoeriger: "Monika Fischer (Ehefrau)",
     angehoerigerTelefon: "+41 44 310 77 33",
     status: "gekuendigt",
@@ -298,8 +298,8 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0045",
-    vorname: "Sabine",
-    nachname: "Becker",
+    vorname: "Fritz",
+    nachname: "Huber",
     angehoeriger: "Hans Becker (Bruder)",
     angehoerigerTelefon: "+41 44 299 33 15",
     status: "nicht_abrechenbar",
@@ -331,8 +331,8 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0046",
-    vorname: "Peter",
-    nachname: "Hoffmann",
+    vorname: "Joaquim",
+    nachname: "Da Silva",
     angehoeriger: "Ruth Hoffmann (Tochter)",
     angehoerigerTelefon: "+41 44 401 12 88",
     status: "aktiv",
@@ -364,8 +364,8 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0047",
-    vorname: "Elisabeth",
-    nachname: "Brunner",
+    vorname: "Anna",
+    nachname: "Bösiger",
     angehoeriger: "Stefan Brunner (Sohn)",
     angehoerigerTelefon: "+41 44 488 91 02",
     status: "aktiv",
@@ -397,8 +397,8 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0048",
-    vorname: "Heinrich",
-    nachname: "Steiner",
+    vorname: "Gino",
+    nachname: "Ferrari",
     angehoeriger: "Ursula Steiner (Ehefrau)",
     angehoerigerTelefon: "+41 44 677 45 20",
     status: "nicht_abrechenbar",
