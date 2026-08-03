@@ -1,12 +1,10 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router";
-import { Plus, Search, AlertTriangle, X, SlidersHorizontal } from "lucide-react";
-import { useCurrentRole } from "../auth";
-import type { UserRole } from "../../types/user";
-import { type OnboardingStatus, ONBOARDING_STATUS_CFG } from "../../lib/onboarding/status";
-import { ANZAHL_SCHRITTE, schrittLabel, phaseFuerSchritt, phaseRang, PHASE_LABEL, ableitenKennzeichen, tageBisStart, istVertragUnterzeichnet } from "../../lib/onboarding/schritte";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { useNavigate } from "react-router";
+import { Plus, Search, AlertTriangle, X, ChevronDown, Check } from "lucide-react";
+import { type OnboardingStatus } from "../../lib/onboarding/status";
+import { ANZAHL_SCHRITTE, schrittLabel, phaseFuerSchritt, phaseRang, PHASE_LABEL, type OnboardingPhase, ableitenKennzeichen, tageBisStart, istVertragUnterzeichnet } from "../../lib/onboarding/schritte";
 import { isoZuAnzeige } from "../../lib/datum";
-import { DataTable, type SpalteDef } from "./ui/DataTable";
+import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
 
 /* ── Bezugsdatum (Mock-Demo, entspricht der Vorgabe): alle Ableitungen laufen
    gegen diesen Stichtag statt gegen new Date(), damit die Liste deterministisch
@@ -42,8 +40,6 @@ interface OnboardingCase {
   kanton: string;
 }
 
-/* Status badges use the shared ONBOARDING_STATUS_CFG (one vocabulary). */
-
 /* ── Mock data (Bezugsdatum 31.07.2026). Prozessdaten gemäss Vorgabe;
    Retain-Felder (status/kanton/abrechnungsstopp/…) positional aus dem
    früheren Mock, damit Filterleiste/KPIs unverändert funktionieren. ── */
@@ -58,49 +54,54 @@ const cases: OnboardingCase[] = [
   { id: "OB-2026-108", patientNachname: "Ferrari", patientVorname: "Gino", patientId: "P-2026-0108", angehoeriger: "Lucia Ferrari", currentStep: 1, pflichtdokErledigt: 3, pflichtdokGefordert: 8, pendenzenOffen: 2, pendenzenUeberfaellig: 0, validFrom: "2026-08-17", responsibleUserId: "ott", status: "abgeschlossen", offen: 2, abrechnungsstopp: false, verantwortlich: "Robert Ott", verantwortlichInitialen: "RO", eintrittsdatum: "12.02.2026", letzteAenderung: "27.02.2026", kanton: "ZH" },
 ];
 
-/* ── Views ── */
-type ViewKey = "alle" | "meine" | "blockiert" | "fast_abgeschlossen" | "in_erfassung";
-const CURRENT_USER = "Maria Keller";
+/* ── Zugehörigkeit (Segmentumschalter, genau eine Auswahl) ──
+   "Meine" = Mandate der angemeldeten Benutzerin. Ohne echte Benutzer-ID im
+   Prototyp bildet Maria Keller (responsibleUserId "keller") die angemeldete
+   Benutzerin ab (deckungsgleich mit dem bisherigen CURRENT_USER). ── */
+type Segment = "alle" | "meine";
+const MEINE_USER_ID = "keller";
 
-function viewFilter(list: OnboardingCase[], view: ViewKey): OnboardingCase[] {
-  switch (view) {
-    case "meine": return list.filter(c => c.verantwortlich === CURRENT_USER);
-    // "blockiert" stützt sich künftig allein auf abrechnungsstopp (unabhängig vom Status).
-    case "blockiert": return list.filter(c => c.abrechnungsstopp);
-    case "fast_abgeschlossen": return list.filter(c => c.offen <= 1 && !c.abrechnungsstopp);
-    // View-Key bleibt intern "in_erfassung"; zeigt die aktiven Fälle (neu + in Bearbeitung).
-    case "in_erfassung": return list.filter(c => c.status === "neu" || c.status === "in_bearbeitung");
-    default: return list;
-  }
-}
-
-const VIEW_DEFS: { key: ViewKey; label: string }[] = [
-  { key: "alle", label: "Alle Onboardings" },
-  { key: "meine", label: "Meine Onboardings" },
-  { key: "blockiert", label: "Blockiert" },
-  { key: "fast_abgeschlossen", label: "Fast abgeschlossen" },
-  { key: "in_erfassung", label: "In Bearbeitung" },
+/* ── Status-Chips: kombinierbar, mit UND verknüpft. Jedes Prädikat ist rein
+   (Mandat + Bezugsdatum → boolean); dieselben Ableitungen wie in der Tabelle. ── */
+type StatusChipId = "start_ueberschritten" | "pendenz_ueberfaellig" | "pflichtdok_offen" | "nicht_zugewiesen";
+const STATUS_CHIPS: { id: StatusChipId; label: string; praedikat: (c: OnboardingCase, bezug: Date) => boolean }[] = [
+  { id: "start_ueberschritten", label: "Startdatum überschritten", praedikat: (c, b) => tageBisStart(c.validFrom, b) < 0 && !istVertragUnterzeichnet(c.currentStep) },
+  { id: "pendenz_ueberfaellig", label: "Pendenz überfällig", praedikat: c => c.pendenzenUeberfaellig >= 1 },
+  { id: "pflichtdok_offen", label: "Pflichtdokument offen", praedikat: c => c.pflichtdokErledigt < c.pflichtdokGefordert },
+  { id: "nicht_zugewiesen", label: "Nicht zugewiesen", praedikat: c => c.responsibleUserId === null },
 ];
 
-function getDefaultView(role: UserRole): ViewKey {
-  return role === "diplomiert" ? "meine" : "alle";
-}
-
-function getViewOrder(role: UserRole): ViewKey[] {
-  if (role === "diplomiert") return ["meine", "alle", "blockiert", "fast_abgeschlossen", "in_erfassung"];
-  return ["alle", "meine", "blockiert", "fast_abgeschlossen", "in_erfassung"];
-}
-
-/* ── Filter defs ── */
-const allVerantwortliche = [...new Set(cases.map(c => c.verantwortlich))].sort();
+/* ── Auswahlfelder (Mehrfachauswahl) ── */
+const PHASE_OPTIONEN: OnboardingPhase[] = ["preparation", "klv", "activation"];
 const allKantone = [...new Set(cases.map(c => c.kanton))].sort();
 
-interface FilterDef { id: string; label: string; options: { value: string; label: string }[] }
-const filterDefs: FilterDef[] = [
-  { id: "status", label: "Status", options: (["neu", "in_bearbeitung", "abgeschlossen", "abgebrochen"] as OnboardingStatus[]).map(s => ({ value: s, label: ONBOARDING_STATUS_CFG[s].label })) },
-  { id: "verantwortlich", label: "Verantwortlich", options: allVerantwortliche.map(v => ({ value: v, label: v })) },
-  { id: "kanton", label: "Kanton", options: allKantone.map(k => ({ value: k, label: k })) },
-];
+/* ── Filterzustand: eine Struktur an einem Ort ── */
+interface FilterZustand {
+  segment: Segment;
+  statusChips: Set<StatusChipId>;
+  phasen: Set<OnboardingPhase>;
+  kantone: Set<string>;
+  suche: string;
+}
+const LEERER_FILTER: FilterZustand = { segment: "alle", statusChips: new Set(), phasen: new Set(), kantone: new Set(), suche: "" };
+
+/** Nur das Segment anwenden — Basis für die Chip-Zahlen (Chip schränkt darüber hinaus ein). */
+function imSegment(c: OnboardingCase, segment: Segment): boolean {
+  return segment === "alle" || c.responsibleUserId === MEINE_USER_ID;
+}
+
+/** Reine Ableitung: Mandate + Filterzustand + Bezugsdatum → gefilterte Mandate. */
+function filterMandate(list: OnboardingCase[], f: FilterZustand, bezug: Date): OnboardingCase[] {
+  return list.filter(c => {
+    if (!imSegment(c, f.segment)) return false;
+    for (const chip of STATUS_CHIPS) if (f.statusChips.has(chip.id) && !chip.praedikat(c, bezug)) return false;
+    if (f.phasen.size > 0 && !f.phasen.has(phaseFuerSchritt(c.currentStep))) return false;
+    if (f.kantone.size > 0 && !f.kantone.has(c.kanton)) return false;
+    const q = f.suche.trim().toLowerCase();
+    if (q && !(c.patientNachname.toLowerCase().includes(q) || c.patientVorname.toLowerCase().includes(q) || c.angehoeriger.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
 
 /* ══════════════════════════════════════════ */
 /* ── Verantwortliche: Kurzname + Initialen für die Spalte (Quelle responsibleUserId) ── */
@@ -124,68 +125,85 @@ function sortCases(list: OnboardingCase[], key: SortKey, dir: "asc" | "desc"): O
   });
 }
 
+/* ── Mehrfachauswahl-Dropdown (lokal; kein neues Shared-/shadcn-Bauteil).
+   Verwaltet nur Auf/Zu + Aussenklick; die Auswahl liegt im Filterzustand. ── */
+function AuswahlDropdown({ label, optionen, ausgewaehlt, onToggle }: {
+  label: string;
+  optionen: { value: string; label: string }[];
+  ausgewaehlt: Set<string>;
+  onToggle: (value: string) => void;
+}) {
+  const [offen, setOffen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!offen) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOffen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [offen]);
+  const anzahl = ausgewaehlt.size;
+  return (
+    <div className="relative" ref={ref}>
+      <button type="button" onClick={() => setOffen(o => !o)} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
+        style={{ gap: 6, padding: "7px 12px", borderRadius: "var(--radius-pill)", background: anzahl > 0 ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: anzahl > 0 ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: anzahl > 0 ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+        {label}{anzahl > 0 && <span style={{ fontVariantNumeric: "tabular-nums" }}>· {anzahl}</span>}
+        <ChevronDown style={{ width: 14, height: 14, opacity: 0.7 }} />
+      </button>
+      {offen && (
+        <div className="absolute z-50" style={{ top: "calc(100% + 6px)", left: 0, minWidth: 180, padding: 6, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)" }}>
+          {optionen.map(opt => {
+            const aktiv = ausgewaehlt.has(opt.value);
+            return (
+              <button key={opt.value} type="button" onClick={() => onToggle(opt.value)} className="w-full inline-flex items-center cursor-pointer transition-colors"
+                style={{ gap: 8, padding: "7px 8px", borderRadius: 6, background: "transparent", border: "none", fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit", textAlign: "left" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <span className="inline-flex items-center justify-center shrink-0" style={{ width: 16, height: 16, borderRadius: 4, border: aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: aktiv ? "var(--brand-primary)" : "transparent" }}>
+                  {aktiv && <Check style={{ width: 11, height: 11, color: "var(--text-on-dark)" }} />}
+                </span>
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function OnboardingListPage() {
   const navigate = useNavigate();
-  const role = useCurrentRole();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const defaultView = getDefaultView(role);
-  const activeView = (searchParams.get("view") || defaultView) as ViewKey;
-  const search = searchParams.get("q") || "";
-  const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
-  const [blockerTooltip, setBlockerTooltip] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterZustand>(LEERER_FILTER);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "start", dir: "asc" });
   const toggleSort = (key: SortKey) => setSort(s => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
-  const filterRef = useRef<HTMLDivElement>(null);
-  const prevRole = useRef(role);
 
-  const setView = (v: ViewKey) => { const n = new URLSearchParams(searchParams); if (v === defaultView) n.delete("view"); else n.set("view", v); setSearchParams(n, { replace: true }); };
-  const setSearch = (q: string) => { const n = new URLSearchParams(searchParams); if (!q) n.delete("q"); else n.set("q", q); setSearchParams(n, { replace: true }); };
+  /* ── Filter-Setter: immer neue Sets, damit die Ableitung rein bleibt ── */
+  const setSegment = (segment: Segment) => setFilter(f => ({ ...f, segment }));
+  const setSuche = (suche: string) => setFilter(f => ({ ...f, suche }));
+  const toggleChip = (id: StatusChipId) => setFilter(f => { const s = new Set(f.statusChips); if (s.has(id)) s.delete(id); else s.add(id); return { ...f, statusChips: s }; });
+  const togglePhase = (p: OnboardingPhase) => setFilter(f => { const s = new Set(f.phasen); if (s.has(p)) s.delete(p); else s.add(p); return { ...f, phasen: s }; });
+  const toggleKanton = (k: string) => setFilter(f => { const s = new Set(f.kantone); if (s.has(k)) s.delete(k); else s.add(k); return { ...f, kantone: s }; });
+  const resetFilter = () => setFilter(f => ({ ...LEERER_FILTER, suche: f.suche })); // Suche behält ihr eigenes Löschen
 
-  // Reset view on role switch
-  useEffect(() => {
-    if (prevRole.current !== role) {
-      prevRole.current = role;
-      const n = new URLSearchParams(searchParams);
-      n.delete("view");
-      setSearchParams(n, { replace: true });
-    }
-  }, [role]);
-
-  const chipFilters = useMemo(() => {
-    const f: Record<string, Set<string>> = {};
-    for (const [key, value] of searchParams.entries()) { if (["view", "q"].includes(key)) continue; f[key] = new Set(value.split(",").filter(Boolean)); }
-    return f;
-  }, [searchParams]);
-
-  const updateChipFilter = (id: string, next: Set<string>) => { const p = new URLSearchParams(searchParams); if (next.size === 0) p.delete(id); else p.set(id, Array.from(next).join(",")); setSearchParams(p, { replace: true }); };
-  const clearAllFilters = () => { const p = new URLSearchParams(); const v = searchParams.get("view"); const q = searchParams.get("q"); if (v) p.set("view", v); if (q) p.set("q", q); setSearchParams(p, { replace: true }); };
-
-  useEffect(() => { if (!filterPopoverOpen) return; const h = (e: MouseEvent) => { if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterPopoverOpen(false); }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, [filterPopoverOpen]);
-
-  const activeFilterTags = useMemo(() => {
-    const tags: { filterId: string; value: string; displayLabel: string }[] = [];
-    filterDefs.forEach(def => { const sel = chipFilters[def.id]; if (!sel) return; sel.forEach(val => { const opt = def.options.find(o => o.value === val); tags.push({ filterId: def.id, value: val, displayLabel: `${def.label}: ${opt?.label || val}` }); }); });
-    return tags;
-  }, [chipFilters]);
-
-  const removeFilterTag = (filterId: string, value: string) => { const sel = chipFilters[filterId] || new Set(); const next = new Set(sel); next.delete(value); updateChipFilter(filterId, next); };
-
-  const filtered = useMemo(() => {
-    let list = viewFilter(cases, activeView);
-    const st = chipFilters.status; if (st && st.size > 0) list = list.filter(c => st.has(c.status));
-    const vr = chipFilters.verantwortlich; if (vr && vr.size > 0) list = list.filter(c => vr.has(c.verantwortlich));
-    const kt = chipFilters.kanton; if (kt && kt.size > 0) list = list.filter(c => kt.has(c.kanton));
-    if (search.trim()) { const q = search.toLowerCase(); list = list.filter(c => c.patientNachname.toLowerCase().includes(q) || c.patientVorname.toLowerCase().includes(q) || c.angehoeriger.toLowerCase().includes(q) || c.id.toLowerCase().includes(q)); }
-    return list;
-  }, [activeView, search, chipFilters]);
-
+  /* ── Ableitungen ── */
+  const segmentBasis = useMemo(() => cases.filter(c => imSegment(c, filter.segment)), [filter.segment]);
+  const chipCounts = useMemo(() => {
+    const r = {} as Record<StatusChipId, number>;
+    // Zahl = wie viele Mandate im aktiven Segment der Chip zusätzlich einschränken würde.
+    for (const chip of STATUS_CHIPS) r[chip.id] = segmentBasis.filter(c => chip.praedikat(c, BEZUGSDATUM)).length;
+    return r;
+  }, [segmentBasis]);
+  const filtered = useMemo(() => filterMandate(cases, filter, BEZUGSDATUM), [filter]);
   const sorted = useMemo(() => sortCases(filtered, sort.key, sort.dir), [filtered, sort]);
 
-  const viewCounts = useMemo(() => {
-    const counts: Record<ViewKey, number> = { alle: 0, meine: 0, blockiert: 0, fast_abgeschlossen: 0, in_erfassung: 0 };
-    for (const k of Object.keys(counts) as ViewKey[]) counts[k] = viewFilter(cases, k).length;
-    return counts;
-  }, []);
+  const filterTags = useMemo(() => {
+    const t: { key: string; label: string; entfernen: () => void }[] = [];
+    STATUS_CHIPS.forEach(chip => { if (filter.statusChips.has(chip.id)) t.push({ key: `s-${chip.id}`, label: chip.label, entfernen: () => toggleChip(chip.id) }); });
+    filter.phasen.forEach(p => t.push({ key: `p-${p}`, label: `Phase: ${PHASE_LABEL[p]}`, entfernen: () => togglePhase(p) }));
+    filter.kantone.forEach(k => t.push({ key: `k-${k}`, label: `Kanton: ${k}`, entfernen: () => toggleKanton(k) }));
+    return t;
+  }, [filter]);
+
+  const SORT_LABEL: Record<SortKey, string> = { patient: "Patient", phase: "Phase", pendenzen: "Pendenzen", start: "geplantem Start" };
 
 
   /* ── Spaltenbeschreibung für die geteilte DataTable (Anteile/Mindestbreiten/
@@ -216,167 +234,165 @@ export function OnboardingListPage() {
 
   const onboardingSpalten: SpalteDef<OnboardingCase>[] = [
     { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", ausKarte: true, render: kennzeichenIcon },
-    { id: "patient", label: "Patient", anteil: 18, minCh: 20, align: "left", sortierbar: true, ausKarte: true,
+    { id: "patient", label: "Patient", anteil: 20, minCh: 22, align: "left", sortierbar: true, ausKarte: true,
       render: c => <span style={{ fontSize: "0.8125rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span> },
-    { id: "angehoeriger", label: "Angehörige/r", anteil: 15, minCh: 18, align: "left", zweitzeileUnter: "patient", ausKarte: true,
+    { id: "angehoeriger", label: "Angehörige/r", anteil: 17, minCh: 20, align: "left", zweitzeileUnter: "patient", ausKarte: true,
       render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.angehoeriger}</span> },
-    { id: "phase", label: "Phase", anteil: 8, minCh: 10, align: "left", sortierbar: true, ausblendenUnter: "eng", ausKarte: true,
+    { id: "phase", label: "Phase", anteil: 7, minCh: 11, align: "left", sortierbar: true, ausblendenUnter: "eng", ausKarte: true,
       render: c => <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{PHASE_LABEL[phaseFuerSchritt(c.currentStep)]}</span> },
-    { id: "schritt", label: "Aktueller Schritt", anteil: 22, minCh: 24, align: "left",
+    { id: "schritt", label: "Aktueller Schritt", anteil: 20, minCh: 24, align: "left",
       render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}><span style={{ fontFamily: "monospace", color: "var(--text-tertiary)", marginRight: 6 }}>{c.currentStep}/{ANZAHL_SCHRITTE}</span>{schrittLabel(c.currentStep)}</span> },
-    { id: "pflichtdok", label: "Pflichtdok.", anteil: 9, minCh: 9, align: "left",
+    { id: "pflichtdok", label: "Pflichtdok.", anteil: 7, minCh: 11, align: "left",
       // Korrektur #5: Balken entfällt — bei 40px war 7/8 vs 8/8 nicht auf einen Blick
       // unterscheidbar; der Bruch ist das eindeutige Signal, vollständig zusätzlich farblich.
       render: c => { const voll = c.pflichtdokErledigt === c.pflichtdokGefordert; return <span style={{ fontFamily: "monospace", fontSize: "0.8125rem", color: voll ? "var(--status-success-text)" : "var(--text-primary)", fontWeight: voll ? "var(--weight-medium)" : "var(--weight-regular)" }}>{c.pflichtdokErledigt}/{c.pflichtdokGefordert}</span>; } },
-    { id: "pendenzen", label: "Pendenzen", anteil: 7, minCh: 7, align: "right", sortierbar: true,
+    { id: "pendenzen", label: "Pendenzen", anteil: 10, minCh: 14, align: "right", sortierbar: true,
       // Korrektur #3: kein "offen" in der Zelle — nur die Zahl (rechtsbündig, tabellarisch),
       // der überfällige Anteil abgesetzt dahinter. 0 = stiller Leerwert.
       render: c => c.pendenzenOffen === 0
         ? <span style={{ fontSize: "0.8125rem", color: "var(--text-tertiary)" }}>–</span>
-        : <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{c.pendenzenOffen}{c.pendenzenUeberfaellig > 0 && <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500 }}>· {c.pendenzenUeberfaellig} überfällig</span>}</span> },
-    { id: "start", label: "Start geplant", anteil: 12, minCh: 16, align: "left", sortierbar: true,
-      render: c => { const t = tageBisStart(c.validFrom, BEZUGSDATUM); const k = kz(c); return <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{isoZuAnzeige(c.validFrom)}{t < 0 && !istVertragUnterzeichnet(c.currentStep) && <span style={{ marginLeft: 8, color: "var(--status-danger)", fontWeight: 500, fontSize: "0.75rem" }}>{Math.abs(t)} {Math.abs(t) === 1 ? "Tag" : "Tage"} überschritten</span>}{k.typ === "gelb" && k.spalte === "start" && <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500, fontSize: "0.75rem" }}>{k.grund}</span>}</span>; } },
-    { id: "verantwortlich", label: "Verantwortlich", anteil: 9, minCh: 12, align: "left",
+        : <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{c.pendenzenOffen}{c.pendenzenUeberfaellig > 0 && <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500 }}>· {c.pendenzenUeberfaellig} überfällig</span>}</span> },
+    { id: "start", label: "Start geplant", anteil: 11, minCh: 16, align: "left", sortierbar: true,
+      // Korrektur C: Abweichungsangabe einzeilig, ohne Umbruch — +N Tage bei Überschreitung,
+      // in N Tagen bei bevorstehendem Start. Die Zelle bricht nie (whiteSpace nowrap).
+      render: c => { const t = tageBisStart(c.validFrom, BEZUGSDATUM); const ueber = t < 0 && !istVertragUnterzeichnet(c.currentStep); const bevor = kz(c).typ === "gelb" && kz(c).spalte === "start"; return <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{isoZuAnzeige(c.validFrom)}{ueber && <span style={{ marginLeft: 8, color: "var(--status-danger)", fontWeight: 500, fontSize: "0.75rem" }}>+{Math.abs(t)} {Math.abs(t) === 1 ? "Tag" : "Tage"}</span>}{!ueber && bevor && <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500, fontSize: "0.75rem" }}>{t === 0 ? "heute" : `in ${t} ${t === 1 ? "Tag" : "Tagen"}`}</span>}</span>; } },
+    { id: "verantwortlich", label: "Verantwortlich", anteil: 8, minCh: 12, align: "left",
       render: c => { const resp = c.responsibleUserId ? RESPONSIBLE[c.responsibleUserId] : null; return resp
         ? <div className="flex items-center" style={{ gap: 6 }}><span className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}><span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{resp.initialen}</span></span><span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{resp.kurz}</span></div>
         : <button type="button" onClick={e => { e.stopPropagation(); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "0.75rem", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit" }}><Plus style={{ width: 12, height: 12 }} /> Zuweisen</button>; } },
   ];
 
-  const viewOrder = getViewOrder(role);
+  const inhaltRahmen = { maxWidth: TABELLE_LAYOUT.inhaltMaxPx, margin: "0 auto", width: "100%" } as const;
+  const leerImOnboarding = cases.length === 0;
+  const keineTreffer = sorted.length === 0;
+
+  const suchButton = { background: "transparent", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-pill)", padding: "5px 12px", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", cursor: "pointer" } as const;
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* ═══════════════════════════════════════
-         HEADER
-         ═══════════════════════════════════════ */}
       <style>{`
         .ob-list-pad { padding-left: var(--mobile-page-padding); padding-right: var(--mobile-page-padding); }
         @media (min-width: 640px) { .ob-list-pad { padding-left: var(--space-6); padding-right: var(--space-6); } }
       `}</style>
-      <div className="shrink-0 ob-list-pad" style={{ paddingTop: "var(--space-4)" }}>
-        {/* Title row */}
-        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
-          <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Onboarding</h1>
-          <button onClick={() => navigate("/onboarding/neu")} className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
-            style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
-            onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
-            <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neues Mandat</span>
-          </button>
-        </div>
 
-        {/* Search + filter */}
-        <div className="flex items-center" style={{ gap: 8, marginBottom: "var(--space-3)" }}>
-          <div className="flex items-center flex-1" style={{
-            maxWidth: 300, gap: "var(--space-2)", padding: "8px 14px",
-            borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)",
-            border: "var(--border-thin) solid var(--border-default)",
-          }}>
-            <Search style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Onboardings suchen…" className="flex-1 bg-transparent outline-none" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }} />
-            {search && <button onClick={() => setSearch("")} className="cursor-pointer" style={{ background: "transparent", border: "none" }}><X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} /></button>}
+      {/* ═══ KOPF — teilt Maximalbreite und Kanten mit der Tabelle (Korrektur A) ═══ */}
+      <div className="shrink-0 ob-list-pad" style={{ paddingTop: "var(--space-4)" }}>
+        <div style={inhaltRahmen}>
+          {/* 1) Titel + Primäraktion auf einer Höhe */}
+          <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+            <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Onboarding</h1>
+            <button onClick={() => navigate("/onboarding/neu")} className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
+              style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
+              <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neues Mandat</span>
+            </button>
           </div>
 
-          <div className="relative" ref={filterRef}>
-            <button onClick={() => setFilterPopoverOpen(o => !o)} className="inline-flex items-center cursor-pointer transition-colors"
-              style={{ gap: 6, padding: "6px 14px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: 13, fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
-              onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
-              <SlidersHorizontal style={{ width: 14, height: 14, color: "var(--text-secondary)" }} />
-              Filter
-              {activeFilterTags.length > 0 && <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "var(--brand-primary)" }} />}
-            </button>
-            {filterPopoverOpen && (
-              <div className="absolute z-50" style={{ top: "calc(100% + 6px)", left: 0, width: 300, padding: 14, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)" }}>
-                <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
-                  <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Filter</span>
-                  <button onClick={() => setFilterPopoverOpen(false)} className="cursor-pointer" style={{ background: "transparent", border: "none" }}><X style={{ width: 14, height: 14, color: "var(--text-secondary)" }} /></button>
+          {leerImOnboarding ? (
+            <p style={{ fontSize: "var(--text-body)", color: "var(--text-secondary)", maxWidth: 560 }}>
+              Sobald ein Mandat ins Onboarding gelangt, erscheint es hier mit Phase, aktuellem Schritt und geplantem Start.
+            </p>
+          ) : (
+            <>
+              {/* 2) Steuerleiste: Suche, Zugehörigkeit, Auswahlfelder */}
+              <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
+                <div className="flex items-center" style={{ flex: "1 1 220px", maxWidth: 300, gap: "var(--space-2)", padding: "7px 14px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
+                  <Search style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
+                  <input value={filter.suche} onChange={e => setSuche(e.target.value)} placeholder="Onboardings suchen…" className="flex-1 bg-transparent outline-none" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", minWidth: 0 }} />
+                  {filter.suche && <button onClick={() => setSuche("")} className="cursor-pointer shrink-0" style={{ background: "transparent", border: "none" }}><X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} /></button>}
                 </div>
-                <div className="flex flex-col" style={{ gap: 14, maxHeight: 400, overflowY: "auto" }}>
-                  {filterDefs.map(def => (
-                    <div key={def.id}>
-                      <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 8, fontWeight: "var(--weight-medium)" }}>{def.label}</div>
-                      <div className="flex flex-wrap" style={{ gap: 4 }}>
-                        {def.options.map(opt => {
-                          const sel = chipFilters[def.id] || new Set();
-                          const isActive = sel.has(opt.value);
-                          return (
-                            <button key={opt.value} onClick={() => { const n = new Set(sel); if (isActive) n.delete(opt.value); else n.add(opt.value); updateChipFilter(def.id, n); }} className="cursor-pointer transition-colors"
-                              style={{ padding: "4px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)", background: isActive ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: isActive ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", color: isActive ? "var(--brand-primary)" : "var(--text-secondary)" }}>
-                              {opt.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+
+                {/* Zugehörigkeit — Segmentumschalter, genau eine Auswahl, Vorgabe „Alle" */}
+                <div className="inline-flex shrink-0" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
+                  {([["meine", "Meine"], ["alle", "Alle"]] as [Segment, string][]).map(([seg, lbl]) => {
+                    const aktiv = filter.segment === seg;
+                    return (
+                      <button key={seg} type="button" onClick={() => setSegment(seg)} className="ui-fokusring cursor-pointer transition-colors"
+                        style={{ padding: "5px 16px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--bg-elevated)" : "transparent", border: aktiv ? "var(--border-thin) solid var(--border-default)" : "var(--border-thin) solid transparent", fontSize: "var(--text-small)", fontWeight: aktiv ? "var(--weight-medium)" : "var(--weight-regular)", color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", fontFamily: "inherit" }}>
+                        {lbl}
+                      </button>
+                    );
+                  })}
                 </div>
-                {activeFilterTags.length > 0 && (
-                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "var(--border-thin) solid var(--border-default)", textAlign: "right" }}>
-                    <button onClick={clearAllFilters} className="cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)" }}>Alle zurücksetzen</button>
-                  </div>
+
+                <AuswahlDropdown label="Phase" optionen={PHASE_OPTIONEN.map(pp => ({ value: pp, label: PHASE_LABEL[pp] }))} ausgewaehlt={filter.phasen as Set<string>} onToggle={v => togglePhase(v as OnboardingPhase)} />
+                <AuswahlDropdown label="Kanton" optionen={allKantone.map(k => ({ value: k, label: k }))} ausgewaehlt={filter.kantone} onToggle={toggleKanton} />
+              </div>
+
+              {/* Status-Chips — kombinierbar (UND), Zahl aus denselben Daten wie die Tabelle */}
+              <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
+                {STATUS_CHIPS.map(chip => {
+                  const aktiv = filter.statusChips.has(chip.id);
+                  const n = chipCounts[chip.id];
+                  return (
+                    <button key={chip.id} type="button" onClick={() => toggleChip(chip.id)} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
+                      style={{ gap: 7, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: aktiv ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: aktiv ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                      <span className="inline-flex items-center justify-center shrink-0" style={{ width: 15, height: 15, borderRadius: 4, border: aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: aktiv ? "var(--brand-primary)" : "transparent" }}>
+                        {aktiv && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}
+                      </span>
+                      {chip.label}
+                      <span style={{ fontVariantNumeric: "tabular-nums", color: aktiv ? "var(--brand-primary)" : "var(--text-tertiary)" }}>{n}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 3) Aktivzeile — immer sichtbar */}
+              <div className="flex items-center flex-wrap" style={{ gap: 6, minHeight: 24, marginBottom: "var(--space-2)" }}>
+                {filterTags.length === 0 ? (
+                  <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+                    {filter.segment === "meine" ? "Meine offenen Mandate" : "Alle offenen Mandate"} · sortiert nach {SORT_LABEL[sort.key]}
+                  </span>
+                ) : (
+                  <>
+                    {filterTags.map(t => (
+                      <button key={t.key} type="button" onClick={t.entfernen} className="ui-fokusring inline-flex items-center cursor-pointer"
+                        style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary-light)", color: "var(--brand-primary)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", border: "none", fontFamily: "inherit" }}>
+                        {t.label} <X style={{ width: 10, height: 10 }} />
+                      </button>
+                    ))}
+                    <button type="button" onClick={resetFilter} className="cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", padding: "3px 6px", fontFamily: "inherit" }}>Filter zurücksetzen</button>
+                  </>
                 )}
               </div>
-            )}
-          </div>
-
-          {activeFilterTags.map(tag => (
-            <button key={`${tag.filterId}-${tag.value}`} onClick={() => removeFilterTag(tag.filterId, tag.value)} className="inline-flex items-center cursor-pointer"
-              style={{ gap: 4, padding: "4px 10px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary-light)", color: "var(--brand-primary)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", border: "none" }}>
-              {tag.displayLabel} <X style={{ width: 10, height: 10 }} />
-            </button>
-          ))}
-          {activeFilterTags.length > 0 && (
-            <button onClick={clearAllFilters} className="cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", padding: "4px 6px" }}>Alle zurücksetzen</button>
+            </>
           )}
         </div>
+      </div>
 
-        {/* View pills — horizontal scroll on mobile */}
-        <div className="flex items-center overflow-x-auto" style={{ gap: 8, marginBottom: "var(--space-4)", paddingBottom: 2 }}>
-          {viewOrder.map(vk => {
-            const def = VIEW_DEFS.find(d => d.key === vk)!;
-            const isActive = activeView === vk;
-            const count = viewCounts[vk];
-            return (
-              <button key={vk} onClick={() => setView(vk)}
-                className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
-                style={{
-                  gap: 8, padding: "8px 14px", borderRadius: "var(--radius-pill)", whiteSpace: "nowrap",
-                  fontSize: 13, fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",
-                  background: isActive ? "var(--brand-primary-light)" : "transparent",
-                  border: isActive ? "var(--border-thin) solid transparent" : "var(--border-thin) solid var(--border-default)",
-                  color: isActive ? "var(--brand-primary)" : "var(--text-primary)",
-                }}
-                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = "var(--bg-secondary)"; }}
-                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = isActive ? "var(--brand-primary-light)" : "transparent"; }}>
-                {def.label}
-                <span className="inline-flex items-center justify-center" style={{
-                  minWidth: 18, padding: "1px 8px", borderRadius: "var(--radius-pill)",
-                  fontSize: 11, fontWeight: "var(--weight-medium)",
-                  background: isActive ? "var(--brand-primary)" : "var(--bg-secondary)",
-                  color: isActive ? "var(--text-on-dark)" : "var(--text-secondary)",
-                }}>{count}</span>
-              </button>
-            );
-          })}
+      {/* ═══ TABELLE / Zustände ═══ */}
+      {!leerImOnboarding && (
+        <div className="flex-1 overflow-y-auto ob-list-pad" style={{ paddingTop: 0, paddingBottom: "var(--space-4)" }}>
+          {keineTreffer ? (
+            <div style={inhaltRahmen}>
+              <div style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", padding: "3rem 1.5rem", textAlign: "center" }}>
+                <p style={{ fontSize: "var(--text-body)", color: "var(--text-secondary)", marginBottom: 14 }}>
+                  {filter.suche.trim()
+                    ? <>Keine Mandate für „{filter.suche.trim()}“.</>
+                    : "Keine Mandate mit diesen Filtern."}
+                </p>
+                <div className="inline-flex items-center flex-wrap justify-center" style={{ gap: 8 }}>
+                  {filter.suche.trim() && <button type="button" onClick={() => setSuche("")} style={suchButton}>Suche löschen</button>}
+                  {filterTags.length > 0 && <button type="button" onClick={resetFilter} style={suchButton}>Filter zurücksetzen</button>}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <DataTable<OnboardingCase>
+              spalten={onboardingSpalten}
+              zeilen={sorted}
+              zeilenKey={c => c.id}
+              onZeileKlick={c => navigate(`/onboarding/${c.id}`)}
+              zeilenHintergrund={onboardingZeilenHintergrund}
+              sort={sort}
+              onSort={k => toggleSort(k as SortKey)}
+              karteTitel={onboardingKarteTitel}
+              fusszeile={<><span>{filtered.length} von {cases.length} offenen Mandaten</span><span>Stand: {isoZuAnzeige("2026-07-31")}</span></>}
+              leerText="Keine Mandate mit diesen Filtern."
+            />
+          )}
         </div>
-      </div>
-
-      {/* ═══════════════════════════════════════
-         TABLE
-         ═══════════════════════════════════════ */}
-      <div className="flex-1 overflow-y-auto ob-list-pad" style={{ paddingTop: 0, paddingBottom: "var(--space-4)" }}>
-        <DataTable<OnboardingCase>
-          spalten={onboardingSpalten}
-          zeilen={sorted}
-          zeilenKey={c => c.id}
-          onZeileKlick={c => navigate(`/onboarding/${c.id}`)}
-          zeilenHintergrund={onboardingZeilenHintergrund}
-          sort={sort}
-          onSort={k => toggleSort(k as SortKey)}
-          karteTitel={onboardingKarteTitel}
-          fusszeile={<><span>{filtered.length} von {cases.length} offenen Mandaten</span><span>Stand: {isoZuAnzeige("2026-07-31")}</span></>}
-          leerText="Keine Ergebnisse für diesen Filter."
-        />
-      </div>
+      )}
     </div>
   );
 }

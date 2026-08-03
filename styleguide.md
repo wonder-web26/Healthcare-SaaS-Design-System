@@ -1180,9 +1180,12 @@ Aufrufstelle. Erste Verwendung: Onboarding-Liste.
 
 ### Grundsatz: fluid ist der Rahmen, nicht der Inhalt
 
-- **Inhaltsbreite:** Der Inhaltsbereich wächst fluid bis **1600px** und wird darüber
-  zentriert (darüber wächst nur Leerfläche, kein Inhalt). Die Seiten-Polsterung skaliert
-  separat (`--mobile-page-padding` → `--space-6` ab 640px).
+- **Inhaltsbreite:** Der Inhaltsbereich wächst fluid bis **1400px** und wird darüber
+  zentriert (darüber wächst nur Leerfläche, kein Inhalt). Die Grenze gilt für den
+  **gesamten Seiteninhalt** — Titel, Steuerleiste, Tabelle und Fusszeile teilen dieselbe
+  linke und rechte Kante (`TABELLE_LAYOUT.inhaltMaxPx`, zentriert per `margin: 0 auto`),
+  nicht nur die Tabelle. Die Seiten-Polsterung skaliert separat
+  (`--mobile-page-padding` → `--space-6` ab 640px).
 - **Spaltenbreiten:** Anteile (Prozent bzw. `fr`-Gewicht) setzen die Proportion,
   Mindestbreiten in `ch` sichern die Lesbarkeit. Umgesetzt als CSS-Grid
   `minmax(<minCh>ch, <anteil>fr)`. Feste Pixel **nur** wo physisch bedeutsam

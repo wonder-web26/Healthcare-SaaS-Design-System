@@ -15,7 +15,7 @@ import * as React from "react";
 /* ── Layoutwerte — die einzige Stelle (Verif #10) ── */
 export const TABELLE_LAYOUT = {
   /** Inhaltsbereich fluid bis hierher, danach zentriert (darüber wächst nur Leerfläche). */
-  inhaltMaxPx: 1600,
+  inhaltMaxPx: 1400,
   /** Haltepunkte in px Fensterbreite. */
   haltepunktePx: {
     zweizeilig: 1400, // darunter: als Zweitzeile markierte Spalte rutscht unter ihre Leitspalte
