@@ -49,6 +49,7 @@ import {
 import { useNavigate } from "react-router";
 import { LeerZustand } from "./ui/LeerZustand";
 import { TabPersonalienV2, TabSteuerV2, TabAnamneseV2 } from "./form/MigratedPatientForms";
+import { FORMULAR_MAX } from "./form/MigratedAngehoerigerForms";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
 import { MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, MOCK_ARZT_DIAGNOSEN, ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
@@ -551,7 +552,10 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
          TAB CONTENT (flach im Container, kein Kartenrahmen)
          ═══════════════════════════════════════ */}
       <div style={{ background: "var(--bg-elevated)" }}>
-        <div style={{ padding: "20px 32px 24px" }}>
+        {/* Formularbereich auf FORMULAR_MAX begrenzt — aber nur für die Formular-Reiter
+            (Personalien/Steuer/Anamnese); klinische Reiter (Vitaldaten, InterRAI,
+            Pflegeplanung, KLV, Workflow) behalten ihre volle Breite. */}
+        <div style={{ padding: "20px 32px 24px", maxWidth: [0, 1, 3].includes(activeTab) ? FORMULAR_MAX : undefined }}>
           {activeTab === 0 && (
             <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}

@@ -213,9 +213,6 @@ export function NotizSpur({ referenz, personName }: { referenz: NotizReferenz; p
           )}
           <button type="button" onClick={sichern} disabled={!text.trim()} className="ui-fokusring cursor-pointer" style={{ marginLeft: "auto", padding: "4px 12px", borderRadius: "var(--radius-pill)", background: text.trim() ? "var(--brand-primary)" : "var(--bg-secondary)", color: text.trim() ? "var(--text-on-dark)" : "var(--text-tertiary)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", border: "none", fontFamily: "inherit", cursor: text.trim() ? "pointer" : "default" }}>Sichern</button>
         </div>
-        <p style={{ marginTop: 6, fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
-          Für Absprachen, Anrufe und Übergaben. Zu Erledigendes gehört in die Pendenzen, pflegerische Beobachtungen in den Pflegebericht.
-        </p>
       </div>
 
       {/* ── Rücknahme-Leiste ── */}

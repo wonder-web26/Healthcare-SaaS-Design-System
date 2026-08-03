@@ -784,10 +784,6 @@ export function OnboardingPage() {
                         Alle {offeneAnzahl} anzeigen <ChevronRight style={{ width: 13, height: 13 }} />
                       </button>
                     )}
-                    {/* Erklärsatz nur wenn Aufgaben vorhanden (§H). Einzige Stelle, die das Domänenmodell erklärt. */}
-                    <div style={{ marginTop: "var(--space-4)", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
-                      Angehörige erhält nach Unterzeichnung einen eigenen Workflow.
-                    </div>
                   </>
                 )}
 

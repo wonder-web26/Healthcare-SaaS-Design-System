@@ -76,6 +76,11 @@ const FUNKTIONEN = FUNKTIONEN_OPTIONS;
    Rasterzelle nicht aus; die Lücke rechts ist beabsichtigt. ── */
 export const FELD_MAX = { schmal: "12rem", mittel: "22rem", voll: "none" } as const;
 
+/* ── Maximalbreite des Formularbereichs — EINZIGE Stelle. Gilt für Raster,
+   Abschnittsüberschriften, Trennlinien und "voll"-Felder gemeinsam (dieselbe rechte
+   Kante, keine Stufe), linksbündig. Die Reiterzeile ist NICHT betroffen. ── */
+export const FORMULAR_MAX = 880;
+
 export function PersonalienFormV2({
   data, onChange, onOpenSpezialbewilligung,
 }: {

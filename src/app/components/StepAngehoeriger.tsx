@@ -49,7 +49,7 @@ import {
 } from "./ui/select";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { PersonalienFormV2, SteuerFormV2, AnstellungFormV2 } from "./form/MigratedAngehoerigerForms";
+import { PersonalienFormV2, SteuerFormV2, AnstellungFormV2, FORMULAR_MAX } from "./form/MigratedAngehoerigerForms";
 import { PartnerFormV2, KinderFormV2, DokumenteFormV2 } from "./form/MigratedAngehoerigerForms2";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
@@ -690,7 +690,7 @@ export function StepAngehoeriger({
          CONTENT AREA (flach im Container, kein Kartenrahmen)
          ═══════════════════════════════════════ */}
       <div style={{ background: "var(--bg-elevated)" }}>
-        <div style={{ padding: "20px 32px 24px" }}>
+        <div style={{ padding: "20px 32px 24px", maxWidth: FORMULAR_MAX }}>
           {activeTab === 0 && <PersonalienFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />}
           {activeTab === 1 && <SteuerFormV2 data={data} onChange={onChange} />}
           {activeTab === 2 && <PartnerFormV2 data={data} onChange={onChange} />}
