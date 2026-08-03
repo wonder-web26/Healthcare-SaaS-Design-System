@@ -574,7 +574,11 @@ export function OnboardingPage() {
           {/* Links: Patientenname (Titel) · bedienbare Statusmarke · Angehörige (Kontext) */}
           <div className="min-w-0 flex items-center flex-wrap" style={{ gap: 8, rowGap: 4, minHeight: 26 }}>
             <span style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere", minWidth: 0 }}>
-              {isExisting && caseInfo ? caseInfo.patient : "Neues Mandat eröffnen"}
+              {/* Titel = Patientenname aus der Fallquelle (Schreibweise der Liste: Nachname, Vorname),
+                  zur Anzeigezeit aufgelöst; zeigt immer den Patienten (auch im Angehörigen-Schritt).
+                  Rückfall auf den alten Fall-Lookup, sonst die Neuanlage-Beschriftung. */}
+              {notizFall ? `${notizFall.patientNachname}, ${notizFall.patientVorname}`
+                : isExisting && caseInfo ? caseInfo.patient : "Neues Mandat eröffnen"}
             </span>
             {caseId ? (
               <DropdownMenu>
