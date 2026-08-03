@@ -47,6 +47,7 @@ import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
 import { fallById, patientRef, angehoerigerRef, patientAnzeigeName, angehoerigerAnzeigeName } from "../../lib/onboarding/faelle";
 import { NotizSpur } from "./notizen/NotizSpur";
 import { type NotizReferenz } from "../../lib/notizen/notizen";
+import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient, seedDemoRhythmus } from "./demoSteinerFall";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
@@ -253,11 +254,15 @@ export function OnboardingPage() {
   const [showSaveToast, setShowSaveToast] = useState(false);
 
   /* ── Angehöriger form state (lifted) ───── */
-  const [angehoerigerData, setAngehoerigerData] = useState<AngehoerigerFormData>(emptyAngehoerigerForm);
+  const [angehoerigerData, setAngehoerigerData] = useState<AngehoerigerFormData>(() => caseId === DEMO_FALL_ID ? demoSteinerAngehoeriger : emptyAngehoerigerForm);
   const [step1Valid, setStep1Valid] = useState(false);
 
   /* ── Patient form state (lifted) ───── */
-  const [patientData, setPatientData] = useState<PatientFormData>(emptyPatientForm);
+  const [patientData, setPatientData] = useState<PatientFormData>(() => caseId === DEMO_FALL_ID ? demoSteinerPatient : emptyPatientForm);
+
+  // Demo-Fall: Rhythmus-/Workflow-Aufgaben vorbelegen (idempotent), ohne Umweg
+  // über den Patienten-Schritt.
+  useEffect(() => { if (caseId === DEMO_FALL_ID) seedDemoRhythmus(); }, [caseId]);
   const [step2Valid, setStep2Valid] = useState(false);
 
   /* ── Step 3 (Vertrag) validity ───── */
