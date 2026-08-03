@@ -127,7 +127,7 @@ export const angehoerige: Angehoeriger[] = [
     status: "aktiv",
     billingReadiness: "abrechenbar",
     zugeordnetePatientenList: [
-      { id: "P-2026-0041", name: "Anna Müller" },
+      { id: "P-2026-0041", name: "Hans-Rudolf Steiner" },
     ],
     stempelTage: 18,
     stempelSoll: 22,
@@ -154,7 +154,7 @@ export const angehoerige: Angehoeriger[] = [
     status: "in_onboarding",
     billingReadiness: "in_vorbereitung",
     zugeordnetePatientenList: [
-      { id: "P-2026-0042", name: "Thomas Schmid" },
+      { id: "P-2026-0042", name: "Marie-Louise Hübscher-Wiederkehr" },
     ],
     stempelTage: 5,
     stempelSoll: 22,
@@ -181,8 +181,8 @@ export const angehoerige: Angehoeriger[] = [
     status: "aktiv",
     billingReadiness: "abrechenbar",
     zugeordnetePatientenList: [
-      { id: "P-2026-0043", name: "Maria Weber" },
-      { id: "P-2026-0047", name: "Elisabeth Brunner" },
+      { id: "P-2026-0043", name: "Fatmire Rexhepi" },
+      { id: "P-2026-0047", name: "Anna Bösiger" },
       { id: "P-2026-0049", name: "Gertrud Zimmermann" },
     ],
     stempelTage: 20,
@@ -210,7 +210,7 @@ export const angehoerige: Angehoeriger[] = [
     status: "aktiv",
     billingReadiness: "gekuendigt",
     zugeordnetePatientenList: [
-      { id: "P-2026-0044", name: "Klaus Fischer" },
+      { id: "P-2026-0044", name: "Emine Kaya" },
     ],
     stempelTage: 0,
     stempelSoll: 22,
@@ -237,7 +237,7 @@ export const angehoerige: Angehoeriger[] = [
     status: "fehlende_dokumente",
     billingReadiness: "nicht_abrechenbar",
     zugeordnetePatientenList: [
-      { id: "P-2026-0045", name: "Sabine Becker" },
+      { id: "P-2026-0045", name: "Fritz Huber" },
     ],
     stempelTage: 14,
     stempelSoll: 22,
@@ -267,7 +267,7 @@ export const angehoerige: Angehoeriger[] = [
     status: "in_onboarding",
     billingReadiness: "in_vorbereitung",
     zugeordnetePatientenList: [
-      { id: "P-2026-0046", name: "Peter Hoffmann" },
+      { id: "P-2026-0046", name: "Joaquim Da Silva" },
     ],
     stempelTage: 3,
     stempelSoll: 22,
@@ -295,7 +295,7 @@ export const angehoerige: Angehoeriger[] = [
     status: "aktiv",
     billingReadiness: "abrechenbar",
     zugeordnetePatientenList: [
-      { id: "P-2026-0047", name: "Elisabeth Brunner" },
+      { id: "P-2026-0047", name: "Anna Bösiger" },
       { id: "P-2026-0050", name: "Werner Keller" },
     ],
     stempelTage: 22,
@@ -323,7 +323,7 @@ export const angehoerige: Angehoeriger[] = [
     status: "fehlende_dokumente",
     billingReadiness: "nicht_abrechenbar",
     zugeordnetePatientenList: [
-      { id: "P-2026-0048", name: "Heinrich Steiner" },
+      { id: "P-2026-0048", name: "Gino Ferrari" },
     ],
     stempelTage: 10,
     stempelSoll: 22,
@@ -382,7 +382,7 @@ export const angehoerige: Angehoeriger[] = [
     billingReadiness: "abrechenbar",
     zugeordnetePatientenList: [
       { id: "P-2026-0050", name: "Werner Keller" },
-      { id: "P-2026-0041", name: "Anna Müller" },
+      { id: "P-2026-0041", name: "Hans-Rudolf Steiner" },
     ],
     stempelTage: 21,
     stempelSoll: 22,
@@ -434,7 +434,7 @@ export const angehoerige: Angehoeriger[] = [
     status: "aktiv",
     billingReadiness: "abrechenbar",
     zugeordnetePatientenList: [
-      { id: "P-2026-0043", name: "Maria Weber" },
+      { id: "P-2026-0043", name: "Fatmire Rexhepi" },
     ],
     stempelTage: 17,
     stempelSoll: 22,
