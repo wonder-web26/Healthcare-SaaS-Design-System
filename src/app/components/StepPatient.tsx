@@ -552,10 +552,10 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
          TAB CONTENT (flach im Container, kein Kartenrahmen)
          ═══════════════════════════════════════ */}
       <div style={{ background: "var(--bg-elevated)" }}>
-        {/* Formularbereich auf FORMULAR_MAX begrenzt — aber nur für die Formular-Reiter
-            (Personalien/Steuer/Anamnese); klinische Reiter (Vitaldaten, InterRAI,
-            Pflegeplanung, KLV, Workflow) behalten ihre volle Breite. */}
-        <div style={{ padding: "20px 32px 24px", maxWidth: [0, 1, 3].includes(activeTab) ? FORMULAR_MAX : undefined }}>
+        {/* Formularbereich auf FORMULAR_MAX begrenzt — Formular-Reiter (Personalien/
+            Steuer/Anamnese) sowie ATL (4) und Dokumente (9); klinische Reiter
+            (Vitaldaten, InterRAI, Pflegeplanung, KLV, Workflow) behalten volle Breite. */}
+        <div style={{ padding: "20px 32px 24px", maxWidth: [0, 1, 3, 4, 9].includes(activeTab) ? FORMULAR_MAX : undefined }}>
           {activeTab === 0 && (
             <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}

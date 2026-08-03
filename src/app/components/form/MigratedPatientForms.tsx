@@ -49,22 +49,22 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={User} label="Identität" first />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="Name" required value={data.name} onChange={v => onUpdate("name", v)} onBlur={() => onBlur("name")} placeholder="Nachname" error={t("name") && !filled(data.name) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Vorname" required value={data.vorname} onChange={v => onUpdate("vorname", v)} onBlur={() => onBlur("vorname")} placeholder="Vorname" error={t("vorname") && !filled(data.vorname) ? "Pflichtfeld" : undefined} />
-        <DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => onUpdate("geburtsdatum", (v as string) ?? "")} onBlur={() => onBlur("geburtsdatum")} />
-        <FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => onUpdate("geschlecht", v || "")} options={GESCHLECHT} placeholder="Geschlecht wählen" />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Name" required value={data.name} onChange={v => onUpdate("name", v)} onBlur={() => onBlur("name")} placeholder="Nachname" error={t("name") && !filled(data.name) ? "Pflichtfeld" : undefined} /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required value={data.vorname} onChange={v => onUpdate("vorname", v)} onBlur={() => onBlur("vorname")} placeholder="Vorname" error={t("vorname") && !filled(data.vorname) ? "Pflichtfeld" : undefined} /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => onUpdate("geburtsdatum", (v as string) ?? "")} onBlur={() => onBlur("geburtsdatum")} /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => onUpdate("geschlecht", v || "")} options={GESCHLECHT} placeholder="Geschlecht wählen" /></div>
       </div>
       <div style={{ marginTop: "var(--space-4)" }}>
-        <AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => onUpdate("ahvNummer", v)} />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => onUpdate("ahvNummer", v)} /></div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <FormSelect label="Nationalität" value={data.nationalitaet || null} onChange={v => onUpdate("nationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" />
-        {isSwiss && <TextInput label="Heimatort" value={data.heimatort} onChange={v => onUpdate("heimatort", v)} placeholder="z.B. Bern" />}
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Nationalität" value={data.nationalitaet || null} onChange={v => onUpdate("nationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" /></div>
+        {isSwiss && <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Heimatort" value={data.heimatort} onChange={v => onUpdate("heimatort", v)} placeholder="z.B. Bern" /></div>}
         {!isSwiss && filled(data.nationalitaet) && (
-          <FormSelect label="Aufenthaltsstatus" value={data.aufenthaltsstatus || null} onChange={v => onUpdate("aufenthaltsstatus", v || "")}
-            options={[{ value: "B", label: "B" }, { value: "C", label: "C" }, { value: "L", label: "L" }, { value: "G", label: "G" }, { value: "F", label: "F" }, { value: "N", label: "N" }]} placeholder="Status wählen" />
+          <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Aufenthaltsstatus" value={data.aufenthaltsstatus || null} onChange={v => onUpdate("aufenthaltsstatus", v || "")}
+            options={[{ value: "B", label: "B" }, { value: "C", label: "C" }, { value: "L", label: "L" }, { value: "G", label: "G" }, { value: "F", label: "F" }, { value: "N", label: "N" }]} placeholder="Status wählen" /></div>
         )}
-        <FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" /></div>
       </div>
 
       <SectionHeader icon={MapPin} label="Adresse" />
@@ -72,41 +72,41 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
         <TextInput label="Strasse" required value={data.adresseStrasse} onChange={v => onUpdate("adresseStrasse", v)} onBlur={() => onBlur("adresseStrasse")} placeholder="Musterstrasse 12" error={t("adresseStrasse") && !filled(data.adresseStrasse) ? "Pflichtfeld" : undefined} />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="PLZ" required value={data.adressePlz} onChange={v => onUpdate("adressePlz", v.replace(/\D/g, "").slice(0, 4))} onBlur={() => onBlur("adressePlz")} placeholder="8000" />
-        <TextInput label="Ort" required value={data.adresseOrt} onChange={v => onUpdate("adresseOrt", v)} onBlur={() => onBlur("adresseOrt")} placeholder="Zürich" error={t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined} />
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="PLZ" required value={data.adressePlz} onChange={v => onUpdate("adressePlz", v.replace(/\D/g, "").slice(0, 4))} onBlur={() => onBlur("adressePlz")} placeholder="8000" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Ort" required value={data.adresseOrt} onChange={v => onUpdate("adresseOrt", v)} onBlur={() => onBlur("adresseOrt")} placeholder="Zürich" error={t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined} /></div>
       </div>
 
       <SectionHeader icon={Shield} label="Krankenkasse & Aerzte" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
         {/* SP-02: Picklist statt Freitext */}
-        <FormSelect label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { const bag = getBagNummer(v || ""); onUpdate("krankenkasse", v || ""); if (bag) setTimeout(() => onUpdate("bagNr", bag), 0); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { const bag = getBagNummer(v || ""); onUpdate("krankenkasse", v || ""); if (bag) setTimeout(() => onUpdate("bagNr", bag), 0); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} /></div>
         {/* SP-03: Kartennummer (umbenannt) */}
-        <TextInput label="Kartennummer" required value={data.kartennummer} onChange={v => onUpdate("kartennummer", v)} onBlur={() => onBlur("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Kartennummer" required value={data.kartennummer} onChange={v => onUpdate("kartennummer", v)} onBlur={() => onBlur("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} /></div>
         {/* SP-03: BAG-Nr. */}
-        <TextInput label="BAG-Nr. der Kasse" value={data.bagNr} onChange={v => onUpdate("bagNr", v)} placeholder="z.B. 0271" />
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="BAG-Nr. der Kasse" value={data.bagNr} onChange={v => onUpdate("bagNr", v)} placeholder="z.B. 0271" /></div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="Hausarzt Name" required value={data.hausarztName} onChange={v => onUpdate("hausarztName", v)} onBlur={() => onBlur("hausarztName")} placeholder="Dr. Müller" error={t("hausarztName") && !filled(data.hausarztName) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Hausarzt Telefon" value={data.hausarztTelefon} onChange={v => onUpdate("hausarztTelefon", v)} placeholder="+41 44 123 45 67" />
-        <TextInput label="Hausarzt E-Mail" value={data.hausarztEmail} onChange={v => onUpdate("hausarztEmail", v)} placeholder="praxis@example.ch" />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Hausarzt Name" required value={data.hausarztName} onChange={v => onUpdate("hausarztName", v)} onBlur={() => onBlur("hausarztName")} placeholder="Dr. Müller" error={t("hausarztName") && !filled(data.hausarztName) ? "Pflichtfeld" : undefined} /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Hausarzt Telefon" value={data.hausarztTelefon} onChange={v => onUpdate("hausarztTelefon", v)} placeholder="+41 44 123 45 67" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Hausarzt E-Mail" value={data.hausarztEmail} onChange={v => onUpdate("hausarztEmail", v)} placeholder="praxis@example.ch" /></div>
       </div>
       <div style={{ marginTop: "var(--space-4)" }}>
-        <TextInput label="Spezialarzt" value={data.spezialAerzte} onChange={v => onUpdate("spezialAerzte", v)} placeholder="Optional — z.B. Kardiologe Dr. Weber" />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Spezialarzt" value={data.spezialAerzte} onChange={v => onUpdate("spezialAerzte", v)} placeholder="Optional — z.B. Kardiologe Dr. Weber" /></div>
       </div>
 
       <SectionHeader icon={Mail} label="Kontaktdaten" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="E-Mail" value={data.email} onChange={v => onUpdate("email", v)} placeholder="Optional" />
-        <TextInput label="Telefon" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="Optional" />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" value={data.email} onChange={v => onUpdate("email", v)} placeholder="Optional" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="Optional" /></div>
       </div>
 
       <SectionHeader icon={Phone} label="Notfallkontakt" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="Name" required value={data.notfallkontaktName} onChange={v => onUpdate("notfallkontaktName", v)} onBlur={() => onBlur("notfallkontaktName")} placeholder="Kontaktperson" error={t("notfallkontaktName") && !filled(data.notfallkontaktName) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Telefon" required value={data.notfallkontaktTelefon} onChange={v => onUpdate("notfallkontaktTelefon", v)} onBlur={() => onBlur("notfallkontaktTelefon")} placeholder="+41 79 ..." error={t("notfallkontaktTelefon") && !filled(data.notfallkontaktTelefon) ? "Pflichtfeld" : undefined} />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Name" required value={data.notfallkontaktName} onChange={v => onUpdate("notfallkontaktName", v)} onBlur={() => onBlur("notfallkontaktName")} placeholder="Kontaktperson" error={t("notfallkontaktName") && !filled(data.notfallkontaktName) ? "Pflichtfeld" : undefined} /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" required value={data.notfallkontaktTelefon} onChange={v => onUpdate("notfallkontaktTelefon", v)} onBlur={() => onBlur("notfallkontaktTelefon")} placeholder="+41 79 ..." error={t("notfallkontaktTelefon") && !filled(data.notfallkontaktTelefon) ? "Pflichtfeld" : undefined} /></div>
       </div>
       <div style={{ marginTop: "var(--space-4)" }}>
-        <TextInput label="Beziehung" value={data.notfallkontaktBeziehung} onChange={v => onUpdate("notfallkontaktBeziehung", v)} placeholder="z.B. Ehepartner, Kind, Nachbar" />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Beziehung" value={data.notfallkontaktBeziehung} onChange={v => onUpdate("notfallkontaktBeziehung", v)} placeholder="z.B. Ehepartner, Kind, Nachbar" /></div>
       </div>
     </div>
   );
@@ -130,7 +130,7 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
       )}
       {data.ivBezug === "ja" && (
         <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
-          <NumberInput label="IV-Bezug" required value={data.ivBezugProzent} onChange={v => onUpdate("ivBezugProzent", v)} suffix="%" placeholder="z.B. 100" />
+          <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="IV-Bezug" required value={data.ivBezugProzent} onChange={v => onUpdate("ivBezugProzent", v)} suffix="%" placeholder="z.B. 100" /></div>
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
@@ -139,7 +139,7 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
       </div>
 
       <SectionHeader icon={Receipt} label="Konfession & Steuer" />
-      <FormSelect label="Konfession" required value={data.konfession || null} onChange={v => onUpdate("konfession", v || "")} options={KONFESSION_OPTIONS} placeholder="Bitte wählen" />
+      <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Konfession" required value={data.konfession || null} onChange={v => onUpdate("konfession", v || "")} options={KONFESSION_OPTIONS} placeholder="Bitte wählen" /></div>
       <div style={{ marginTop: "var(--space-4)" }}>
         <TextareaInput label="Quellensteuer-Hinweise" value={data.quellensteuerHinweise} onChange={v => onUpdate("quellensteuerHinweise", v)} placeholder="Optionale Hinweise zur Quellensteuer-Situation" hint="Wird nur an die Lohnbuchhaltung weitergeleitet" />
       </div>
@@ -159,8 +159,8 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
       <SectionHeader icon={Stethoscope} label="Basisanamnese" first />
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <NumberInput label="Grösse" required value={data.groesse} onChange={v => onUpdate("groesse", v)} suffix="cm" placeholder="170" error={t("groesse") && !filled(data.groesse) ? "Pflichtfeld" : undefined} />
-        <NumberInput label="Gewicht" required value={data.gewicht} onChange={v => onUpdate("gewicht", v)} suffix="kg" placeholder="72" error={t("gewicht") && !filled(data.gewicht) ? "Pflichtfeld" : undefined} />
+        <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="Grösse" required value={data.groesse} onChange={v => onUpdate("groesse", v)} suffix="cm" placeholder="170" error={t("groesse") && !filled(data.groesse) ? "Pflichtfeld" : undefined} /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="Gewicht" required value={data.gewicht} onChange={v => onUpdate("gewicht", v)} suffix="kg" placeholder="72" error={t("gewicht") && !filled(data.gewicht) ? "Pflichtfeld" : undefined} /></div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
@@ -185,13 +185,13 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
       {/* Wohnsituation */}
       <SectionHeader icon={Home} label="Wohnsituation" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <FormSelect label="Wohnsituation" value={data.wohnsituation || null} onChange={v => onUpdate("wohnsituation", v || "")} options={WOHNSITUATION} placeholder="Bitte wählen" />
-        <TextInput label="Etage" value={data.etage} onChange={v => onUpdate("etage", v)} placeholder="z.B. 2. OG" />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Wohnsituation" value={data.wohnsituation || null} onChange={v => onUpdate("wohnsituation", v || "")} options={WOHNSITUATION} placeholder="Bitte wählen" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Etage" value={data.etage} onChange={v => onUpdate("etage", v)} placeholder="z.B. 2. OG" /></div>
         <SegmentedControl label="Lift vorhanden" value={data.liftVorhanden} onChange={v => onUpdate("liftVorhanden", v)} options={JA_NEIN} />
         <SegmentedControl label="Treppen" value={data.treppen} onChange={v => onUpdate("treppen", v)} options={JA_NEIN} />
       </div>
       <div style={{ marginTop: "var(--space-4)" }}>
-        <FormSelect label="Personen im Haushalt" value={data.personenImHaushalt || null} onChange={v => onUpdate("personenImHaushalt", v || "")} options={PERSONEN} placeholder="Wählen" hint="Inklusive Patient" />
+        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Personen im Haushalt" value={data.personenImHaushalt || null} onChange={v => onUpdate("personenImHaushalt", v || "")} options={PERSONEN} placeholder="Wählen" hint="Inklusive Patient" /></div>
       </div>
 
       {/* Erweiterte Anamnese (dauerhaft sichtbar) */}
@@ -201,7 +201,7 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
 
         {/* PA-03: Sturz-Assessment */}
         <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginTop: 4 }}>Sturz-Assessment</div>
-        <FormSelect label="Stürze in den letzten 12 Monaten?" required value={data.sturzLetzte12m || null} onChange={v => {
+        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Stürze in den letzten 12 Monaten?" required value={data.sturzLetzte12m || null} onChange={v => {
           const val = v || "kein_sturz";
           onUpdate("sturzLetzte12m", val);
           if (val === "kein_sturz") { onUpdate("sturzAnzahl", ""); onUpdate("sturzKommentar", ""); }
@@ -209,14 +209,14 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
           { value: "kein_sturz", label: "Kein Sturz" },
           { value: "innerhalb_6_monate", label: "Ja, innerhalb 6 Monate" },
           { value: "7_bis_12_monate", label: "Ja, vor 7–12 Monaten" },
-        ]} placeholder="Bitte wählen" />
+        ]} placeholder="Bitte wählen" /></div>
         {data.sturzLetzte12m && data.sturzLetzte12m !== "kein_sturz" && (
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-3)" }}>
-            <NumberInput label="Anzahl Stürze" value={data.sturzAnzahl} onChange={v => onUpdate("sturzAnzahl", v)} placeholder="z.B. 2" />
+            <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="Anzahl Stürze" value={data.sturzAnzahl} onChange={v => onUpdate("sturzAnzahl", v)} placeholder="z.B. 2" /></div>
             <TextareaInput label="Bemerkungen (Umstände, Verletzungen, Ort)" value={data.sturzKommentar} onChange={v => onUpdate("sturzKommentar", v)} placeholder="z.B. Sturz im Bad, Prellung am Arm" />
           </div>
         )}
-        <FormSelect label="Stimmung" value={data.stimmungAktuell || null} onChange={v => onUpdate("stimmungAktuell", v || "")} options={STIMMUNG} placeholder="Stimmung einschätzen" />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Stimmung" value={data.stimmungAktuell || null} onChange={v => onUpdate("stimmungAktuell", v || "")} options={STIMMUNG} placeholder="Stimmung einschätzen" /></div>
         <TextareaInput label="Behandlungsziel" value={data.behandlungszielFokus} onChange={v => onUpdate("behandlungszielFokus", v)} placeholder="Hauptziel der Pflege und Betreuung" />
       </div>
     </div>

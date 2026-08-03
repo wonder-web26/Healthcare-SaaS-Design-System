@@ -112,15 +112,15 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
 
       <SectionHeader icon={Users} label="Partnerangaben" first />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="Vorname" required={istPflicht} value={data.partnerVorname} onChange={v => set("partnerVorname", v)} onBlur={() => touch("partnerVorname")} placeholder="Vorname" error={errIfPflicht("partnerVorname", data.partnerVorname)} />
-        <TextInput label="Nachname" required={istPflicht} value={data.partnerName} onChange={v => set("partnerName", v)} onBlur={() => touch("partnerName")} placeholder="Nachname" error={errIfPflicht("partnerName", data.partnerName)} />
-        <DateField label="Geburtsdatum" required={istPflicht} wertFormat="display" bereich="past" value={data.partnerGeburtsdatum || null} onChange={v => set("partnerGeburtsdatum", (v as string) ?? "")} onBlur={() => touch("partnerGeburtsdatum")} />
-        <FormSelect label="Nationalität" value={data.partnerNationalitaet || null} onChange={v => set("partnerNationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required={istPflicht} value={data.partnerVorname} onChange={v => set("partnerVorname", v)} onBlur={() => touch("partnerVorname")} placeholder="Vorname" error={errIfPflicht("partnerVorname", data.partnerVorname)} /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Nachname" required={istPflicht} value={data.partnerName} onChange={v => set("partnerName", v)} onBlur={() => touch("partnerName")} placeholder="Nachname" error={errIfPflicht("partnerName", data.partnerName)} /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required={istPflicht} wertFormat="display" bereich="past" value={data.partnerGeburtsdatum || null} onChange={v => set("partnerGeburtsdatum", (v as string) ?? "")} onBlur={() => touch("partnerGeburtsdatum")} /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Nationalität" value={data.partnerNationalitaet || null} onChange={v => set("partnerNationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" /></div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         {/* SP-06/SP-07: Aufenthaltsbewilligung des Partners — triggert Quellensteuer-Automatik (Regel 1) */}
-        <FormSelect label="Aufenthaltsbewilligung" required={istPflicht} value={data.partnerAufenthaltsstatus || null} onChange={v => {
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Aufenthaltsbewilligung" required={istPflicht} value={data.partnerAufenthaltsstatus || null} onChange={v => {
           const bewilligung = v || "";
           set("partnerAufenthaltsstatus", bewilligung);
           touch("partnerAufenthaltsstatus");
@@ -139,7 +139,7 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
             // SP-07 Regel 2 (Pendenz): erfolgt erst bei Onboarding-Konvertierung,
             // nicht waehrend der Erfassung (Mitarbeiter existiert noch nicht).
           }
-        }} options={AUFENTHALT_PARTNER} placeholder="Bewilligung waehlen" error={errIfPflicht("partnerAufenthaltsstatus", data.partnerAufenthaltsstatus)} />
+        }} options={AUFENTHALT_PARTNER} placeholder="Bewilligung waehlen" error={errIfPflicht("partnerAufenthaltsstatus", data.partnerAufenthaltsstatus)} /></div>
         {/* SP-06: Erwerbstaetig */}
         <SegmentedControl label="Erwerbstaetig?" required={istPflicht} value={data.partnerErwerbstaetig} onChange={v => set("partnerErwerbstaetig", v)} options={JA_NEIN} />
       </div>
@@ -205,7 +205,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
       {hasKids && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
-            <TextInput
+            <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput
               label="Anzahl unterhaltspflichtige Kinder"
               required
               value={data.anzahlKinder}
@@ -213,7 +213,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
               placeholder="z.B. 2"
               hint="Relevant fuer Quellensteuer-Tarif"
               error={hasKids && (!data.anzahlKinder || data.anzahlKinder === "0") ? "Pflichtfeld" : undefined}
-            />
+            /></div>
           </div>
 
           {/* Gating-Frage 2 (nur wenn Frage 1 = Ja) */}
@@ -242,10 +242,10 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                     removeDisabledTooltip="Mindestens ein Kind erforderlich"
                   >
                     <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-                      <TextInput label="Vorname" required value={kind.vorname} onChange={v => updateKind(kind.id, "vorname", v)} placeholder="Vorname" />
-                      <TextInput label="Nachname" required value={kind.name} onChange={v => updateKind(kind.id, "name", v)} placeholder="Nachname" />
-                      <DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={kind.geburtsdatum || null} onChange={v => updateKind(kind.id, "geburtsdatum", (v as string) ?? "")} />
-                      <FormSelect label="Geschlecht" value={kind.geschlecht || null} onChange={v => updateKind(kind.id, "geschlecht", v || "")} options={GESCHLECHT} placeholder="Waehlen" />
+                      <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required value={kind.vorname} onChange={v => updateKind(kind.id, "vorname", v)} placeholder="Vorname" /></div>
+                      <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Nachname" required value={kind.name} onChange={v => updateKind(kind.id, "name", v)} placeholder="Nachname" /></div>
+                      <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={kind.geburtsdatum || null} onChange={v => updateKind(kind.id, "geburtsdatum", (v as string) ?? "")} /></div>
+                      <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" value={kind.geschlecht || null} onChange={v => updateKind(kind.id, "geschlecht", v || "")} options={GESCHLECHT} placeholder="Waehlen" /></div>
                     </div>
                     {/* SP-09: Ausbildungslogik >16/25 hier nicht ausimplementiert */}
                     {/* SP-22: Dokumente (Familienbuechlein/IDs) hier nicht enthalten */}
