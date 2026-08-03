@@ -18,7 +18,7 @@ const MEINE_PFK = "Sandra Weber";
 type StatusChipId = "srk_offen" | "schritt_ueberfaellig" | "im_onboarding" | "nicht_zugewiesen";
 function nichtZugewiesen(a: Angehoeriger): boolean { return !a.pflegefachkraft || a.pflegefachkraft.trim() === "" || a.pflegefachkraft === "—"; }
 const STATUS_CHIPS: { id: StatusChipId; label: string; praedikat: (a: Angehoeriger) => boolean }[] = [
-  { id: "srk_offen", label: "SRK-Kurs offen", praedikat: a => !a.srkKursDatum },
+  { id: "srk_offen", label: "SRK-Kurs offen", praedikat: a => a.qualifikation === "ohne_srk" && !a.srkKursDatum },
   { id: "schritt_ueberfaellig", label: "Monatsschritt überfällig", praedikat: a => a.monatsSchritt.ueberfaellig === true },
   { id: "im_onboarding", label: "Im Onboarding", praedikat: a => a.status === "in_onboarding" },
   { id: "nicht_zugewiesen", label: "Nicht zugewiesen", praedikat: nichtZugewiesen },
@@ -34,7 +34,7 @@ const allePflegefachkraefte = [...new Set(angehoerige.map(a => a.pflegefachkraft
 type KennzeichenTyp = "rot" | "gelb" | null;
 function ableitenKennzeichen(a: Angehoeriger): { typ: KennzeichenTyp; grund: string } {
   if (a.monatsSchritt.ueberfaellig === true) return { typ: "rot", grund: "Monatsschritt überfällig" };
-  if (!a.srkKursDatum) return { typ: "gelb", grund: "SRK-Kurs offen" };
+  if (a.qualifikation === "ohne_srk" && !a.srkKursDatum) return { typ: "gelb", grund: "SRK-Kurs offen" };
   if (nichtZugewiesen(a)) return { typ: "gelb", grund: "Keine Pflegefachkraft zugewiesen" };
   return { typ: null, grund: "" };
 }
@@ -188,17 +188,17 @@ export function AngehoerigePage() {
     { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", ausKarte: true, render: kennzeichenIcon },
     { id: "name", label: "Name", anteil: 16, minCh: 24, align: "left", sortierbar: true, ausKarte: true, render: nameZelle },
     { id: "patienten", label: "Zugeordnete Patienten", anteil: 18, minCh: 24, align: "left", zweitzeileUnter: "name",
+      // Einzeilig: erster Name ausgeschrieben (verlinkt), weitere als "+N".
+      // Die vollständige Liste steht in der Detailansicht.
       render: a => a.zugeordnetePatientenList.length === 0 ? (
         <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontStyle: "italic" }}>Keine Zuordnung</span>
       ) : (
-        <div className="flex flex-col" style={{ gap: 2 }}>
-          {a.zugeordnetePatientenList.slice(0, 2).map(p => (
-            <button key={p.id} onClick={e => { e.stopPropagation(); navigate(`/patienten/${p.id}`); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, fontSize: "var(--text-small)", color: "var(--brand-primary)", background: "transparent", border: "none", textAlign: "left", padding: 0, fontFamily: "inherit" }}>
-              <ExternalLink style={{ width: 10, height: 10, opacity: 0.5 }} />{p.name}
-            </button>
-          ))}
-          {a.zugeordnetePatientenList.length > 2 && <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>+{a.zugeordnetePatientenList.length - 2} weitere</span>}
-        </div>
+        <span className="inline-flex items-center" style={{ gap: 6 }}>
+          <button onClick={e => { e.stopPropagation(); navigate(`/patienten/${a.zugeordnetePatientenList[0].id}`); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, fontSize: "var(--text-small)", color: "var(--brand-primary)", background: "transparent", border: "none", textAlign: "left", padding: 0, fontFamily: "inherit", overflowWrap: "anywhere" }}>
+            <ExternalLink style={{ width: 10, height: 10, opacity: 0.5, flexShrink: 0 }} />{a.zugeordnetePatientenList[0].name}
+          </button>
+          {a.zugeordnetePatientenList.length > 1 && <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", flexShrink: 0 }}>+{a.zugeordnetePatientenList.length - 1}</span>}
+        </span>
       ) },
     { id: "pflegefachkraft", label: "Pflegefachkraft", anteil: 12, minCh: 16, align: "left", sortierbar: true,
       render: a => nichtZugewiesen(a) ? (
@@ -226,7 +226,7 @@ export function AngehoerigePage() {
           <AlertCircle style={{ width: 14, height: 14 }} /> Ausstehend
         </span>
       ) : (
-        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>n/a</span>
+        <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>–</span>
       ) },
     { id: "monatsschritt", label: "Monatsschritt", anteil: 20, minCh: 20, align: "left", sortierbar: true,
       // Balken entfällt (aus "aktuell/total" ableitbar). Farbe nur bei Überfälligkeit.

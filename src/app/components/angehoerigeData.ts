@@ -273,7 +273,7 @@ export const angehoerige: Angehoeriger[] = [
     stempelSoll: 22,
     stempelWarnings: [{ type: "fehlende_tage", label: "Fehlende Tage" }],
     hrCheck: { bankdaten: false, kinderzulagen: false, quellensteuerTarif: null },
-    srkKursDatum: null,
+    srkKursDatum: "2025-05-20",
     letzteMutationDatum: "24.02.2026",
     letzteMutationUser: "K. Meier",
     pflegefachkraft: "Kathrin Meier",
