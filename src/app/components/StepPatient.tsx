@@ -1067,7 +1067,7 @@ function TabPersonalien({ data, touched, onUpdate, onBlur }: FieldProps) {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
           {/* SP-02: Durchsuchbare Krankenkasse-Picklist */}
-          <Combobox label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { const bag = getBagNummer(v || ""); onChange({ ...data, krankenkasse: v || "", ...(bag ? { bagNr: bag } : {}) }); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} />
+          <Combobox label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { const bag = getBagNummer(v || ""); onUpdate("krankenkasse", v || ""); if (bag) setTimeout(() => onUpdate("bagNr", bag), 0); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} />
 
           {/* SP-03: Kartennummer (umbenannt von Versicherungsnr.) */}
           <FormField label="Kartennummer" required error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : null}>
@@ -2102,7 +2102,7 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
   // Sync: Einwilligung-Status → scans["patient_einwilligung"], damit
   // getFehlendePflichtdokumente und istDokumentVollstaendig korrekt rechnen.
   useEffect(() => {
-    if (einwilligung.status.signiert && data.scans["patient_einwilligung"] !== "unterschrieben") {
+    if (einwilligung.status.signiert && (data.scans["patient_einwilligung"] as unknown as string) !== "unterschrieben") {
       onChange({ ...data, scans: { ...data.scans, patient_einwilligung: "unterschrieben" as unknown as PatientScanFile } });
     }
   }, [einwilligung.status.signiert]);

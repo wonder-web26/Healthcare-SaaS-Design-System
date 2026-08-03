@@ -2731,6 +2731,7 @@ function SubStepContent({
   status,
   data,
   onChange,
+  onOpenSpezialbewilligung,
 }: {
   stepKey: string;
   stepLabel: string;
@@ -2739,6 +2740,7 @@ function SubStepContent({
   status: "empty" | "partial" | "complete";
   data: AngehoerigerFormData;
   onChange: (data: AngehoerigerFormData) => void;
+  onOpenSpezialbewilligung?: () => void;
 }) {
   const fieldHints: Record<string, { fields: string[]; info?: string }> = {
     partner: {

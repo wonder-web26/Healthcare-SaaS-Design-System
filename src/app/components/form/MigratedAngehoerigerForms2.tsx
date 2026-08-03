@@ -358,7 +358,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
         {sichtbar.map(doc => {
           /* ── modus=unterschrift: Status-Anzeige, kein Upload-Slot ── */
           if (doc.modus === "unterschrift") {
-            const istUnterschrieben = data.scans[doc.code] === "unterschrieben";
+            const istUnterschrieben = (data.scans[doc.code] as unknown as string) === "unterschrieben";
             return (
               <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
                 <div className="flex items-center justify-between">
