@@ -36,7 +36,7 @@ export interface Notiz {
   autor: string;              // Kurzname aus den Mock-Benutzern (z. B. "M. Keller")
   erstelltAm: string;         // ISO-Zeitstempel
   geaendertAm: string | null; // leer, solange unverändert
-  angeheftet: boolean;        // "In Liste anzeigen"
+  angeheftet: boolean;        // "Anheften" (erscheint in der Liste)
   geloeschtAm: string | null; // gesetzt = gelöscht; Eintrag bleibt bestehen
 }
 

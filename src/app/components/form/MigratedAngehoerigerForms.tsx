@@ -70,6 +70,12 @@ const FUNKTIONEN = FUNKTIONEN_OPTIONS;
 /* ══════════════════════════════════════════
    TAB 1: PERSONALIEN (migrated)
    ══════════════════════════════════════════ */
+/* ── Feldbreitenklassen — EINZIGE Stelle. schmal/mittel begrenzen die Maximalbreite,
+   "voll" = Rasterzelle (keine Begrenzung). Die Klasse wird je Feld an der Aufrufstelle
+   zugewiesen, nicht aus dem Feldnamen abgeleitet. Ein schmales Feld füllt seine
+   Rasterzelle nicht aus; die Lücke rechts ist beabsichtigt. ── */
+export const FELD_MAX = { schmal: "12rem", mittel: "22rem", voll: "none" } as const;
+
 export function PersonalienFormV2({
   data, onChange, onOpenSpezialbewilligung,
 }: {
@@ -90,23 +96,23 @@ export function PersonalienFormV2({
       {/* Identität */}
       <SectionHeader icon={User} label="Identität" first />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="Name" required value={data.name} onChange={v => set("name", v)} onBlur={() => touch("name")} placeholder="Nachname" error={touched.name && !filled(data.name) ? "Pflichtfeld" : undefined} />
-        <TextInput label="Vorname" required value={data.vorname} onChange={v => set("vorname", v)} onBlur={() => touch("vorname")} placeholder="Vorname" error={touched.vorname && !filled(data.vorname) ? "Pflichtfeld" : undefined} />
-        <FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => { set("geschlecht", v || ""); touch("geschlecht"); }} options={GESCHLECHT} placeholder="Geschlecht wählen" error={touched.geschlecht && !filled(data.geschlecht) ? "Pflichtfeld" : undefined} />
-        <DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => set("geburtsdatum", (v as string) ?? "")} onBlur={() => touch("geburtsdatum")} />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Name" required value={data.name} onChange={v => set("name", v)} onBlur={() => touch("name")} placeholder="Nachname" error={touched.name && !filled(data.name) ? "Pflichtfeld" : undefined} /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required value={data.vorname} onChange={v => set("vorname", v)} onBlur={() => touch("vorname")} placeholder="Vorname" error={touched.vorname && !filled(data.vorname) ? "Pflichtfeld" : undefined} /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => { set("geschlecht", v || ""); touch("geschlecht"); }} options={GESCHLECHT} placeholder="Geschlecht wählen" error={touched.geschlecht && !filled(data.geschlecht) ? "Pflichtfeld" : undefined} /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => set("geburtsdatum", (v as string) ?? "")} onBlur={() => touch("geburtsdatum")} /></div>
       </div>
-      <div style={{ marginTop: "var(--space-4)" }}>
+      <div style={{ marginTop: "var(--space-4)", maxWidth: FELD_MAX.mittel }}>
         <AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => set("ahvNummer", v)} />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <Combobox label="Nationalität" required value={data.nationalitaet || null} onChange={v => {
+        <div style={{ maxWidth: FELD_MAX.mittel }}><Combobox label="Nationalität" required value={data.nationalitaet || null} onChange={v => {
           touch("nationalitaet");
           if (v === "schweiz") onChange({ ...data, nationalitaet: v || "", aufenthaltsstatus: "CH" });
           else onChange({ ...data, nationalitaet: v || "", heimatort: "", aufenthaltsstatus: "" });
-        }} options={NATIONALITAETEN} placeholder="Nationalität wählen" error={touched.nationalitaet && !filled(data.nationalitaet) ? "Pflichtfeld" : undefined} />
+        }} options={NATIONALITAETEN} placeholder="Nationalität wählen" error={touched.nationalitaet && !filled(data.nationalitaet) ? "Pflichtfeld" : undefined} /></div>
 
         {isSwiss && (
-          <TextInput label="Heimatort" required value={data.heimatort} onChange={v => set("heimatort", v)} onBlur={() => touch("heimatort")} placeholder="z.B. Zürich" error={touched.heimatort && !filled(data.heimatort) ? "Pflichtfeld" : undefined} />
+          <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Heimatort" required value={data.heimatort} onChange={v => set("heimatort", v)} onBlur={() => touch("heimatort")} placeholder="z.B. Zürich" error={touched.heimatort && !filled(data.heimatort) ? "Pflichtfeld" : undefined} /></div>
         )}
         {showAufenthalt && (
           <FormSelect label="Aufenthaltsstatus" required value={data.aufenthaltsstatus || null} onChange={v => {
@@ -139,8 +145,8 @@ export function PersonalienFormV2({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <FormSelect label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND} placeholder="Zivilstand wählen" />
-        <DateField label="Zivilstand seit" required wertFormat="display" bereich="past" value={data.zivilstandSeit || null} onChange={v => set("zivilstandSeit", (v as string) ?? "")} onBlur={() => touch("zivilstandSeit")} />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND} placeholder="Zivilstand wählen" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Zivilstand seit" required wertFormat="display" bereich="past" value={data.zivilstandSeit || null} onChange={v => set("zivilstandSeit", (v as string) ?? "")} onBlur={() => touch("zivilstandSeit")} /></div>
       </div>
 
       {/* Kontaktdaten */}
@@ -149,8 +155,8 @@ export function PersonalienFormV2({
         <TextInput label="Strasse & Nr." required value={data.strasse} onChange={v => set("strasse", v)} onBlur={() => touch("strasse")} placeholder="Musterstrasse 12" error={touched.strasse && !filled(data.strasse) ? "Pflichtfeld" : undefined} />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextInput label="PLZ" required value={data.plz} onChange={v => set("plz", v.replace(/\D/g, "").slice(0, 4))} onBlur={() => touch("plz")} placeholder="8000" />
-        <TextInput label="Ort" required value={data.ort} onChange={v => set("ort", v)} onBlur={() => touch("ort")} placeholder="Zürich" error={touched.ort && !filled(data.ort) ? "Pflichtfeld" : undefined} />
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="PLZ" required value={data.plz} onChange={v => set("plz", v.replace(/\D/g, "").slice(0, 4))} onBlur={() => touch("plz")} placeholder="8000" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Ort" required value={data.ort} onChange={v => set("ort", v)} onBlur={() => touch("ort")} placeholder="Zürich" error={touched.ort && !filled(data.ort) ? "Pflichtfeld" : undefined} /></div>
         <TextInput label="E-Mail" required value={data.email} onChange={v => set("email", v)} onBlur={() => touch("email")} placeholder="name@example.com" />
         <TextInput label="Telefon" required value={data.telefon} onChange={v => set("telefon", v)} onBlur={() => touch("telefon")} placeholder="+41 79 123 45 67" />
       </div>

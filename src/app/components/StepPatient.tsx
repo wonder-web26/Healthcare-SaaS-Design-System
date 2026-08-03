@@ -492,11 +492,11 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           "Gespräch" rechts fixiert; zehn Abschnitte scrollen waagrecht mit Verlauf-Hinweis (§C/§D). */}
       <div className="flex items-center" style={{ background: "transparent", padding: "0 20px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
         <div className="relative flex-1 min-w-0">
-        <div ref={abschnittScrollRef} onScroll={pruefeVerlauf} className="overflow-x-auto">
+        <div ref={abschnittScrollRef} onScroll={pruefeVerlauf}>
         <div
           role="tablist"
           aria-label="Abschnitte"
-          className="flex min-w-max"
+          className="flex flex-wrap"
           style={{ gap: 16 }}
           onKeyDown={e => {
             if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;

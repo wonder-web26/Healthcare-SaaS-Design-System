@@ -727,8 +727,8 @@ export function OnboardingPage() {
       <div className="flex-1 flex min-h-0" style={{ padding: "var(--space-3) var(--space-6) var(--space-4)" }}>
         {/* §B: EIN Container mit Aussenlinie + Radius 10, kein Schatten; zwei Spalten, senkrechte Haarlinie 0.5. */}
         <div className="flex w-full min-h-0" style={{ border: "var(--border-thin) solid var(--border-default)", borderRadius: 10, background: "var(--bg-elevated)", overflow: "hidden" }}>
-          {/* ── Zustandsspalte (200px fest, an den längsten echten Werten geprüft; kein Kürzen, Umbruch erlaubt) ── */}
-          <div className="hidden lg:flex shrink-0 flex-col min-h-0 overflow-y-auto" style={{ width: 200, borderRight: "var(--border-thin) solid var(--border-default)", padding: "var(--space-4)" }}>
+          {/* ── Zustandsspalte (260px fest; breiter, damit Notizen und Hinweistext nicht umbrechen; kein Kürzen) ── */}
+          <div className="hidden lg:flex shrink-0 flex-col min-h-0 overflow-y-auto" style={{ width: 260, borderRight: "var(--border-thin) solid var(--border-default)", padding: "var(--space-4)" }}>
                 {/* Abschnitt FORTSCHRITT entfernt (§C): die Phasen sind jetzt die erste
                    Reiterebene oben. Die Spalte zeigt nur noch, was zugewiesen ist und was ansteht. */}
 

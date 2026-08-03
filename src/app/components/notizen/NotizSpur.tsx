@@ -7,7 +7,7 @@
  * und Interaktion. Datums-/Zeitausgaben ausschliesslich über die Datums-Hilfsschicht.
  */
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, type ReactNode } from "react";
-import { Pin, PinOff, Pencil, Trash2, Search, X } from "lucide-react";
+import { Pin, Search, X } from "lucide-react";
 import { formatAnzeige, formatDatumZeit, formatMonatJahr, formatTagMonat } from "../../../lib/datum";
 import {
   type Notiz, type NotizReferenz, NOTIZ_ZAEHLER_AB, NOTIZ_MAX_ANGEHEFTET,
@@ -95,7 +95,7 @@ function NotizKarte({ notiz, imGruppe, gedaempft, suche, onLoeschen }: {
         <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>· {datum}</span>
         {notiz.angeheftet && (
           <span className="inline-flex items-center" style={{ gap: 3, marginLeft: "auto", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", color: "var(--status-warning-text)" }}>
-            <Pin style={{ width: 10, height: 10 }} /> In Liste sichtbar
+            <Pin style={{ width: 10, height: 10 }} /> Angeheftet
           </span>
         )}
       </div>
@@ -128,22 +128,22 @@ function NotizKarte({ notiz, imGruppe, gedaempft, suche, onLoeschen }: {
               Bearbeitet am {formatDatumZeit(new Date(notiz.geaendertAm))}
             </div>
           )}
-          {/* Handlungen */}
-          <div className="flex items-center" style={{ gap: 10, marginTop: 5 }}>
-            <button type="button" onClick={() => { setEntwurf(notiz.text); setBearbeitet(true); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 3, fontSize: "var(--text-micro)", color: "var(--text-secondary)", background: "none", border: "none", padding: 0, fontFamily: "inherit" }}>
-              <Pencil style={{ width: 11, height: 11 }} /> Bearbeiten
+          {/* Handlungen — einheitlich als Text, keine Symbole (whitespace-nowrap: kein Umbruch) */}
+          <div className="flex items-center flex-wrap" style={{ gap: 12, marginTop: 5 }}>
+            <button type="button" onClick={() => { setEntwurf(notiz.text); setBearbeitet(true); }} className="ui-fokusring cursor-pointer" style={{ whiteSpace: "nowrap", fontSize: "var(--text-micro)", color: "var(--text-secondary)", background: "none", border: "none", padding: 0, fontFamily: "inherit" }}>
+              Bearbeiten
             </button>
             {notiz.angeheftet ? (
-              <button type="button" onClick={() => notizAnheftungLoesen(notiz.id)} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 3, fontSize: "var(--text-micro)", color: "var(--text-secondary)", background: "none", border: "none", padding: 0, fontFamily: "inherit" }}>
-                <PinOff style={{ width: 11, height: 11 }} /> Anheftung lösen
+              <button type="button" onClick={() => notizAnheftungLoesen(notiz.id)} className="ui-fokusring cursor-pointer" style={{ whiteSpace: "nowrap", fontSize: "var(--text-micro)", color: "var(--text-secondary)", background: "none", border: "none", padding: 0, fontFamily: "inherit" }}>
+                Lösen
               </button>
             ) : (
-              <button type="button" onClick={() => notizAnheften(notiz.id)} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 3, fontSize: "var(--text-micro)", color: "var(--text-secondary)", background: "none", border: "none", padding: 0, fontFamily: "inherit" }}>
-                <Pin style={{ width: 11, height: 11 }} /> Anheften
+              <button type="button" onClick={() => notizAnheften(notiz.id)} className="ui-fokusring cursor-pointer" style={{ whiteSpace: "nowrap", fontSize: "var(--text-micro)", color: "var(--text-secondary)", background: "none", border: "none", padding: 0, fontFamily: "inherit" }}>
+                Anheften
               </button>
             )}
-            <button type="button" onClick={() => onLoeschen(notiz.id)} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 3, fontSize: "var(--text-micro)", color: "var(--text-secondary)", background: "none", border: "none", padding: 0, fontFamily: "inherit" }}>
-              <Trash2 style={{ width: 11, height: 11 }} /> Löschen
+            <button type="button" onClick={() => onLoeschen(notiz.id)} className="ui-fokusring cursor-pointer" style={{ whiteSpace: "nowrap", fontSize: "var(--text-micro)", color: "var(--text-secondary)", background: "none", border: "none", padding: 0, fontFamily: "inherit" }}>
+              Löschen
             </button>
           </div>
         </>
@@ -204,8 +204,10 @@ export function NotizSpur({ referenz, personName }: { referenz: NotizReferenz; p
         <div className="flex items-center" style={{ gap: 6, marginTop: 5, flexWrap: "wrap" }}>
           <label className="inline-flex items-center cursor-pointer" style={{ gap: 5, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
             <input type="checkbox" checked={inListe} onChange={e => setInListe(e.target.checked)} style={{ width: 13, height: 13, accentColor: "var(--brand-primary)", cursor: "pointer" }} />
-            In Liste anzeigen
+            Anheften
           </label>
+          {/* Erläuterung, keine zweite Beschriftung: Sekundärfarbe, kleinere Schrift */}
+          <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>· erscheint in der Liste</span>
           {inListe && text.length >= NOTIZ_ZAEHLER_AB && (
             <span style={{ fontSize: "var(--text-micro)", color: text.length >= NOTIZ_MAX_ANGEHEFTET ? "var(--status-warning-text)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{text.length}/{NOTIZ_MAX_ANGEHEFTET}</span>
           )}
