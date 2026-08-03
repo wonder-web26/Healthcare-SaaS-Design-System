@@ -45,7 +45,6 @@ import { EinwilligungProvider } from "./EinwilligungContext";
 import { ArztAnfrageProvider, useArztAnfrage } from "./ArztAnfrageContext";
 import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
-// import { AnnaListenEinordnung, type DetailKontext } from "../anna/AnnaListenEinordnung";
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";

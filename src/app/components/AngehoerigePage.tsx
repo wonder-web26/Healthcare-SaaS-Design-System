@@ -1,24 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import {
-  Search,
-  Plus,
-  ExternalLink,
-  AlertCircle,
-  GraduationCap,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  X,
-  SlidersHorizontal,
-} from "lucide-react";
-import {
-  angehoerige,
-  qualifikationConfig,
-  type Angehoeriger,
-} from "./angehoerigeData";
+import { Search, Plus, ExternalLink, AlertCircle, GraduationCap, CheckCircle2, Clock, AlertTriangle, X, SlidersHorizontal } from "lucide-react";
+import { angehoerige, type Angehoeriger } from "./angehoerigeData";
 import { useCurrentRole } from "../auth";
-import { AnnaListenEinordnung, type ListenKontext } from "../anna/AnnaListenEinordnung";
 import type { UserRole } from "../../types/user";
 
 /* ── Views ── */
@@ -79,39 +63,6 @@ function buildFilterDefs(): FilterDef[] {
     { id: "pflegefachkraft", label: "Pflegefachkraft", options: pflegefachkraefte.map(pf => ({ value: pf, label: pf })) },
     { id: "srk_status", label: "SRK-Status", options: [{ value: "ausstehend", label: "Ausstehend" }, { value: "absolviert", label: "Absolviert" }] },
   ];
-}
-
-/* ── Anna context ── */
-function buildAnnaContext(allAngehoerige: Angehoeriger[], role: UserRole): ListenKontext {
-  const active = allAngehoerige.filter(a => a.status !== "gekuendigt");
-  const srkOffen = active.filter(a => a.qualifikation === "ohne_srk" && !a.srkKursDatum);
-  const ueberfaellig = active.filter(a => a.monatsSchritt.ueberfaellig);
-
-  const byStatus: Record<string, number> = {};
-  if (srkOffen.length > 0) byStatus["srk_offen"] = srkOffen.length;
-  if (ueberfaellig.length > 0) byStatus["ueberfaellig"] = ueberfaellig.length;
-
-  const highlights: string[] = [];
-
-  if (role === "diplomiert") {
-    if (ueberfaellig.length > 0) {
-      const names = ueberfaellig.slice(0, 2).map(a => `${a.vorname} ${a.nachname}`).join(" und ");
-      highlights.push(`Bei ${names} ${ueberfaellig.length === 1 ? "ist ein Monatsschritt" : "sind Monatsschritte"} überfällig`);
-    }
-    if (srkOffen.length > 0) highlights.push(`${srkOffen.length} Angehörige ohne SRK-Schulung – Anmeldung sinnvoll`);
-  } else if (role === "backoffice") {
-    if (srkOffen.length > 0) highlights.push(`${srkOffen.length} ausstehende SRK-Anmeldungen`);
-    const blocked = active.filter(a => isBillingBlocked(a));
-    if (blocked.length > 0) highlights.push(`${blocked.length} nicht abrechenbar – Compliance prüfen`);
-  } else {
-    if (srkOffen.length > 0) highlights.push(`Compliance-Risiko bei ${srkOffen.length} Fällen – alle im SRK-Bereich`);
-    const pfCounts: Record<string, number> = {};
-    for (const a of srkOffen) pfCounts[a.pflegefachkraft] = (pfCounts[a.pflegefachkraft] || 0) + 1;
-    const top = Object.entries(pfCounts).sort((a, b) => b[1] - a[1])[0];
-    if (top && top[1] >= 2) highlights.push(`Konzentration bei ${top[0]} (${top[1]} offene SRK-Fälle) – möglicher Engpass`);
-  }
-
-  return { seite: `angehoerige_${role}`, totalCount: active.length, byStatus, highlights };
 }
 
 /* ══════════════════════════════════════════
@@ -175,7 +126,6 @@ export function AngehoerigePage() {
     return counts;
   }, []);
 
-  const annaContext = useMemo(() => buildAnnaContext(angehoerige, role), [role]);
   const viewOrder = getViewOrder(role);
 
   return (
@@ -184,18 +134,13 @@ export function AngehoerigePage() {
          HEADER
          ═══════════════════════════════════════ */}
       <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0" }}>
-        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
           <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Angehörige</h1>
           <button onClick={() => navigate("/onboarding/neu")} className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
             style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
             onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
             <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neuen Angehörigen anlegen</span>
           </button>
-        </div>
-
-        {/* Anna */}
-        <div style={{ marginBottom: "var(--space-4)" }}>
-          <AnnaListenEinordnung context={annaContext} />
         </div>
 
         {/* Search + filter */}

@@ -1,14 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { Plus, Search, AlertTriangle, Check, Clock, Ban, ChevronRight, ClipboardList, X, Users, Sparkles, SlidersHorizontal } from "lucide-react";
-import { AnnaListenEinordnung, type ListenKontext } from "../anna/AnnaListenEinordnung";
+import { Plus, Search, AlertTriangle, X, SlidersHorizontal } from "lucide-react";
 import { useCurrentRole } from "../auth";
 import type { UserRole } from "../../types/user";
 import { type OnboardingStatus, ONBOARDING_STATUS_CFG } from "../../lib/onboarding/status";
-import {
-  ANZAHL_SCHRITTE, schrittLabel, phaseFuerSchritt, phaseRang, PHASE_LABEL,
-  ableitenKennzeichen, tageBisStart, istVertragUnterzeichnet,
-} from "../../lib/onboarding/schritte";
+import { ANZAHL_SCHRITTE, schrittLabel, phaseFuerSchritt, phaseRang, PHASE_LABEL, ableitenKennzeichen, tageBisStart, istVertragUnterzeichnet } from "../../lib/onboarding/schritte";
 import { isoZuAnzeige } from "../../lib/datum";
 
 /* ── Bezugsdatum (Mock-Demo, entspricht der Vorgabe): alle Ableitungen laufen
@@ -105,78 +101,6 @@ const filterDefs: FilterDef[] = [
   { id: "kanton", label: "Kanton", options: allKantone.map(k => ({ value: k, label: k })) },
 ];
 
-/* ── Anna context ── */
-function buildAnnaContext(allCases: OnboardingCase[], role: UserRole): ListenKontext {
-  const blocked = allCases.filter(c => c.abrechnungsstopp);
-  const inErfassung = allCases.filter(c => c.status === "neu" || c.status === "in_bearbeitung");
-  const fastAbgeschlossen = allCases.filter(c => c.offen <= 1 && !c.abrechnungsstopp);
-
-  const byStatus: Record<string, number> = {
-    neu: allCases.filter(c => c.status === "neu").length,
-    in_bearbeitung: allCases.filter(c => c.status === "in_bearbeitung").length,
-    abgeschlossen: allCases.filter(c => c.status === "abgeschlossen").length,
-    abgebrochen: allCases.filter(c => c.status === "abgebrochen").length,
-    blockiert: blocked.length,
-  };
-
-  const highlights: string[] = [];
-
-  if (role === "diplomiert") {
-    if (blocked.length > 0) highlights.push(`${blocked.length} Onboarding${blocked.length > 1 ? "s" : ""} blockiert – brauchen Aufmerksamkeit`);
-    const oldestInErfassung = inErfassung.sort((a, b) => a.eintrittsdatum.split(".").reverse().join("-").localeCompare(b.eintrittsdatum.split(".").reverse().join("-")))[0];
-    if (oldestInErfassung) {
-      const days = Math.round((new Date("2026-03-03").getTime() - new Date(oldestInErfassung.eintrittsdatum.split(".").reverse().join("-")).getTime()) / 86400000);
-      if (days > 7) highlights.push(`${oldestInErfassung.patientNachname} seit ${days} Tagen in Ersterfassung`);
-    }
-  } else if (role === "backoffice") {
-    if (blocked.length > 0) {
-      const reasons = blocked.filter(c => c.abrechnungsstoppGrund).map(c => c.abrechnungsstoppGrund!);
-      const spezialbewilligung = reasons.filter(r => r.toLowerCase().includes("spezialbewilligung")).length;
-      if (spezialbewilligung > 0) highlights.push(`${spezialbewilligung} blockiert wegen Spezialbewilligung beim Migrationsamt`);
-      else highlights.push(`${blocked.length} blockiert`);
-    }
-    if (fastAbgeschlossen.length > 0) {
-      const names = fastAbgeschlossen.slice(0, 3).map(c => `${c.angehoeriger}`).join(", ");
-      highlights.push(`${fastAbgeschlossen.length} fast abschlussreif: ${names}`);
-    }
-  } else {
-    // Management
-    highlights.push(`Verteilung: ${inErfassung.length} in Bearbeitung, ${fastAbgeschlossen.length} fast abgeschlossen, ${blocked.length} blockiert`);
-    // Bottleneck
-    const personCounts: Record<string, number> = {};
-    for (const c of allCases) personCounts[c.verantwortlich] = (personCounts[c.verantwortlich] || 0) + 1;
-    const top = Object.entries(personCounts).sort((a, b) => b[1] - a[1])[0];
-    if (top && top[1] >= 3) highlights.push(`${top[1]} Mandate bei ${top[0]} – möglicher Engpass`);
-  }
-
-  return { seite: `onboarding_${role}`, totalCount: allCases.length, byStatus, highlights };
-}
-
-/**
- * Zusammenfassung der Onboarding-Liste — eigenständig, damit jede Aussage GENAU
- * EINMAL erscheint (§B). Die geteilte Bausteinlogik (generateMockEinordnung)
- * rendert die Blockiert-Zahl UND hängt zusätzlich highlights[0] an — nennt
- * highlights[0] denselben Sachverhalt, doppelt sich die Aussage. Hier wird die
- * Blockiert-Zahl einmal genannt, und als zweite Aussage die erste NICHT-blockiert
- * bezogene Einordnung. Singular/Plural von "Mandat" korrekt.
- */
-function buildOnboardingEinordnung(ctx: ListenKontext): string {
-  const total = ctx.totalCount;
-  if (total === 0) return "Aktuell kein Mandat im Onboarding.";
-  const blocked = ctx.byStatus["blockiert"] || 0;
-  const wort = total === 1 ? "Mandat" : "Mandate";
-  const parts: string[] = [];
-  if (blocked > 0) {
-    parts.push(`${total} ${wort} im Onboarding, {{danger}}${blocked === 1 ? "eines davon blockiert" : `${blocked} davon blockiert`}{{/danger}}.`);
-  } else {
-    parts.push(`${total} ${wort} im Onboarding, alle laufen planmässig.`);
-  }
-  // Zweite Aussage: erste Einordnung, die NICHT die Blockiert-Zahl wiederholt.
-  const zusatz = ctx.highlights.find(h => !/blockiert|blocked/i.test(h));
-  if (zusatz) parts.push(`{{warning}}${zusatz}{{/warning}}.`);
-  return parts.join(" ");
-}
-
 /* ══════════════════════════════════════════ */
 /* ── Verantwortliche: Kurzname + Initialen für die Spalte (Quelle responsibleUserId) ── */
 const RESPONSIBLE: Record<string, { initialen: string; kurz: string }> = {
@@ -262,8 +186,6 @@ export function OnboardingListPage() {
     return counts;
   }, []);
 
-  const annaContext = useMemo(() => buildAnnaContext(cases, role), [role]);
-  const annaEinordnung = useMemo(() => buildOnboardingEinordnung(annaContext), [annaContext]);
   const viewOrder = getViewOrder(role);
 
   return (
@@ -277,18 +199,13 @@ export function OnboardingListPage() {
       `}</style>
       <div className="shrink-0 ob-list-pad" style={{ paddingTop: "var(--space-4)" }}>
         {/* Title row */}
-        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
           <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Onboarding</h1>
           <button onClick={() => navigate("/onboarding/neu")} className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
             style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
             onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
             <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neues Mandat</span>
           </button>
-        </div>
-
-        {/* Anna einordnung */}
-        <div style={{ marginBottom: "var(--space-4)" }}>
-          <AnnaListenEinordnung context={annaContext} einordnung={annaEinordnung} />
         </div>
 
         {/* Search + filter */}

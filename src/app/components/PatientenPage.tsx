@@ -16,9 +16,7 @@ import {
 import { StatusModal } from "./StatusModal";
 import { PflegefachkraftSidebar, type Caregiver } from "./PflegefachkraftSidebar";
 import { useCurrentRole } from "../auth";
-import { AnnaListenEinordnung, type ListenKontext } from "../anna/AnnaListenEinordnung";
 import { toast } from "sonner";
-import type { UserRole } from "../../types/user";
 
 /* ══════════════════════════════════════════
    VIEW FILTERING
@@ -63,50 +61,6 @@ const SCHWEREGRAD_STYLE: Record<string, { label: string; bg: string; color: stri
   schwer: { label: "Schwer", bg: "var(--status-danger-bg)", color: "var(--status-danger)" },
   kritisch: { label: "Kritisch", bg: "var(--status-danger-bg)", color: "var(--status-danger)" },
 };
-
-/* ══════════════════════════════════════════
-   ANNA CONTEXT
-   ══════════════════════════════════════════ */
-
-function buildAnnaContext(patients: Patient[], role: UserRole): ListenKontext {
-  const active = patients.filter(p => p.status !== "gekuendigt");
-  const overdueTasks = active.filter(p => p.prozessStatus?.ueberfaellig);
-  const unassigned = active.filter(p => p.pflegefachkraft === "—");
-  const schwerKritisch = active.filter(p => p.schweregrad === "schwer" || p.schweregrad === "kritisch");
-  const reassessmentSoon = active.filter(p => p.reAssessmentTage !== null && p.reAssessmentTage <= 30);
-
-  const byStatus: Record<string, number> = {};
-  for (const p of active) byStatus[p.status] = (byStatus[p.status] || 0) + 1;
-  if (overdueTasks.length > 0) byStatus["ueberfaellig"] = overdueTasks.length;
-
-  const highlights: string[] = [];
-
-  if (role === "diplomiert") {
-    if (overdueTasks.length > 0) {
-      const names = overdueTasks.slice(0, 2).map(p => `${p.vorname} ${p.nachname}`).join(" und ");
-      highlights.push(`Bei ${names} ${overdueTasks.length === 1 ? "ist die Dokumentation" : "sind Aufgaben"} überfällig`);
-    }
-    if (reassessmentSoon.length > 0) highlights.push(`${reassessmentSoon.length} Re-Assessment${reassessmentSoon.length > 1 ? "s" : ""} in den nächsten 30 Tagen`);
-    if (schwerKritisch.length > 0) highlights.push(`${schwerKritisch.length} Patienten im Schweregrad Schwer oder Kritisch`);
-  } else if (role === "backoffice") {
-    const nichtAbr = active.filter(p => p.status === "nicht_abrechenbar");
-    if (nichtAbr.length > 0) highlights.push(`${nichtAbr.length} nicht abrechenbar – Kostengutsprachen prüfen`);
-    if (unassigned.length > 0) highlights.push(`${unassigned.length} noch nicht einer Pflegefachperson zugewiesen`);
-  } else {
-    if (overdueTasks.length > 0) highlights.push(`${overdueTasks.length} mit überfälligen Tasks`);
-    if (schwerKritisch.length > 0) highlights.push(`${schwerKritisch.length} Patienten im Schweregrad Schwer oder Kritisch`);
-    const pfCounts: Record<string, number> = {};
-    for (const p of schwerKritisch) if (p.pflegefachkraft !== "—") pfCounts[p.pflegefachkraft] = (pfCounts[p.pflegefachkraft] || 0) + 1;
-    const top = Object.entries(pfCounts).sort((a, b) => b[1] - a[1])[0];
-    if (top && top[1] >= 2) highlights.push(`${top[1]} dieser Fälle bei ${top[0]} – möglicher Engpass`);
-  }
-
-  return { seite: `patienten_${role}`, totalCount: active.length, byStatus, highlights };
-}
-
-/* ══════════════════════════════════════════
-   FILTER DEFINITIONS
-   ══════════════════════════════════════════ */
 
 interface FilterDef {
   id: string;
@@ -242,7 +196,6 @@ export function PatientenPage() {
     aufmerksamkeit: viewFilter(patients, "aufmerksamkeit").length,
   }), [patients]);
 
-  const annaContext = useMemo(() => buildAnnaContext(patients, role), [patients, role]);
 
   const removeFilterTag = (filterId: string, value: string) => {
     const sel = chipFilters[filterId];
@@ -260,7 +213,7 @@ export function PatientenPage() {
            ═══════════════════════════════════════ */}
         <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0" }}>
           {/* Title row */}
-          <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
             <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>
               Patienten
             </h1>
@@ -279,10 +232,6 @@ export function PatientenPage() {
             </button>
           </div>
 
-          {/* Anna einordnung */}
-          <div style={{ marginBottom: "var(--space-4)" }}>
-            <AnnaListenEinordnung context={annaContext} />
-          </div>
 
           {/* Search + filter */}
           <div className="flex items-center" style={{ gap: 8, marginBottom: "var(--space-3)" }}>

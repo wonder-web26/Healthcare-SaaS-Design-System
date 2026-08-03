@@ -1,29 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router";
-import {
-  Inbox,
-  SlidersHorizontal,
-  Plus,
-  X,
-  AlertTriangle,
-  Check,
-  ArrowLeft,
-  Send,
-  Sparkles,
-  Square,
-  CheckSquare,
-} from "lucide-react";
-import {
-  unifiedEntries,
-  getUnifiedEntries,
-  entryTitle,
-  CURRENT_USER,
-  MY_TEAM,
-  type UnifiedEntry,
-} from "../../lib/mocks/service-desk-unified";
+import { Inbox, SlidersHorizontal, Plus, X, AlertTriangle, Check, ArrowLeft, Send, Sparkles, Square, CheckSquare } from "lucide-react";
+import { getUnifiedEntries, entryTitle, CURRENT_USER, MY_TEAM, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
 import { pendenzTypen } from "../../types/pendenz";
 import { useCurrentRole } from "../auth";
-import { AnnaListenEinordnung, type ListenKontext } from "../anna/AnnaListenEinordnung";
 import { AnnaPendenzVorschlag } from "../anna/AnnaPendenzVorschlag";
 import { AnnaDemoMockModal } from "../anna/AnnaDemoMockModal";
 import { toast } from "sonner";
@@ -138,42 +118,6 @@ function sortScore(e: UnifiedEntry, role: UserRole): number {
 }
 
 /* ══════════════════════════════════════════
-   ANNA CONTEXT
-   ══════════════════════════════════════════ */
-
-function buildAnnaContext(entries: UnifiedEntry[], role: UserRole): ListenKontext {
-  const active = entries.filter(e => e.status !== "erledigt");
-  const overdue = active.filter(e => e.faellig && daysFromToday(e.faellig)! < 0);
-  const byStatus: Record<string, number> = {};
-  for (const e of active) byStatus[e.status] = (byStatus[e.status] || 0) + 1;
-  if (overdue.length > 0) byStatus["ueberfaellig"] = overdue.length;
-
-  const highlights: string[] = [];
-
-  if (role === "diplomiert") {
-    const aubCount = active.filter(e => e.pendenzTyp === "aub-vertretung").length;
-    const klvCount = active.filter(e => e.pendenzTyp === "klv-verordnung" || e.pendenzTyp === "re-assessment").length;
-    if (overdue.length > 0) highlights.push(`${overdue.length} ${overdue.length === 1 ? "Pendenz ist" : "Pendenzen sind"} überfällig und ${overdue.length === 1 ? "betrifft" : "betreffen"} direkt Patienten`);
-    if (aubCount > 0) highlights.push(`${aubCount} AUB-Vertretung${aubCount > 1 ? "en" : ""} – Patienten brauchen Betreuung`);
-    if (klvCount > 0) highlights.push(`${klvCount} KLV/Re-Assessment${klvCount > 1 ? "s" : ""} demnächst fällig`);
-  } else if (role === "backoffice") {
-    const srkCount = active.filter(e => e.pendenzTyp === "srk-anmeldung").length;
-    const qstCount = active.filter(e => e.pendenzTyp === "quellensteuer").length;
-    if (qstCount > 0) highlights.push(`${qstCount} Quellensteuer-Anmeldung${qstCount > 1 ? "en" : ""} diese Woche fällig`);
-    if (srkCount > 0) highlights.push(`${srkCount} SRK-Anmeldung${srkCount > 1 ? "en" : ""} nahe der 1-Jahres-Frist`);
-    if (overdue.length > 0) highlights.push(`${overdue.length} überfällig – behördliche Konsequenzen möglich`);
-  } else {
-    if (overdue.length > 0) highlights.push(`${overdue.length} überfällig – Eskalationsrisiko`);
-    const personCounts: Record<string, number> = {};
-    for (const e of active) personCounts[e.verantwortlich.initialen] = (personCounts[e.verantwortlich.initialen] || 0) + 1;
-    const top = Object.entries(personCounts).sort((a, b) => b[1] - a[1])[0];
-    if (top && top[1] >= 3) highlights.push(`${top[1]} Pendenzen bei ${active.find(e => e.verantwortlich.initialen === top[0])?.verantwortlich.name} – möglicher Engpass`);
-  }
-
-  return { seite: `pendenzen_${role}`, totalCount: active.length, byStatus, highlights };
-}
-
-/* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
 
@@ -258,7 +202,6 @@ export function ServiceDeskPage() {
   }, [selectedId, localStatus, allEntries]);
 
   // Anna context
-  const annaContext = useMemo(() => buildAnnaContext(allEntries, role), [role, allEntries]);
 
   const viewOrder = getViewOrder(role);
 
@@ -340,7 +283,7 @@ export function ServiceDeskPage() {
         <style>{`@media (min-width: 640px) { .pendenzen-header { padding-left: var(--space-6) !important; padding-right: var(--space-6) !important; } }`}</style>
         <div className="pendenzen-header" style={{ padding: "0" }}>
         {/* Title row */}
-        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
           <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>
             Pendenzen
           </h1>
@@ -361,10 +304,6 @@ export function ServiceDeskPage() {
           </div>
         </div>
 
-        {/* Anna einordnung */}
-        <div style={{ marginBottom: "var(--space-3)" }}>
-          <AnnaListenEinordnung context={annaContext} />
-        </div>
 
         {/* View pills + filter button — horizontal scroll on mobile */}
         <div className="flex items-center overflow-x-auto" style={{ gap: 8, marginBottom: "var(--space-3)", paddingBottom: 2 }}>

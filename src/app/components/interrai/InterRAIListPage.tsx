@@ -1,18 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
-import { Plus, ChevronRight, AlertTriangle, CheckCircle2, Users } from "lucide-react";
-import {
-  getAllAssessments,
-  getPerson,
-  getOpenFieldCount,
-  getActiveFieldCount,
-  getAnlassLabel,
-  getStatusLabel,
-  formatDateTime,
-  type NeuAssessment,
-  type PersonZustand,
-} from "../../../lib/interrai/store";
-import { AnnaListenEinordnung, type ListenKontext } from "../../anna/AnnaListenEinordnung";
+import { ChevronRight } from "lucide-react";
+import { getAllAssessments, getPerson, getOpenFieldCount, getActiveFieldCount, getAnlassLabel, getStatusLabel, formatDateTime, type PersonZustand } from "../../../lib/interrai/store";
 
 type ViewKey = "alle" | "in_bearbeitung" | "abgeschlossen";
 type PersonFilter = "alle" | "mandat" | "patient";
@@ -70,24 +59,14 @@ export function InterRAIListPage() {
     abgeschlossen: enriched.filter((a) => a.status === "abgeschlossen").length,
   }), [enriched]);
 
-  const annaCtx = useMemo<ListenKontext>(() => ({
-    seite: "interrai_liste",
-    totalCount: enriched.length,
-    byStatus: { in_bearbeitung: counts.in_bearbeitung },
-    highlights: [
-      counts.in_bearbeitung > 0 ? `${counts.in_bearbeitung} Assessments in Bearbeitung` : "",
-    ].filter(Boolean),
-  }), [enriched, counts]);
 
   return (
     <div className="h-full overflow-y-auto">
       <style>{`.ba-pad { padding-left: var(--mobile-page-padding); padding-right: var(--mobile-page-padding); } @media (min-width: 640px) { .ba-pad { padding-left: var(--space-6); padding-right: var(--space-6); } }`}</style>
       <div className="ba-pad" style={{ paddingTop: "var(--space-4)", paddingBottom: "var(--space-8)" }}>
-        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
           <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>InterRAI</h1>
         </div>
-
-        <div style={{ marginBottom: "var(--space-4)" }}><AnnaListenEinordnung context={annaCtx} /></div>
 
         {/* Status filter pills */}
         <div className="flex items-center overflow-x-auto" style={{ gap: 8, marginBottom: 8, paddingBottom: 2 }}>

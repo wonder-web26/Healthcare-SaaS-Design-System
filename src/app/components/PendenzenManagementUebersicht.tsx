@@ -1,8 +1,7 @@
 import { useMemo } from "react";
-import { ClipboardList, AlertTriangle, Calendar, CheckCircle2, List, Plus, Sparkles } from "lucide-react";
+import { ClipboardList, AlertTriangle, Calendar, CheckCircle2, List, Plus } from "lucide-react";
 import { getUnifiedEntries, entryTitle, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
-import { AnnaListenEinordnung, type ListenKontext } from "../anna/AnnaListenEinordnung";
 
 const TODAY = "2026-03-03";
 
@@ -114,22 +113,13 @@ export function PendenzenManagementUebersicht({ onSwitchToList, onSelectPendenz 
   const entries = useMemo(() => getUnifiedEntries(), []);
   const agg = useMemo(() => calculateAggregates(entries), [entries]);
 
-  const annaContext = useMemo<ListenKontext>(() => ({
-    seite: "pendenzen_management",
-    totalCount: agg.offeneTotal,
-    byStatus: { ueberfaellig: agg.ueberfaellig },
-    highlights: [
-      agg.ueberfaellig > 0 ? `${agg.ueberfaellig} überfällig – Eskalationsrisiko` : "",
-      agg.mitarbeiterAuslastung.find(m => m.isEngpass) ? `${agg.mitarbeiterAuslastung.find(m => m.isEngpass)!.count} Pendenzen bei ${agg.mitarbeiterAuslastung.find(m => m.isEngpass)!.name} – möglicher Engpass` : "",
-    ].filter(Boolean),
-  }), [agg]);
 
   const maxTypCount = agg.typenVerteilung[0]?.count || 1;
 
   return (
     <div className="h-full overflow-y-auto" style={{ padding: "var(--space-4) var(--space-6) var(--space-6)" }}>
       {/* Header */}
-      <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+      <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>
           Pendenzenliste
         </h1>
@@ -162,10 +152,6 @@ export function PendenzenManagementUebersicht({ onSwitchToList, onSelectPendenz 
         </div>
       </div>
 
-      {/* Anna briefing */}
-      <div style={{ marginBottom: 24 }}>
-        <AnnaListenEinordnung context={annaContext} />
-      </div>
 
       {/* KPI Cards */}
       <div className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}>
