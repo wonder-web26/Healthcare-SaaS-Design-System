@@ -1,4 +1,4 @@
-import { patients } from "../components/patientData";
+import { getPatienten, tageBisReAssessment } from "../../lib/patienten/store";
 import { angehoerige } from "../components/angehoerigeData";
 import { unifiedEntries, entryTitle, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
 
@@ -100,11 +100,11 @@ const rules: MatchRule[] = [
   {
     patterns: [/wie\s*viele?\s*(klient|patient)/i, /anzahl\s*(klient|patient)/i],
     handler: () => {
-      const aktiv = patients.filter(p => p.status === "aktiv").length;
-      const schwer = patients.filter(p => p.schweregrad === "schwer" || p.schweregrad === "kritisch").length;
+      const aktiv = getPatienten().filter(p => p.status === "aktiv").length;
+      const schwer = getPatienten().filter(p => p.schweregrad === "schwer" || p.schweregrad === "kritisch").length;
       return {
         role: "anna",
-        text: `Aktuell ${patients.length} Klienten im System, davon ${aktiv} aktiv. ${schwer} mit Schweregrad schwer oder kritisch.`,
+        text: `Aktuell ${getPatienten().length} Klienten im System, davon ${aktiv} aktiv. ${schwer} mit Schweregrad schwer oder kritisch.`,
         chips: ["Schwere Klienten zeigen", "Klienten ohne Zuweisung", "Zur Patientenliste"],
       };
     },
@@ -114,7 +114,7 @@ const rules: MatchRule[] = [
     patterns: [/(?:wo\s*ist|zeig\s*mir|finde|suche)\s+(.{2,})/i, /^([A-ZÄÖÜ][a-zäöü]+\s+[A-ZÄÖÜ][a-zäöü]+)$/],
     handler: (_m, query) => {
       const q = query.replace(/^(wo\s*ist|zeig\s*mir|finde|suche)\s+/i, "").trim().toLowerCase();
-      const pMatches = patients.filter(p => `${p.vorname} ${p.nachname}`.toLowerCase().includes(q) || `${p.nachname} ${p.vorname}`.toLowerCase().includes(q));
+      const pMatches = getPatienten().filter(p => `${p.vorname} ${p.nachname}`.toLowerCase().includes(q) || `${p.nachname} ${p.vorname}`.toLowerCase().includes(q));
       const aMatches = angehoerige.filter(a => `${a.vorname} ${a.nachname}`.toLowerCase().includes(q) || `${a.nachname} ${a.vorname}`.toLowerCase().includes(q));
       const cards: AnnaCard[] = [
         ...pMatches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: `Patient · ${p.kanton} · ${p.schweregrad}`, path: `/patienten/${p.id}` })),
@@ -131,7 +131,7 @@ const rules: MatchRule[] = [
     handler: (m) => {
       const region = m[1].toUpperCase().replace(/ZÜRICH/i, "ZH").replace(/BERN/i, "BE").replace(/LUZERN/i, "LU").replace(/AARGAU/i, "AG").replace(/ST\.?\s*GALLEN/i, "SG");
       const kanton = region.length <= 2 ? region : region;
-      const matches = patients.filter(p => p.kanton.toUpperCase() === kanton);
+      const matches = getPatienten().filter(p => p.kanton.toUpperCase() === kanton);
       const cards = matches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: `${p.schweregrad} · ${p.pflegefachkraft}`, path: `/patienten/${p.id}` }));
       return { role: "anna", text: `${formatCount(matches.length, "Klient", "Klienten")} im Kanton ${kanton}:`, cards: cards.slice(0, 5), navAction: `/patienten?region=${kanton}`, chips: ["Davon mit Schweregrad schwer", "Zur gefilterten Liste"] };
     },
@@ -141,7 +141,7 @@ const rules: MatchRule[] = [
     patterns: [/klient.*schweregrad\s+(leicht|mittel|schwer|kritisch)/i, /(leicht|mittel|schwer|kritisch)e?\s*klient/i],
     handler: (m) => {
       const sg = m[1].toLowerCase();
-      const matches = patients.filter(p => p.schweregrad === sg);
+      const matches = getPatienten().filter(p => p.schweregrad === sg);
       const cards = matches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: `${p.kanton} · ${p.pflegefachkraft}`, path: `/patienten/${p.id}` }));
       return { role: "anna", text: `${formatCount(matches.length, "Klient", "Klienten")} mit Schweregrad "${sg}":`, cards: cards.slice(0, 5), navAction: `/patienten?schweregrad=${sg}`, chips: ["Nur in Zürich", "Zur gefilterten Liste"] };
     },
@@ -151,7 +151,7 @@ const rules: MatchRule[] = [
     patterns: [/klient.*von\s+(.+)/i, /patient.*von\s+(.+)/i],
     handler: (m) => {
       const name = m[1].trim().toLowerCase();
-      const matches = patients.filter(p => p.pflegefachkraft.toLowerCase().includes(name));
+      const matches = getPatienten().filter(p => p.pflegefachkraft.toLowerCase().includes(name));
       const cards = matches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: `${p.schweregrad} · ${p.kanton}`, path: `/patienten/${p.id}` }));
       if (cards.length === 0) return { role: "anna", text: `Keine Klienten für "${m[1].trim()}" gefunden.`, chips: ["Alle Pflegefachkräfte zeigen"] };
       return { role: "anna", text: `${formatCount(matches.length, "Klient", "Klienten")} von ${m[1].trim()}:`, cards: cards.slice(0, 5), chips: ["Davon überfällig", "Zur Patientenliste"] };
@@ -161,7 +161,7 @@ const rules: MatchRule[] = [
   {
     patterns: [/(?:klient|patient).*(?:ohne|kein).*zuwe?i?sung/i, /nicht\s*zugewiesen/i],
     handler: () => {
-      const matches = patients.filter(p => p.pflegefachkraft === "—");
+      const matches = getPatienten().filter(p => p.pflegefachkraft === "—");
       const cards = matches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: `${p.schweregrad} · ${p.kanton}`, path: `/patienten/${p.id}` }));
       return { role: "anna", text: `${formatCount(matches.length, "Klient ist", "Klienten sind")} ohne Pflegefachkraft-Zuweisung:`, cards: cards.slice(0, 5), navAction: `/patienten?zuweisung=nicht_zugewiesen`, chips: ["Zur gefilterten Liste"] };
     },
@@ -170,8 +170,8 @@ const rules: MatchRule[] = [
   {
     patterns: [/re.?assessment/i],
     handler: () => {
-      const faellig = patients.filter(p => p.reAssessmentTage !== null && p.reAssessmentTage <= 30);
-      const cards = faellig.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: `Fällig in ${p.reAssessmentTage} Tagen`, path: `/patienten/${p.id}` }));
+      const faellig = getPatienten().filter(p => { const t = tageBisReAssessment(p); return t !== null && t <= 30; });
+      const cards = faellig.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: `Fällig in ${tageBisReAssessment(p)} Tagen`, path: `/patienten/${p.id}` }));
       return { role: "anna", text: `${formatCount(faellig.length, "Re-Assessment ist", "Re-Assessments sind")} in den nächsten 30 Tagen fällig:`, cards: cards.slice(0, 5), navAction: `/patienten?reassessment=diesen_monat`, chips: ["Nur überfällige", "Zur gefilterten Liste"] };
     },
   },
@@ -292,7 +292,7 @@ const rules: MatchRule[] = [
     handler: () => {
       const overdue = unifiedEntries.filter(e => e.faellig && e.faellig < TODAY && e.status !== "erledigt").length;
       const todayDue = unifiedEntries.filter(e => e.faellig === TODAY && e.status !== "erledigt").length;
-      const activePatients = patients.filter(p => p.status === "aktiv").length;
+      const activePatients = getPatienten().filter(p => p.status === "aktiv").length;
       return {
         role: "anna",
         text: `Dein Überblick: ${activePatients} aktive Klienten, ${overdue} überfällige und ${todayDue} heute fällige Pendenzen.`,
@@ -325,7 +325,7 @@ const rules: MatchRule[] = [
       const thisWeek = unifiedEntries.filter(e => e.faellig && e.faellig >= TODAY && e.faellig <= endOfWeek && e.status !== "erledigt").length;
       return {
         role: "anna",
-        text: `Wochenüberblick KW 10:\n• ${openTotal} offene Pendenzen total\n• ${overdue} davon überfällig\n• ${thisWeek} diese Woche fällig\n• ${patients.filter(p => p.status === "aktiv").length} aktive Klienten`,
+        text: `Wochenüberblick KW 10:\n• ${openTotal} offene Pendenzen total\n• ${overdue} davon überfällig\n• ${thisWeek} diese Woche fällig\n• ${getPatienten().filter(p => p.status === "aktiv").length} aktive Klienten`,
         chips: ["Überfällige zeigen", "Diese Woche fällige", "Zum Dashboard"],
       };
     },

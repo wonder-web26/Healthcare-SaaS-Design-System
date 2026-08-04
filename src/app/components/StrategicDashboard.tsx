@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router";
 import { useCurrentRole } from "../auth";
-import { patients } from "./patientData";
+import { getPatienten } from "../../lib/patienten/store";
 import type { Schweregrad } from "./patientData";
 import {
   Sparkles,
@@ -23,7 +23,7 @@ import { ComplianceRisikoSection } from "./ComplianceRisikoSection";
 
 /* ── Derived data ────────────────────────── */
 
-const activePatients = patients.filter((p) => p.status === "aktiv");
+const activePatients = getPatienten().filter((p) => p.status === "aktiv");
 const activeCount = activePatients.length;
 
 const schweregradCounts: Record<Schweregrad, number> = {
@@ -33,7 +33,7 @@ const schweregradCounts: Record<Schweregrad, number> = {
   kritisch: 0,
 };
 for (const p of activePatients) {
-  schweregradCounts[p.schweregrad]++;
+  if (p.schweregrad) schweregradCounts[p.schweregrad]++;
 }
 
 const schweregradLabels: Record<Schweregrad, string> = {

@@ -5,6 +5,7 @@
  */
 
 export type PatientStatus =
+  | "im_onboarding"
   | "aktiv"
   | "nicht_abrechenbar"
   | "gekuendigt";
@@ -19,13 +20,17 @@ export type AbrechnungsStatus =
 
 export interface Patient {
   id: string;
+  /** Onboarding, aus dem dieser Patient entstanden ist. null = Altbestand ohne Mandat. */
+  onboardingId: string | null;
   vorname: string;
   nachname: string;
+  /** Aus der Verknüpfung zum Angehörigen — NICHT aus dem Notfallkontakt abgeleitet. */
   angehoeriger: string;
   angehoerigerTelefon: string;
   status: PatientStatus;
   kanton: string;
-  schweregrad: Schweregrad;
+  /** Leer erlaubt: wird im Onboarding nicht erhoben und dann nirgends dargestellt. */
+  schweregrad: Schweregrad | "";
   pflegefachkraft: string;
   pflegefachkraftInitialen: string;
   ahvNummer: string;
@@ -35,13 +40,25 @@ export interface Patient {
   aufnahmeDatum: string;
   letzterBesuch: string;
   sprache: string;
+  /* ── Krankenkasse und Ärzte (Quelle: Onboarding-Reiter Personalien) ── */
+  kartennummer: string;
+  hausarztName: string;
+  hausarztFachgebiet: string;
+  hausarztTelefon: string;
+  /* ── Notfallkontakt — eigene Person, unabhängig vom Angehörigen ── */
+  notfallkontaktName: string;
+  notfallkontaktTelefon: string;
+  notfallkontaktBeziehung: string;
   /* ── Extended fields ──────────────────── */
   abrechnungsStatus: AbrechnungsStatus;
-  reAssessmentTage: number | null; // days until re-assessment, null = n/a
-  offeneActionTasks: number;
+  /** Absolutes Fristdatum (ISO). null = keine Frist; die Tageszahl wird gegen das
+   *  Bezugsdatum gerechnet, nicht gespeichert. */
+  reAssessmentFrist: string | null;
+  offeneActionTasks: number | null;
   letzteAktivitaet: string; // date string or description
   abrechnungsstoppGrund: string; // reason for billing stop
-  medlinkSync: "synced" | "pending" | "error";
+  /** "" = kein Wert; im Onboarding wird nichts dazu erhoben. */
+  medlinkSync: "synced" | "pending" | "error" | "";
   /** Krankenkasse des Patienten (für kassenspezifische Abrechnungsregeln) */
   krankenkasse: string;
   /* ── Prozessstatus / Workflow ──────────── */
@@ -57,6 +74,13 @@ export const statusConfig: Record<
   PatientStatus,
   { label: string; bg: string; text: string; dot: string; variant: string }
 > = {
+  im_onboarding: {
+    label: "Im Onboarding",
+    bg: "bg-neutral-medium",
+    text: "text-neutral-foreground",
+    dot: "bg-neutral",
+    variant: "neutral",
+  },
   aktiv: {
     label: "Aktiv",
     bg: "bg-success-light",
@@ -143,6 +167,13 @@ export const statusExplanations: Record<
   string,
   { title: string; description: string; detail: string }
 > = {
+  im_onboarding: {
+    title: "Im Onboarding",
+    description:
+      "Der Patient wird gerade im Onboarding erfasst. Er erscheint noch nicht in der Patientenliste; erst mit dem Abschluss des Onboardings wechselt er auf Aktiv.",
+    detail:
+      "Bis dahin sind alle bereits erfassten Angaben im Dossier sichtbar und können weiter ergänzt werden.",
+  },
   aktiv: {
     title: "Abrechenbar",
     description:
@@ -167,9 +198,14 @@ export const statusExplanations: Record<
 };
 
 /* ── Realistic German sample data ──────── */
-export const patients: Patient[] = [
+/**
+ * Startbestand. Der lebende Bestand liegt in lib/patienten/store.ts; von dort
+ * lesen alle Ansichten. Diese Liste wird nur einmal als Ausgangswert eingelesen.
+ */
+export const patientenSeed: Patient[] = [
   {
     id: "P-2026-0041",
+    onboardingId: null,
     vorname: "Hans-Rudolf",
     nachname: "Steiner",
     angehoeriger: "Vera Steiner (Ehefrau)",
@@ -186,9 +222,16 @@ export const patients: Patient[] = [
     aufnahmeDatum: "12.01.2026",
     letzterBesuch: "25.02.2026",
     sprache: "Deutsch",
+    kartennummer: "",
+    hausarztName: "",
+    hausarztFachgebiet: "",
+    hausarztTelefon: "",
+    notfallkontaktName: "",
+    notfallkontaktTelefon: "",
+    notfallkontaktBeziehung: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "abrechenbar",
-    reAssessmentTage: 30,
+    reAssessmentFrist: "2026-04-02",
     offeneActionTasks: 2,
     letzteAktivitaet: "24.02.2026",
     abrechnungsstoppGrund: "",
@@ -203,6 +246,7 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0042",
+    onboardingId: null,
     vorname: "Marie-Louise",
     nachname: "Hübscher-Wiederkehr",
     angehoeriger: "Beatrice Hübscher-Wiederkehr (Tochter)",
@@ -219,9 +263,16 @@ export const patients: Patient[] = [
     aufnahmeDatum: "20.02.2026",
     letzterBesuch: "—",
     sprache: "Deutsch",
+    kartennummer: "",
+    hausarztName: "",
+    hausarztFachgebiet: "",
+    hausarztTelefon: "",
+    notfallkontaktName: "",
+    notfallkontaktTelefon: "",
+    notfallkontaktBeziehung: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "in_vorbereitung",
-    reAssessmentTage: null,
+    reAssessmentFrist: null,
     offeneActionTasks: 1,
     letzteAktivitaet: "20.02.2026",
     abrechnungsstoppGrund: "",
@@ -236,6 +287,7 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0043",
+    onboardingId: null,
     vorname: "Fatmire",
     nachname: "Rexhepi",
     angehoeriger: "Arben Rexhepi (Sohn)",
@@ -252,9 +304,16 @@ export const patients: Patient[] = [
     aufnahmeDatum: "03.09.2025",
     letzterBesuch: "24.02.2026",
     sprache: "Italienisch",
+    kartennummer: "",
+    hausarztName: "",
+    hausarztFachgebiet: "",
+    hausarztTelefon: "",
+    notfallkontaktName: "",
+    notfallkontaktTelefon: "",
+    notfallkontaktBeziehung: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "abrechenbar",
-    reAssessmentTage: 45,
+    reAssessmentFrist: "2026-04-17",
     offeneActionTasks: 0,
     letzteAktivitaet: "24.02.2026",
     abrechnungsstoppGrund: "",
@@ -269,6 +328,7 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0044",
+    onboardingId: null,
     vorname: "Emine",
     nachname: "Kaya",
     angehoeriger: "Yusuf Kaya (Ehemann)",
@@ -285,9 +345,16 @@ export const patients: Patient[] = [
     aufnahmeDatum: "15.06.2025",
     letzterBesuch: "10.02.2026",
     sprache: "Deutsch",
+    kartennummer: "",
+    hausarztName: "",
+    hausarztFachgebiet: "",
+    hausarztTelefon: "",
+    notfallkontaktName: "",
+    notfallkontaktTelefon: "",
+    notfallkontaktBeziehung: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "gekuendigt",
-    reAssessmentTage: null,
+    reAssessmentFrist: null,
     offeneActionTasks: 0,
     letzteAktivitaet: "10.02.2026",
     abrechnungsstoppGrund: "",
@@ -298,6 +365,7 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0045",
+    onboardingId: null,
     vorname: "Fritz",
     nachname: "Huber",
     angehoeriger: "Erika Huber (Schwester)",
@@ -314,9 +382,16 @@ export const patients: Patient[] = [
     aufnahmeDatum: "28.07.2025",
     letzterBesuch: "23.02.2026",
     sprache: "Deutsch",
+    kartennummer: "",
+    hausarztName: "",
+    hausarztFachgebiet: "",
+    hausarztTelefon: "",
+    notfallkontaktName: "",
+    notfallkontaktTelefon: "",
+    notfallkontaktBeziehung: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "nicht_abrechenbar",
-    reAssessmentTage: null,
+    reAssessmentFrist: null,
     offeneActionTasks: 1,
     letzteAktivitaet: "23.02.2026",
     abrechnungsstoppGrund: "Fehlende Kostengutsprache",
@@ -331,6 +406,7 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0046",
+    onboardingId: null,
     vorname: "Joaquim",
     nachname: "Da Silva",
     angehoeriger: "Marta Da Silva (Tochter)",
@@ -347,9 +423,16 @@ export const patients: Patient[] = [
     aufnahmeDatum: "22.02.2026",
     letzterBesuch: "—",
     sprache: "Türkisch",
+    kartennummer: "",
+    hausarztName: "",
+    hausarztFachgebiet: "",
+    hausarztTelefon: "",
+    notfallkontaktName: "",
+    notfallkontaktTelefon: "",
+    notfallkontaktBeziehung: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "in_vorbereitung",
-    reAssessmentTage: null,
+    reAssessmentFrist: null,
     offeneActionTasks: 1,
     letzteAktivitaet: "22.02.2026",
     abrechnungsstoppGrund: "",
@@ -364,6 +447,7 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0047",
+    onboardingId: null,
     vorname: "Anna",
     nachname: "Bösiger",
     angehoeriger: "Heidi Bösiger (Tochter)",
@@ -380,9 +464,16 @@ export const patients: Patient[] = [
     aufnahmeDatum: "01.11.2025",
     letzterBesuch: "26.02.2026",
     sprache: "Deutsch",
+    kartennummer: "",
+    hausarztName: "",
+    hausarztFachgebiet: "",
+    hausarztTelefon: "",
+    notfallkontaktName: "",
+    notfallkontaktTelefon: "",
+    notfallkontaktBeziehung: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "abrechenbar",
-    reAssessmentTage: 30,
+    reAssessmentFrist: "2026-04-02",
     offeneActionTasks: 0,
     letzteAktivitaet: "26.02.2026",
     abrechnungsstoppGrund: "",
@@ -397,6 +488,7 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0048",
+    onboardingId: null,
     vorname: "Gino",
     nachname: "Ferrari",
     angehoeriger: "Lucia Ferrari (Ehefrau)",
@@ -413,9 +505,16 @@ export const patients: Patient[] = [
     aufnahmeDatum: "05.04.2025",
     letzterBesuch: "21.02.2026",
     sprache: "Französisch",
+    kartennummer: "",
+    hausarztName: "",
+    hausarztFachgebiet: "",
+    hausarztTelefon: "",
+    notfallkontaktName: "",
+    notfallkontaktTelefon: "",
+    notfallkontaktBeziehung: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "nicht_abrechenbar",
-    reAssessmentTage: null,
+    reAssessmentFrist: null,
     offeneActionTasks: 1,
     letzteAktivitaet: "21.02.2026",
     abrechnungsstoppGrund: "Kritische Gesundheitslage",
@@ -430,6 +529,7 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0049",
+    onboardingId: null,
     vorname: "Gertrud",
     nachname: "Zimmermann",
     angehoeriger: "Karl Zimmermann (Ehemann)",
@@ -446,9 +546,16 @@ export const patients: Patient[] = [
     aufnahmeDatum: "18.12.2025",
     letzterBesuch: "25.02.2026",
     sprache: "Deutsch",
+    kartennummer: "",
+    hausarztName: "",
+    hausarztFachgebiet: "",
+    hausarztTelefon: "",
+    notfallkontaktName: "",
+    notfallkontaktTelefon: "",
+    notfallkontaktBeziehung: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "abrechenbar",
-    reAssessmentTage: 60,
+    reAssessmentFrist: "2026-05-02",
     offeneActionTasks: 0,
     letzteAktivitaet: "25.02.2026",
     abrechnungsstoppGrund: "",
@@ -459,6 +566,7 @@ export const patients: Patient[] = [
   },
   {
     id: "P-2026-0050",
+    onboardingId: null,
     vorname: "Werner",
     nachname: "Keller",
     angehoeriger: "Margrit Keller (Ehefrau)",
@@ -475,9 +583,16 @@ export const patients: Patient[] = [
     aufnahmeDatum: "10.10.2025",
     letzterBesuch: "24.02.2026",
     sprache: "Portugiesisch",
+    kartennummer: "",
+    hausarztName: "",
+    hausarztFachgebiet: "",
+    hausarztTelefon: "",
+    notfallkontaktName: "",
+    notfallkontaktTelefon: "",
+    notfallkontaktBeziehung: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "abrechenbar",
-    reAssessmentTage: 45,
+    reAssessmentFrist: "2026-04-17",
     offeneActionTasks: 0,
     letzteAktivitaet: "24.02.2026",
     abrechnungsstoppGrund: "",

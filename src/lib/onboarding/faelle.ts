@@ -50,6 +50,20 @@ export const onboardingFaelle: OnboardingFall[] = [
   { id: "OB-2026-108", patientNachname: "Ferrari", patientVorname: "Gino", patientId: "P-2026-0108", angehoeriger: "Lucia Ferrari", angehoerigerId: "A-2026-0108", currentStep: 1, pflichtdokErledigt: 3, pflichtdokGefordert: 8, pendenzenOffen: 2, pendenzenUeberfaellig: 0, validFrom: "2026-08-17", responsibleUserId: "ott", status: "abgeschlossen", offen: 2, abrechnungsstopp: false, verantwortlich: "Robert Ott", verantwortlichInitialen: "RO", eintrittsdatum: "12.02.2026", letzteAenderung: "27.02.2026", kanton: "ZH" },
 ];
 
+/**
+ * Nächste freie Mandatskennung. Wird vergeben, sobald ein neu begonnenes
+ * Onboarding den Schritt "Patient" erreicht — ab da trägt der Vorgang seine
+ * Kennung unverändert, auch über den Abschluss hinaus.
+ */
+export function naechsteFallKennung(): string {
+  let hoechste = 0;
+  for (const f of onboardingFaelle) {
+    const m = f.id.match(/^OB-\d{4}-(\d{3})$/);
+    if (m) hoechste = Math.max(hoechste, parseInt(m[1], 10));
+  }
+  return `OB-2026-${hoechste + 1}`;
+}
+
 export function fallById(id: string | undefined | null): OnboardingFall | undefined {
   return id ? onboardingFaelle.find(f => f.id === id) : undefined;
 }

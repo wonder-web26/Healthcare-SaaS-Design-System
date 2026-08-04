@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Search, Plus, AlertTriangle, Clock, X, ChevronDown, Check } from "lucide-react";
-import { patients as allePatienten, type Patient, type Schweregrad } from "./patientData";
+import { type Patient, type Schweregrad } from "./patientData";
+import { usePatienten, weisePflegefachkraftZu, tageBisReAssessment, NICHT_ZUGEWIESEN, PATIENTEN_BEZUGSDATUM_ISO } from "../../lib/patienten/store";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
 import { StatusModal } from "./StatusModal";
 import { PflegefachkraftSidebar, type Caregiver } from "./PflegefachkraftSidebar";
@@ -13,7 +14,7 @@ import { toast } from "sonner";
    gegen new Date(), damit die Liste deterministisch ist. 03.03.2026 ist der in
    CLAUDE.md festgelegte Mock-Stichtag; die Fälligkeitsdaten der Patienten sind
    darauf ausgerichtet. Die reinen Funktionen erhalten ihn als Parameter. ── */
-const BEZUGSDATUM_ISO = "2026-03-03";
+const BEZUGSDATUM_ISO = PATIENTEN_BEZUGSDATUM_ISO;
 
 /* ── Zugehörigkeit (Segmentumschalter, genau eine Auswahl) ──
    "Meine" = Patienten der angemeldeten Benutzerin. Die Benutzerin kommt aus der
@@ -24,8 +25,6 @@ type Segment = "alle" | "meine";
    Warnschwelle, die die Zelle selbst verwendet — Chip und Zelle teilen sie. ── */
 const REASSESSMENT_SCHWELLE_TAGE = 30;
 
-/* ── Sentinel der Mockdaten für "keine Pflegefachkraft" ── */
-const KEINE_PFLEGEFACHKRAFT = "—";
 
 /* ══════════════════════════════════════════
    ABLEITUNGEN — reine Funktionen (Patient + Bezugsdatum → boolean)
@@ -38,12 +37,13 @@ function istProzessUeberfaellig(p: Patient, bezugIso: string): boolean {
   return faelligIso !== "" && faelligIso < bezugIso;
 }
 
-function istReAssessmentFaellig(p: Patient): boolean {
-  return p.reAssessmentTage !== null && p.reAssessmentTage <= REASSESSMENT_SCHWELLE_TAGE;
+function istReAssessmentFaellig(p: Patient, bezugIso: string): boolean {
+  const tage = tageBisReAssessment(p, bezugIso);
+  return tage !== null && tage <= REASSESSMENT_SCHWELLE_TAGE;
 }
 
 function istNichtZugewiesen(p: Patient): boolean {
-  return p.pflegefachkraft === KEINE_PFLEGEFACHKRAFT;
+  return !p.pflegefachkraft || p.pflegefachkraft === NICHT_ZUGEWIESEN;
 }
 
 function istNichtAbrechenbar(p: Patient): boolean {
@@ -69,7 +69,7 @@ function ableitenKennzeichen(p: Patient, bezugIso: string): { typ: KennzeichenTy
 type StatusChipId = "prozess_ueberfaellig" | "reassessment_faellig" | "nicht_zugewiesen" | "nicht_abrechenbar";
 const STATUS_CHIPS: { id: StatusChipId; label: string; praedikat: (p: Patient, bezugIso: string) => boolean }[] = [
   { id: "prozess_ueberfaellig", label: "Prozessschritt überfällig", praedikat: istProzessUeberfaellig },
-  { id: "reassessment_faellig", label: "Re-Assessment fällig", praedikat: p => istReAssessmentFaellig(p) },
+  { id: "reassessment_faellig", label: "Re-Assessment fällig", praedikat: istReAssessmentFaellig },
   { id: "nicht_zugewiesen", label: "Nicht zugewiesen", praedikat: p => istNichtZugewiesen(p) },
   { id: "nicht_abrechenbar", label: "Nicht abrechenbar", praedikat: p => istNichtAbrechenbar(p) },
 ];
@@ -81,7 +81,6 @@ const SCHWEREGRAD_OPTIONEN: { value: Schweregrad; label: string }[] = [
   { value: "schwer", label: "Schwer" },
   { value: "kritisch", label: "Kritisch" },
 ];
-const allePflegefachkraefte = [...new Set(allePatienten.map(p => p.pflegefachkraft).filter(pf => pf !== KEINE_PFLEGEFACHKRAFT))].sort();
 
 /* ── Filterzustand: eine Struktur an einem Ort ── */
 interface FilterZustand {
@@ -116,7 +115,7 @@ function filterPatienten(list: Patient[], f: FilterZustand, bezugIso: string, me
   return list.filter(p => {
     if (!imSegment(p, f.segment, meinName)) return false;
     for (const chip of STATUS_CHIPS) if (f.statusChips.has(chip.id) && !chip.praedikat(p, bezugIso)) return false;
-    if (f.schweregrade.size > 0 && !f.schweregrade.has(p.schweregrad)) return false;
+    if (f.schweregrade.size > 0 && (!p.schweregrad || !f.schweregrade.has(p.schweregrad))) return false;
     if (f.pflegefachkraefte.size > 0 && !f.pflegefachkraefte.has(p.pflegefachkraft)) return false;
     const q = f.suche.trim().toLowerCase();
     if (q && !(p.nachname.toLowerCase().includes(q) || p.vorname.toLowerCase().includes(q) || p.angehoeriger.toLowerCase().includes(q) || p.pflegefachkraft.toLowerCase().includes(q) || p.id.toLowerCase().includes(q))) return false;
@@ -127,15 +126,16 @@ function filterPatienten(list: Patient[], f: FilterZustand, bezugIso: string, me
 /* ── Sortierung: Standard Name aufsteigend; klickbar in vier Spalten ── */
 type SortKey = "name" | "schweregrad" | "reassessment" | "tasks";
 const SORT_LABEL: Record<SortKey, string> = { name: "Name", schweregrad: "Schweregrad", reassessment: "Re-Assessment", tasks: "Tasks" };
-const SCHWEREGRAD_RANK: Record<Schweregrad, number> = { leicht: 0, mittel: 1, schwer: 2, kritisch: 3 };
+/** Leerer Schweregrad sortiert ans Ende, nicht an den Anfang. */
+const SCHWEREGRAD_RANK: Record<Schweregrad | "", number> = { leicht: 0, mittel: 1, schwer: 2, kritisch: 3, "": 4 };
 
 function sortPatients(list: Patient[], key: SortKey, dir: "asc" | "desc"): Patient[] {
   const f = dir === "asc" ? 1 : -1;
   return [...list].sort((a, b) => {
     switch (key) {
       case "schweregrad": return f * ((SCHWEREGRAD_RANK[a.schweregrad] - SCHWEREGRAD_RANK[b.schweregrad]) || a.nachname.localeCompare(b.nachname, "de"));
-      case "reassessment": return f * ((a.reAssessmentTage ?? Infinity) - (b.reAssessmentTage ?? Infinity));
-      case "tasks": return f * (a.offeneActionTasks - b.offeneActionTasks);
+      case "reassessment": return f * ((tageBisReAssessment(a, BEZUGSDATUM_ISO) ?? Infinity) - (tageBisReAssessment(b, BEZUGSDATUM_ISO) ?? Infinity));
+      case "tasks": return f * ((a.offeneActionTasks ?? Infinity) - (b.offeneActionTasks ?? Infinity));
       case "name": default: return f * (a.nachname.localeCompare(b.nachname, "de") || a.vorname.localeCompare(b.vorname, "de"));
     }
   });
@@ -143,11 +143,13 @@ function sortPatients(list: Patient[], key: SortKey, dir: "asc" | "desc"): Patie
 
 /* ── Anzeige-Hilfen ── */
 const STATUS_LABEL: Record<Patient["status"], string> = {
+  im_onboarding: "Im Onboarding",
   aktiv: "Aktiv",
   nicht_abrechenbar: "Nicht abrechenbar",
   gekuendigt: "Gekündigt",
 };
-const SCHWEREGRAD_LABEL: Record<Schweregrad, string> = { leicht: "Leicht", mittel: "Mittel", schwer: "Schwer", kritisch: "Kritisch" };
+/** Leerer Schweregrad wird nirgends dargestellt — weder als Text noch als Pille. */
+const SCHWEREGRAD_LABEL: Record<Schweregrad | "", string> = { leicht: "Leicht", mittel: "Mittel", schwer: "Schwer", kritisch: "Kritisch", "": "" };
 
 /** "Sandra Weber" → "S. Weber" (Kurzname wie in der Onboarding-Liste). */
 function kurzname(voll: string): string {
@@ -223,18 +225,22 @@ export function PatientenPage() {
   const togglePflegefachkraft = (pf: string) => setFilter(f => { const s = new Set(f.pflegefachkraefte); if (s.has(pf)) s.delete(pf); else s.add(pf); return { ...f, pflegefachkraefte: s }; });
   const resetFilter = () => setFilter(f => ({ ...LEERER_FILTER, suche: f.suche })); // Suche behält ihr eigenes Löschen
 
-  /* ── Zuweisung: Sidebar schreibt in lokale Übersteuerung, nicht in die Mocks ── */
-  const [assignmentOverrides, setAssignmentOverrides] = useState<Record<string, { name: string; initialen: string }>>({});
   const [statusModal, setStatusModal] = useState<{ open: boolean; patient: Patient | null }>({ open: false, patient: null });
   const [assignSidebar, setAssignSidebar] = useState<{ open: boolean; patient: Patient | null }>({ open: false, patient: null });
 
-  const patients = useMemo(() => allePatienten.map(p => {
-    const override = assignmentOverrides[p.id];
-    return override ? { ...p, pflegefachkraft: override.name, pflegefachkraftInitialen: override.initialen } : p;
-  }), [assignmentOverrides]);
+  /* ── Der gemeinsame Bestand. Patienten im Onboarding sind hier nicht enthalten
+     und zählen daher weder in der Liste noch in den Chip-Zahlen mit. ── */
+  const patients = usePatienten();
 
+  /* Auswahlliste der Pflegefachkräfte folgt dem Bestand, nicht einer Modul-Konstante. */
+  const allePflegefachkraefte = useMemo(
+    () => [...new Set(patients.map(p => p.pflegefachkraft).filter(pf => pf && pf !== NICHT_ZUGEWIESEN))].sort(),
+    [patients],
+  );
+
+  /* ── Zuweisung: schreibt in den gemeinsamen Bestand ── */
   const handleAssign = (patientId: string, caregiver: Caregiver) => {
-    setAssignmentOverrides(prev => ({ ...prev, [patientId]: { name: caregiver.name, initialen: caregiver.initialen } }));
+    weisePflegefachkraftZu(patientId, caregiver.name, caregiver.initialen);
     setAssignSidebar({ open: false, patient: null });
     toast("Patient zugewiesen");
   };
@@ -314,7 +320,7 @@ export function PatientenPage() {
     { id: "schweregrad", label: "Schweregrad", anteil: 6, minCh: 9, align: "left", sortierbar: true,
       // Nur "Kritisch" behält die Fläche. Der Rand hält die Pille optisch von einer
       // benachbarten Status-Pille getrennt (Ferrari trägt beide).
-      render: p => p.schweregrad === "kritisch"
+      render: p => !p.schweregrad ? null : p.schweregrad === "kritisch"
         ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: "transparent", border: "var(--border-thin) solid var(--status-danger)", color: "var(--status-danger)", whiteSpace: "nowrap" }}>{SCHWEREGRAD_LABEL[p.schweregrad]}</span>
         : <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{SCHWEREGRAD_LABEL[p.schweregrad]}</span> },
     { id: "pflegefachkraft", label: "Pflegefachkraft", anteil: 9, minCh: 12, align: "left",
@@ -358,12 +364,16 @@ export function PatientenPage() {
       // Balken entfällt: seine Breite war eine reine Funktion der Tageszahl
       // (90-Tage-Zyklus, nirgends in den Daten hinterlegt) und trug damit keine
       // eigene Information. Die Fälligkeitsschwelle wandert in die Zahl.
-      render: p => p.reAssessmentTage === null
-        ? <span style={{ fontFamily: "monospace", fontSize: "0.8125rem", color: "var(--text-tertiary)" }}>–</span>
-        : <span style={{ fontFamily: "monospace", fontVariantNumeric: "tabular-nums", fontSize: "0.8125rem", fontWeight: istReAssessmentFaellig(p) ? "var(--weight-medium)" : "var(--weight-regular)", color: istReAssessmentFaellig(p) ? "var(--status-warning-text)" : "var(--text-primary)" }}>{p.reAssessmentTage}d</span> },
+      render: p => {
+        const tage = tageBisReAssessment(p, BEZUGSDATUM_ISO);
+        if (tage === null) return null; // keine Frist hinterlegt → leere Zelle
+        const faellig = istReAssessmentFaellig(p, BEZUGSDATUM_ISO);
+        return <span style={{ fontFamily: "monospace", fontVariantNumeric: "tabular-nums", fontSize: "0.8125rem", fontWeight: faellig ? "var(--weight-medium)" : "var(--weight-regular)", color: faellig ? "var(--status-warning-text)" : "var(--text-primary)" }}>{tage}d</span>;
+      } },
     { id: "tasks", label: "Tasks", anteil: 5, minCh: 5, align: "right", sortierbar: true,
       // Tabellarische Zahl auf fester Linie; 0 = stiller Leerwert.
-      render: p => <span style={{ fontFamily: "monospace", fontVariantNumeric: "tabular-nums", fontSize: "0.8125rem", color: p.offeneActionTasks === 0 ? "var(--text-tertiary)" : "var(--text-primary)" }}>{p.offeneActionTasks === 0 ? "–" : p.offeneActionTasks}</span> },
+      render: p => p.offeneActionTasks === null ? null
+        : <span style={{ fontFamily: "monospace", fontVariantNumeric: "tabular-nums", fontSize: "0.8125rem", color: p.offeneActionTasks === 0 ? "var(--text-tertiary)" : "var(--text-primary)" }}>{p.offeneActionTasks === 0 ? "–" : p.offeneActionTasks}</span> },
     { id: "aktivitaet", label: "Aktivität", anteil: 7, minCh: 8, align: "left",
       render: p => <span style={{ fontSize: "0.75rem", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{p.letzteAktivitaet}</span> },
   ];

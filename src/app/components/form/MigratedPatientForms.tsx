@@ -36,13 +36,15 @@ interface TabProps {
   data: PatientFormData;
   touched: Set<string>;
   onUpdate: (field: keyof PatientFormData, value: string) => void;
+  /** Mehrere Felder in einem Zug — nötig, wo ein Feld ein zweites mitschreibt. */
+  onUpdateMehrere?: (patch: Partial<PatientFormData>) => void;
   onBlur: (field: string) => void;
 }
 
 /* ══════════════════════════════════════════
    TAB 1: PERSONALIEN (migrated)
    ══════════════════════════════════════════ */
-export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) {
+export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onBlur }: TabProps) {
   const t = (f: string) => touched.has(f);
   const isSwiss = data.nationalitaet === "schweiz";
 
@@ -80,7 +82,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onBlur }: TabProps) 
       <SectionHeader icon={Shield} label="Krankenkasse & Aerzte" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
         {/* SP-02: Picklist statt Freitext */}
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { const bag = getBagNummer(v || ""); onUpdate("krankenkasse", v || ""); if (bag) setTimeout(() => onUpdate("bagNr", bag), 0); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { const kasse = v || ""; const bag = getBagNummer(kasse); if (onUpdateMehrere) onUpdateMehrere({ krankenkasse: kasse, bagNr: bag || data.bagNr }); else onUpdate("krankenkasse", kasse); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} /></div>
         {/* SP-03: Kartennummer (umbenannt) */}
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Kartennummer" required value={data.kartennummer} onChange={v => onUpdate("kartennummer", v)} onBlur={() => onBlur("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} /></div>
         {/* SP-03: BAG-Nr. */}

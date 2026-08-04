@@ -18,11 +18,11 @@ import {
   UserPlus,
 } from "lucide-react";
 import {
-  patients as allPatients,
   statusConfig,
   schweregradConfig,
   type Patient,
 } from "./patientData";
+import { usePatienten } from "../../lib/patienten/store";
 
 /* ── Pflegefachkraft pool for matching ──── */
 interface Pflegefachkraft {
@@ -94,6 +94,9 @@ export function ZuteilungPage() {
   const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [confirmToast, setConfirmToast] = useState<string | null>(null);
 
+  // Gemeinsamer Bestand — Patienten im Onboarding sind nicht enthalten
+  const allPatients = usePatienten();
+
   // Build unique filter options
   const kantone = [...new Set(allPatients.map((p) => p.kanton))].sort();
   const sprachen = [...new Set(allPatients.map((p) => p.sprache))].sort();
@@ -114,7 +117,7 @@ export function ZuteilungPage() {
     return Object.entries(countMap)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, count]) => ({ name, count }));
-  }, [assignments]);
+  }, [assignments, allPatients]);
 
   // Filter patients
   const filtered = useMemo(() => {

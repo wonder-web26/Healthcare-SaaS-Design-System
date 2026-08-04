@@ -58,12 +58,12 @@ import {
 } from "lucide-react";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import {
-  patients,
   statusConfig,
   schweregradConfig,
   abrechnungsStatusConfig,
   type Patient,
 } from "./patientData";
+import { usePatienten, getPatient, tageBisReAssessment } from "../../lib/patienten/store";
 import { StatusModal } from "./StatusModal";
 import { TabDokumente } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
@@ -297,8 +297,11 @@ export function Patient360Page() {
   };
   const [statusModal, setStatusModal] = useState(false);
 
-  const allPatientIds = patients.map(p => p.id);
-  const patient = patients.find((p) => p.id === patientId);
+  // Blättern läuft über den sichtbaren Bestand; das Dossier selbst ist auch für
+  // einen Patienten im Onboarding erreichbar — er existiert bereits.
+  const patienten = usePatienten();
+  const allPatientIds = patienten.map(p => p.id);
+  const patient = patientId ? getPatient(patientId) : undefined;
 
   if (!patient) {
     return (
@@ -323,13 +326,12 @@ export function Patient360Page() {
 
   const st = statusConfig[patient.status];
   const ast = abrechnungsStatusConfig[patient.abrechnungsStatus];
-  const sg = schweregradConfig[patient.schweregrad];
+  const sg = patient.schweregrad ? schweregradConfig[patient.schweregrad] : null;
   const tickets = getTickets(patient.id);
 
   // Status styles mapped to CSS variables
   const stStyle = { bg: st.bg, text: st.text, dot: st.dot };
   const astStyle = { bg: ast.bg, text: ast.text, dot: ast.dot };
-  const sgStyle = { bg: sg.bg, text: sg.text };
 
   return (
     <>
@@ -355,7 +357,7 @@ export function Patient360Page() {
               {/* Status/Abrechnung/Schweregrad: Information (nicht bedienbar), je Zustand mit Symbol. */}
               <StatusMarke label={st.label} variante={bgZuVariante(st.bg)} />
               <StatusMarke label={ast.label} variante={bgZuVariante(ast.bg)} />
-              <StatusMarke label={sg.label} variante={bgZuVariante(sg.bg)} />
+              {sg && <StatusMarke label={sg.label} variante={bgZuVariante(sg.bg)} />}
             </div>
             <div className="flex items-center flex-wrap" style={{ gap: "var(--space-3)", marginTop: 6, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
               <MaskedAhv ahv={patient.ahvNummer} />
@@ -647,16 +649,16 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
   const [angehName, setAngehName] = useState(origAngehName);
   const [angehRelation, setAngehRelation] = useState(origAngehRelation);
   const [angehTelefon, setAngehTelefon] = useState(patient.angehoerigerTelefon);
-  const [notfallName, setNotfallName] = useState(origAngehName);
-  const [notfallRelation, setNotfallRelation] = useState("Notfallkontakt");
-  const [notfallTelefon, setNotfallTelefon] = useState(patient.angehoerigerTelefon);
+  const [notfallName, setNotfallName] = useState(patient.notfallkontaktName);
+  const [notfallRelation, setNotfallRelation] = useState(patient.notfallkontaktBeziehung);
+  const [notfallTelefon, setNotfallTelefon] = useState(patient.notfallkontaktTelefon);
 
-  /* ── Editable fields: Versicherung & Arzt ── */
-  const [kkName, setKkName] = useState("CSS Versicherung");
-  const [kkNummer, setKkNummer] = useState("T553.91");
-  const [arztName, setArztName] = useState("Dr. med. Markus Huber");
-  const [arztFach, setArztFach] = useState("Allgemeinmedizin");
-  const [arztTel, setArztTel] = useState("+41 44 261 33 00");
+  /* ── Editable fields: Versicherung & Arzt — Werte kommen aus dem Patienten ── */
+  const [kkName, setKkName] = useState(patient.krankenkasse);
+  const [kkNummer, setKkNummer] = useState(patient.kartennummer);
+  const [arztName, setArztName] = useState(patient.hausarztName);
+  const [arztFach, setArztFach] = useState(patient.hausarztFachgebiet);
+  const [arztTel, setArztTel] = useState(patient.hausarztTelefon);
 
   /* ── Snapshot for cancel/revert ── */
   const [snapshot, setSnapshot] = useState<Record<string, string>>({});
@@ -704,8 +706,9 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
     setEditingSection(null);
   };
 
-  const raOverdue = patient.reAssessmentTage !== null && patient.reAssessmentTage <= 0;
-  const raUrgent = patient.reAssessmentTage !== null && patient.reAssessmentTage > 0 && patient.reAssessmentTage <= 14;
+  const raTage = tageBisReAssessment(patient);
+  const raOverdue = raTage !== null && raTage <= 0;
+  const raUrgent = raTage !== null && raTage > 0 && raTage <= 14;
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -886,18 +889,16 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
             <h5 className="text-foreground">Re-Assessment</h5>
           </div>
           <div className="p-5">
-            {patient.reAssessmentTage !== null ? (
+            {raTage !== null && (
               <div className={`text-[13px] flex items-center gap-1.5 ${
                 raOverdue ? "text-error" : raUrgent ? "text-error" : "text-foreground"
               }`} style={{ fontWeight: raOverdue || raUrgent ? 500 : 400 }}>
                 {(raOverdue || raUrgent) && <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
                 {raOverdue
                   ? "Überfällig — bitte umgehend einplanen"
-                  : `Fällig in ${patient.reAssessmentTage} Tagen`
+                  : `Fällig in ${raTage} Tagen`
                 }
               </div>
-            ) : (
-              <span className="text-[13px] text-muted-foreground">Nicht erforderlich</span>
             )}
           </div>
         </div>

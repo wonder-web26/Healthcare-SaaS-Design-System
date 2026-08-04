@@ -16,6 +16,7 @@ import { protokolliereAufteilung } from "./aufteilung-log";
 import { erstelleNachweis } from "../schulung/nachweis-store";
 import { MOCK_KLV_VERORDNUNGEN } from "../mocks/klinische-artefakte-mock";
 import { getPersonByOnboardingId, updatePersonZustand } from "../interrai/store";
+import { schliessePatientOnboardingAb } from "../patienten/store";
 
 export interface KonvertierungsErgebnis {
   patientId: string;
@@ -54,14 +55,18 @@ export function konvertiereOnboarding(
   /** Auslösende Person für das Aufteilungs-Ereignisprotokoll (sofern bekannt). */
   ausloeser?: { id: string; name: string },
 ): KonvertierungsErgebnis {
-  // 1. Generate new patient ID (in production: server-generated)
-  const patientId = `P-${Date.now()}`;
+  // 1. Der Patient existiert bereits (er entsteht mit dem Schritt "Patient").
+  //    Der Abschluss kopiert nichts und erzeugt nichts — er wechselt nur den
+  //    Zustand von "im_onboarding" auf "aktiv". Mandate aus dem Altbestand
+  //    haben keinen Patientendatensatz; dann bleibt die Kennung leer.
+  const patient = schliessePatientOnboardingAb(onboardingId);
+  const patientId = patient?.id ?? "";
   const angehoerigerId = `A-${Date.now()}`;
 
   // 2. Update person state — assessments reference the person, not the
   //    onboarding or patient. The assessment itself stays untouched.
   const person = getPersonByOnboardingId(onboardingId);
-  if (person) {
+  if (person && patientId) {
     updatePersonZustand(person.id, "patient", patientId);
   }
 

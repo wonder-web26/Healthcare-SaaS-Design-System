@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Sparkles } from "lucide-react";
 import { useCurrentRole } from "../auth";
 import type { Patient } from "../components/patientData";
+import { tageBisReAssessment } from "../../lib/patienten/store";
 
 function parseMarkers(text: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
@@ -47,11 +48,12 @@ function generatePatientSummary(p: Patient): string {
   }
 
   // Sentence 4: Re-assessment
-  if (p.reAssessmentTage !== null) {
-    if (p.reAssessmentTage <= 0) {
+  const reAssessmentTage = tageBisReAssessment(p);
+  if (reAssessmentTage !== null) {
+    if (reAssessmentTage <= 0) {
       parts.push(`{{danger}}Re-Assessment überfällig.{{/danger}}`);
-    } else if (p.reAssessmentTage <= 14) {
-      parts.push(`{{warning}}Re-Assessment in ${p.reAssessmentTage} Tagen fällig.{{/warning}}`);
+    } else if (reAssessmentTage <= 14) {
+      parts.push(`{{warning}}Re-Assessment in ${reAssessmentTage} Tagen fällig.{{/warning}}`);
     }
   }
 

@@ -92,7 +92,7 @@ function computeMatch(
 ): { score: number; detail: MatchDetail } {
   const spracheMatch = caregiver.sprachen.includes(patient.sprache);
   const regionMatch = caregiver.regionen.includes(patient.kanton);
-  const schweregradMatch = caregiver.schweregrade.includes(patient.schweregrad);
+  const schweregradMatch = !!patient.schweregrad && caregiver.schweregrade.includes(patient.schweregrad);
   const freeSlots = caregiver.kapazitaet.max - caregiver.kapazitaet.aktuell;
   const kapPct = Math.round(
     (freeSlots / caregiver.kapazitaet.max) * 100

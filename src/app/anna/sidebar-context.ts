@@ -2,7 +2,7 @@
  * Anna Sidebar context detection and greeting generators.
  * Each route/entity combination gets its own greeting + quick replies.
  */
-import { patients } from "../components/patientData";
+import { getPatienten, tageBisReAssessment } from "../../lib/patienten/store";
 import { angehoerige } from "../components/angehoerigeData";
 import { unifiedEntries, entryTitle, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
 import { pendenzTypen } from "../../types/pendenz";
@@ -121,7 +121,7 @@ export function generateContextResult(ctx: AnnaContext): AnnaContextResult {
 /* ── Startseite ── */
 function generateStartseite(): AnnaContextResult {
   const myOverdue = unifiedEntries.filter(e => e.verantwortlich.initialen === CURRENT_USER && e.faellig && e.faellig < TODAY && e.status !== "erledigt");
-  const criticalPatients = patients.filter(p => p.schweregrad === "schwer" || p.schweregrad === "kritisch");
+  const criticalPatients = getPatienten().filter(p => p.schweregrad === "schwer" || p.schweregrad === "kritisch");
   const parts: string[] = [`${greeting()}! `];
   if (myOverdue.length > 0) parts.push(`Du hast {{danger}}${myOverdue.length} überfällige Pendenzen{{/danger}}.`);
   if (criticalPatients.length > 0) parts.push(`{{warning}}${criticalPatients.length} Patienten${criticalPatients.length > 1 ? "" : ""} im Schweregrad Schwer oder Kritisch.{{/warning}}`);
@@ -172,9 +172,9 @@ function generateOnboardingDetail(mandatId: string): AnnaContextResult {
 
 /* ── Patient-Liste ── */
 function generatePatientListe(): AnnaContextResult {
-  const critical = patients.filter(p => p.schweregrad === "schwer" || p.schweregrad === "kritisch");
-  const overdueTasks = patients.filter(p => p.prozessStatus?.ueberfaellig);
-  const parts: string[] = [`${patients.length} aktive Patienten.`];
+  const critical = getPatienten().filter(p => p.schweregrad === "schwer" || p.schweregrad === "kritisch");
+  const overdueTasks = getPatienten().filter(p => p.prozessStatus?.ueberfaellig);
+  const parts: string[] = [`${getPatienten().length} aktive Patienten.`];
   if (critical.length > 0) parts.push(`{{warning}}${critical.length} mit Schweregrad Schwer oder Kritisch.{{/warning}}`);
   if (overdueTasks.length > 0) parts.push(`{{danger}}${overdueTasks.length} haben überfällige Tasks.{{/danger}}`);
   return {
@@ -190,12 +190,15 @@ function generatePatientListe(): AnnaContextResult {
 
 /* ── Patient-Detail ── */
 function generatePatientDetail(patientId: string): AnnaContextResult {
-  const p = patients.find(x => x.id === patientId);
+  const p = getPatienten().find(x => x.id === patientId);
   if (!p) return { greeting: "Ich kann diesen Patienten nicht finden.", quickReplies: [], contextLabel: "Patient-Detail" };
   const name = `${p.vorname} ${p.nachname}`;
-  const parts: string[] = [`Wir schauen ${name} an. Schweregrad „${p.schweregrad[0].toUpperCase() + p.schweregrad.slice(1)}".`];
+  const parts: string[] = p.schweregrad
+    ? [`Wir schauen ${name} an. Schweregrad „${p.schweregrad[0].toUpperCase() + p.schweregrad.slice(1)}".`]
+    : [`Wir schauen ${name} an.`];
   if (p.prozessStatus?.ueberfaellig) parts.push(`{{danger}}${p.prozessStatus.naechsteAufgabe} ist überfällig.{{/danger}}`);
-  if (p.reAssessmentTage !== null && p.reAssessmentTage <= 14) parts.push(`{{warning}}Re-Assessment in ${p.reAssessmentTage} Tagen.{{/warning}}`);
+  const reAssessmentTage = tageBisReAssessment(p);
+  if (reAssessmentTage !== null && reAssessmentTage <= 14) parts.push(`{{warning}}Re-Assessment in ${reAssessmentTage} Tagen.{{/warning}}`);
   return {
     greeting: parts.join(" "),
     quickReplies: [

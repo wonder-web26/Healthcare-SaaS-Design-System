@@ -79,7 +79,7 @@ import { NATIONALITAETEN } from "./form/MigratedAngehoerigerForms";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/krankenkassen";
 import { Combobox } from "./form/Combobox";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
-import { patients } from "./patientData";
+import { getPatient } from "../../lib/patienten/store";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext, type DokumentTypDefinition } from "../../lib/stammdaten/dokumenttypen";
 import { DokumentScanUpload, type ScanFile } from "./form/DokumentScanUpload";
 import { EinwilligungModal } from "./einwilligung/EinwilligungModal";
@@ -458,6 +458,16 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
     [data, onChange]
   );
 
+  /** Mehrere Felder in EINEM Zug — zwei getrennte Aufrufe im selben Rendertakt
+   *  würden den zweiten auf einem veralteten Stand aufsetzen und den ersten
+   *  wieder überschreiben (betraf Krankenkasse + BAG-Nr.). */
+  const updateFields = useCallback(
+    (patch: Partial<PatientFormData>) => {
+      onChange({ ...data, ...patch });
+    },
+    [data, onChange]
+  );
+
   const updateATL = useCallback(
     (itemKey: string, update: Partial<ATLEntry>) => {
       onChange({
@@ -557,7 +567,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
             (Vitaldaten, InterRAI, Pflegeplanung, KLV, Workflow) behalten volle Breite. */}
         <div style={{ padding: "20px 32px 24px", maxWidth: [0, 1, 3, 4, 9].includes(activeTab) ? FORMULAR_MAX : undefined }}>
           {activeTab === 0 && (
-            <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
+            <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onUpdateMehrere={updateFields} onBlur={markTouched} />
           )}
           {activeTab === 1 && (
             <TabSteuerV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
@@ -2688,7 +2698,7 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   const pp = MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === onboardingId);
   const verfuegbareDiagnosen = pp?.pflegediagnosen || [];
   // Krankenkasse: from patient (if konvertiert) or mock default
-  const patient = klv?.patientId ? patients.find(p => p.id === klv.patientId) : null;
+  const patient = klv?.patientId ? getPatient(klv.patientId) : null;
   const krankenkasse = patient?.krankenkasse || "Groupe Mutuel"; // Demo-Default für Onboarding
 
   // Pflegeplanung data for WZW

@@ -50,6 +50,8 @@ import { type NotizReferenz } from "../../lib/notizen/notizen";
 import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient, seedDemoRhythmus } from "./demoSteinerFall";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
+import { naechsteFallKennung } from "../../lib/onboarding/faelle";
+import { erfassePatientImOnboarding } from "../../lib/patienten/store";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
 import { formatFaelligkeit, isoZuDate } from "../../lib/datum";
@@ -265,6 +267,17 @@ export function OnboardingPage() {
   useEffect(() => { if (caseId === DEMO_FALL_ID) seedDemoRhythmus(); }, [caseId]);
   const [step2Valid, setStep2Valid] = useState(false);
 
+  /* ── Ein Bestand, ein Objekt ────────────────────────────────────────────────
+     Ein neu begonnenes Onboarding erhält seine Kennung, sobald der Schritt
+     "Patient" zum ersten Mal geöffnet wird; im selben Moment entsteht der
+     Patient im gemeinsamen Bestand mit dem Zustand "im_onboarding". Ab da
+     bleibt die Kennung unverändert — der Abschluss wechselt nur den Zustand.
+
+     Die acht Mandate aus dem Mockbestand bleiben davon unberührt: sie sind
+     Altbestand ohne Patientendatensatz und erzeugen beim Abschluss keinen. ── */
+  const [neueFallKennung, setNeueFallKennung] = useState<string | null>(null);
+  const wirksameFallKennung = caseId ?? neueFallKennung;
+
   /* ── Step 3 (Vertrag) validity ───── */
   const [step3Valid, setStep3Valid] = useState(false);
 
@@ -373,6 +386,21 @@ export function OnboardingPage() {
   }, [requiresB, wizardSteps.length]);
 
   const activeStepData = wizardSteps.find((s) => s.id === currentStep) ?? wizardSteps[0];
+
+  useEffect(() => {
+    if (caseId || activeStepData.key !== "patient") return;
+    setNeueFallKennung(k => k ?? naechsteFallKennung());
+  }, [caseId, activeStepData.key]);
+
+  // Erfasste Felder fortschreiben — dieselbe Kennung, kein zweiter Patient.
+  useEffect(() => {
+    if (!neueFallKennung) return;
+    erfassePatientImOnboarding(neueFallKennung, patientData, {
+      vorname: angehoerigerData.vorname,
+      name: angehoerigerData.name,
+      telefon: angehoerigerData.telefon,
+    });
+  }, [neueFallKennung, patientData, angehoerigerData.vorname, angehoerigerData.name, angehoerigerData.telefon]);
 
   /* ── Notizspur: Person des aktiven Schritts (aus der geteilten Fall-Quelle).
      angehoeriger/spezialbewilligung → Angehörige, patient → Patient, vertrag →
@@ -1039,7 +1067,7 @@ export function OnboardingPage() {
                 variant="primaer"
                 disabled={abschlussPruefung.fehlendePflichtdokumente.length > 0 && !overrideBegrundung.trim()}
                 onClick={() => {
-                  if (caseId) {
+                  if (wirksameFallKennung) {
                     // Audit-Spur: bei Override dokumentieren und in Sitzungs-State festhalten
                     if (abschlussPruefung.fehlendePflichtdokumente.length > 0 && overrideBegrundung.trim()) {
                       const auditNote = {
@@ -1051,7 +1079,7 @@ export function OnboardingPage() {
                       setAbschlussAuditLog(auditNote);
                       console.info("[Audit] Abschluss mit Override:", auditNote);
                     }
-                    const ergebnis = konvertiereOnboarding(caseId, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: MOCK_KLV_VERORDNUNGEN, workflows: [] }, {
+                    const ergebnis = konvertiereOnboarding(wirksameFallKennung, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: MOCK_KLV_VERORDNUNGEN, workflows: [] }, {
                       name: `${angehoerigerData.vorname || ""} ${angehoerigerData.name || ""}`.trim(),
                       quellensteuerpflichtig: angehoerigerData.quellensteuer === "ja",
                       aufenthaltsstatus: angehoerigerData.aufenthaltsstatus,
