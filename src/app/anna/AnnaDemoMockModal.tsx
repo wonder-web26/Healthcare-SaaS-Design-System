@@ -1,5 +1,6 @@
 import { Info, X, Clock, MapPin, User as UserIcon } from "lucide-react";
 import type { UnifiedEntry } from "../../lib/mocks/service-desk-unified";
+import { personName as aufloesenName } from "../../lib/mocks/personen-aufloesung";
 
 /* ══════════════════════════════════════════
    MOCK DATA FOR AUB VERTRETUNG
@@ -42,7 +43,7 @@ export function AnnaDemoMockModal({ isOpen, onClose, onConfirm, mockType, penden
   if (!isOpen) return null;
 
   const isVertretung = mockType === "vertretung-einsetzen";
-  const personName = pendenz.person?.name ?? "–";
+  const personName = aufloesenName(pendenz.personBezug);
 
   return (
     <div

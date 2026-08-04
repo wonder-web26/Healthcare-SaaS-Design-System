@@ -1,5 +1,6 @@
 import type { WorkflowTyp } from "./workflow-tasks";
 import type { UnifiedEntry } from "./service-desk-unified";
+import { personName } from "./personen-aufloesung";
 
 const templates: Record<WorkflowTyp, string> = {
   SRK_ANMELDUNG:
@@ -20,6 +21,6 @@ export function generateWorkflowBeschreibung(entry: UnifiedEntry): string {
   const template = templates[entry.typ as WorkflowTyp];
   if (!template) return "";
   return template
-    .replace(/\{person\}/g, entry.person?.name || "—")
+    .replace(/\{person\}/g, personName(entry.personBezug))
     .replace(/\{kontext\}/g, entry.kontext || "—");
 }

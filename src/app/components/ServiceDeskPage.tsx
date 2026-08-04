@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router";
-import { Plus, X, AlertTriangle, Check, ArrowLeft, Send, Sparkles, Search, ChevronDown } from "lucide-react";
-import { getUnifiedEntries, entryTitle, CURRENT_USER, MY_TEAM, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
+import { useSearchParams, useNavigate } from "react-router";
+import { Plus, X, AlertTriangle, Check, ArrowLeft, Send, Sparkles, Search, ChevronDown, ExternalLink } from "lucide-react";
+import { getUnifiedEntries, entryBetreff, entryPersonName, CURRENT_USER, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
+import { personLink, personArtLabel } from "../../lib/mocks/personen-aufloesung";
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
 import { isoZuAnzeige } from "../../lib/datum";
@@ -21,12 +22,6 @@ function formatDate(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
-function formatShort(iso: string): string {
-  const months = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
-  const [, m, d] = iso.split("-");
-  return `${parseInt(d)}. ${months[parseInt(m) - 1]}`;
-}
-
 function daysFromToday(iso: string | null): number | null {
   if (!iso) return null;
   const t = new Date(TODAY);
@@ -34,21 +29,31 @@ function daysFromToday(iso: string | null): number | null {
   return Math.round((d.getTime() - t.getTime()) / 86400000);
 }
 
-/** Fälligkeitsangabe mit Abweichung (überfällig/heute/morgen/Datum). */
-function faelligLabel(iso: string | null): string {
+/** Fälligkeit: volles Datum (über die Datumsschicht) plus Abweichung daneben.
+ *  Keine Monatsabkürzungen, keine gebietsschema-abhängige Formatierung. */
+type FaelligTon = "danger" | "warning" | "still";
+function faelligDarstellung(iso: string, status: string): { datum: string; abw: string | null; ton: FaelligTon } {
+  const datum = isoZuAnzeige(iso);
+  const d = daysFromToday(iso)!;
+  if (status !== "erledigt" && d < 0) return { datum, abw: `+${Math.abs(d)} ${Math.abs(d) === 1 ? "Tag" : "Tage"}`, ton: "danger" };
+  if (status !== "erledigt" && d === 0) return { datum, abw: "heute", ton: "danger" };
+  if (status !== "erledigt" && d <= 3) return { datum, abw: `in ${d} ${d === 1 ? "Tag" : "Tagen"}`, ton: "still" };
+  return { datum, abw: null, ton: "still" };
+}
+
+/** Textzeile zur Fälligkeit (für den Detailbereich / überfällig-Banner). */
+function faelligBanner(iso: string | null): string {
   if (!iso) return "–";
   const d = daysFromToday(iso)!;
-  if (d < -1) return `${Math.abs(d)} T. überfällig`;
-  if (d === -1) return "Gestern";
-  if (d === 0) return "Heute";
-  if (d === 1) return "Morgen";
-  return formatShort(iso);
+  if (d < 0) return `${Math.abs(d)} ${Math.abs(d) === 1 ? "Tag" : "Tage"} überfällig`;
+  if (d === 0) return "Heute fällig";
+  return `Fällig am ${isoZuAnzeige(iso)}`;
 }
 
 const STATUS_CFG: Record<string, { label: string; bg: string; color: string; dot: string }> = {
   offen: { label: "Offen", bg: "var(--status-danger-bg)", color: "var(--status-danger)", dot: "var(--status-danger)" },
   in_bearbeitung: { label: "In Bearbeitung", bg: "var(--status-warning-bg)", color: "var(--status-warning-text)", dot: "var(--status-warning)" },
-  erledigt: { label: "Erledigt", bg: "var(--status-success-bg)", color: "var(--status-success-text)", dot: "var(--status-success)" },
+  erledigt: { label: "Abgeschlossen", bg: "var(--status-success-bg)", color: "var(--status-success-text)", dot: "var(--status-success)" },
 };
 
 const PRIO_CFG: Record<string, { label: string; color: string }> = {
@@ -59,38 +64,35 @@ const PRIO_CFG: Record<string, { label: string; color: string }> = {
 
 /* ══════════════════════════════════════════
    FACHLOGIK — Segment, Status-Chips, Kennzeichen, Filter, Sortierung
-   (nach dem Onboarding-Listenmuster; reine Ableitungen)
    ══════════════════════════════════════════ */
 
-/* ── Zugehörigkeit (Segmentumschalter). Default "alle". ── */
-type Segment = "mir" | "team" | "alle";
-const SEGMENTE: [Segment, string][] = [["mir", "Mir zugewiesen"], ["team", "Mein Team"], ["alle", "Alle"]];
+/* ── Zugehörigkeit: nur "Mir zugewiesen" und "Alle". Vorauswahl "mir". ── */
+type Segment = "mir" | "alle";
+const SEGMENTE: [Segment, string][] = [["mir", "Mir zugewiesen"], ["alle", "Alle"]];
 
 function istNichtZugewiesen(e: UnifiedEntry): boolean {
   const n = e.verantwortlich?.name?.trim();
-  return !n || n === "Nicht zugewiesen";
+  const i = e.verantwortlich?.initialen?.trim();
+  return !n || n === "Nicht zugewiesen" || !i;
 }
 
 function imSegment(e: UnifiedEntry, segment: Segment): boolean {
-  if (segment === "alle") return true;
-  if (segment === "mir") return e.verantwortlich.initialen === CURRENT_USER;
-  return MY_TEAM.includes(e.verantwortlich.initialen);
+  return segment === "alle" || e.verantwortlich.initialen === CURRENT_USER;
 }
 
-/* ── Status-Chips: kombinierbar (UND). Reine Prädikate, dieselben Ableitungen
-   wie Kennzeichen. Erledigte sind standardmässig ausgeblendet und werden erst
-   über den "Erledigt"-Chip sichtbar. ── */
-type StatusChipId = "ueberfaellig" | "diese_woche" | "nicht_zugewiesen" | "erledigt";
+/* ── Status-Chips: kombinierbar (UND). Erledigte sind standardmässig ausgeblendet
+   und erscheinen erst über den "Abgeschlossen"-Chip. ── */
+type StatusChipId = "ueberfaellig" | "diese_woche" | "in_bearbeitung" | "nicht_zugewiesen" | "abgeschlossen";
 const STATUS_CHIPS: { id: StatusChipId; label: string; praedikat: (e: UnifiedEntry) => boolean }[] = [
-  { id: "ueberfaellig", label: "Überfällig", praedikat: e => e.faellig != null && daysFromToday(e.faellig)! < 0 },
-  { id: "diese_woche", label: "Diese Woche fällig", praedikat: e => e.faellig != null && daysFromToday(e.faellig)! >= 0 && daysFromToday(e.faellig)! <= 7 },
+  { id: "ueberfaellig", label: "Überfällig", praedikat: e => e.status !== "erledigt" && e.faellig != null && daysFromToday(e.faellig)! < 0 },
+  { id: "diese_woche", label: "Diese Woche fällig", praedikat: e => e.status !== "erledigt" && e.faellig != null && daysFromToday(e.faellig)! >= 0 && daysFromToday(e.faellig)! <= 7 },
+  { id: "in_bearbeitung", label: "In Bearbeitung", praedikat: e => e.status === "in_bearbeitung" },
   { id: "nicht_zugewiesen", label: "Nicht zugewiesen", praedikat: istNichtZugewiesen },
-  { id: "erledigt", label: "Erledigt", praedikat: e => e.status === "erledigt" },
+  { id: "abgeschlossen", label: "Abgeschlossen", praedikat: e => e.status === "erledigt" },
 ];
 
 /* ── Kennzeichen: Rot (überfällig) schlägt Gelb (in den nächsten Tagen fällig
-   oder nicht zugewiesen). Erledigte tragen kein Kennzeichen. Grund als Klartext
-   (a11y). ── */
+   oder nicht zugewiesen). Erledigte tragen kein Kennzeichen. ── */
 type KennzeichenTyp = "rot" | "gelb" | null;
 function ableitenKennzeichen(e: UnifiedEntry): { typ: KennzeichenTyp; grund: string } {
   if (e.status !== "erledigt" && e.faellig) {
@@ -110,26 +112,26 @@ interface FilterZustand {
   zustaendige: Set<string>;
   suche: string;
 }
-const LEERER_FILTER: FilterZustand = { segment: "alle", statusChips: new Set(), arten: new Set(), zustaendige: new Set(), suche: "" };
+const LEERER_FILTER: FilterZustand = { segment: "mir", statusChips: new Set(), arten: new Set(), zustaendige: new Set(), suche: "" };
 
-/** Reine Ableitung: Einträge + Filterzustand → gefiltert. */
 function filterEntries(list: UnifiedEntry[], f: FilterZustand): UnifiedEntry[] {
   return list.filter(e => {
     if (!imSegment(e, f.segment)) return false;
-    // Erledigte nur zeigen, wenn der "Erledigt"-Chip aktiv ist.
-    if (!f.statusChips.has("erledigt") && e.status === "erledigt") return false;
+    // Erledigte nur zeigen, wenn der "Abgeschlossen"-Chip aktiv ist.
+    if (!f.statusChips.has("abgeschlossen") && e.status === "erledigt") return false;
     for (const chip of STATUS_CHIPS) if (f.statusChips.has(chip.id) && !chip.praedikat(e)) return false;
     if (f.arten.size > 0 && !f.arten.has(e.pendenzTyp)) return false;
     if (f.zustaendige.size > 0 && !f.zustaendige.has(e.verantwortlich.name)) return false;
     const q = f.suche.trim().toLowerCase();
-    if (q && !(entryTitle(e).toLowerCase().includes(q) || (e.kontext || "").toLowerCase().includes(q))) return false;
+    if (q && !(entryBetreff(e).toLowerCase().includes(q) || (e.kontext || "").toLowerCase().includes(q) || entryPersonName(e).toLowerCase().includes(q))) return false;
     return true;
   });
 }
 
-/* ── Sortierung (Fälligkeit als Standard, aufsteigend: überfällig zuerst, ohne
+/* ── Sortierung (Fälligkeit aufsteigend als Standard: überfällig zuerst, ohne
    Termin zuletzt). ── */
-type SortKey = "faellig" | "betreff" | "zustaendig";
+type SortKey = "faellig" | "betreff" | "person" | "zustaendig";
+const SORT_LABEL: Record<SortKey, string> = { faellig: "Fälligkeit", betreff: "Betreff", person: "Person", zustaendig: "Zuständig" };
 function faelligRank(e: UnifiedEntry): number { return e.faellig ? daysFromToday(e.faellig)! : Number.POSITIVE_INFINITY; }
 function sortEntries(list: UnifiedEntry[], key: SortKey, dir: "asc" | "desc"): UnifiedEntry[] {
   const f = dir === "asc" ? 1 : -1;
@@ -137,10 +139,11 @@ function sortEntries(list: UnifiedEntry[], key: SortKey, dir: "asc" | "desc"): U
     switch (key) {
       case "faellig": {
         const ra = faelligRank(a), rb = faelligRank(b);
-        if (ra === rb) return entryTitle(a).localeCompare(entryTitle(b), "de");
+        if (ra === rb) return entryBetreff(a).localeCompare(entryBetreff(b), "de");
         return f * (ra - rb);
       }
-      case "betreff": return f * entryTitle(a).localeCompare(entryTitle(b), "de");
+      case "betreff": return f * entryBetreff(a).localeCompare(entryBetreff(b), "de");
+      case "person": return f * entryPersonName(a).localeCompare(entryPersonName(b), "de");
       case "zustaendig": return f * a.verantwortlich.name.localeCompare(b.verantwortlich.name, "de");
       default: return 0;
     }
@@ -171,7 +174,7 @@ function AuswahlDropdown({ label, optionen, ausgewaehlt, onToggle }: {
         <ChevronDown style={{ width: 14, height: 14, opacity: 0.7 }} />
       </button>
       {offen && (
-        <div className="absolute z-50" style={{ top: "calc(100% + 6px)", left: 0, minWidth: 200, maxHeight: 320, overflowY: "auto", padding: 6, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)" }}>
+        <div className="absolute z-50" style={{ top: "calc(100% + 6px)", left: 0, minWidth: 220, maxHeight: 320, overflowY: "auto", padding: 6, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)" }}>
           {optionen.map(opt => {
             const aktiv = ausgewaehlt.has(opt.value);
             return (
@@ -197,6 +200,7 @@ function AuswahlDropdown({ label, optionen, ausgewaehlt, onToggle }: {
 
 export function ServiceDeskPage() {
   const role = useCurrentRole();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get("id") || null;
 
@@ -230,14 +234,12 @@ export function ServiceDeskPage() {
 
   const isBulkMode = role === "backoffice" || role === "management";
 
-  // Alle Einträge inkl. Rhythmus-Tickets, mit lokal überschriebenem Status
   const allEntries = useMemo(() => getUnifiedEntries(), []);
   const entries = useMemo(
     () => allEntries.map(e => ({ ...e, status: (localStatus[e.id] || e.status) as UnifiedEntry["status"] })),
     [allEntries, localStatus],
   );
 
-  // Segmentbasis (für Chip-Zahlen und Zuständigen-Optionen)
   const segmentBasis = useMemo(() => entries.filter(e => imSegment(e, filter.segment)), [entries, filter.segment]);
   const chipCounts = useMemo(() => {
     const r = {} as Record<StatusChipId, number>;
@@ -248,24 +250,20 @@ export function ServiceDeskPage() {
   const filtered = useMemo(() => filterEntries(entries, filter), [entries, filter]);
   const sorted = useMemo(() => sortEntries(filtered, sort.key, sort.dir), [filtered, sort]);
 
-  // Auswahlfelder: alle vorkommenden Arten und Zuständigen
   const alleArten = useMemo(() => {
     const vorhanden = new Set(entries.map(e => e.pendenzTyp));
     return (Object.keys(pendenzTypen) as PendenzTyp[]).filter(t => vorhanden.has(t));
   }, [entries]);
   const alleZustaendige = useMemo(
-    () => [...new Set(entries.map(e => e.verantwortlich.name))].sort((a, b) => a.localeCompare(b, "de")),
+    () => [...new Set(entries.map(e => e.verantwortlich.name))].filter(n => n && n !== "Nicht zugewiesen").sort((a, b) => a.localeCompare(b, "de")),
     [entries],
   );
 
-  // Ausgewählter Eintrag (Detail)
   const selected = useMemo(() => {
     if (!selectedId) return null;
-    const e = entries.find(e => e.id === selectedId);
-    return e || null;
+    return entries.find(e => e.id === selectedId) || null;
   }, [selectedId, entries]);
 
-  // Filter-Setter
   const setSegment = (segment: Segment) => setFilter(f => ({ ...f, segment }));
   const setSuche = (suche: string) => setFilter(f => ({ ...f, suche }));
   const toggleChip = (id: StatusChipId) => setFilter(f => { const s = new Set(f.statusChips); if (s.has(id)) s.delete(id); else s.add(id); return { ...f, statusChips: s }; });
@@ -283,7 +281,6 @@ export function ServiceDeskPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
-  // Status / Kommentare / Demo
   const handleStatusChange = (id: string, newStatus: string) => setLocalStatus(prev => ({ ...prev, [id]: newStatus }));
 
   const handleAddComment = (id: string) => {
@@ -318,7 +315,7 @@ export function ServiceDeskPage() {
   };
   const handleBulkErledigen = () => {
     for (const id of bulkSelected) handleStatusChange(id, "erledigt");
-    toast(`${bulkSelected.size} Pendenzen erledigt`);
+    toast(`${bulkSelected.size} Pendenzen abgeschlossen`);
     setBulkSelected(new Set());
   };
 
@@ -327,26 +324,56 @@ export function ServiceDeskPage() {
     else setParam({ id });
   };
 
-  /* ── Zell-Renderer für die Listenspalte ── */
+  /* ── Zell-Renderer ── */
   const kennzeichenIcon = (e: UnifiedEntry) => {
     const k = ableitenKennzeichen(e);
     if (!k.typ) return null;
     return <AlertTriangle role="img" aria-label={k.grund} style={{ width: 15, height: 15, flexShrink: 0, color: k.typ === "rot" ? "var(--status-danger)" : "var(--status-warning)", fill: k.typ === "rot" ? "var(--status-danger)" : "none" }} />;
   };
-  const typPill = (e: UnifiedEntry) => {
-    const t = pendenzTypen[e.pendenzTyp];
-    if (!t) return null;
-    return <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: 11, fontWeight: "var(--weight-medium)", background: t.pillBg, color: t.pillColor, whiteSpace: "nowrap" }}>{t.label}</span>;
+  // Art: stiller Text, keine Fläche, keine Farbe.
+  const artZelle = (e: UnifiedEntry) => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{pendenzTypen[e.pendenzTyp]?.label || e.typLabel}</span>;
+
+  // Betreff: die Sache, einzeilig mit Ellipsis; bei laufender Bearbeitung eine
+  // stille Kennzeichnung; abgeschlossene zurückgenommen.
+  const betreffZelle = (e: UnifiedEntry) => {
+    const erledigt = e.status === "erledigt";
+    return (
+      <span className="flex items-baseline" style={{ gap: 8, minWidth: 0 }}>
+        <span title={e.betreff} style={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: erledigt ? "var(--text-tertiary)" : "var(--text-primary)" }}>{e.betreff}</span>
+        {e.status === "in_bearbeitung" && <span className="shrink-0" style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>In Bearbeitung</span>}
+        {erledigt && <span className="shrink-0" style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Abgeschlossen</span>}
+      </span>
+    );
   };
+
+  // Person: aufgelöster Name, verlinkt auf die Detailseite; Klick löst NICHT die
+  // Zeilenauswahl aus.
+  const personZelle = (e: UnifiedEntry) => (
+    <button type="button" onClick={ev => { ev.stopPropagation(); navigate(personLink(e.personBezug)); }}
+      className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, minWidth: 0, background: "transparent", border: "none", padding: 0, fontFamily: "inherit", textAlign: "left" }}>
+      <ExternalLink style={{ width: 10, height: 10, opacity: 0.5, flexShrink: 0 }} />
+      <span style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entryPersonName(e)}</span>
+    </button>
+  );
+
+  const beschreibungZelle = (e: UnifiedEntry) => <span title={e.kontext} style={{ display: "block", fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.kontext}</span>;
+
   const faelligZelle = (e: UnifiedEntry) => {
     if (!e.faellig) return <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>–</span>;
-    const overdue = e.status !== "erledigt" && daysFromToday(e.faellig)! < 0;
-    return <span style={{ fontSize: "var(--text-small)", fontWeight: overdue ? "var(--weight-medium)" : "var(--weight-regular)", color: overdue ? "var(--status-danger)" : "var(--text-secondary)", whiteSpace: "nowrap" }}>{faelligLabel(e.faellig)}</span>;
+    const { datum, abw, ton } = faelligDarstellung(e.faellig, e.status);
+    const farbe = ton === "danger" ? "var(--status-danger)" : ton === "warning" ? "var(--status-warning-text)" : "var(--text-tertiary)";
+    return (
+      <span className="inline-flex items-baseline" style={{ gap: 6, whiteSpace: "nowrap" }}>
+        <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{datum}</span>
+        {abw && <span style={{ fontSize: "var(--text-meta)", fontWeight: ton === "danger" ? "var(--weight-medium)" : "var(--weight-regular)", color: farbe }}>{abw}</span>}
+      </span>
+    );
   };
+
   const zustaendigZelle = (e: UnifiedEntry) => istNichtZugewiesen(e) ? (
-    <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>
-      <AlertTriangle style={{ width: 12, height: 12, color: "var(--status-warning)" }} /> Nicht zugewiesen
-    </span>
+    <button type="button" onClick={ev => { ev.stopPropagation(); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+      <Plus style={{ width: 12, height: 12 }} /> Zuweisen
+    </button>
   ) : (
     <div className="flex items-center" style={{ gap: 6 }}>
       <MiniAvatar person={e.verantwortlich} size={18} />
@@ -354,35 +381,28 @@ export function ServiceDeskPage() {
     </div>
   );
 
-  /* ── Kartenkopf: Kennzeichen + Art + Betreff + Fälligkeit (spiegelt die frühere
-     Kartenzeile 1). Die übrigen Spalten (Beschreibung, Zuständig) werden im
-     Kartenkörper zu Wertepaaren. ── */
   const karteTitel = (e: UnifiedEntry) => (
     <div className="flex items-center" style={{ gap: 8, width: "100%", minWidth: 0 }}>
       {kennzeichenIcon(e)}
-      {typPill(e)}
-      <span className="truncate" style={{ flex: 1, minWidth: 0, fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{entryTitle(e)}</span>
-      {faelligZelle(e)}
+      <span className="truncate" style={{ flex: 1, minWidth: 0, fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: e.status === "erledigt" ? "var(--text-tertiary)" : "var(--text-primary)" }}>{e.betreff}</span>
+      {e.faellig && faelligZelle(e)}
     </div>
   );
 
   const spalten: SpalteDef<UnifiedEntry>[] = [
     { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", ausKarte: true, render: kennzeichenIcon },
-    { id: "art", label: "Art", anteil: 8, minCh: 10, align: "left", ausKarte: true, render: typPill },
-    { id: "betreff", label: "Betreff", anteil: 20, minCh: 16, align: "left", sortierbar: true, ausKarte: true,
-      render: e => <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{entryTitle(e)}</span> },
-    { id: "beschreibung", label: "Beschreibung", anteil: 26, minCh: 20, align: "left", ausblendenUnter: "eng",
-      // Beschreibungszeile: nie umbrechen, Ellipsis, voller Text als Tooltip.
-      render: e => <span title={e.kontext} style={{ display: "block", fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.kontext}</span> },
-    { id: "faellig", label: "Fällig", anteil: 9, minCh: 11, align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
+    { id: "art", label: "Art", anteil: 8, minCh: 10, align: "left", render: artZelle },
+    { id: "betreff", label: "Betreff", anteil: 20, minCh: 16, align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
+    { id: "person", label: "Person", anteil: 13, minCh: 16, align: "left", sortierbar: true, render: personZelle },
+    { id: "beschreibung", label: "Beschreibung", anteil: 22, minCh: 18, align: "left", ausblendenUnter: "eng", render: beschreibungZelle },
+    { id: "faellig", label: "Fällig", anteil: 12, minCh: 15, align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
     { id: "zustaendig", label: "Zuständig", anteil: 12, minCh: 14, align: "left", sortierbar: true, render: zustaendigZelle },
   ];
 
-  /* ── Zeilentönung: Aktivzeile (offenes Detail) und Bulk-Auswahl heben hervor;
-     sonst Kennzeichen-Tönung (Rot kräftiger als Gelb). ── */
   const zeilenHintergrund = (e: UnifiedEntry): string | undefined => {
     if (e.id === selectedId) return "var(--brand-primary-light)";
     if (isBulkMode && bulkSelected.has(e.id)) return "var(--brand-primary-light)";
+    if (e.status === "erledigt") return "color-mix(in srgb, var(--bg-secondary), transparent 30%)";
     const t = ableitenKennzeichen(e).typ;
     return t === "rot" ? "color-mix(in srgb, var(--status-danger-bg), transparent 40%)"
       : t === "gelb" ? "color-mix(in srgb, var(--status-warning-bg), transparent 68%)"
@@ -407,7 +427,7 @@ export function ServiceDeskPage() {
               onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"}
               onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
             >
-              <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neues Ticket</span>
+              <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neue Pendenz</span>
             </button>
           </div>
 
@@ -457,7 +477,7 @@ export function ServiceDeskPage() {
           <div className="flex items-center flex-wrap" style={{ gap: 6, minHeight: 24, marginBottom: "var(--space-2)" }}>
             {filterTags.length === 0 ? (
               <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-                {SEGMENTE.find(([s]) => s === filter.segment)![1]} · sortiert nach {sort.key === "faellig" ? "Fälligkeit" : sort.key === "betreff" ? "Betreff" : "Zuständig"}
+                {SEGMENTE.find(([s]) => s === filter.segment)![1]} · sortiert nach {SORT_LABEL[sort.key]}
               </span>
             ) : (
               <>
@@ -507,7 +527,7 @@ export function ServiceDeskPage() {
                   style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: 13, fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
                   onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
                   onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
-                  <Check style={{ width: 13, height: 13 }} /> Erledigen
+                  <Check style={{ width: 13, height: 13 }} /> Abschliessen
                 </button>
               </div>
             </div>
@@ -534,14 +554,14 @@ export function ServiceDeskPage() {
               onSort={toggleSort}
               karteTitel={karteTitel}
               containerHaltepunkte
-              auswahl={isBulkMode ? { istGewaehlt: e => bulkSelected.has(e.id), onToggle: e => toggleBulk(e.id), zeilenLabel: e => entryTitle(e) } : undefined}
+              auswahl={isBulkMode ? { istGewaehlt: e => bulkSelected.has(e.id), onToggle: e => toggleBulk(e.id), zeilenLabel: e => entryBetreff(e) } : undefined}
               fusszeile={<><span>{sorted.length} von {entries.length} Pendenzen</span><span>Stand: {isoZuAnzeige(TODAY)}</span></>}
               leerText="Keine Pendenzen mit diesen Filtern."
             />
           )}
         </div>
 
-        {/* ── DETAILBEREICH (Desktop, dynamisch) — unverändert ── */}
+        {/* ── DETAILBEREICH (Desktop, dynamisch) — unverändert im Aufbau ── */}
         {selected && (
           <div className="hidden xl:flex shrink-0 flex-col min-h-0" style={{ width: 520, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
             <DetailPanel
@@ -553,12 +573,13 @@ export function ServiceDeskPage() {
               onStatusChange={s => handleStatusChange(selected.id, s)}
               onClose={() => setParam({ id: null })}
               onDemoAction={handleDemoAction}
+              onPersonKlick={() => navigate(personLink(selected.personBezug))}
             />
           </div>
         )}
       </div>
 
-      {/* ── MOBILE / TABLET: Detail-Overlay — unverändert ── */}
+      {/* ── MOBILE / TABLET: Detail-Overlay ── */}
       {selected && (
         <div className="fixed inset-0 z-50 xl:hidden flex flex-col" style={{ background: "var(--bg-elevated)" }}>
           <div className="shrink-0 flex items-center" style={{ padding: "12px var(--space-4)", borderBottom: "var(--border-thin) solid var(--border-default)", minHeight: 48 }}>
@@ -577,6 +598,7 @@ export function ServiceDeskPage() {
               onStatusChange={s => handleStatusChange(selected.id, s)}
               onClose={() => setParam({ id: null })}
               onDemoAction={handleDemoAction}
+              onPersonKlick={() => navigate(personLink(selected.personBezug))}
             />
           </div>
         </div>
@@ -609,25 +631,24 @@ interface DetailPanelProps {
   onStatusChange: (s: string) => void;
   onClose: () => void;
   onDemoAction?: (mockType: string) => void;
+  onPersonKlick: () => void;
 }
 
-function DetailPanel({ entry, comments, draftComment, onDraftChange, onAddComment, onStatusChange, onClose, onDemoAction }: DetailPanelProps) {
-  const isOverdue = entry.faellig && daysFromToday(entry.faellig)! < 0;
+function DetailPanel({ entry, comments, draftComment, onDraftChange, onAddComment, onStatusChange, onClose, onDemoAction, onPersonKlick }: DetailPanelProps) {
+  const isOverdue = entry.status !== "erledigt" && entry.faellig && daysFromToday(entry.faellig)! < 0;
   const typDef = pendenzTypen[entry.pendenzTyp];
   const statusCfg = STATUS_CFG[entry.status] || STATUS_CFG.offen;
   const prioCfg = PRIO_CFG[entry.prioritaet] || PRIO_CFG.niedrig;
+  const personName = entryPersonName(entry);
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* Header — Titel = Betreff (die Sache); Person als verlinkte Unterzeile */}
       <div className="shrink-0" style={{ padding: "20px 24px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
         <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-2)" }}>
           <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-            {typDef && (
-              <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: typDef.pillBg, color: typDef.pillColor }}>
-                {typDef.label}
-              </span>
-            )}
+            <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{typDef?.label || entry.typLabel}</span>
+            <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>·</span>
             <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{entry.id}</span>
           </div>
           <button onClick={onClose} className="flex items-center justify-center cursor-pointer transition-colors"
@@ -638,10 +659,15 @@ function DetailPanel({ entry, comments, draftComment, onDraftChange, onAddCommen
           </button>
         </div>
         <div style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-          {entryTitle(entry)}
+          {entry.betreff}
         </div>
+        <button type="button" onClick={onPersonKlick} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, marginTop: 4, background: "transparent", border: "none", padding: 0, fontFamily: "inherit" }}>
+          <ExternalLink style={{ width: 11, height: 11, opacity: 0.6 }} />
+          <span style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
+          <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>· {personArtLabel(entry.personBezug.art)}</span>
+        </button>
         {entry.kontext && (
-          <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 4 }}>
+          <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 6 }}>
             {entry.kontext}
           </div>
         )}
@@ -655,7 +681,7 @@ function DetailPanel({ entry, comments, draftComment, onDraftChange, onAddCommen
           <div className="flex items-center" style={{ gap: "var(--space-2)", padding: "var(--space-3) var(--space-4)", background: "var(--status-danger-bg)", borderRadius: "var(--radius-card)", marginBottom: "var(--space-5)" }}>
             <AlertTriangle style={{ width: 16, height: 16, color: "var(--status-danger)", flexShrink: 0 }} />
             <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--status-danger)" }}>
-              {faelligLabel(entry.faellig)}
+              {faelligBanner(entry.faellig)}
             </span>
           </div>
         )}
@@ -667,19 +693,28 @@ function DetailPanel({ entry, comments, draftComment, onDraftChange, onAddCommen
         )}
 
         <div style={{ background: "var(--bg-primary)", borderRadius: "var(--radius-card)", padding: "var(--space-4)", marginBottom: "var(--space-5)" }}>
-          <MetaRow label="Typ" value={typDef?.label || entry.typLabel} />
+          <MetaRow label="Art" value={typDef?.label || entry.typLabel} />
           <MetaRow label="Status">
             <span className="inline-flex items-center" style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: statusCfg.bg, color: statusCfg.color }}>
               <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: statusCfg.dot }} />
               {statusCfg.label}
             </span>
           </MetaRow>
-          {entry.person && <MetaRow label="Person" value={entry.person.name} />}
-          <MetaRow label="Verantwortlich">
-            <div className="flex items-center" style={{ gap: 6 }}>
-              <MiniAvatar person={entry.verantwortlich} size={20} />
-              <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{entry.verantwortlich.name}</span>
-            </div>
+          <MetaRow label={personArtLabel(entry.personBezug.art)}>
+            <button type="button" onClick={onPersonKlick} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, background: "transparent", border: "none", padding: 0, fontFamily: "inherit" }}>
+              <span style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
+              <ExternalLink style={{ width: 11, height: 11, opacity: 0.6, color: "var(--brand-primary)" }} />
+            </button>
+          </MetaRow>
+          <MetaRow label="Zuständig">
+            {istNichtZugewiesen(entry) ? (
+              <span style={{ fontSize: "var(--text-small)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>Nicht zugewiesen</span>
+            ) : (
+              <div className="flex items-center" style={{ gap: 6 }}>
+                <MiniAvatar person={entry.verantwortlich} size={20} />
+                <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{entry.verantwortlich.name}</span>
+              </div>
+            )}
           </MetaRow>
           <MetaRow label="Priorität">
             <div className="flex items-center" style={{ gap: 6 }}>
@@ -687,8 +722,9 @@ function DetailPanel({ entry, comments, draftComment, onDraftChange, onAddCommen
               <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{prioCfg.label}</span>
             </div>
           </MetaRow>
-          <MetaRow label="Fällig" value={entry.faellig ? formatDate(entry.faellig) : "–"} />
-          <MetaRow label="Erstellt" value={formatDate(entry.erstellt)} last />
+          <MetaRow label="Fällig" value={entry.faellig ? isoZuAnzeige(entry.faellig) : "–"} />
+          <MetaRow label="Erstellt von" value={entry.erstelltVon.name} />
+          <MetaRow label="Erstellt am" value={formatDate(entry.erstellt)} last />
         </div>
 
         <div style={{ marginBottom: "var(--space-5)" }}>
@@ -731,13 +767,13 @@ function DetailPanel({ entry, comments, draftComment, onDraftChange, onAddCommen
             style={{ padding: "10px 14px", borderRadius: "var(--radius-pill)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)", fontSize: 16, color: "var(--text-primary)", fontFamily: "inherit", cursor: "pointer", minHeight: 44 }}>
             <option value="offen">Offen</option>
             <option value="in_bearbeitung">In Bearbeitung</option>
-            <option value="erledigt">Erledigt</option>
+            <option value="erledigt">Abgeschlossen</option>
           </select>
           <button onClick={() => onStatusChange("erledigt")} className="inline-flex items-center cursor-pointer transition-colors"
             style={{ gap: "var(--space-1)", padding: "10px 16px", borderRadius: "var(--radius-pill)", background: "transparent", border: "none", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", minHeight: 44 }}
             onMouseEnter={e => e.currentTarget.style.background = "var(--status-success-bg)"}
             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-            <Check style={{ width: 14, height: 14 }} /> Erledigen
+            <Check style={{ width: 14, height: 14 }} /> Abschliessen
           </button>
         </div>
       </div>
