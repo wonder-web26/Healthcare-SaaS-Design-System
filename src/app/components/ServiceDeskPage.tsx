@@ -41,20 +41,35 @@ function faelligDarstellung(iso: string, status: string): { datum: string; abw: 
   return { datum, abw: null, ton: "still" };
 }
 
-/** Textzeile zur Fälligkeit (für den Detailbereich / überfällig-Banner). */
-function faelligBanner(iso: string | null): string {
-  if (!iso) return "–";
-  const d = daysFromToday(iso)!;
-  if (d < 0) return `${Math.abs(d)} ${Math.abs(d) === 1 ? "Tag" : "Tage"} überfällig`;
-  if (d === 0) return "Heute fällig";
-  return `Fällig am ${isoZuAnzeige(iso)}`;
+/* ── Status: Anzeige-Labels (Fuss-Umschalter und Verlauf) ── */
+const STATUS_LABEL: Record<string, string> = { offen: "Offen", in_bearbeitung: "In Arbeit", erledigt: "Abgeschlossen" };
+const STATUS_SEGMENTE: [string, string][] = [["offen", "Offen"], ["in_bearbeitung", "In Arbeit"], ["erledigt", "Abgeschlossen"]];
+
+/* ── "Zu erledigen": je Pendenzart ein hinterlegter Satz, was zu tun ist — kein
+   Fliesstext über den Datensatz. ── */
+const ZU_ERLEDIGEN_SATZ: Partial<Record<PendenzTyp, string>> = {
+  "srk-anmeldung": "Die angehörige Person zum SRK-Pflegekurs anmelden.",
+  "quellensteuer": "Die Quellensteuer beim kantonalen Steueramt anmelden.",
+  "ausweis-b-migrationsamt": "Die Person innerhalb der Meldefrist beim Migrationsamt anmelden.",
+  "kinderzulagen": "Den Kinderzulagen-Antrag bei der Familienausgleichskasse einreichen.",
+  "lohn-anpassung": "Den Stundenlohn nach bestandenem SRK-Kurs anpassen.",
+  "re-assessment": "Das Re-Assessment durchführen und die Pflegestufe überprüfen.",
+  "schluessel": "Die Schlüsselausgabe beziehungsweise -rückgabe organisieren.",
+  "anfrage": "Die Anfrage prüfen und die nötigen Schritte einleiten.",
+  "problem": "Das gemeldete Problem prüfen und beheben.",
+  "meldung": "Die Meldung sichten und die Folgeaktion auslösen.",
+  "betreuungs-rhythmus": "Den fälligen Betreuungsschritt durchführen und protokollieren.",
+};
+function zuErledigenSatz(art: PendenzTyp): string {
+  return ZU_ERLEDIGEN_SATZ[art] || pendenzTypen[art]?.description || "Die Pendenz bearbeiten.";
 }
 
-const STATUS_CFG: Record<string, { label: string; bg: string; color: string; dot: string }> = {
-  offen: { label: "Offen", bg: "var(--status-danger-bg)", color: "var(--status-danger)", dot: "var(--status-danger)" },
-  in_bearbeitung: { label: "In Bearbeitung", bg: "var(--status-warning-bg)", color: "var(--status-warning-text)", dot: "var(--status-warning)" },
-  erledigt: { label: "Abgeschlossen", bg: "var(--status-success-bg)", color: "var(--status-success-text)", dot: "var(--status-success)" },
-};
+/* ── Priorität: Regelfall wird nicht angezeigt, nur Abweichungen. ── */
+const PRIO_REGELFALL = "mittel";
+
+/* ── Verlauf: ein Strang (Erstellung, Statuswechsel, Kommentare). ── */
+type VerlaufTyp = "erstellt" | "status" | "zuweisung" | "kommentar";
+interface VerlaufEintrag { typ: VerlaufTyp; text: string; by: string; at: string; }
 
 const PRIO_CFG: Record<string, { label: string; color: string }> = {
   hoch: { label: "Hoch", color: "var(--status-danger)" },
@@ -207,7 +222,7 @@ export function ServiceDeskPage() {
   const [filter, setFilter] = useState<FilterZustand>(LEERER_FILTER);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "faellig", dir: "asc" });
   const [localStatus, setLocalStatus] = useState<Record<string, string>>({});
-  const [comments, setComments] = useState<Record<string, { text: string; by: string; at: string }[]>>({});
+  const [verlauf, setVerlauf] = useState<Record<string, VerlaufEintrag[]>>({});
   const [draftComment, setDraftComment] = useState("");
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const prevRole = useRef(role);
@@ -281,11 +296,18 @@ export function ServiceDeskPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
-  const handleStatusChange = (id: string, newStatus: string) => setLocalStatus(prev => ({ ...prev, [id]: newStatus }));
+  const pushVerlauf = (id: string, eintrag: VerlaufEintrag) =>
+    setVerlauf(prev => ({ ...prev, [id]: [...(prev[id] || []), eintrag] }));
+
+  // Statuswechsel an genau einer Stelle; jeder Wechsel wird im Verlauf festgehalten.
+  const handleStatusChange = (id: string, newStatus: string, by = "Maria Keller") => {
+    setLocalStatus(prev => ({ ...prev, [id]: newStatus }));
+    pushVerlauf(id, { typ: "status", text: `Status: ${STATUS_LABEL[newStatus] || newStatus}`, by, at: "03.03.2026, 14:40" });
+  };
 
   const handleAddComment = (id: string) => {
     if (!draftComment.trim()) return;
-    setComments(prev => ({ ...prev, [id]: [...(prev[id] || []), { text: draftComment.trim(), by: "Maria Keller", at: "03.03.2026, 14:30" }] }));
+    pushVerlauf(id, { typ: "kommentar", text: draftComment.trim(), by: "Maria Keller", at: "03.03.2026, 14:30" });
     setDraftComment("");
   };
 
@@ -294,8 +316,7 @@ export function ServiceDeskPage() {
   const handleDemoConfirm = () => {
     const id = demoModal.pendenzId;
     setDemoModal({ open: false, mockType: "", pendenzId: "" });
-    handleStatusChange(id, "erledigt");
-    setComments(prev => ({ ...prev, [id]: [...(prev[id] || []), { text: "Anna (Demo) hat die Aktion ausgeführt", by: "Anna", at: "03.03.2026, 14:32" }] }));
+    handleStatusChange(id, "erledigt", "Anna");
   };
 
   // Bulk-Auswahl (nur Backoffice/Management)
@@ -306,15 +327,12 @@ export function ServiceDeskPage() {
   const bulkAction = bulkTypDef?.bulkAction;
 
   const handleBulkExecute = () => {
-    for (const id of bulkSelected) {
-      handleStatusChange(id, bulkAction?.isDemoMock ? "erledigt" : "in_bearbeitung");
-      setComments(prev => ({ ...prev, [id]: [...(prev[id] || []), { text: bulkAction?.isDemoMock ? "Anna (Demo): Bulk-Aktion ausgeführt" : `Anna: ${bulkAction?.label || "Aktion"} ausgeführt`, by: "Anna", at: "03.03.2026, 14:35" }] }));
-    }
+    for (const id of bulkSelected) handleStatusChange(id, bulkAction?.isDemoMock ? "erledigt" : "in_bearbeitung", "Anna");
     toast(bulkAction?.resultDescription?.replace("{N}", String(bulkSelected.size)) || `${bulkSelected.size} Pendenzen aktualisiert`);
     setBulkSelected(new Set());
   };
   const handleBulkErledigen = () => {
-    for (const id of bulkSelected) handleStatusChange(id, "erledigt");
+    for (const id of bulkSelected) handleStatusChange(id, "erledigt", "Anna");
     toast(`${bulkSelected.size} Pendenzen abgeschlossen`);
     setBulkSelected(new Set());
   };
@@ -535,7 +553,7 @@ export function ServiceDeskPage() {
                   style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: 13, fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
                   onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
                   onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
-                  <Check style={{ width: 13, height: 13 }} /> Abschliessen
+                  <Check style={{ width: 13, height: 13 }} /> Abgeschlossen
                 </button>
               </div>
             </div>
@@ -575,7 +593,7 @@ export function ServiceDeskPage() {
           <div className="hidden xl:flex shrink-0 flex-col min-h-0" style={{ width: 520, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
             <DetailPanel
               entry={selected}
-              comments={comments[selected.id] || []}
+              verlauf={verlauf[selected.id] || []}
               draftComment={draftComment}
               onDraftChange={setDraftComment}
               onAddComment={() => handleAddComment(selected.id)}
@@ -597,10 +615,10 @@ export function ServiceDeskPage() {
               <ArrowLeft style={{ width: 18, height: 18 }} /> Zurück
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0">
             <DetailPanel
               entry={selected}
-              comments={comments[selected.id] || []}
+              verlauf={verlauf[selected.id] || []}
               draftComment={draftComment}
               onDraftChange={setDraftComment}
               onAddComment={() => handleAddComment(selected.id)}
@@ -633,7 +651,7 @@ export function ServiceDeskPage() {
 
 interface DetailPanelProps {
   entry: UnifiedEntry;
-  comments: { text: string; by: string; at: string }[];
+  verlauf: VerlaufEintrag[];
   draftComment: string;
   onDraftChange: (v: string) => void;
   onAddComment: () => void;
@@ -643,164 +661,145 @@ interface DetailPanelProps {
   onPersonKlick: () => void;
 }
 
-function DetailPanel({ entry, comments, draftComment, onDraftChange, onAddComment, onStatusChange, onClose, onDemoAction, onPersonKlick }: DetailPanelProps) {
-  const isOverdue = entry.status !== "erledigt" && entry.faellig && daysFromToday(entry.faellig)! < 0;
-  const typDef = pendenzTypen[entry.pendenzTyp];
-  const statusCfg = STATUS_CFG[entry.status] || STATUS_CFG.offen;
-  const prioCfg = PRIO_CFG[entry.prioritaet] || PRIO_CFG.niedrig;
+function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment, onStatusChange, onClose, onPersonKlick }: DetailPanelProps) {
+  const sektionLabel = { fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, fontWeight: "var(--weight-medium)", marginBottom: "var(--space-2)" };
   const personName = entryPersonName(entry);
+  const prio = entry.prioritaet !== PRIO_REGELFALL ? PRIO_CFG[entry.prioritaet] : null;
+  const faellig = entry.faellig ? faelligDarstellung(entry.faellig, entry.status) : null;
+  const faelligFarbe = faellig?.ton === "danger" ? "var(--status-danger)" : faellig?.ton === "warning" ? "var(--status-warning-text)" : "var(--text-tertiary)";
+
+  // Verlauf: Erstellung immer zuunterst (nie leer), danach die dynamischen Einträge;
+  // Anzeige neueste zuerst.
+  const erstellEintrag: VerlaufEintrag = { typ: "erstellt", text: "Pendenz erstellt", by: entry.erstelltVon.name, at: formatDate(entry.erstellt) };
+  const eintraege = [erstellEintrag, ...verlauf].reverse();
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header — Titel = Betreff (die Sache); Person als verlinkte Unterzeile */}
-      <div className="shrink-0" style={{ padding: "20px 24px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
-        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-2)" }}>
-          <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-            <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{typDef?.label || entry.typLabel}</span>
+    <div className="flex flex-col h-full min-h-0">
+      {/* ── KOPF (fest) ── */}
+      <div className="shrink-0" style={{ padding: "16px 24px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+        {/* Zeile 1: Kennung · Art + Schliessen */}
+        <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+          <div className="flex items-center" style={{ gap: 6, minWidth: 0 }}>
+            <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{entry.id}</span>
             <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>·</span>
-            <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{entry.id}</span>
+            <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{pendenzTypen[entry.pendenzTyp]?.label || entry.typLabel}</span>
           </div>
-          <button onClick={onClose} className="flex items-center justify-center cursor-pointer transition-colors"
+          <button onClick={onClose} className="shrink-0 flex items-center justify-center cursor-pointer transition-colors"
             style={{ width: 28, height: 28, borderRadius: "var(--radius-pill)", background: "transparent", border: "none" }}
             onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
             <X style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
           </button>
         </div>
-        <div style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+        {/* Zeile 2: Betreff */}
+        <div style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>
           {entry.betreff}
         </div>
-        <button type="button" onClick={onPersonKlick} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, marginTop: 4, background: "transparent", border: "none", padding: 0, fontFamily: "inherit" }}>
-          <ExternalLink style={{ width: 11, height: 11, opacity: 0.6 }} />
-          <span style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
-          <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>· {personArtLabel(entry.personBezug.art)}</span>
-        </button>
-        {entry.kontext && (
-          <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 6 }}>
-            {entry.kontext}
-          </div>
-        )}
+        {/* Zeile 3: Person · Personenart, Fälligkeit, Priorität (nur bei Abweichung) */}
+        <div className="flex items-center flex-wrap" style={{ gap: 12 }}>
+          <button type="button" onClick={onPersonKlick} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, minWidth: 0, background: "transparent", border: "none", padding: 0, fontFamily: "inherit" }}>
+            <ExternalLink style={{ width: 11, height: 11, opacity: 0.6, flexShrink: 0 }} />
+            <span style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
+            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>· {personArtLabel(entry.personBezug.art)}</span>
+          </button>
+          {faellig && (
+            <span className="inline-flex items-baseline" style={{ gap: 5 }}>
+              <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{faellig.datum}</span>
+              {faellig.abw && <span style={{ fontSize: "var(--text-meta)", fontWeight: faellig.ton === "danger" ? "var(--weight-medium)" : "var(--weight-regular)", color: faelligFarbe }}>{faellig.abw}</span>}
+            </span>
+          )}
+          {prio && (
+            <span className="inline-flex items-center" style={{ gap: 5, padding: "1px 8px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)" }}>
+              <span style={{ width: 6, height: 6, borderRadius: "var(--radius-pill)", background: prio.color }} />
+              Priorität {prio.label.toLowerCase()}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto" style={{ padding: "20px 24px" }}>
-        <AnnaPendenzVorschlag pendenz={entry} onActionExecuted={() => {}} onDemoAction={onDemoAction} />
+      {/* ── KÖRPER (scrollt) ── */}
+      <div className="flex-1 overflow-y-auto min-h-0" style={{ padding: "20px 24px" }}>
+        {/* ANNA-VORSCHLAG — vorübergehend ausgeblendet. Mechanismus, Sammelaktion und
+            Komponente bleiben erhalten; zum Reaktivieren die folgende Zeile einkommentieren. */}
+        {/* <AnnaPendenzVorschlag pendenz={entry} onActionExecuted={() => {}} onDemoAction={onDemoAction} /> */}
 
-        {isOverdue && (
-          <div className="flex items-center" style={{ gap: "var(--space-2)", padding: "var(--space-3) var(--space-4)", background: "var(--status-danger-bg)", borderRadius: "var(--radius-card)", marginBottom: "var(--space-5)" }}>
-            <AlertTriangle style={{ width: 16, height: 16, color: "var(--status-danger)", flexShrink: 0 }} />
-            <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--status-danger)" }}>
-              {faelligBanner(entry.faellig)}
-            </span>
+        {/* Zu erledigen — ein Satz je Art, darunter die kontext-Zeile als "Details". */}
+        <div style={{ marginBottom: "var(--space-6)" }}>
+          <div style={sektionLabel}>Zu erledigen</div>
+          <div style={{ fontSize: "var(--text-body)", color: "var(--text-primary)", lineHeight: 1.5 }}>
+            {zuErledigenSatz(entry.pendenzTyp)}
           </div>
-        )}
-
-        {entry.beschreibung && (
-          <div style={{ fontSize: "var(--text-body)", color: "var(--text-primary)", lineHeight: 1.6, marginBottom: "var(--space-5)" }}>
-            {entry.beschreibung}
-          </div>
-        )}
-
-        <div style={{ background: "var(--bg-primary)", borderRadius: "var(--radius-card)", padding: "var(--space-4)", marginBottom: "var(--space-5)" }}>
-          <MetaRow label="Art" value={typDef?.label || entry.typLabel} />
-          <MetaRow label="Status">
-            <span className="inline-flex items-center" style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: statusCfg.bg, color: statusCfg.color }}>
-              <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: statusCfg.dot }} />
-              {statusCfg.label}
-            </span>
-          </MetaRow>
-          <MetaRow label={personArtLabel(entry.personBezug.art)}>
-            <button type="button" onClick={onPersonKlick} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, background: "transparent", border: "none", padding: 0, fontFamily: "inherit" }}>
-              <span style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
-              <ExternalLink style={{ width: 11, height: 11, opacity: 0.6, color: "var(--brand-primary)" }} />
-            </button>
-          </MetaRow>
-          <MetaRow label="Zuständig">
-            {istNichtZugewiesen(entry) ? (
-              <span style={{ fontSize: "var(--text-small)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>Nicht zugewiesen</span>
-            ) : (
-              <div className="flex items-center" style={{ gap: 6 }}>
-                <MiniAvatar person={entry.verantwortlich} size={20} />
-                <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{entry.verantwortlich.name}</span>
-              </div>
-            )}
-          </MetaRow>
-          <MetaRow label="Priorität">
-            <div className="flex items-center" style={{ gap: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "var(--radius-pill)", background: prioCfg.color }} />
-              <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{prioCfg.label}</span>
-            </div>
-          </MetaRow>
-          <MetaRow label="Fällig" value={entry.faellig ? isoZuAnzeige(entry.faellig) : "–"} />
-          <MetaRow label="Erstellt von" value={entry.erstelltVon.name} />
-          <MetaRow label="Erstellt am" value={formatDate(entry.erstellt)} last />
-        </div>
-
-        <div style={{ marginBottom: "var(--space-5)" }}>
-          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: "var(--space-3)" }}>
-            Verlauf
-          </div>
-          {comments.length === 0 && (
-            <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)", padding: "var(--space-3) 0" }}>
-              Noch keine Einträge
+          {entry.kontext && (
+            <div style={{ marginTop: "var(--space-3)" }}>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 2 }}>Details</div>
+              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{entry.kontext}</div>
             </div>
           )}
-          {comments.map((c, i) => (
-            <div key={i} className="flex" style={{ gap: "var(--space-3)", marginBottom: "var(--space-3)" }}>
-              <MiniAvatar person={{ name: c.by, initialen: c.by.split(" ").map(w => w[0]).join(""), color: "#4F46E5" }} size={24} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-                  <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{c.by}</span>
-                  <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{c.at}</span>
+        </div>
+
+        {/* Verlauf — ein Strang, neueste zuerst; Erstellung immer vorhanden. */}
+        <div>
+          <div style={sektionLabel}>Verlauf</div>
+          <div className="flex flex-col" style={{ gap: "var(--space-3)" }}>
+            {eintraege.map((v, i) => v.typ === "kommentar" ? (
+              <div key={i} className="flex" style={{ gap: "var(--space-3)" }}>
+                <MiniAvatar person={{ name: v.by, initialen: v.by.split(" ").map(w => w[0]).join(""), color: "#4F46E5" }} size={24} />
+                <div className="flex-1 min-w-0" style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius-card)", padding: "8px 12px" }}>
+                  <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
+                    <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{v.by}</span>
+                    <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{v.at}</span>
+                  </div>
+                  <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 2 }}>{v.text}</div>
                 </div>
-                <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 2 }}>{c.text}</div>
               </div>
-            </div>
-          ))}
+            ) : (
+              <div key={i} className="flex" style={{ gap: "var(--space-2)" }}>
+                <span className="shrink-0" style={{ width: 6, height: 6, marginTop: 7, borderRadius: "var(--radius-pill)", background: "var(--text-tertiary)" }} />
+                <div className="flex-1 min-w-0">
+                  <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{v.text}</span>
+                  <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginLeft: 6 }}>{v.by} · {v.at}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Kommentarfeld am Ende des Verlaufs (nicht im Fuss — keine schwebende Aktion verdeckt es). */}
+          <div className="flex items-start" style={{ gap: "var(--space-2)", marginTop: "var(--space-4)" }}>
+            <textarea value={draftComment} onChange={e => onDraftChange(e.target.value)} placeholder="Kommentar schreiben…" rows={2}
+              style={{ flex: 1, resize: "none", padding: "10px 12px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)", fontSize: 16, color: "var(--text-primary)", fontFamily: "inherit" }} />
+            <button onClick={onAddComment} disabled={!draftComment.trim()}
+              className="shrink-0 flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              style={{ width: 40, height: 40, borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none" }}>
+              <Send style={{ width: 15, height: 15, color: "var(--text-on-dark)" }} />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="shrink-0" style={{ padding: "12px 16px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
-        <div className="flex items-start" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
-          <textarea value={draftComment} onChange={e => onDraftChange(e.target.value)} placeholder="Kommentar schreiben…" rows={2}
-            style={{ flex: 1, resize: "none", padding: "10px 12px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)", fontSize: 16, color: "var(--text-primary)", fontFamily: "inherit" }} />
-          <button onClick={onAddComment} disabled={!draftComment.trim()}
-            className="shrink-0 flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ width: 44, height: 44, borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none" }}>
-            <Send style={{ width: 16, height: 16, color: "var(--text-on-dark)" }} />
-          </button>
+      {/* ── FUSS (fest): Status-Umschalter · Zuständigkeit ── */}
+      <div className="shrink-0 flex items-center justify-between" style={{ gap: "var(--space-2)", padding: "12px 16px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+        <div className="inline-flex" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
+          {STATUS_SEGMENTE.map(([val, lbl]) => {
+            const aktiv = entry.status === val;
+            return (
+              <button key={val} type="button" onClick={() => { if (!aktiv) onStatusChange(val); }} className="ui-fokusring cursor-pointer transition-colors"
+                style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--bg-elevated)" : "transparent", border: aktiv ? "var(--border-thin) solid var(--border-default)" : "var(--border-thin) solid transparent", fontSize: "var(--text-small)", fontWeight: aktiv ? "var(--weight-medium)" : "var(--weight-regular)", color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                {lbl}
+              </button>
+            );
+          })}
         </div>
-        <div className="flex items-center justify-between" style={{ gap: "var(--space-2)" }}>
-          <select value={entry.status} onChange={e => onStatusChange(e.target.value)}
-            style={{ padding: "10px 14px", borderRadius: "var(--radius-pill)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)", fontSize: 16, color: "var(--text-primary)", fontFamily: "inherit", cursor: "pointer", minHeight: 44 }}>
-            <option value="offen">Offen</option>
-            <option value="in_bearbeitung">In Bearbeitung</option>
-            <option value="erledigt">Abgeschlossen</option>
-          </select>
-          <button onClick={() => onStatusChange("erledigt")} className="inline-flex items-center cursor-pointer transition-colors"
-            style={{ gap: "var(--space-1)", padding: "10px 16px", borderRadius: "var(--radius-pill)", background: "transparent", border: "none", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", minHeight: 44 }}
-            onMouseEnter={e => e.currentTarget.style.background = "var(--status-success-bg)"}
-            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-            <Check style={{ width: 14, height: 14 }} /> Abschliessen
+        {istNichtZugewiesen(entry) ? (
+          <button type="button" className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+            <Plus style={{ width: 13, height: 13 }} /> Zuweisen
           </button>
-        </div>
+        ) : (
+          <div className="flex items-center" style={{ gap: 6 }}>
+            <MiniAvatar person={entry.verantwortlich} size={22} />
+            <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{entry.verantwortlich.name}</span>
+          </div>
+        )}
       </div>
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════
-   META ROW
-   ══════════════════════════════════════════ */
-
-function MetaRow({ label, value, children, last }: { label: string; value?: string; children?: React.ReactNode; last?: boolean }) {
-  return (
-    <div className="flex items-center justify-between" style={{ padding: "8px 0", borderBottom: last ? "none" : "var(--border-thin) solid var(--border-default)" }}>
-      <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{label}</span>
-      {value ? (
-        <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)" }}>{value}</span>
-      ) : children}
     </div>
   );
 }
