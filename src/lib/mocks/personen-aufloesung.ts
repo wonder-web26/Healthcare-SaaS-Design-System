@@ -10,10 +10,10 @@
  * des Produktumfangs.
  *
  * Quellen:
- *   • Patient    → patients aus app/components/patientData     (Kennung P-2026-00xx)
+ *   • Patient    → gemeinsamer Patientenbestand aus lib/patienten/store (Kennung P-2026-00xx)
  *   • Angehörige → angehoerige aus app/components/angehoerigeData (Kennung A-2026-01xx)
  */
-import { patients } from "../../app/components/patientData";
+import { getPatient } from "../patienten/store";
 import { angehoerige } from "../../app/components/angehoerigeData";
 
 export type PersonArt = "patient" | "angehoeriger";
@@ -27,7 +27,8 @@ export interface PersonenBezug {
 /** Anzeigename aus der Quelle auflösen (nie gespeichert). */
 export function personName(ref: PersonenBezug): string {
   if (ref.art === "patient") {
-    const p = patients.find(p => p.id === ref.kennung);
+    // getPatient findet auch Patienten, die noch im Onboarding stehen.
+    const p = getPatient(ref.kennung);
     return p ? `${p.vorname} ${p.nachname}` : "Unbekannte Person";
   }
   const a = angehoerige.find(a => a.id === ref.kennung);
