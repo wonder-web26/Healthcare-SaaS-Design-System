@@ -68,8 +68,9 @@ export const demoSteinerAngehoeriger: AngehoerigerFormData = {
 /* ── Patient: Hans-Rudolf Steiner ──────────────────────────────────────────── */
 export const demoSteinerPatient: PatientFormData = {
   ...emptyPatientForm,
-  name: "Steiner", vorname: "Hans-Rudolf", geburtsdatum: "14.06.1956", geschlecht: "maennlich",
-  nationalitaet: "schweiz", heimatort: "Winterthur ZH", zivilstand: "verheiratet", aufenthaltsstatus: "CH",
+  // SDA-Kodierung: BB2 maennlich -> 1, BB12 schweiz -> 1, BB4 verheiratet -> 2
+  name: "Steiner", vorname: "Hans-Rudolf", geburtsdatum: "14.06.1956", geschlecht: "1",
+  staatsangehoerigkeit: "1", andererStaat: "", heimatort: "Winterthur ZH", zivilstand: "2", aufenthaltsstatus: "CH",
   krankenkasse: "helsana", ahvNummer: "756.9876.5432.10",
   hausarztName: "Dr. med. R. Lüthi", hausarztTelefon: "+41 52 213 44 55", hausarztEmail: "praxis.luethi@example.ch",
   email: "hr.steiner@example.ch", telefon: "+41 79 330 22 11",
@@ -81,8 +82,13 @@ export const demoSteinerPatient: PatientFormData = {
   konfession: "evangelisch_reformiert",
   groesse: "174", gewicht: "78", gewichtsverlust: "nein", brille: "ja", hoergeraet: "ja",
   chronischeErkrankungen: "Arterielle Hypertonie, Diabetes mellitus Typ 2, beginnende Herzinsuffizienz (NYHA II)",
-  spitalaufenthalte: "ja", operationen: "Hüft-Totalprothese rechts (2019), Katarakt beidseits (2022)",
-  allergien: "Penicillin", wohnsituation: "Eigene Wohnung, gemeinsam mit Ehefrau",
+  // BB11: das bisherige "ja" war nicht auflösbar. Neu gesetzt auf 0 — die beiden
+  // dokumentierten Eingriffe liegen 2019 und 2022 und damit weit ausserhalb der
+  // 90-Tage-Periode; die Anamnese nennt keinen jüngeren Spitalaufenthalt.
+  spitalaufenthalte: "0", operationen: "Hüft-Totalprothese rechts (2019), Katarakt beidseits (2022)",
+  // BB9: der bisherige Freitext war kein Listenwert. Neu gesetzt auf 1 — eigene
+  // Wohnung im 2. Obergeschoss mit Lift, zu zweit bewohnt.
+  allergien: "Penicillin", wohnsituation: "1",
   etage: "2", liftVorhanden: "ja", treppen: "ja", personenImHaushalt: "2",
   anamneseText: "Zunehmende Gangunsicherheit, benötigt Unterstützung bei Körperpflege und Medikamentenmanagement. Kognitiv orientiert, Stimmung stabil.",
   stimmungAktuell: "stabil", behandlungszielFokus: "Erhalt der Selbständigkeit, Sturzprävention",

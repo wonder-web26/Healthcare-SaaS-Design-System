@@ -15,20 +15,19 @@ import { Combobox as FormSelect } from "./Combobox";
 import { FormField } from "./FormField";
 import { DateField } from "./DateField";
 import type { PatientFormData } from "../StepPatient";
-import { NATIONALITAETEN } from "./MigratedAngehoerigerForms";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
-import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
+import { SDA_GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/sda-geschlecht";
+import { SDA_ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/sda-zivilstand";
+import { SDA_WOHNSITUATION_OPTIONS } from "../../../lib/stammdaten/sda-wohnsituation";
+import { SDA_SPITALAUFENTHALT_OPTIONS } from "../../../lib/stammdaten/sda-spitalaufenthalt";
+import { SDA_STAATSANGEHOERIGKEIT_OPTIONS, SDA_STAAT_ANDERE } from "../../../lib/stammdaten/sda-staatsangehoerigkeit";
 
 function filled(v: string | undefined | null): boolean {
   return typeof v === "string" && v.trim().length > 0;
 }
 
 const JA_NEIN = [{ value: "ja", label: "Ja" }, { value: "nein", label: "Nein" }];
-const JA_NEIN_UNB = [{ value: "ja", label: "Ja" }, { value: "nein", label: "Nein" }, { value: "unbekannt", label: "Unbekannt" }];
-const GESCHLECHT = [{ value: "weiblich", label: "Weiblich" }, { value: "maennlich", label: "Männlich" }, { value: "divers", label: "Divers" }];
-// SP-01: Konfession aus shared stammdaten (ersetzt die alte lokale Liste)
-const WOHNSITUATION = [{ value: "wohnung", label: "Eigene Wohnung" }, { value: "haus", label: "Eigenheim" }, { value: "betreut", label: "Betreutes Wohnen" }, { value: "heim", label: "Pflegeheim" }, { value: "sonstige", label: "Sonstige" }];
 const STIMMUNG = [{ value: "stabil", label: "Stabil" }, { value: "gedrueckt", label: "Gedrückt" }, { value: "wechselhaft", label: "Wechselhaft" }, { value: "belastet", label: "Sehr belastet" }];
 const PERSONEN = [{ value: "1", label: "1 (alleinlebend)" }, { value: "2", label: "2 Personen" }, { value: "3", label: "3 Personen" }, { value: "4+", label: "4+ Personen" }];
 
@@ -46,7 +45,8 @@ interface TabProps {
    ══════════════════════════════════════════ */
 export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onBlur }: TabProps) {
   const t = (f: string) => touched.has(f);
-  const isSwiss = data.nationalitaet === "schweiz";
+  const istSchweizerin = data.staatsangehoerigkeit === "1";
+  const istAndererStaat = data.staatsangehoerigkeit === SDA_STAAT_ANDERE;
 
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
@@ -55,19 +55,21 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Name" required value={data.name} onChange={v => onUpdate("name", v)} onBlur={() => onBlur("name")} placeholder="Nachname" error={t("name") && !filled(data.name) ? "Pflichtfeld" : undefined} /></div>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required value={data.vorname} onChange={v => onUpdate("vorname", v)} onBlur={() => onBlur("vorname")} placeholder="Vorname" error={t("vorname") && !filled(data.vorname) ? "Pflichtfeld" : undefined} /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => onUpdate("geburtsdatum", (v as string) ?? "")} onBlur={() => onBlur("geburtsdatum")} /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => onUpdate("geschlecht", v || "")} options={GESCHLECHT} placeholder="Geschlecht wählen" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => onUpdate("geschlecht", v || "")} options={SDA_GESCHLECHT_OPTIONS} placeholder="Geschlecht wählen" /></div>
       </div>
       <div style={{ marginTop: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => onUpdate("ahvNummer", v)} /></div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Nationalität" value={data.nationalitaet || null} onChange={v => onUpdate("nationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" /></div>
-        {isSwiss && <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Heimatort" value={data.heimatort} onChange={v => onUpdate("heimatort", v)} placeholder="z.B. Bern" /></div>}
-        {!isSwiss && filled(data.nationalitaet) && (
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Staatsangehörigkeit" value={data.staatsangehoerigkeit || null} onChange={v => onUpdate("staatsangehoerigkeit", v || "")} options={SDA_STAATSANGEHOERIGKEIT_OPTIONS} placeholder="Staatsangehörigkeit wählen" /></div>
+        {/* Bei Code 2 ist der Staat als Freitext zu erfassen. */}
+        {istAndererStaat && <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Welcher Staat" required value={data.andererStaat} onChange={v => onUpdate("andererStaat", v)} onBlur={() => onBlur("andererStaat")} placeholder="z.B. Portugal" error={t("andererStaat") && !filled(data.andererStaat) ? "Pflichtfeld" : undefined} /></div>}
+        {istSchweizerin && <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Heimatort" value={data.heimatort} onChange={v => onUpdate("heimatort", v)} placeholder="z.B. Bern" /></div>}
+        {istAndererStaat && (
           <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Aufenthaltsstatus" value={data.aufenthaltsstatus || null} onChange={v => onUpdate("aufenthaltsstatus", v || "")}
             options={[{ value: "B", label: "B" }, { value: "C", label: "C" }, { value: "L", label: "L" }, { value: "G", label: "G" }, { value: "F", label: "F" }, { value: "N", label: "N" }]} placeholder="Status wählen" /></div>
         )}
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={SDA_ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" /></div>
       </div>
 
       <SectionHeader icon={MapPin} label="Adresse" />
@@ -177,7 +179,7 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <SegmentedControl label="Spitalaufenthalte (letzte 90 Tage)" value={data.spitalaufenthalte} onChange={v => onUpdate("spitalaufenthalte", v)} options={JA_NEIN} />
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zeit seit dem letzten Spitalaufenthalt" value={data.spitalaufenthalte || null} onChange={v => onUpdate("spitalaufenthalte", v || "")} options={SDA_SPITALAUFENTHALT_OPTIONS} placeholder="Bitte wählen" /></div>
         <TextareaInput label="Operationen" value={data.operationen} onChange={v => onUpdate("operationen", v)} placeholder="z.B. Hüft-TEP rechts (2024), Knie-TEP links (2022), Appendektomie (2018)" rows={4} />
       </div>
 
@@ -188,7 +190,7 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
       {/* Wohnsituation */}
       <SectionHeader icon={Home} label="Wohnsituation" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Wohnsituation" value={data.wohnsituation || null} onChange={v => onUpdate("wohnsituation", v || "")} options={WOHNSITUATION} placeholder="Bitte wählen" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Wohnsituation zur Zeit der Abklärung" value={data.wohnsituation || null} onChange={v => onUpdate("wohnsituation", v || "")} options={SDA_WOHNSITUATION_OPTIONS} placeholder="Bitte wählen" /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Etage" value={data.etage} onChange={v => onUpdate("etage", v)} placeholder="z.B. 2. OG" /></div>
         <SegmentedControl label="Lift vorhanden" value={data.liftVorhanden} onChange={v => onUpdate("liftVorhanden", v)} options={JA_NEIN} />
         <SegmentedControl label="Treppen" value={data.treppen} onChange={v => onUpdate("treppen", v)} options={JA_NEIN} />
