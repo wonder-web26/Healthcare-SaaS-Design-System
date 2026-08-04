@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Sparkles, ExternalLink, Copy, Download, Mail, Play, CheckCircle2 } from "lucide-react";
 import { pendenzTypen, type AnnaAction } from "../../types/pendenz";
 import type { UnifiedEntry } from "../../lib/mocks/service-desk-unified";
+import { personName } from "../../lib/mocks/personen-aufloesung";
 import { useCurrentRole } from "../auth";
 import { toast } from "sonner";
 
@@ -25,9 +26,8 @@ function parseMarkers(text: string): React.ReactNode[] {
 }
 
 function fillTemplate(template: string, entry: UnifiedEntry): string {
-  const personName = entry.person?.name ?? "–";
   return template
-    .replace(/\{personName\}/g, personName)
+    .replace(/\{personName\}/g, personName(entry.personBezug))
     .replace(/\{beschreibung\}/g, entry.beschreibung || entry.kontext)
     .replace(/\{vertragsstart\}/g, "15.01.2026")
     .replace(/\{srkFrist\}/g, "15.01.2027")
@@ -52,15 +52,12 @@ function generateMockVorschlag(entry: UnifiedEntry): string {
     return text;
   }
   // Generic fallback for types without specific config
-  const personName = entry.person?.name ?? "–";
-  return `${typDef?.label || entry.typLabel} für ${personName}. ${entry.kontext}`;
+  return `${typDef?.label || entry.typLabel} für ${personName(entry.personBezug)}. ${entry.kontext}`;
 }
 
 function generateCopyData(entry: UnifiedEntry): string {
-  const p = entry.person;
-  if (!p) return entry.kontext;
   return [
-    `Name: ${p.name}`,
+    `Name: ${personName(entry.personBezug)}`,
     `Pendenz: ${entry.typLabel}`,
     `Kontext: ${entry.kontext}`,
     entry.faellig ? `Fällig: ${entry.faellig}` : null,
@@ -178,7 +175,7 @@ export function AnnaPendenzVorschlag({ pendenz, onActionExecuted, onDemoAction }
       case "open-mailto": {
         const p = action.payload as { to?: string; subject?: string } | undefined;
         const to = p?.to || "";
-        const subject = encodeURIComponent((p?.subject || "").replace("{personName}", pendenz.person?.name || ""));
+        const subject = encodeURIComponent((p?.subject || "").replace("{personName}", personName(pendenz.personBezug)));
         window.location.href = `mailto:${to}?subject=${subject}`;
         break;
       }
