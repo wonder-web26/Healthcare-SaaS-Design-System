@@ -40,6 +40,7 @@ import {
   Sparkles,
   Clock,
   Send,
+  Inbox,
 } from "lucide-react";
 
 /* ══════════════════════════════════════════
@@ -48,7 +49,7 @@ import {
 
 import { useNavigate } from "react-router";
 import { LeerZustand } from "./ui/LeerZustand";
-import { TabPersonalienV2, TabSteuerV2, TabAnamneseV2 } from "./form/MigratedPatientForms";
+import { TabAnmeldungV2, TabPersonalienV2, TabSteuerV2, TabAnamneseV2 } from "./form/MigratedPatientForms";
 import { FORMULAR_MAX } from "./form/feldbreiten";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
@@ -79,6 +80,7 @@ import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/kranke
 import { Combobox } from "./form/Combobox";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import { getPatient } from "../../lib/patienten/store";
+import { EROEFFNUNGSGRUND_STANDARD } from "../../lib/stammdaten/sda-eroeffnungsgrund";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext, type DokumentTypDefinition } from "../../lib/stammdaten/dokumenttypen";
 import { DokumentScanUpload, type ScanFile } from "./form/DokumentScanUpload";
 import { EinwilligungModal } from "./einwilligung/EinwilligungModal";
@@ -93,6 +95,23 @@ export interface ATLEntry {
 export type PatientScanFile = ScanFile;
 
 export interface PatientFormData {
+  /* Reiter Anmeldung – Bereich AA und BB16 */
+  /** AA1 — Code aus lib/stammdaten/sda-eroeffnungsgrund. Einzige Vorbelegung. */
+  eroeffnungsgrund: string;
+  /** AA2 — Datum der Eröffnung des Dossiers, alleinige Quelle des Aufnahmedatums. */
+  dossierEroeffnetAm: string;
+  /** AA3 — Code aus lib/stammdaten/sda-anmeldende-institution. */
+  anmeldendeInstitution: string;
+  /** AA3 Code 8 — Institution als Freitext. */
+  anmeldendeInstitutionAndere: string;
+  anmeldendePersonName: string;
+  anmeldendePersonFunktion: string;
+  anmeldendePersonTelefon: string;
+  anmeldendePersonEmail: string;
+  /** BB16 — Code aus lib/stammdaten/sda-einschaetzung-situation. */
+  einschaetzungSituation: string;
+  anmeldungPraezisierungen: string;
+
   /* Tab 1 – Personalien */
   name: string;
   vorname: string;
@@ -199,6 +218,18 @@ function buildEmptyATL(): Record<string, ATLEntry> {
 }
 
 export const emptyPatientForm: PatientFormData = {
+  // AA1 ist laut Handbuch vorzubelegen — das einzige Feld des Reiters mit Wert.
+  eroeffnungsgrund: EROEFFNUNGSGRUND_STANDARD,
+  dossierEroeffnetAm: "",
+  anmeldendeInstitution: "",
+  anmeldendeInstitutionAndere: "",
+  anmeldendePersonName: "",
+  anmeldendePersonFunktion: "",
+  anmeldendePersonTelefon: "",
+  anmeldendePersonEmail: "",
+  einschaetzungSituation: "",
+  anmeldungPraezisierungen: "",
+
   name: "",
   vorname: "",
   geburtsdatum: "",
@@ -306,10 +337,19 @@ function formatAHV(v: string): string {
 }
 
 /* ── Tab completion logic ──────────────── */
-const TAB_KEYS = ["personalien", "steuer", "anamnese", "aktivitaeten", "dokumente"] as const;
-
 function getTabCompletion(tabKey: string, data: PatientFormData): { done: number; total: number } {
   switch (tabKey) {
+    case "anmeldung": {
+      const checks = [
+        filled(data.eroeffnungsgrund),
+        isValidDate(data.dossierEroeffnetAm),
+        filled(data.anmeldendeInstitution),
+        filled(data.einschaetzungSituation),
+      ];
+      // AA3 Code 8: die Institution ist zusätzlich als Freitext zu erfassen.
+      if (data.anmeldendeInstitution === "8") checks.push(filled(data.anmeldendeInstitutionAndere));
+      return { done: checks.filter(Boolean).length, total: checks.length };
+    }
     case "personalien": {
       const checks = [
         filled(data.name),
@@ -373,7 +413,13 @@ function isTabComplete(tabKey: string, data: PatientFormData): boolean {
 }
 
 /* ── Tab definitions ───────────────────── */
+/**
+ * Reiter des Schritts Patient — EINE Quelle für Beschriftung, Symbol und
+ * Schlüssel. Angesteuert wird ausschliesslich über den Schlüssel, nie über die
+ * Position: ein eingeschobener Reiter verschöbe sonst stumm jede Nummer.
+ */
 const tabDefs = [
+  { key: "anmeldung", label: "Anmeldung", icon: Inbox },
   { key: "personalien", label: "Personalien", icon: User },
   { key: "steuer", label: "Soziales & Steuer", icon: ShieldCheck },
   { key: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
@@ -384,7 +430,18 @@ const tabDefs = [
   { key: "klv", label: "KLV", icon: FileText },
   { key: "workflow", label: "Workflow", icon: ClipboardList },
   { key: "dokumente", label: "Dokumente", icon: FileText },
-];
+] as const;
+
+/** Schlüssel eines Reiters — aus tabDefs abgeleitet, damit beide nicht auseinanderlaufen. */
+export type PatientReiter = typeof tabDefs[number]["key"];
+
+/** Alle Reiterschlüssel in Anzeigereihenfolge. */
+export const TAB_KEYS: readonly PatientReiter[] = tabDefs.map(t => t.key);
+
+/** Reiter, die reine Formulare sind — ihr Inhalt wird auf FORMULAR_MAX begrenzt. */
+const FORMULARREITER: ReadonlySet<PatientReiter> = new Set<PatientReiter>([
+  "anmeldung", "personalien", "steuer", "anamnese", "aktivitaeten", "dokumente",
+]);
 
 /* ══════════════════════════════════════════
    PROPS
@@ -395,7 +452,7 @@ interface StepPatientProps {
   onValidityChange?: (isValid: boolean) => void;
   onboardingId?: string;
   /** External tab-switch request (e.g. from header pill click) */
-  requestedTab?: number | null;
+  requestedTab?: PatientReiter | null;
   onTabSwitched?: () => void;
   /** Aktion am rechten Ende der Reiterzeile (z. B. "Gespräch"), bleibt fixiert sichtbar. */
   reiterAktion?: React.ReactNode;
@@ -405,7 +462,7 @@ interface StepPatientProps {
    MAIN COMPONENT
    ══════════════════════════════════════════ */
 export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion }: StepPatientProps) {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState<PatientReiter>("anmeldung");
 
   // §D: Verlauf am rechten Rand der Abschnittszeile, solange waagrecht scrollbar (nicht am Ende).
   const abschnittScrollRef = useRef<HTMLDivElement>(null);
@@ -443,7 +500,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
 
   /* Compute overall validity — Pflichtfelder + Pflichtdokumente.
    * InterRAI, Pflegeplanung, KLV, Workflow: ausgenommen (Zertifizierung ausstehend, siehe MODUL_ZERTIFIZIERUNG). */
-  const requiredTabs = ["personalien", "steuer", "anamnese", "dokumente"];
+  const requiredTabs = ["anmeldung", "personalien", "steuer", "anamnese", "dokumente"];
   const allRequiredComplete = requiredTabs.every((k) => isTabComplete(k, data));
 
   useEffect(() => {
@@ -524,8 +581,8 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
             next?.scrollIntoView({ inline: "nearest", block: "nearest" });
           }}
         >
-          {tabDefs.map((tab, idx) => {
-            const isActive = activeTab === idx;
+          {tabDefs.map((tab) => {
+            const isActive = activeTab === tab.key;
             const complete = isTabComplete(tab.key, data);
 
             return (
@@ -533,7 +590,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
                 key={tab.key}
                 role="tab"
                 aria-selected={isActive}
-                onClick={() => setActiveTab(idx)}
+                onClick={() => setActiveTab(tab.key)}
                 onFocus={e => e.currentTarget.scrollIntoView({ inline: "nearest", block: "nearest" })}
                 className="ui-fokusring relative flex items-center whitespace-nowrap transition-colors cursor-pointer"
                 style={{
@@ -569,29 +626,32 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
         {/* Formularbereich auf FORMULAR_MAX begrenzt — Formular-Reiter (Personalien/
             Steuer/Anamnese) sowie ATL (4) und Dokumente (9); klinische Reiter
             (Vitaldaten, InterRAI, Pflegeplanung, KLV, Workflow) behalten volle Breite. */}
-        <div style={{ padding: "20px 32px 24px", maxWidth: [0, 1, 3, 4, 9].includes(activeTab) ? FORMULAR_MAX : undefined }}>
-          {activeTab === 0 && (
+        <div style={{ padding: "20px 32px 24px", maxWidth: FORMULARREITER.has(activeTab) ? FORMULAR_MAX : undefined }}>
+          {activeTab === "anmeldung" && (
+            <TabAnmeldungV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
+          )}
+          {activeTab === "personalien" && (
             <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onUpdateMehrere={updateFields} onBlur={markTouched} />
           )}
-          {activeTab === 1 && (
+          {activeTab === "steuer" && (
             <TabSteuerV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
-          {activeTab === 2 && <VitaldatenTab patientId={onboardingId || "new"} />}
-          {activeTab === 3 && (
+          {activeTab === "vitaldaten" && <VitaldatenTab patientId={onboardingId || "new"} />}
+          {activeTab === "anamnese" && (
             <TabAnamneseV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
-          {activeTab === 4 && (
+          {activeTab === "aktivitaeten" && (
             <TabAktivitaetenV2 data={data} onUpdateATL={updateATL} />
           )}
-          {activeTab === 5 && onboardingId && <OnboardingTabBA onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />}
-          {activeTab === 6 && onboardingId && <OnboardingTabPP onboardingId={onboardingId} />}
-          {activeTab === 7 && onboardingId && <OnboardingTabKLV onboardingId={onboardingId} />}
-          {activeTab === 8 && onboardingId && (() => {
+          {activeTab === "interrai" && onboardingId && <OnboardingTabBA onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />}
+          {activeTab === "pflegeplanung" && onboardingId && <OnboardingTabPP onboardingId={onboardingId} />}
+          {activeTab === "klv" && onboardingId && <OnboardingTabKLV onboardingId={onboardingId} />}
+          {activeTab === "workflow" && onboardingId && (() => {
             // Patient-Workflow: Tickets ab Aufnahmedatum (= heute im Onboarding-Kontext)
             generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, new Date().toISOString().slice(0, 10));
             return <RhythmusTimeline subjektTyp="patient" subjektId={onboardingId} />;
           })()}
-          {activeTab === 9 && <TabDokumente data={data} onChange={onChange} />}
+          {activeTab === "dokumente" && <TabDokumente data={data} onChange={onChange} />}
         </div>
       </div>
       {/* Hinweistext entfernt (§A). Recording handled globally via RecordingContext + GlobalRecordingBar */}

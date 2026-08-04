@@ -36,6 +36,8 @@ import {
   emptyPatientForm,
   getFehlendePflichtdokumente,
   type PatientFormData,
+  type PatientReiter,
+  TAB_KEYS,
 } from "./StepPatient";
 import { VertragsunterzeichnungPhase } from "./VertragsunterzeichnungPhase";
 import { SpezialbewilligungDialog } from "./SpezialbewilligungDialog";
@@ -111,6 +113,7 @@ const baseSteps: WizardStep[] = [
     icon: HeartPulse,
     description: "Medizinische und pflegerische Angaben zum Patienten",
     sections: [
+      "Anmeldung",
       "Personalien",
       "Steuer & Sozialversicherungen",
       "Anamnese",
@@ -527,12 +530,12 @@ export function OnboardingPage() {
     : "Onboardings";
 
   // Tab-jump state (for header pill clicks → StepPatient tab switch)
-  const [requestedPatientTab, setRequestedPatientTab] = useState<number | null>(null);
+  const [requestedPatientTab, setRequestedPatientTab] = useState<PatientReiter | null>(null);
 
-  // "Öffnen" (Workflow-Aufgabe) → Rhythmus/Workflow-Tab im Patienten-Schritt (Index 7).
+  // "Öffnen" (Workflow-Aufgabe) → Reiter Workflow im Patienten-Schritt.
   const oeffneRhythmus = () => {
-    if (activeStepData.key === "patient") { setRequestedPatientTab(7); }
-    else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab(7), 100); }
+    if (activeStepData.key === "patient") { setRequestedPatientTab("workflow"); }
+    else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab("workflow"), 100); }
   };
 
   // "Gespräch" (§E): startet die Aufzeichnung. Der Erklärsatz erscheint als Hinweis
@@ -571,8 +574,10 @@ export function OnboardingPage() {
     const patientStep = wizardSteps.find((s) => s.key === "patient");
     if (!patientStep) return;
     goToStep(patientStep.id);
-    if (searchParams.get("tab") === "interrai") {
-      setTimeout(() => setRequestedPatientTab(5), 100);
+    // Der Tiefenlink trägt bereits den Schlüssel — keine Übersetzung mehr nötig.
+    const gewuenschterReiter = searchParams.get("tab");
+    if (gewuenschterReiter && (TAB_KEYS as readonly string[]).includes(gewuenschterReiter)) {
+      setTimeout(() => setRequestedPatientTab(gewuenschterReiter as PatientReiter), 100);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

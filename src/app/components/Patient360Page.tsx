@@ -651,7 +651,6 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
   const [kanton, setKanton] = useState(patient.kanton);
   const [sprache, setSprache] = useState(patient.sprache);
   const [leistungsart, setLeistungsart] = useState(patient.leistungsart);
-  const [aufnahme, setAufnahme] = useState(patient.aufnahmeDatum);
   const [letzterBesuch, setLetzterBesuch] = useState(patient.letzterBesuch);
 
   /* ── Editable fields: Kontaktpersonen ── */
@@ -677,7 +676,7 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
   const startEdit = (section: string) => {
     // Snapshot current values for the section
     if (section === "adresse") {
-      setSnapshot({ adresse, kanton, sprache, leistungsart, aufnahme, letzterBesuch });
+      setSnapshot({ adresse, kanton, sprache, leistungsart, letzterBesuch });
     } else if (section === "kontakt") {
       setSnapshot({ angehName, angehRelation, angehTelefon, notfallName, notfallRelation, notfallTelefon });
     } else if (section === "versicherung") {
@@ -693,7 +692,6 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
       setKanton(snapshot.kanton ?? kanton);
       setSprache(snapshot.sprache ?? sprache);
       setLeistungsart(snapshot.leistungsart ?? leistungsart);
-      setAufnahme(snapshot.aufnahme ?? aufnahme);
       setLetzterBesuch(snapshot.letzterBesuch ?? letzterBesuch);
     } else if (section === "kontakt") {
       setAngehName(snapshot.angehName ?? angehName);
@@ -721,8 +719,7 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
   const saveEdit = () => {
     if (editingSection === "adresse") {
       aktualisierePatient(patient.id, {
-        adresse, kanton, sprache, leistungsart,
-        aufnahmeDatum: aufnahme, letzterBesuch,
+        adresse, kanton, sprache, leistungsart, letzterBesuch,
       });
     } else if (editingSection === "kontakt") {
       const angehoerigerText = angehRelation.trim()
@@ -772,7 +769,8 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
             <PEditableField label="Kanton" value={kanton} editing={editingSection === "adresse"} onChange={setKanton} />
             <PEditableField label="Sprache" value={sprache} editing={editingSection === "adresse"} onChange={setSprache} />
             <PEditableField label="Leistungsart" value={leistungsart} editing={editingSection === "adresse"} onChange={setLeistungsart} />
-            <PEditableField label="Aufnahmedatum" value={aufnahme} editing={editingSection === "adresse"} onChange={setAufnahme} />
+            {/* Quelle ist AA2 im Reiter Anmeldung — hier nur Anzeige, nicht bearbeitbar. */}
+            <PEditableField label="Aufnahmedatum" value={patient.aufnahmeDatum} editing={false} onChange={() => {}} />
             <PEditableField label="Letzter Besuch" value={letzterBesuch} editing={editingSection === "adresse"} onChange={setLetzterBesuch} />
           </div>
         </PSectionCard>

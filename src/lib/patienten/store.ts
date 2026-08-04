@@ -106,6 +106,8 @@ export interface PatientStammdatenEingabe {
   name: string;
   geburtsdatum: string;
   ahvNummer: string;
+  /** AA2 — Datum der Eröffnung des Dossiers; alleinige Quelle des Aufnahmedatums. */
+  dossierEroeffnetAm: string;
   adresseStrasse: string;
   adressePlz: string;
   adresseOrt: string;
@@ -158,7 +160,7 @@ function stammdatenAbbilden(
   eingabe: PatientStammdatenEingabe,
   angehoeriger: AngehoerigerVerknuepfung | null,
 ): Pick<Patient,
-  "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "adresse" | "krankenkasse" |
+  "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "adresse" | "krankenkasse" | "aufnahmeDatum" |
   "kartennummer" | "hausarztName" | "hausarztTelefon" |
   "notfallkontaktName" | "notfallkontaktTelefon" | "notfallkontaktBeziehung" |
   "angehoeriger" | "angehoerigerTelefon"> {
@@ -167,6 +169,8 @@ function stammdatenAbbilden(
     nachname: eingabe.name,
     geburtsdatum: eingabe.geburtsdatum,
     ahvNummer: eingabe.ahvNummer,
+    // AA2 ist die einzige Quelle; die Detailseite zeigt den Wert nur noch an.
+    aufnahmeDatum: eingabe.dossierEroeffnetAm,
     adresse: adresseZusammensetzen(eingabe.adresseStrasse, eingabe.adressePlz, eingabe.adresseOrt),
     krankenkasse: eingabe.krankenkasse ? getKrankenkasseLabel(eingabe.krankenkasse) : "",
     kartennummer: eingabe.kartennummer,
@@ -188,7 +192,7 @@ function stammdatenAbbilden(
  * Kennung bleibt dieselbe.
  *
  * Alle Felder, die das Onboarding nicht erhebt, bleiben leer: Schweregrad,
- * Kanton, Sprache, Leistungsart, Aufnahmedatum, letzter Besuch, letzte
+ * Kanton, Sprache, Leistungsart, letzter Besuch, letzte
  * Aktivität, Fachgebiet des Hausarztes, Re-Assessment-Frist, offene Tasks.
  * Die Pflegefachkraft trägt das im Bestand übliche Zeichen für "nicht
  * zugewiesen"; die Liste zeigt dafür die Aktion "Zuweisen".
@@ -217,7 +221,6 @@ export function erfassePatientImOnboarding(
     pflegefachkraft: NICHT_ZUGEWIESEN,
     pflegefachkraftInitialen: NICHT_ZUGEWIESEN,
     leistungsart: "",
-    aufnahmeDatum: "",
     letzterBesuch: "",
     sprache: "",
     hausarztFachgebiet: "",

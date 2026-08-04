@@ -3,7 +3,7 @@
  * Uses new form components from components/form/.
  */
 import { useState } from "react";
-import { User, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ChevronDown, ChevronUp } from "lucide-react";
+import { User, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { FELD_MAX } from "./feldbreiten";
 import { TextInput } from "./TextInput";
@@ -23,6 +23,9 @@ import { GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/geschlecht";
 import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
 import { STAATSANGEHOERIGKEIT_OPTIONS, istSchweiz } from "../../../lib/stammdaten/staatsangehoerigkeit";
 import { AUFENTHALTSSTATUS_OPTIONS } from "../../../lib/stammdaten/aufenthaltsstatus";
+import { SDA_EROEFFNUNGSGRUND_OPTIONS } from "../../../lib/stammdaten/sda-eroeffnungsgrund";
+import { SDA_ANMELDENDE_INSTITUTION_OPTIONS, INSTITUTION_ANDERE } from "../../../lib/stammdaten/sda-anmeldende-institution";
+import { SDA_EINSCHAETZUNG_SITUATION_OPTIONS, sdaEinschaetzungFolge } from "../../../lib/stammdaten/sda-einschaetzung-situation";
 
 function filled(v: string | undefined | null): boolean {
   return typeof v === "string" && v.trim().length > 0;
@@ -39,6 +42,56 @@ interface TabProps {
   /** Mehrere Felder in einem Zug — nötig, wo ein Feld ein zweites mitschreibt. */
   onUpdateMehrere?: (patch: Partial<PatientFormData>) => void;
   onBlur: (field: string) => void;
+}
+
+/* ══════════════════════════════════════════
+   REITER: ANMELDUNG (Bereich AA + BB16)
+   ══════════════════════════════════════════ */
+
+/**
+ * Der Bereich AA wird zum Zeitpunkt der Anmeldung erhoben — meist telefonisch,
+ * bevor jemand die Person gesehen hat. Deshalb steht dieser Reiter vor allen
+ * anderen Angaben.
+ *
+ * BB16 hat eine Triagefunktion; der Hilfetext unter dem Feld nennt die künftige
+ * Folge, löst sie aber nicht aus. Dasselbe gilt für den Eröffnungsgrund 2.
+ */
+export function TabAnmeldungV2({ data, touched, onUpdate, onBlur }: TabProps) {
+  const t = (f: string) => touched.has(f);
+  const istAndereInstitution = data.anmeldendeInstitution === INSTITUTION_ANDERE;
+
+  return (
+    <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
+      <SectionHeader icon={ClipboardList} label="Anmeldung" first />
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Eröffnungsgrund" required value={data.eroeffnungsgrund || null} onChange={v => onUpdate("eroeffnungsgrund", v || "")} options={SDA_EROEFFNUNGSGRUND_OPTIONS} placeholder="Bitte wählen" error={t("eroeffnungsgrund") && !filled(data.eroeffnungsgrund) ? "Pflichtfeld" : undefined} /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Datum der Eröffnung des Dossiers" required wertFormat="display" value={data.dossierEroeffnetAm || null} onChange={v => onUpdate("dossierEroeffnetAm", (v as string) ?? "")} onBlur={() => onBlur("dossierEroeffnetAm")} /></div>
+      </div>
+
+      <SectionHeader icon={Phone} label="Anmeldende Stelle" />
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Anmeldende Institution" required value={data.anmeldendeInstitution || null} onChange={v => onUpdate("anmeldendeInstitution", v || "")} options={SDA_ANMELDENDE_INSTITUTION_OPTIONS} placeholder="Bitte wählen" error={t("anmeldendeInstitution") && !filled(data.anmeldendeInstitution) ? "Pflichtfeld" : undefined} /></div>
+        {/* Bei Code 8 ist die Institution als Freitext zu erfassen. */}
+        {istAndereInstitution && <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Welche Institution" required value={data.anmeldendeInstitutionAndere} onChange={v => onUpdate("anmeldendeInstitutionAndere", v)} onBlur={() => onBlur("anmeldendeInstitutionAndere")} placeholder="z.B. Beratungsstelle" error={t("anmeldendeInstitutionAndere") && !filled(data.anmeldendeInstitutionAndere) ? "Pflichtfeld" : undefined} /></div>}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Anmeldende Person" value={data.anmeldendePersonName} onChange={v => onUpdate("anmeldendePersonName", v)} placeholder="Optional — wer angerufen oder geschrieben hat" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Funktion oder Rolle" value={data.anmeldendePersonFunktion} onChange={v => onUpdate("anmeldendePersonFunktion", v)} placeholder="Optional" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" value={data.anmeldendePersonTelefon} onChange={v => onUpdate("anmeldendePersonTelefon", v)} placeholder="Optional" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" value={data.anmeldendePersonEmail} onChange={v => onUpdate("anmeldendePersonEmail", v)} placeholder="Optional" /></div>
+      </div>
+
+      <SectionHeader icon={Stethoscope} label="Einschätzung" />
+      <div style={{ maxWidth: FELD_MAX.mittel }}>
+        <FormSelect label="Einschätzung der Situation" required value={data.einschaetzungSituation || null} onChange={v => onUpdate("einschaetzungSituation", v || "")} options={SDA_EINSCHAETZUNG_SITUATION_OPTIONS} placeholder="Bitte wählen"
+          hint={sdaEinschaetzungFolge(data.einschaetzungSituation) || undefined}
+          error={t("einschaetzungSituation") && !filled(data.einschaetzungSituation) ? "Pflichtfeld" : undefined} />
+      </div>
+      <div style={{ marginTop: "var(--space-4)" }}>
+        <TextareaInput label="Individuelle Präzisierungen" value={data.anmeldungPraezisierungen} onChange={v => onUpdate("anmeldungPraezisierungen", v)} placeholder="Optional" hint="Zusätzliche Informationen zum Bereich Anmeldung, die für Abklärung, Betreuung oder Pflege wesentlich sind." />
+      </div>
+    </div>
+  );
 }
 
 /* ══════════════════════════════════════════

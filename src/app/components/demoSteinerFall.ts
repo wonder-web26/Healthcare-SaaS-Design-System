@@ -70,6 +70,18 @@ export const demoSteinerAngehoeriger: AngehoerigerFormData = {
 /* ── Patient: Hans-Rudolf Steiner ──────────────────────────────────────────── */
 export const demoSteinerPatient: PatientFormData = {
   ...emptyPatientForm,
+  // Reiter Anmeldung: AA1 bleibt auf dem Standardwert (Eintritt). AA2 übernimmt
+  // das bisherige Aufnahmedatum des Mandats unverändert. AA3 ist der Hausarzt,
+  // der den Fall angemeldet hat, und BB16 die somatische Situation — beides passt
+  // zur Anamnese (Gangunsicherheit, Diabetes, Herzinsuffizienz).
+  eroeffnungsgrund: "1",
+  dossierEroeffnetAm: "18.02.2026",
+  anmeldendeInstitution: "1",
+  anmeldendePersonName: "Dr. med. R. Lüthi",
+  anmeldendePersonFunktion: "Hausarzt",
+  anmeldendePersonTelefon: "+41 52 213 44 55",
+  anmeldendePersonEmail: "praxis.luethi@example.ch",
+  einschaetzungSituation: "1",
   // Gemeinsame Schlüssel mit dem Angehörigen; die SDA-Codes hängen an der Liste.
   // Aufenthaltsstatus bleibt leer: er erscheint nur bei ausländischer Staatsangehörigkeit.
   name: "Steiner", vorname: "Hans-Rudolf", geburtsdatum: "14.06.1956", geschlecht: "maennlich",
