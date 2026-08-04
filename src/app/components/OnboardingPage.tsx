@@ -83,7 +83,6 @@ interface WizardStep {
   shortLabel: string;
   icon: React.ElementType;
   description: string;
-  sections: string[];
   blocked?: boolean;
   danger?: boolean;
 }
@@ -96,14 +95,6 @@ const baseSteps: WizardStep[] = [
     shortLabel: "Angehöriger",
     icon: Users,
     description: "Personalangaben und HR-Daten des Angehörigen",
-    sections: [
-      "Personalien",
-      "Steuer & Sozialversicherung",
-      "Partner",
-      "Kinder & Zulagen",
-      "Anstellung & Auszahlung",
-      "Dokumente",
-    ],
   },
   {
     id: 2,
@@ -112,14 +103,6 @@ const baseSteps: WizardStep[] = [
     shortLabel: "Patient",
     icon: HeartPulse,
     description: "Medizinische und pflegerische Angaben zum Patienten",
-    sections: [
-      "Anmeldung",
-      "Personalien",
-      "Steuer & Sozialversicherungen",
-      "Anamnese",
-      "Aktivitäten",
-      "Dokumente",
-    ],
   },
   {
     id: 3,
@@ -128,11 +111,6 @@ const baseSteps: WizardStep[] = [
     shortLabel: "Vertrag",
     icon: FileSignature,
     description: "Arbeitsvertrag auswählen und digital unterzeichnen",
-    sections: [
-      "Vertragstyp",
-      "Dokumentenerstellung",
-      "Digitale Signatur",
-    ],
   },
 ];
 
@@ -148,7 +126,6 @@ function buildSteps(requiresB: boolean, bewilligungEingereicht: boolean): Wizard
       shortLabel: "Bewilligung B",
       icon: eingereicht ? CheckCircle2 : ShieldAlert,
       description: "Erwerbstätigkeitsbewilligung beim Migrationsamt",
-      sections: ["Antragstellung"],
       danger: !eingereicht,
     },
     { ...baseSteps[1], id: 3 },

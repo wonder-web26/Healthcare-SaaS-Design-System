@@ -542,14 +542,6 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
     [data, onChange]
   );
 
-  /* Status logic */
-  const completedTabCount = tabDefs.filter((t) => isTabComplete(t.key, data)).length;
-  const status = allRequiredComplete
-    ? "Aktiv"
-    : completedTabCount > 0
-    ? "In Vorbereitung"
-    : "Nicht abrechenbar";
-
   return (
     <div className="space-y-0">
       {/* Workspace-Kopf entfernt — Tab-Leiste rückt direkt unter den Onboarding-Header.
