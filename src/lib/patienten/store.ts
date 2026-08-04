@@ -246,6 +246,18 @@ export function schliessePatientOnboardingAb(onboardingId: string): Patient | un
   return aktiv;
 }
 
+/**
+ * Einzelne Felder eines Patienten fortschreiben (Inline-Bearbeitung im Dossier).
+ * Kennung, Zustand und Onboarding-Bezug bleiben ausgenommen — die ändert nur
+ * der Vorgang selbst, nie ein Formular.
+ */
+export function aktualisierePatient(
+  patientId: string,
+  patch: Partial<Omit<Patient, "id" | "onboardingId" | "status">>,
+): void {
+  setzeBestand(bestand.map(p => (p.id === patientId ? { ...p, ...patch } : p)));
+}
+
 /** Zuweisung einer Pflegefachkraft (Sidebar der Patientenliste). */
 export function weisePflegefachkraftZu(patientId: string, name: string, initialen: string): void {
   setzeBestand(bestand.map(p => (p.id === patientId ? { ...p, pflegefachkraft: name, pflegefachkraftInitialen: initialen } : p)));

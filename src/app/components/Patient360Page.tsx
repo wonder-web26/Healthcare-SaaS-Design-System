@@ -63,7 +63,7 @@ import {
   abrechnungsStatusConfig,
   type Patient,
 } from "./patientData";
-import { usePatienten, getPatient, tageBisReAssessment } from "../../lib/patienten/store";
+import { usePatienten, getPatient, aktualisierePatient, tageBisReAssessment } from "../../lib/patienten/store";
 import { StatusModal } from "./StatusModal";
 import { TabDokumente } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
@@ -712,8 +712,38 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
     setEditingSection(null);
   };
 
+  /**
+   * Speichern schreibt in den gemeinsamen Bestand — Liste und Dossier zeigen
+   * danach denselben Stand. Der Angehörige wird wieder in die im Bestand
+   * übliche Form "Name (Beziehung)" gebracht; der Notfallkontakt bleibt davon
+   * getrennt und behält seine eigenen drei Felder.
+   */
   const saveEdit = () => {
-    // In a real app, this would persist to the backend
+    if (editingSection === "adresse") {
+      aktualisierePatient(patient.id, {
+        adresse, kanton, sprache, leistungsart,
+        aufnahmeDatum: aufnahme, letzterBesuch,
+      });
+    } else if (editingSection === "kontakt") {
+      const angehoerigerText = angehRelation.trim()
+        ? `${angehName.trim()} (${angehRelation.trim()})`
+        : angehName.trim();
+      aktualisierePatient(patient.id, {
+        angehoeriger: angehoerigerText,
+        angehoerigerTelefon: angehTelefon,
+        notfallkontaktName: notfallName,
+        notfallkontaktBeziehung: notfallRelation,
+        notfallkontaktTelefon: notfallTelefon,
+      });
+    } else if (editingSection === "versicherung") {
+      aktualisierePatient(patient.id, {
+        krankenkasse: kkName,
+        kartennummer: kkNummer,
+        hausarztName: arztName,
+        hausarztFachgebiet: arztFach,
+        hausarztTelefon: arztTel,
+      });
+    }
     setEditingSection(null);
   };
 
