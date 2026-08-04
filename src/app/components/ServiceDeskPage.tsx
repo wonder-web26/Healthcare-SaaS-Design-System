@@ -402,22 +402,29 @@ export function ServiceDeskPage() {
     </div>
   );
 
+  // Bei geöffnetem Detailbereich dient die Karte nur noch dem Wechsel: Betreff +
+  // Fälligkeit im Kopf, Person als zweite Zeile. Art/Beschreibung/Zuständig stehen
+  // dann rechts im Detail und werden aus dem Kartenkörper genommen (siehe Spalten).
+  const detailOffen = !!selected;
   const karteTitel = (e: UnifiedEntry) => (
-    <div className="flex items-center" style={{ gap: 8, width: "100%", minWidth: 0 }}>
-      {kennzeichenIcon(e)}
-      <span className="truncate" style={{ flex: 1, minWidth: 0, fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: e.status === "erledigt" ? "var(--text-tertiary)" : "var(--text-primary)" }}>{e.betreff}</span>
-      {e.faellig && faelligZelle(e)}
+    <div style={{ width: "100%", minWidth: 0 }}>
+      <div className="flex items-center" style={{ gap: 8, minWidth: 0 }}>
+        {kennzeichenIcon(e)}
+        <span className="truncate" style={{ flex: 1, minWidth: 0, fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: e.status === "erledigt" ? "var(--text-tertiary)" : "var(--text-primary)" }}>{e.betreff}</span>
+        {e.faellig && faelligZelle(e)}
+      </div>
+      {detailOffen && <div style={{ marginTop: 4 }}>{personZelle(e)}</div>}
     </div>
   );
 
   const spalten: SpalteDef<UnifiedEntry>[] = [
     { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", ausKarte: true, render: kennzeichenIcon },
-    { id: "art", label: "Art", anteil: 8, minCh: 10, align: "left", render: artZelle },
+    { id: "art", label: "Art", anteil: 8, minCh: 10, align: "left", ausKarte: detailOffen, render: artZelle },
     { id: "betreff", label: "Betreff", anteil: 20, minCh: 16, align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
-    { id: "person", label: "Person", anteil: 16, minCh: 22, align: "left", sortierbar: true, render: personZelle },
-    { id: "beschreibung", label: "Beschreibung", anteil: 22, minCh: 18, align: "left", ausblendenUnter: "eng", render: beschreibungZelle },
+    { id: "person", label: "Person", anteil: 16, minCh: 22, align: "left", sortierbar: true, ausKarte: detailOffen, render: personZelle },
+    { id: "beschreibung", label: "Beschreibung", anteil: 22, minCh: 18, align: "left", ausblendenUnter: "eng", ausKarte: detailOffen, render: beschreibungZelle },
     { id: "faellig", label: "Fällig", anteil: 12, minCh: 15, align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
-    { id: "zustaendig", label: "Zuständig", anteil: 12, minCh: 14, align: "left", sortierbar: true, render: zustaendigZelle },
+    { id: "zustaendig", label: "Zuständig", anteil: 12, minCh: 14, align: "left", sortierbar: true, ausKarte: detailOffen, render: zustaendigZelle },
   ];
 
   // Flächentönung ausschliesslich für Dringlichkeit (rot kräftiger als gelb) bzw.
@@ -695,23 +702,26 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
         <div style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>
           {entry.betreff}
         </div>
-        {/* Zeile 3: Person · Personenart, Fälligkeit, Priorität (nur bei Abweichung) */}
-        <div className="flex items-center flex-wrap" style={{ gap: 12 }}>
-          <button type="button" onClick={onPersonKlick} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, minWidth: 0, background: "transparent", border: "none", padding: 0, fontFamily: "inherit" }}>
+        {/* Zeile 3: Person · Personenart | Fälligkeit · Priorität. Fälligkeit und
+            Priorität bleiben zusammen (Priorität nie auf eigener Zeile); wird es eng,
+            kürzt der Personenname und die Personenart weicht zuerst. */}
+        <div className="flex items-center" style={{ gap: 10, minWidth: 0 }}>
+          <button type="button" onClick={onPersonKlick} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, minWidth: 0, flex: "0 1 auto", overflow: "hidden", background: "transparent", border: "none", padding: 0, fontFamily: "inherit" }}>
             <ExternalLink style={{ width: 11, height: 11, opacity: 0.6, flexShrink: 0 }} />
-            <span style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
-            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>· {personArtLabel(entry.personBezug.art)}</span>
+            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
+            <span style={{ flexShrink: 0, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>· {personArtLabel(entry.personBezug.art)}</span>
           </button>
-          {faellig && (
-            <span className="inline-flex items-baseline" style={{ gap: 5 }}>
-              <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{faellig.datum}</span>
-              {faellig.abw && <span style={{ fontSize: "var(--text-meta)", fontWeight: faellig.ton === "danger" ? "var(--weight-medium)" : "var(--weight-regular)", color: faelligFarbe }}>{faellig.abw}</span>}
-            </span>
-          )}
-          {prio && (
-            <span className="inline-flex items-center" style={{ gap: 5, padding: "1px 8px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)" }}>
-              <span style={{ width: 6, height: 6, borderRadius: "var(--radius-pill)", background: prio.color }} />
-              Priorität {prio.label.toLowerCase()}
+          {(faellig || prio) && (
+            <span className="inline-flex items-baseline shrink-0" style={{ gap: 5, whiteSpace: "nowrap" }}>
+              {faellig && <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{faellig.datum}</span>}
+              {faellig?.abw && <span style={{ fontSize: "var(--text-meta)", fontWeight: faellig.ton === "danger" ? "var(--weight-medium)" : "var(--weight-regular)", color: faelligFarbe }}>{faellig.abw}</span>}
+              {faellig && prio && <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>·</span>}
+              {prio && (
+                <span className="inline-flex items-center" style={{ gap: 5 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "var(--radius-pill)", background: prio.color }} />
+                  <span style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)" }}>Priorität {prio.label.toLowerCase()}</span>
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -763,15 +773,21 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
             ))}
           </div>
 
-          {/* Kommentarfeld am Ende des Verlaufs (nicht im Fuss — keine schwebende Aktion verdeckt es). */}
-          <div className="flex items-start" style={{ gap: "var(--space-2)", marginTop: "var(--space-4)" }}>
+          {/* Kommentarfeld am Ende des Verlaufs. Absende-Schaltfläche liegt im Feld
+              (unten rechts) und erscheint erst bei Eingabe; der rechte Innenabstand
+              reserviert ihren Platz, damit kein Text verdeckt wird. */}
+          <div style={{ position: "relative", marginTop: "var(--space-4)" }}>
             <textarea value={draftComment} onChange={e => onDraftChange(e.target.value)} placeholder="Kommentar schreiben…" rows={2}
-              style={{ flex: 1, resize: "none", padding: "10px 12px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)", fontSize: 16, color: "var(--text-primary)", fontFamily: "inherit" }} />
-            <button onClick={onAddComment} disabled={!draftComment.trim()}
-              className="shrink-0 flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ width: 40, height: 40, borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none" }}>
-              <Send style={{ width: 15, height: 15, color: "var(--text-on-dark)" }} />
-            </button>
+              style={{ display: "block", width: "100%", resize: "none", padding: "10px 44px 10px 12px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)", fontSize: 16, color: "var(--text-primary)", fontFamily: "inherit" }} />
+            {draftComment.trim() && (
+              <button onClick={onAddComment} aria-label="Kommentar senden"
+                className="flex items-center justify-center cursor-pointer transition-colors"
+                style={{ position: "absolute", right: 8, bottom: 8, width: 30, height: 30, borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"}
+                onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
+                <Send style={{ width: 14, height: 14, color: "var(--text-on-dark)" }} />
+              </button>
+            )}
           </div>
         </div>
       </div>
