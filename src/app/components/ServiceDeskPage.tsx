@@ -347,14 +347,17 @@ export function ServiceDeskPage() {
   };
 
   // Person: aufgelöster Name, verlinkt auf die Detailseite; Klick löst NICHT die
-  // Zeilenauswahl aus.
-  const personZelle = (e: UnifiedEntry) => (
-    <button type="button" onClick={ev => { ev.stopPropagation(); navigate(personLink(e.personBezug)); }}
-      className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, minWidth: 0, background: "transparent", border: "none", padding: 0, fontFamily: "inherit", textAlign: "left" }}>
-      <ExternalLink style={{ width: 10, height: 10, opacity: 0.5, flexShrink: 0 }} />
-      <span style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entryPersonName(e)}</span>
-    </button>
-  );
+  // Zeilenauswahl aus. Kürzung mit Auslassungspunkten, voller Wert im title.
+  const personZelle = (e: UnifiedEntry) => {
+    const name = entryPersonName(e);
+    return (
+      <button type="button" title={name} onClick={ev => { ev.stopPropagation(); navigate(personLink(e.personBezug)); }}
+        className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, maxWidth: "100%", minWidth: 0, background: "transparent", border: "none", padding: 0, fontFamily: "inherit", textAlign: "left" }}>
+        <ExternalLink style={{ width: 10, height: 10, opacity: 0.5, flexShrink: 0 }} />
+        <span style={{ minWidth: 0, fontSize: "var(--text-small)", color: "var(--brand-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+      </button>
+    );
+  };
 
   const beschreibungZelle = (e: UnifiedEntry) => <span title={e.kontext} style={{ display: "block", fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.kontext}</span>;
 
@@ -393,21 +396,26 @@ export function ServiceDeskPage() {
     { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", ausKarte: true, render: kennzeichenIcon },
     { id: "art", label: "Art", anteil: 8, minCh: 10, align: "left", render: artZelle },
     { id: "betreff", label: "Betreff", anteil: 20, minCh: 16, align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
-    { id: "person", label: "Person", anteil: 13, minCh: 16, align: "left", sortierbar: true, render: personZelle },
+    { id: "person", label: "Person", anteil: 16, minCh: 22, align: "left", sortierbar: true, render: personZelle },
     { id: "beschreibung", label: "Beschreibung", anteil: 22, minCh: 18, align: "left", ausblendenUnter: "eng", render: beschreibungZelle },
     { id: "faellig", label: "Fällig", anteil: 12, minCh: 15, align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
     { id: "zustaendig", label: "Zuständig", anteil: 12, minCh: 14, align: "left", sortierbar: true, render: zustaendigZelle },
   ];
 
+  // Flächentönung ausschliesslich für Dringlichkeit (rot kräftiger als gelb) bzw.
+  // zurückgenommene erledigte Zeilen. Die Auswahl nutzt einen eigenen Kanal.
   const zeilenHintergrund = (e: UnifiedEntry): string | undefined => {
-    if (e.id === selectedId) return "var(--brand-primary-light)";
-    if (isBulkMode && bulkSelected.has(e.id)) return "var(--brand-primary-light)";
     if (e.status === "erledigt") return "color-mix(in srgb, var(--bg-secondary), transparent 30%)";
     const t = ableitenKennzeichen(e).typ;
     return t === "rot" ? "color-mix(in srgb, var(--status-danger-bg), transparent 40%)"
       : t === "gelb" ? "color-mix(in srgb, var(--status-warning-bg), transparent 68%)"
       : undefined;
   };
+
+  // Auswahl-/Aktivakzent (linker Streifen + kräftigerer Rahmen): offene Detailzeile
+  // und Bulk-Auswahl. Getrennt von der Tönung — überschreibt die Dringlichkeit nie.
+  const zeilenAkzent = (e: UnifiedEntry): string | undefined =>
+    (e.id === selectedId || (isBulkMode && bulkSelected.has(e.id))) ? "var(--brand-primary)" : undefined;
 
   const keineTreffer = sorted.length === 0;
   const suchButton = { background: "transparent", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-pill)", padding: "5px 12px", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", cursor: "pointer" } as const;
@@ -550,6 +558,7 @@ export function ServiceDeskPage() {
               zeilenKey={e => e.id}
               onZeileKlick={e => handleCardClick(e.id)}
               zeilenHintergrund={zeilenHintergrund}
+              zeilenAkzent={zeilenAkzent}
               sort={sort}
               onSort={toggleSort}
               karteTitel={karteTitel}

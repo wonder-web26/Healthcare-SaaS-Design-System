@@ -57,6 +57,10 @@ export interface DataTableProps<T> {
   onZeileKlick?: (row: T) => void;
   /** Zeilentönung (Fachlogik lebt an der Aufrufstelle, die Komponente wendet sie nur an). */
   zeilenHintergrund?: (row: T) => string | undefined;
+  /** Auswahl-/Aktivakzent: linker Farbstreifen plus kräftigerer Rahmen, getrennt
+   *  von der Flächentönung (so teilen sich Auswahl und Dringlichkeit nicht denselben
+   *  Kanal). Gibt die Akzentfarbe zurück oder undefined. */
+  zeilenAkzent?: (row: T) => string | undefined;
   sort?: { key: string; dir: "asc" | "desc" };
   onSort?: (key: string) => void;
   fusszeile?: React.ReactNode;
@@ -134,7 +138,7 @@ function Kontrollkaestchen({ gewaehlt, onToggle, label }: { gewaehlt: boolean; o
 }
 
 export function DataTable<T>({
-  spalten, zeilen, zeilenKey, onZeileKlick, zeilenHintergrund,
+  spalten, zeilen, zeilenKey, onZeileKlick, zeilenHintergrund, zeilenAkzent,
   sort, onSort, fusszeile, karteTitel, leerText = "Keine Ergebnisse.",
   auswahl, containerHaltepunkte = false,
 }: DataTableProps<T>) {
@@ -179,10 +183,12 @@ export function DataTable<T>({
           {zeilen.length === 0 && (
             <div style={{ ...karte, padding: "2rem 1rem", textAlign: "center", color: "var(--text-tertiary)", fontSize: "0.875rem" }}>{leerText}</div>
           )}
-          {zeilen.map(row => (
+          {zeilen.map(row => {
+            const akzent = zeilenAkzent?.(row);
+            return (
             <div key={zeilenKey(row)}
               onClick={onZeileKlick ? () => onZeileKlick(row) : undefined}
-              style={{ ...karte, padding: "0.875rem 1rem", cursor: onZeileKlick ? "pointer" : "default", background: zeilenHintergrund?.(row) || "var(--bg-elevated)" }}>
+              style={{ ...karte, padding: "0.875rem 1rem", cursor: onZeileKlick ? "pointer" : "default", background: zeilenHintergrund?.(row) || "var(--bg-elevated)", ...(akzent ? { border: `var(--border-thin) solid ${akzent}`, boxShadow: `inset 3px 0 0 ${akzent}` } : null) }}>
               <div className="flex items-center justify-between" style={{ gap: "0.5rem", marginBottom: "0.625rem" }}>
                 {auswahl ? (
                   <div className="flex items-center" style={{ gap: "0.5rem", flex: 1, minWidth: 0 }}>
@@ -200,7 +206,8 @@ export function DataTable<T>({
                 ))}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
         {fusszeile && <div style={{ marginTop: "0.5rem", textAlign: "right", fontSize: "0.8125rem", color: "var(--text-secondary)" }}>{fusszeile}</div>}
       </div>
@@ -243,12 +250,14 @@ export function DataTable<T>({
           {/* Datenzeilen */}
           {zeilen.length === 0 ? (
             <div role="row" style={{ padding: "3rem 1rem", textAlign: "center", color: "var(--text-tertiary)", fontSize: "0.875rem", borderTop: "var(--border-thin) solid var(--border-default)" }}>{leerText}</div>
-          ) : zeilen.map(row => (
+          ) : zeilen.map(row => {
+            const akzent = zeilenAkzent?.(row);
+            return (
             <div key={zeilenKey(row)} role="row"
               onClick={onZeileKlick ? () => onZeileKlick(row) : undefined}
               onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
               onMouseLeave={e => (e.currentTarget.style.background = zeilenHintergrund?.(row) || "transparent")}
-              style={{ display: "grid", gridTemplateColumns: gridCols, alignItems: "center", borderTop: "var(--border-thin) solid var(--border-default)", cursor: onZeileKlick ? "pointer" : "default", background: zeilenHintergrund?.(row) || "transparent" }}>
+              style={{ display: "grid", gridTemplateColumns: gridCols, alignItems: "center", borderTop: "var(--border-thin) solid var(--border-default)", cursor: onZeileKlick ? "pointer" : "default", background: zeilenHintergrund?.(row) || "transparent", boxShadow: akzent ? `inset 3px 0 0 ${akzent}, inset 0 0 0 1px ${akzent}` : undefined }}>
               {auswahl && (
                 <div role="cell" style={{ padding: zellPad, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0 }}>
                   <Kontrollkaestchen gewaehlt={auswahl.istGewaehlt(row)} onToggle={() => auswahl.onToggle(row)} label={auswahl.zeilenLabel?.(row)} />
@@ -268,7 +277,8 @@ export function DataTable<T>({
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </div>
         {fusszeile && (
           <div className="flex items-center justify-between" style={{ padding: "0.5rem 1rem", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "0.8125rem", color: "var(--text-secondary)" }}>

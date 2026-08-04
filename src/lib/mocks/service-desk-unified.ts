@@ -87,6 +87,16 @@ const PERSONEN_BEZUG: Record<string, PersonenBezug> = {
   "T-0098": { art: "patient", kennung: "P-2026-0048" }, // Adresse aktualisiert
 };
 
+/**
+ * Einheitliches Kennungs-Präfix für alle Pendenzen. Die Quellen tragen heute
+ * verschiedene Präfixe (Workflow "W-"/"W-BEWB-"/…, Tickets "T-", Rhythmus "rt-");
+ * nach aussen erhält jede Pendenz die Kennung "PD-…". Die Quell-Ids bleiben
+ * intern unverändert (Zuordnungstabelle, Rhythmus-Engine).
+ */
+function vereinheitlicheId(rohId: string): string {
+  return `PD-${rohId.replace(/^(W|T|rt|ri)-/, "")}`;
+}
+
 /** Ersteller der system-generierten Rhythmus-Tickets (Verweis auf Benutzerin). */
 const RHYTHMUS_ERSTELLER: Person = { name: "Maria Keller", initialen: "MK", color: "#4F46E5" };
 const NICHT_ZUGEWIESEN: Person = { name: "Nicht zugewiesen", initialen: "" };
@@ -109,7 +119,7 @@ export const TICKET_TYPES: { id: TicketTyp; label: string }[] = [
 
 function toUnifiedWorkflow(t: WorkflowTask): UnifiedEntry {
   const entry: UnifiedEntry = {
-    id: t.id,
+    id: vereinheitlicheId(t.id),
     quelle: "workflow",
     typ: t.typ,
     typLabel: workflowTypLabel[t.typ],
@@ -131,7 +141,7 @@ function toUnifiedWorkflow(t: WorkflowTask): UnifiedEntry {
 
 function toUnifiedTicket(t: ServiceTicket): UnifiedEntry {
   return {
-    id: t.id,
+    id: vereinheitlicheId(t.id),
     quelle: "ticket",
     typ: t.typ,
     typLabel: ticketTypLabel[t.typ],
@@ -151,7 +161,7 @@ function toUnifiedTicket(t: ServiceTicket): UnifiedEntry {
 
 function toUnifiedRhythmus(t: RhythmusTicket): UnifiedEntry {
   return {
-    id: t.id,
+    id: vereinheitlicheId(t.id),
     quelle: "rhythmus",
     typ: "RE_ASSESSMENT" as WorkflowTyp, // closest existing type for routing
     typLabel: t.label,
