@@ -3,7 +3,7 @@
  * Uses new form components from components/form/.
  */
 import { useState } from "react";
-import { User, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
+import { User, Users, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { FELD_MAX, katalogFeldBreite } from "./feldbreiten";
 import { TextInput } from "./TextInput";
@@ -26,6 +26,8 @@ import { AUFENTHALTSSTATUS_OPTIONS } from "../../../lib/stammdaten/aufenthaltsst
 import { SDA_EROEFFNUNGSGRUND_OPTIONS } from "../../../lib/stammdaten/sda-eroeffnungsgrund";
 import { SDA_ANMELDENDE_INSTITUTION_OPTIONS, INSTITUTION_ANDERE } from "../../../lib/stammdaten/sda-anmeldende-institution";
 import { SDA_EINSCHAETZUNG_SITUATION_OPTIONS, sdaEinschaetzungFolge } from "../../../lib/stammdaten/sda-einschaetzung-situation";
+import { SDA_ZUSAMMENLEBEN_OPTIONS } from "../../../lib/stammdaten/sda-zusammenleben";
+import { SDA_JA_NEIN_OPTIONS } from "../../../lib/stammdaten/sda-ja-nein";
 
 function filled(v: string | undefined | null): boolean {
   return typeof v === "string" && v.trim().length > 0;
@@ -209,6 +211,86 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
 }
 
 /* ══════════════════════════════════════════
+   REITER: WOHNEN & UMFELD (BB9, BB10, BB15)
+   ══════════════════════════════════════════ */
+
+/**
+ * Der Standard trennt Lebenssituation und Gesundheitszustand. BB9, BB10 und
+ * BB15 beschreiben, wo und mit wem die Person lebt — sie gehören deshalb nicht
+ * zwischen Grösse, Gewicht und Diagnosen.
+ *
+ * Organisationseigene Felder (Etage, Lift, Treppen, Personen im Haushalt)
+ * stehen unter eigener Zwischenüberschrift, damit erkennbar bleibt, was aus
+ * dem Katalog stammt und was nicht.
+ */
+export function TabWohnenUmfeldV2({ data, touched, onUpdate, onBlur }: TabProps) {
+  const t = (f: string) => touched.has(f);
+  const bWohnsituation = katalogFeldBreite(SDA_WOHNSITUATION_OPTIONS);
+  const bZusammenleben = katalogFeldBreite(SDA_ZUSAMMENLEBEN_OPTIONS);
+  const bJaNein = katalogFeldBreite(SDA_JA_NEIN_OPTIONS);
+
+  /** BB15a–e: fünf unabhängige Ja/Nein-Angaben auf derselben Werteliste. */
+  const wohnvorgeschichte: { feld: keyof PatientFormData; label: string }[] = [
+    { feld: "wohnvorgeschichtePflegeheim", label: "Alters- und Pflegeheim" },
+    { feld: "wohnvorgeschichteBetreutesWohnen", label: "Begleitetes oder betreutes Wohnen" },
+    { feld: "wohnvorgeschichtePsychischeProbleme", label: "Einrichtung für Personen mit psychischen Problemen" },
+    { feld: "wohnvorgeschichtePsychiatrie", label: "Psychiatrische Klinik oder Psychiatrieabteilung eines Spitals" },
+    { feld: "wohnvorgeschichteGeistigeBehinderung", label: "Einrichtung für Personen mit einer geistigen Behinderung" },
+  ];
+
+  return (
+    <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
+      <SectionHeader icon={Home} label="Wohnsituation" first />
+      <div style={bWohnsituation.zelle}>
+        <FormSelect label="Wohnsituation zur Zeit der Abklärung" required steuerelementMaxBreite={bWohnsituation.steuerelement}
+          value={data.wohnsituation || null} onChange={v => onUpdate("wohnsituation", v || "")} options={SDA_WOHNSITUATION_OPTIONS} placeholder="Bitte wählen"
+          hint="Wohnort für die Zeit, in der Spitex-Leistungen bezogen werden. Weilt die Person aktuell im Spital, wird der Ort erfasst, an dem die Leistung beginnen soll."
+          error={t("wohnsituation") && !filled(data.wohnsituation) ? "Pflichtfeld" : undefined} />
+      </div>
+
+      <SectionHeader icon={Home} label="Ergänzende Angaben zum Zugang" />
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+        <div><TextInput label="Etage" steuerelementMaxBreite={FELD_MAX.schmal} value={data.etage} onChange={v => onUpdate("etage", v)} placeholder="z.B. 2. OG" /></div>
+        <SegmentedControl label="Lift vorhanden" value={data.liftVorhanden} onChange={v => onUpdate("liftVorhanden", v)} options={JA_NEIN} />
+        <SegmentedControl label="Treppen" value={data.treppen} onChange={v => onUpdate("treppen", v)} options={JA_NEIN} />
+      </div>
+
+      <SectionHeader icon={Users} label="Zusammenleben" />
+      <div style={bZusammenleben.zelle}>
+        <FormSelect label="Form des Zusammenlebens" required steuerelementMaxBreite={bZusammenleben.steuerelement}
+          value={data.formZusammenleben || null} onChange={v => onUpdate("formZusammenleben", v || "")} options={SDA_ZUSAMMENLEBEN_OPTIONS} placeholder="Bitte wählen"
+          hint="Massgebend ist die Situation für die Dauer der Abklärung. Vorübergehende Rahmenbedingungen zählen nicht — etwa wenn die Tochter nur bleibt, bis die Spitex-Leistung angelaufen ist."
+          error={t("formZusammenleben") && !filled(data.formZusammenleben) ? "Pflichtfeld" : undefined} />
+      </div>
+      <div style={{ marginTop: "var(--space-4)" }}>
+        <div style={bJaNein.zelle}>
+          <FormSelect label="Lebt die Person neu mit jemand anderem zusammen" required steuerelementMaxBreite={bJaNein.steuerelement}
+            value={data.neuZusammenlebend || null} onChange={v => onUpdate("neuZusammenlebend", v || "")} options={SDA_JA_NEIN_OPTIONS} placeholder="Bitte wählen"
+            hint="Verglichen mit vor 90 Tagen oder seit der letzten Beurteilung. Auch wenn die Partnerin oder der Partner in dieser Zeit verstorben ist."
+            error={t("neuZusammenlebend") && !filled(data.neuZusammenlebend) ? "Pflichtfeld" : undefined} />
+        </div>
+      </div>
+
+      <SectionHeader icon={Users} label="Ergänzende Angaben" />
+      <div style={{ maxWidth: FELD_MAX.schmal }}>
+        <FormSelect label="Personen im Haushalt" value={data.personenImHaushalt || null} onChange={v => onUpdate("personenImHaushalt", v || "")} options={PERSONEN} placeholder="Wählen" hint="Inklusive Patient" />
+      </div>
+
+      <SectionHeader icon={Home} label="Wohn-Vorgeschichte der letzten 5 Jahre" />
+      <div className="flex flex-col" style={{ rowGap: "var(--space-3)" }}>
+        {wohnvorgeschichte.map(({ feld, label }) => (
+          <div key={feld} style={bJaNein.zelle}>
+            <FormSelect label={label} required steuerelementMaxBreite={bJaNein.steuerelement}
+              value={(data[feld] as string) || null} onChange={v => onUpdate(feld, v || "")} options={SDA_JA_NEIN_OPTIONS} placeholder="Bitte wählen"
+              error={t(feld) && !filled(data[feld] as string) ? "Pflichtfeld" : undefined} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
    TAB 3: ANAMNESE (migrated)
    ══════════════════════════════════════════ */
 export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
@@ -241,18 +323,6 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
 
       <div style={{ marginTop: "var(--space-4)" }}>
         <TextareaInput label="Allergien / Unverträglichkeiten" value={data.allergien} onChange={v => onUpdate("allergien", v)} placeholder="z.B. Penicillin, Latex, Nüsse" hint="Medikamente, Nahrungsmittel, Latex etc." />
-      </div>
-
-      {/* Wohnsituation */}
-      <SectionHeader icon={Home} label="Wohnsituation" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Wohnsituation zur Zeit der Abklärung" value={data.wohnsituation || null} onChange={v => onUpdate("wohnsituation", v || "")} options={SDA_WOHNSITUATION_OPTIONS} placeholder="Bitte wählen" /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Etage" value={data.etage} onChange={v => onUpdate("etage", v)} placeholder="z.B. 2. OG" /></div>
-        <SegmentedControl label="Lift vorhanden" value={data.liftVorhanden} onChange={v => onUpdate("liftVorhanden", v)} options={JA_NEIN} />
-        <SegmentedControl label="Treppen" value={data.treppen} onChange={v => onUpdate("treppen", v)} options={JA_NEIN} />
-      </div>
-      <div style={{ marginTop: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Personen im Haushalt" value={data.personenImHaushalt || null} onChange={v => onUpdate("personenImHaushalt", v || "")} options={PERSONEN} placeholder="Wählen" hint="Inklusive Patient" /></div>
       </div>
 
       {/* Erweiterte Anamnese (dauerhaft sichtbar) */}

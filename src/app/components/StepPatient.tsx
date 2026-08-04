@@ -49,7 +49,7 @@ import {
 
 import { useNavigate } from "react-router";
 import { LeerZustand } from "./ui/LeerZustand";
-import { TabAnmeldungV2, TabPersonalienV2, TabSteuerV2, TabAnamneseV2 } from "./form/MigratedPatientForms";
+import { TabAnmeldungV2, TabPersonalienV2, TabSteuerV2, TabWohnenUmfeldV2, TabAnamneseV2 } from "./form/MigratedPatientForms";
 import { FORMULAR_MAX } from "./form/feldbreiten";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
@@ -166,8 +166,19 @@ export interface PatientFormData {
   spitalaufenthalte: string;
   operationen: string;
   allergien: string;
+  /* Reiter Wohnen & Umfeld — BB9, BB10, BB15 */
   /** BB9 — Code aus lib/stammdaten/sda-wohnsituation. */
   wohnsituation: string;
+  /** BB10a — Code aus lib/stammdaten/sda-zusammenleben. */
+  formZusammenleben: string;
+  /** BB10b — Code aus lib/stammdaten/sda-ja-nein. */
+  neuZusammenlebend: string;
+  /* BB15a–e — Wohn-Vorgeschichte der letzten fünf Jahre, je Code aus sda-ja-nein. */
+  wohnvorgeschichtePflegeheim: string;
+  wohnvorgeschichteBetreutesWohnen: string;
+  wohnvorgeschichtePsychischeProbleme: string;
+  wohnvorgeschichtePsychiatrie: string;
+  wohnvorgeschichteGeistigeBehinderung: string;
   etage: string;
   liftVorhanden: string;
   treppen: string;
@@ -274,6 +285,13 @@ export const emptyPatientForm: PatientFormData = {
   operationen: "",
   allergien: "",
   wohnsituation: "",
+  formZusammenleben: "",
+  neuZusammenlebend: "",
+  wohnvorgeschichtePflegeheim: "",
+  wohnvorgeschichteBetreutesWohnen: "",
+  wohnvorgeschichtePsychischeProbleme: "",
+  wohnvorgeschichtePsychiatrie: "",
+  wohnvorgeschichteGeistigeBehinderung: "",
   etage: "",
   liftVorhanden: "nein",
   treppen: "nein",
@@ -378,6 +396,19 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
       if (data.ivBezug === "ja") checks.push(filled(data.ivBezugProzent));
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
+    case "wohnen": {
+      const checks = [
+        filled(data.wohnsituation),
+        filled(data.formZusammenleben),
+        filled(data.neuZusammenlebend),
+        filled(data.wohnvorgeschichtePflegeheim),
+        filled(data.wohnvorgeschichteBetreutesWohnen),
+        filled(data.wohnvorgeschichtePsychischeProbleme),
+        filled(data.wohnvorgeschichtePsychiatrie),
+        filled(data.wohnvorgeschichteGeistigeBehinderung),
+      ];
+      return { done: checks.filter(Boolean).length, total: checks.length };
+    }
     case "anamnese": {
       const checks = [
         filled(data.groesse),
@@ -422,6 +453,7 @@ const tabDefs = [
   { key: "anmeldung", label: "Anmeldung", icon: Inbox },
   { key: "personalien", label: "Personalien", icon: User },
   { key: "steuer", label: "Soziales & Steuer", icon: ShieldCheck },
+  { key: "wohnen", label: "Wohnen & Umfeld", icon: Home },
   { key: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
   { key: "anamnese", label: "Anamnese", icon: Stethoscope },
   { key: "aktivitaeten", label: "Aktivitäten", icon: Activity },
@@ -440,7 +472,7 @@ export const TAB_KEYS: readonly PatientReiter[] = tabDefs.map(t => t.key);
 
 /** Reiter, die reine Formulare sind — ihr Inhalt wird auf FORMULAR_MAX begrenzt. */
 const FORMULARREITER: ReadonlySet<PatientReiter> = new Set<PatientReiter>([
-  "anmeldung", "personalien", "steuer", "anamnese", "aktivitaeten", "dokumente",
+  "anmeldung", "personalien", "steuer", "wohnen", "anamnese", "aktivitaeten", "dokumente",
 ]);
 
 /* ══════════════════════════════════════════
@@ -500,7 +532,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
 
   /* Compute overall validity — Pflichtfelder + Pflichtdokumente.
    * InterRAI, Pflegeplanung, KLV, Workflow: ausgenommen (Zertifizierung ausstehend, siehe MODUL_ZERTIFIZIERUNG). */
-  const requiredTabs = ["anmeldung", "personalien", "steuer", "anamnese", "dokumente"];
+  const requiredTabs = ["anmeldung", "personalien", "steuer", "wohnen", "anamnese", "dokumente"];
   const allRequiredComplete = requiredTabs.every((k) => isTabComplete(k, data));
 
   useEffect(() => {
@@ -627,6 +659,9 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           )}
           {activeTab === "steuer" && (
             <TabSteuerV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
+          )}
+          {activeTab === "wohnen" && (
+            <TabWohnenUmfeldV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
           {activeTab === "vitaldaten" && <VitaldatenTab patientId={onboardingId || "new"} />}
           {activeTab === "anamnese" && (

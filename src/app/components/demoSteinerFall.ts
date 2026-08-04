@@ -103,7 +103,19 @@ export const demoSteinerPatient: PatientFormData = {
   spitalaufenthalte: "0", operationen: "Hüft-Totalprothese rechts (2019), Katarakt beidseits (2022)",
   // BB9: der bisherige Freitext war kein Listenwert. Neu gesetzt auf 1 — eigene
   // Wohnung im 2. Obergeschoss mit Lift, zu zweit bewohnt.
-  allergien: "Penicillin", wohnsituation: "1",
+  allergien: "Penicillin",
+  // Reiter Wohnen & Umfeld. BB9 unverändert aus dem bisherigen Umzug.
+  // BB10a = 2: lebt ausschliesslich mit der Ehefrau Vera zusammen.
+  // BB10b = 0: die Wohnsituation hat sich in den letzten 90 Tagen nicht geändert.
+  // BB15a–e = 0: die Anamnese nennt keinen Heim- oder Klinikaufenthalt in den letzten fünf Jahren.
+  wohnsituation: "1",
+  formZusammenleben: "2",
+  neuZusammenlebend: "0",
+  wohnvorgeschichtePflegeheim: "0",
+  wohnvorgeschichteBetreutesWohnen: "0",
+  wohnvorgeschichtePsychischeProbleme: "0",
+  wohnvorgeschichtePsychiatrie: "0",
+  wohnvorgeschichteGeistigeBehinderung: "0",
   etage: "2", liftVorhanden: "ja", treppen: "ja", personenImHaushalt: "2",
   anamneseText: "Zunehmende Gangunsicherheit, benötigt Unterstützung bei Körperpflege und Medikamentenmanagement. Kognitiv orientiert, Stimmung stabil.",
   stimmungAktuell: "stabil", behandlungszielFokus: "Erhalt der Selbständigkeit, Sturzprävention",
