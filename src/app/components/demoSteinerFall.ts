@@ -104,7 +104,7 @@ export const demoSteinerPatient: PatientFormData = {
   // BB9: der bisherige Freitext war kein Listenwert. Neu gesetzt auf 1 — eigene
   // Wohnung im 2. Obergeschoss mit Lift, zu zweit bewohnt.
   allergien: "Penicillin",
-  // Reiter Wohnen & Umfeld. BB9 unverändert aus dem bisherigen Umzug.
+  // Reiter Wohnen. BB9 unverändert aus dem bisherigen Umzug.
   // BB10a = 2: lebt ausschliesslich mit der Ehefrau Vera zusammen.
   // BB10b = 0: die Wohnsituation hat sich in den letzten 90 Tagen nicht geändert.
   // BB15a–e = 0: die Anamnese nennt keinen Heim- oder Klinikaufenthalt in den letzten fünf Jahren.

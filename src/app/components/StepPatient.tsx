@@ -166,7 +166,7 @@ export interface PatientFormData {
   spitalaufenthalte: string;
   operationen: string;
   allergien: string;
-  /* Reiter Wohnen & Umfeld — BB9, BB10, BB15 */
+  /* Reiter Wohnen — BB9, BB10, BB15 */
   /** BB9 — Code aus lib/stammdaten/sda-wohnsituation. */
   wohnsituation: string;
   /** BB10a — Code aus lib/stammdaten/sda-zusammenleben. */
@@ -452,8 +452,8 @@ function isTabComplete(tabKey: string, data: PatientFormData): boolean {
 const tabDefs = [
   { key: "anmeldung", label: "Anmeldung", icon: Inbox },
   { key: "personalien", label: "Personalien", icon: User },
-  { key: "steuer", label: "Soziales & Steuer", icon: ShieldCheck },
-  { key: "wohnen", label: "Wohnen & Umfeld", icon: Home },
+  { key: "steuer", label: "Soziales", icon: ShieldCheck },
+  { key: "wohnen", label: "Wohnen", icon: Home },
   { key: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
   { key: "anamnese", label: "Anamnese", icon: Stethoscope },
   { key: "aktivitaeten", label: "Aktivitäten", icon: Activity },
@@ -495,30 +495,6 @@ interface StepPatientProps {
    ══════════════════════════════════════════ */
 export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion }: StepPatientProps) {
   const [activeTab, setActiveTab] = useState<PatientReiter>("anmeldung");
-
-  // §D: Verlauf am rechten Rand der Abschnittszeile, solange waagrecht scrollbar (nicht am Ende).
-  const abschnittScrollRef = useRef<HTMLDivElement>(null);
-  const [zeigtVerlauf, setZeigtVerlauf] = useState(false);
-  const pruefeVerlauf = useCallback(() => {
-    const el = abschnittScrollRef.current;
-    if (el) setZeigtVerlauf(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-  }, []);
-  useEffect(() => {
-    pruefeVerlauf();
-    const el = abschnittScrollRef.current;
-    if (!el) return;
-    // §C-Ursache: Der Verlauf wurde nur beim Mount berechnet — vor dem Font-Reflow.
-    // Dann massen die Reiter zu schmal, zeigtVerlauf blieb false, und auf macOS
-    // (Overlay-Scrollbars) fehlte jedes Affordance: der letzte Reiter wirkte hart
-    // abgeschnitten ("Dokument"). Wir messen daher nach Font-Laden erneut und
-    // beobachten zusätzlich die Inhaltsbreite (nicht nur die Containerbreite).
-    document.fonts?.ready.then(pruefeVerlauf).catch(() => {});
-    const ro = new ResizeObserver(pruefeVerlauf);
-    ro.observe(el);
-    if (el.firstElementChild) ro.observe(el.firstElementChild);
-    window.addEventListener("resize", pruefeVerlauf);
-    return () => { ro.disconnect(); window.removeEventListener("resize", pruefeVerlauf); };
-  }, [pruefeVerlauf]);
 
   // External tab-switch request
   useEffect(() => {
@@ -585,10 +561,9 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
       {/* ZWEITE Reiterebene: Abschnitte der aktiven Phase (§B). KEINE Tönung (Containerfläche),
           Höhe 48, Schrift 12, KEIN Zustandssymbol, Abstand 16, aktiver Eintrag 1.5px unterstrichen.
           Die Ebenen-Haarlinie trägt die Phasenzeile; hier nur die untere Haarlinie zum Formular.
-          "Gespräch" rechts fixiert; zehn Abschnitte scrollen waagrecht mit Verlauf-Hinweis (§C/§D). */}
+          "Gespräch" rechts fixiert; die Abschnitte stehen in einer Zeile. */}
       <div className="flex items-center" style={{ background: "transparent", padding: "0 20px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
-        <div className="relative flex-1 min-w-0">
-        <div ref={abschnittScrollRef} onScroll={pruefeVerlauf}>
+        <div className="flex-1 min-w-0">
         <div
           role="tablist"
           aria-label="Abschnitte"
@@ -632,11 +607,6 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
             );
           })}
         </div>
-        </div>
-        {/* §D: Verlauf von Flächenfarbe zu durchsichtig am rechten Rand, nur wenn scrollbar */}
-        {zeigtVerlauf && (
-          <div aria-hidden="true" style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: 28, pointerEvents: "none", background: "linear-gradient(to right, transparent, var(--bg-elevated))" }} />
-        )}
         </div>
         {reiterAktion && (
           <div className="flex items-center shrink-0" style={{ paddingLeft: 12 }}>{reiterAktion}</div>
