@@ -17,7 +17,10 @@ import type { AngehoerigerFormData } from "../StepAngehoeriger";
 import { createEmptyKind } from "../StepAngehoeriger";
 import { pruefeQuellensteuerAutomatik } from "../../../lib/stammdaten/quellensteuer-automatik";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../../lib/stammdaten/dokumenttypen";
-import { SEMMeldeBanner, NATIONALITAETEN } from "./MigratedAngehoerigerForms";
+import { SEMMeldeBanner } from "./MigratedAngehoerigerForms";
+import { GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/geschlecht";
+import { STAATSANGEHOERIGKEIT_OPTIONS } from "../../../lib/stammdaten/staatsangehoerigkeit";
+import { istVerheiratetOderPartnerschaft } from "../../../lib/stammdaten/zivilstand";
 import { toast } from "sonner";
 
 function filled(v: string | undefined | null): boolean {
@@ -25,7 +28,6 @@ function filled(v: string | undefined | null): boolean {
 }
 
 const JA_NEIN = [{ value: "ja", label: "Ja" }, { value: "nein", label: "Nein" }];
-const GESCHLECHT = [{ value: "maennlich", label: "Männlich" }, { value: "weiblich", label: "Weiblich" }, { value: "divers", label: "Divers" }];
 const ZULAGENART = [{ value: "K", label: "K (Kinderzulage)" }, { value: "W", label: "W (Weiterbildung)" }];
 const AUSBILDUNG = [{ value: "gymnasium", label: "Gymnasium" }, { value: "lehre", label: "Lehre" }, { value: "fachhochschule", label: "Fachhochschule" }, { value: "universitaet", label: "Universität" }, { value: "andere", label: "Andere" }];
 /** Aufenthaltsbewilligung des Partners — vollstaendige Liste wie beim Angehoerigen selbst */
@@ -59,7 +61,7 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
   const set = (f: keyof AngehoerigerFormData, v: unknown) => onChange({ ...data, [f]: v });
 
   // SP-06: Pflicht-Bedingung
-  const pflichtBedingung = (data.zivilstand === "verheiratet" || data.zivilstand === "eingetragene_partnerschaft") && data.quellensteuer === "ja";
+  const pflichtBedingung = istVerheiratetOderPartnerschaft(data.zivilstand) && data.quellensteuer === "ja";
   const manuellesToggle = data.partnerManualToggle === true;
   const partnerSichtbar = pflichtBedingung || manuellesToggle;
   const istPflicht = pflichtBedingung;
@@ -117,7 +119,7 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required={istPflicht} value={data.partnerVorname} onChange={v => set("partnerVorname", v)} onBlur={() => touch("partnerVorname")} placeholder="Vorname" error={errIfPflicht("partnerVorname", data.partnerVorname)} /></div>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Nachname" required={istPflicht} value={data.partnerName} onChange={v => set("partnerName", v)} onBlur={() => touch("partnerName")} placeholder="Nachname" error={errIfPflicht("partnerName", data.partnerName)} /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required={istPflicht} wertFormat="display" bereich="past" value={data.partnerGeburtsdatum || null} onChange={v => set("partnerGeburtsdatum", (v as string) ?? "")} onBlur={() => touch("partnerGeburtsdatum")} /></div>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Nationalität" value={data.partnerNationalitaet || null} onChange={v => set("partnerNationalitaet", v || "")} options={NATIONALITAETEN} placeholder="Nationalität wählen" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Nationalität" value={data.partnerNationalitaet || null} onChange={v => set("partnerNationalitaet", v || "")} options={STAATSANGEHOERIGKEIT_OPTIONS} placeholder="Nationalität wählen" /></div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
@@ -246,7 +248,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                       <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required value={kind.vorname} onChange={v => updateKind(kind.id, "vorname", v)} placeholder="Vorname" /></div>
                       <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Nachname" required value={kind.name} onChange={v => updateKind(kind.id, "name", v)} placeholder="Nachname" /></div>
                       <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={kind.geburtsdatum || null} onChange={v => updateKind(kind.id, "geburtsdatum", (v as string) ?? "")} /></div>
-                      <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" value={kind.geschlecht || null} onChange={v => updateKind(kind.id, "geschlecht", v || "")} options={GESCHLECHT} placeholder="Waehlen" /></div>
+                      <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" value={kind.geschlecht || null} onChange={v => updateKind(kind.id, "geschlecht", v || "")} options={GESCHLECHT_OPTIONS} placeholder="Waehlen" /></div>
                     </div>
                     {/* SP-09: Ausbildungslogik >16/25 hier nicht ausimplementiert */}
                     {/* SP-22: Dokumente (Familienbuechlein/IDs) hier nicht enthalten */}
@@ -289,7 +291,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
   // Bedingungen aus LIVE-Formulardaten ableiten (reaktiv bei jeder Änderung)
   const kontext: DokumentKontext = {
     partnerErforderlich:
-      ((data.zivilstand === "verheiratet" || data.zivilstand === "eingetragene_partnerschaft") && data.quellensteuer === "ja")
+      (istVerheiratetOderPartnerschaft(data.zivilstand) && data.quellensteuer === "ja")
       || data.partnerManualToggle === true,
     hatKinder: parseInt(data.anzahlKinder) > 0,
     kinderzulagenUeberSpitex: data.kinderzulagenUeberSpitex === "ja",

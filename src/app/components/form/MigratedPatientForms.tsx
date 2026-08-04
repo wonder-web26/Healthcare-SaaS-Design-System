@@ -17,11 +17,12 @@ import { DateField } from "./DateField";
 import type { PatientFormData } from "../StepPatient";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
-import { SDA_GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/sda-geschlecht";
-import { SDA_ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/sda-zivilstand";
 import { SDA_WOHNSITUATION_OPTIONS } from "../../../lib/stammdaten/sda-wohnsituation";
 import { SDA_SPITALAUFENTHALT_OPTIONS } from "../../../lib/stammdaten/sda-spitalaufenthalt";
-import { SDA_STAATSANGEHOERIGKEIT_OPTIONS, SDA_STAAT_ANDERE } from "../../../lib/stammdaten/sda-staatsangehoerigkeit";
+import { GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/geschlecht";
+import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
+import { STAATSANGEHOERIGKEIT_OPTIONS, istSchweiz } from "../../../lib/stammdaten/staatsangehoerigkeit";
+import { AUFENTHALTSSTATUS_OPTIONS } from "../../../lib/stammdaten/aufenthaltsstatus";
 
 function filled(v: string | undefined | null): boolean {
   return typeof v === "string" && v.trim().length > 0;
@@ -45,8 +46,8 @@ interface TabProps {
    ══════════════════════════════════════════ */
 export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onBlur }: TabProps) {
   const t = (f: string) => touched.has(f);
-  const istSchweizerin = data.staatsangehoerigkeit === "1";
-  const istAndererStaat = data.staatsangehoerigkeit === SDA_STAAT_ANDERE;
+  const istSchweizerin = istSchweiz(data.staatsangehoerigkeit);
+  const istAusland = filled(data.staatsangehoerigkeit) && !istSchweizerin;
 
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
@@ -55,21 +56,19 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Name" required value={data.name} onChange={v => onUpdate("name", v)} onBlur={() => onBlur("name")} placeholder="Nachname" error={t("name") && !filled(data.name) ? "Pflichtfeld" : undefined} /></div>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required value={data.vorname} onChange={v => onUpdate("vorname", v)} onBlur={() => onBlur("vorname")} placeholder="Vorname" error={t("vorname") && !filled(data.vorname) ? "Pflichtfeld" : undefined} /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => onUpdate("geburtsdatum", (v as string) ?? "")} onBlur={() => onBlur("geburtsdatum")} /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => onUpdate("geschlecht", v || "")} options={SDA_GESCHLECHT_OPTIONS} placeholder="Geschlecht wählen" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => onUpdate("geschlecht", v || "")} options={GESCHLECHT_OPTIONS} placeholder="Geschlecht wählen" /></div>
       </div>
       <div style={{ marginTop: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => onUpdate("ahvNummer", v)} /></div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Staatsangehörigkeit" value={data.staatsangehoerigkeit || null} onChange={v => onUpdate("staatsangehoerigkeit", v || "")} options={SDA_STAATSANGEHOERIGKEIT_OPTIONS} placeholder="Staatsangehörigkeit wählen" /></div>
-        {/* Bei Code 2 ist der Staat als Freitext zu erfassen. */}
-        {istAndererStaat && <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Welcher Staat" required value={data.andererStaat} onChange={v => onUpdate("andererStaat", v)} onBlur={() => onBlur("andererStaat")} placeholder="z.B. Portugal" error={t("andererStaat") && !filled(data.andererStaat) ? "Pflichtfeld" : undefined} /></div>}
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Staatsangehörigkeit" value={data.staatsangehoerigkeit || null} onChange={v => onUpdate("staatsangehoerigkeit", v || "")} options={STAATSANGEHOERIGKEIT_OPTIONS} placeholder="Staatsangehörigkeit wählen" /></div>
         {istSchweizerin && <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Heimatort" value={data.heimatort} onChange={v => onUpdate("heimatort", v)} placeholder="z.B. Bern" /></div>}
-        {istAndererStaat && (
+        {istAusland && (
           <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Aufenthaltsstatus" value={data.aufenthaltsstatus || null} onChange={v => onUpdate("aufenthaltsstatus", v || "")}
-            options={[{ value: "B", label: "B" }, { value: "C", label: "C" }, { value: "L", label: "L" }, { value: "G", label: "G" }, { value: "F", label: "F" }, { value: "N", label: "N" }]} placeholder="Status wählen" /></div>
+            options={AUFENTHALTSSTATUS_OPTIONS} placeholder="Status wählen" /></div>
         )}
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={SDA_ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" /></div>
       </div>
 
       <SectionHeader icon={MapPin} label="Adresse" />

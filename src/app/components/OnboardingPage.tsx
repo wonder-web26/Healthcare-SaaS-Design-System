@@ -51,6 +51,7 @@ import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient, seedDemoRhyt
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { naechsteFallKennung } from "../../lib/onboarding/faelle";
+import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
 import { erfassePatientImOnboarding } from "../../lib/patienten/store";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
@@ -440,7 +441,7 @@ export function OnboardingPage() {
 
     // Angehörigen-Dokumente (gleiche Engine wie DokumenteFormV2 und getSubStepStatus)
     const angKontext: DokumentKontext = {
-      partnerErforderlich: ((angehoerigerData.zivilstand === "verheiratet" || angehoerigerData.zivilstand === "eingetragene_partnerschaft") && angehoerigerData.quellensteuer === "ja") || angehoerigerData.partnerManualToggle === true,
+      partnerErforderlich: (istVerheiratetOderPartnerschaft(angehoerigerData.zivilstand) && angehoerigerData.quellensteuer === "ja") || angehoerigerData.partnerManualToggle === true,
       hatKinder: parseInt(angehoerigerData.anzahlKinder) > 0,
       kinderzulagenUeberSpitex: angehoerigerData.kinderzulagenUeberSpitex === "ja",
       unterhaltspflicht: angehoerigerData.hatUnterhaltspflichtigeKinder === "ja",

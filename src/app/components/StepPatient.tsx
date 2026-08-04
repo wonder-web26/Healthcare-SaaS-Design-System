@@ -75,7 +75,6 @@ import { useEinwilligung } from "./EinwilligungContext";
 import { useArztAnfrage, ArztAnfrageFlowInline } from "./ArztAnfrageContext";
 import { SectionAction } from "./ui/SectionAction";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
-import { NATIONALITAETEN } from "./form/MigratedAngehoerigerForms";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/krankenkassen";
 import { Combobox } from "./form/Combobox";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
@@ -98,14 +97,12 @@ export interface PatientFormData {
   name: string;
   vorname: string;
   geburtsdatum: string;
-  /** BB2 — Code aus lib/stammdaten/sda-geschlecht. */
+  /** BB2 — Schlüssel aus lib/stammdaten/geschlecht. */
   geschlecht: string;
-  /** BB12 — Code aus lib/stammdaten/sda-staatsangehoerigkeit ("1" oder "2"). */
+  /** BB12 — Schlüssel aus lib/stammdaten/staatsangehoerigkeit (volle Länderliste). */
   staatsangehoerigkeit: string;
-  /** BB12 Code 2 — Staat als Freitext. */
-  andererStaat: string;
   heimatort: string;
-  /** BB4 — Code aus lib/stammdaten/sda-zivilstand. */
+  /** BB4 — Schlüssel aus lib/stammdaten/zivilstand. */
   zivilstand: string;
   aufenthaltsstatus: string;
   /** SP-02: Krankenkasse als Code (Picklist-Wert) */
@@ -207,7 +204,6 @@ export const emptyPatientForm: PatientFormData = {
   geburtsdatum: "",
   geschlecht: "",
   staatsangehoerigkeit: "",
-  andererStaat: "",
   heimatort: "",
   zivilstand: "",
   aufenthaltsstatus: "",
@@ -329,8 +325,6 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
         filled(data.notfallkontaktName),
         isValidPhone(data.notfallkontaktTelefon),
       ];
-      // BB12: bei Code 2 ist der Staat als Freitext zu erfassen.
-      if (data.staatsangehoerigkeit === "2") checks.push(filled(data.andererStaat));
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
     case "steuer": {

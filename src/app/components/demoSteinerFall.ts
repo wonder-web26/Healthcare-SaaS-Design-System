@@ -27,7 +27,9 @@ export const demoSteinerAngehoeriger: AngehoerigerFormData = {
   ...emptyAngehoerigerForm,
   name: "Steiner", vorname: "Vera", geschlecht: "weiblich", geburtsdatum: "22.09.1961",
   ahvNummer: "756.1234.5678.97", nationalitaet: "schweiz", heimatort: "Winterthur ZH",
-  aufenthaltsstatus: "CH",
+  // Schweizer Bürgerrecht — der Aufenthaltsstatus erscheint nur bei ausländischer
+  // Staatsangehörigkeit und bleibt daher leer.
+  aufenthaltsstatus: "",
   zivilstand: "verheiratet", zivilstandSeit: "12.05.1984",
   strasse: "Rosenweg 14", plz: "8400", ort: "Winterthur",
   email: "vera.steiner@example.ch", telefon: "+41 79 412 55 08",
@@ -68,9 +70,10 @@ export const demoSteinerAngehoeriger: AngehoerigerFormData = {
 /* ── Patient: Hans-Rudolf Steiner ──────────────────────────────────────────── */
 export const demoSteinerPatient: PatientFormData = {
   ...emptyPatientForm,
-  // SDA-Kodierung: BB2 maennlich -> 1, BB12 schweiz -> 1, BB4 verheiratet -> 2
-  name: "Steiner", vorname: "Hans-Rudolf", geburtsdatum: "14.06.1956", geschlecht: "1",
-  staatsangehoerigkeit: "1", andererStaat: "", heimatort: "Winterthur ZH", zivilstand: "2", aufenthaltsstatus: "CH",
+  // Gemeinsame Schlüssel mit dem Angehörigen; die SDA-Codes hängen an der Liste.
+  // Aufenthaltsstatus bleibt leer: er erscheint nur bei ausländischer Staatsangehörigkeit.
+  name: "Steiner", vorname: "Hans-Rudolf", geburtsdatum: "14.06.1956", geschlecht: "maennlich",
+  staatsangehoerigkeit: "schweiz", heimatort: "Winterthur ZH", zivilstand: "verheiratet", aufenthaltsstatus: "",
   krankenkasse: "helsana", ahvNummer: "756.9876.5432.10",
   hausarztName: "Dr. med. R. Lüthi", hausarztTelefon: "+41 52 213 44 55", hausarztEmail: "praxis.luethi@example.ch",
   email: "hr.steiner@example.ch", telefon: "+41 79 330 22 11",

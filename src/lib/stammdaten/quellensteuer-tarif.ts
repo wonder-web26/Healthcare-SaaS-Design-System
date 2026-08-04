@@ -20,6 +20,7 @@
  */
 
 import { istKirchensteuerRelevant } from "./konfession";
+import { istVerheiratetOderPartnerschaft } from "./zivilstand";
 
 export interface TarifcodeErgebnis {
   code: string;
@@ -41,7 +42,7 @@ export function leiteTarifcodeAb(params: {
 }): TarifcodeErgebnis {
   const { zivilstand, hatKinder, anzahlKinder, partnerErwerbstaetig, konfession } = params;
 
-  const istVerheiratet = zivilstand === "verheiratet" || zivilstand === "eingetragene_partnerschaft";
+  const istVerheiratet = istVerheiratetOderPartnerschaft(zivilstand);
   const kirchensteuer = istKirchensteuerRelevant(konfession);
   const suffix = kirchensteuer ? "Y" : "N";
   const kinderZiffer = Math.max(0, Math.min(9, anzahlKinder));

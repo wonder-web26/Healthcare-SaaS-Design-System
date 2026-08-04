@@ -18,6 +18,9 @@ import type { AngehoerigerFormData } from "../StepAngehoeriger";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
 import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
+import { GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/geschlecht";
+import { STAATSANGEHOERIGKEIT_OPTIONS, istSchweiz } from "../../../lib/stammdaten/staatsangehoerigkeit";
+import { AUFENTHALTSSTATUS_OPTIONS, STATUS_B } from "../../../lib/stammdaten/aufenthaltsstatus";
 import { FELD_MAX } from "./feldbreiten";
 import { leiteTarifcodeAb } from "../../../lib/stammdaten/quellensteuer-tarif";
 import { formDataToSEM, erstelleSEMFormular, ermittleFehlendeFelderSEM, downloadBlob } from "../../../lib/sem/meldeformular";
@@ -39,24 +42,8 @@ const QUALIFIKATION_OPTIONS = [
   { value: "fage_dipl", label: "FaGe / Dipl" },
 ];
 
-export const NATIONALITAETEN = [
-  { value: "schweiz", label: "Schweiz" }, { value: "deutschland", label: "Deutschland" },
-  { value: "frankreich", label: "Frankreich" }, { value: "italien", label: "Italien" },
-  { value: "oesterreich", label: "Österreich" }, { value: "portugal", label: "Portugal" },
-  { value: "spanien", label: "Spanien" }, { value: "tuerkei", label: "Türkei" }, { value: "andere", label: "Andere" },
-];
-
-const AUFENTHALTSSTATUS = [
-  { value: "B", label: "B – Aufenthaltsbewilligung" }, { value: "C", label: "C – Niederlassungsbewilligung" },
-  { value: "L", label: "L – Kurzaufenthaltsbewilligung" }, { value: "G", label: "G – Grenzgängerbewilligung" },
-  { value: "F", label: "F – Vorläufige Aufnahme" }, { value: "N", label: "N – Asylsuchende" },
-  { value: "S", label: "S – Schutzbedürftige" },
-];
-
-const GESCHLECHT = [{ value: "maennlich", label: "Männlich" }, { value: "weiblich", label: "Weiblich" }, { value: "divers", label: "Divers" }];
 
 // Zivilstand aus shared stammdaten
-const ZIVILSTAND = ZIVILSTAND_OPTIONS;
 
 // SP-01: Konfession aus shared stammdaten (ersetzt die alte lokale Liste)
 
@@ -83,7 +70,7 @@ export function PersonalienFormV2({
   const touch = (f: string) => setTouched(p => ({ ...p, [f]: true }));
   const set = (f: keyof AngehoerigerFormData, v: string) => onChange({ ...data, [f]: v });
 
-  const isSwiss = data.nationalitaet === "schweiz";
+  const isSwiss = istSchweiz(data.nationalitaet);
   const isNatSelected = filled(data.nationalitaet);
   const showAufenthalt = isNatSelected && !isSwiss;
 
@@ -94,27 +81,28 @@ export function PersonalienFormV2({
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Name" required value={data.name} onChange={v => set("name", v)} onBlur={() => touch("name")} placeholder="Nachname" error={touched.name && !filled(data.name) ? "Pflichtfeld" : undefined} /></div>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required value={data.vorname} onChange={v => set("vorname", v)} onBlur={() => touch("vorname")} placeholder="Vorname" error={touched.vorname && !filled(data.vorname) ? "Pflichtfeld" : undefined} /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => { set("geschlecht", v || ""); touch("geschlecht"); }} options={GESCHLECHT} placeholder="Geschlecht wählen" error={touched.geschlecht && !filled(data.geschlecht) ? "Pflichtfeld" : undefined} /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => { set("geschlecht", v || ""); touch("geschlecht"); }} options={GESCHLECHT_OPTIONS} placeholder="Geschlecht wählen" error={touched.geschlecht && !filled(data.geschlecht) ? "Pflichtfeld" : undefined} /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => set("geburtsdatum", (v as string) ?? "")} onBlur={() => touch("geburtsdatum")} /></div>
       </div>
       <div style={{ marginTop: "var(--space-4)", maxWidth: FELD_MAX.mittel }}>
         <AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => set("ahvNummer", v)} />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><Combobox label="Nationalität" required value={data.nationalitaet || null} onChange={v => {
+        <div style={{ maxWidth: FELD_MAX.mittel }}><Combobox label="Staatsangehörigkeit" required value={data.nationalitaet || null} onChange={v => {
           touch("nationalitaet");
-          if (v === "schweiz") onChange({ ...data, nationalitaet: v || "", aufenthaltsstatus: "CH" });
+          // Schweizer Bürgerrecht: Heimatort statt Aufenthaltsstatus — und umgekehrt.
+          if (istSchweiz(v || "")) onChange({ ...data, nationalitaet: v || "", aufenthaltsstatus: "" });
           else onChange({ ...data, nationalitaet: v || "", heimatort: "", aufenthaltsstatus: "" });
-        }} options={NATIONALITAETEN} placeholder="Nationalität wählen" error={touched.nationalitaet && !filled(data.nationalitaet) ? "Pflichtfeld" : undefined} /></div>
+        }} options={STAATSANGEHOERIGKEIT_OPTIONS} placeholder="Staatsangehörigkeit wählen" error={touched.nationalitaet && !filled(data.nationalitaet) ? "Pflichtfeld" : undefined} /></div>
 
         {isSwiss && (
           <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Heimatort" required value={data.heimatort} onChange={v => set("heimatort", v)} onBlur={() => touch("heimatort")} placeholder="z.B. Zürich" error={touched.heimatort && !filled(data.heimatort) ? "Pflichtfeld" : undefined} /></div>
         )}
         {showAufenthalt && (
           <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Aufenthaltsstatus" required value={data.aufenthaltsstatus || null} onChange={v => {
-            onChange({ ...data, aufenthaltsstatus: v || "", spezialbewilligungStatus: v === "B" ? "ausstehend" : "nicht_erforderlich", spezialbewilligungDokument: v === "B" ? data.spezialbewilligungDokument : null, spezialbewilligungEinreichungsDatum: v === "B" ? data.spezialbewilligungEinreichungsDatum : "" });
+            onChange({ ...data, aufenthaltsstatus: v || "", spezialbewilligungStatus: v === STATUS_B ? "ausstehend" : "nicht_erforderlich", spezialbewilligungDokument: v === STATUS_B ? data.spezialbewilligungDokument : null, spezialbewilligungEinreichungsDatum: v === STATUS_B ? data.spezialbewilligungEinreichungsDatum : "" });
             touch("aufenthaltsstatus");
-          }} options={isSwiss ? [{ value: "CH", label: "Schweizer Bürger/in" }, ...AUFENTHALTSSTATUS] : AUFENTHALTSSTATUS} placeholder="Status wählen" error={touched.aufenthaltsstatus && !filled(data.aufenthaltsstatus) ? "Pflichtfeld" : undefined} /></div>
+          }} options={AUFENTHALTSSTATUS_OPTIONS} placeholder="Status wählen" error={touched.aufenthaltsstatus && !filled(data.aufenthaltsstatus) ? "Pflichtfeld" : undefined} /></div>
         )}
       </div>
 
@@ -141,7 +129,7 @@ export function PersonalienFormV2({
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND} placeholder="Zivilstand wählen" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Zivilstand seit" required wertFormat="display" bereich="past" value={data.zivilstandSeit || null} onChange={v => set("zivilstandSeit", (v as string) ?? "")} onBlur={() => touch("zivilstandSeit")} /></div>
       </div>
 

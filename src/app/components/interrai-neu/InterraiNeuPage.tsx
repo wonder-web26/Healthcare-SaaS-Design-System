@@ -51,7 +51,7 @@ import {
 
 import { DateField } from "../form/DateField";
 import { ComboboxPopover } from "../form/ComboboxPopover";
-import { NATIONALITAETEN } from "../form/MigratedAngehoerigerForms";
+import { STAATSANGEHOERIGKEIT_OPTIONS } from "../../../lib/stammdaten/staatsangehoerigkeit";
 import { validiereFeld, maskiereAHV, maskiereZiffern, ICD_HINWEIS, type ValidierungTyp } from "../../../lib/validierung";
 import { MODUL_ZERTIFIZIERUNG } from "../../../lib/stammdaten/modul-zertifizierung";
 import {
@@ -2134,7 +2134,7 @@ function validierungFuer(code: string): ValidierungTyp | null {
 const MEHRZEILIGE_CODES = new Set(["A10"]);
 
 /** Country options for a "land" follow-up — the product's existing list, minus "Andere". */
-const LAENDER_OPTIONEN = NATIONALITAETEN.filter((n) => n.value !== "andere");
+const LAENDER_OPTIONEN = STAATSANGEHOERIGKEIT_OPTIONS.filter((n) => n.value !== "andere");
 
 /**
  * Text field with central validation. Masks input where the type requires it

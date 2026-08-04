@@ -59,6 +59,10 @@ import {
   type Angehoeriger,
 } from "./angehoerigeData";
 import { TabDokumenteGeneric, type DocFolder } from "./TabDokumente";
+import { geschlechtLabel } from "../../lib/stammdaten/geschlecht";
+import { zivilstandLabel } from "../../lib/stammdaten/zivilstand";
+import { staatsangehoerigkeitLabel } from "../../lib/stammdaten/staatsangehoerigkeit";
+import { aufenthaltsstatusLabel } from "../../lib/stammdaten/aufenthaltsstatus";
 import { DetailNavigation } from "./DetailNavigation";
 import { AnnaAngehoerigeSummary } from "../anna/AnnaAngehoerigeSummary";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
@@ -131,9 +135,9 @@ interface AngehoerigerDetail {
 
 const detailLookup: Record<string, AngehoerigerDetail> = {
   "A-2026-0101": {
-    geschlecht: "Männlich", geburtsdatum: "14.03.1978", ahvNummer: "756.1234.5678.97",
-    nationalitaet: "Schweiz", heimatort: "Luzern", aufenthaltsstatus: "—",
-    zivilstand: "Verheiratet", zivilstandSeit: "12.06.2005",
+    geschlecht: "maennlich", geburtsdatum: "14.03.1978", ahvNummer: "756.1234.5678.97",
+    nationalitaet: "schweiz", heimatort: "Luzern", aufenthaltsstatus: "",
+    zivilstand: "verheiratet", zivilstandSeit: "12.06.2005",
     strasse: "Bahnhofstrasse 42", plz: "8001", ort: "Zürich",
     email: "peter.mueller@bluewin.ch", telefon: "+41 44 321 65 87",
     krankenkasseName: "CSS", versicherungsnummer: "KK-834291",
@@ -143,8 +147,8 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
     partnerName: "Anna Müller", partnerGeburtsdatum: "22.08.1980",
     partnerAhvNummer: "756.9876.5432.10", partnerZemisNummer: "—", partnerAufenthaltsstatus: "Schweizer/in",
     kinder: [
-      { nachname: "Müller", vorname: "Luca", geburtsdatum: "15.04.2010", ahvNummer: "756.1111.2222.33", geschlecht: "Männlich", zulagenart: "K", ausbildungsbeginn: "—" },
-      { nachname: "Müller", vorname: "Sophie", geburtsdatum: "03.09.2012", ahvNummer: "756.4444.5555.66", geschlecht: "Weiblich", zulagenart: "K", ausbildungsbeginn: "—" },
+      { nachname: "Müller", vorname: "Luca", geburtsdatum: "15.04.2010", ahvNummer: "756.1111.2222.33", geschlecht: "maennlich", zulagenart: "K", ausbildungsbeginn: "—" },
+      { nachname: "Müller", vorname: "Sophie", geburtsdatum: "03.09.2012", ahvNummer: "756.4444.5555.66", geschlecht: "weiblich", zulagenart: "K", ausbildungsbeginn: "—" },
     ],
     kinderzulagenAktiv: "Ja", kinderzulagenUeberSpitex: "Ja", familienausgleichskasse: "SVA Zürich",
     lohnsumme: "3'540.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
@@ -160,9 +164,9 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
     ],
   },
   "A-2026-0102": {
-    geschlecht: "Weiblich", geburtsdatum: "28.11.1985", ahvNummer: "756.2345.6789.08",
-    nationalitaet: "Deutschland", heimatort: "—", aufenthaltsstatus: "Bewilligung B",
-    zivilstand: "Ledig", zivilstandSeit: "—",
+    geschlecht: "weiblich", geburtsdatum: "28.11.1985", ahvNummer: "756.2345.6789.08",
+    nationalitaet: "deutschland", heimatort: "—", aufenthaltsstatus: "B",
+    zivilstand: "ledig", zivilstandSeit: "—",
     strasse: "Seestrasse 15", plz: "8002", ort: "Zürich",
     email: "lisa.schmid@gmail.com", telefon: "+41 76 555 12 34",
     krankenkasseName: "Helsana", versicherungsnummer: "—",
@@ -186,9 +190,9 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
     ],
   },
   "A-2026-0103": {
-    geschlecht: "Männlich", geburtsdatum: "05.07.1972", ahvNummer: "756.3456.7890.19",
-    nationalitaet: "Schweiz", heimatort: "Bern", aufenthaltsstatus: "—",
-    zivilstand: "Geschieden", zivilstandSeit: "01.03.2018",
+    geschlecht: "maennlich", geburtsdatum: "05.07.1972", ahvNummer: "756.3456.7890.19",
+    nationalitaet: "schweiz", heimatort: "Bern", aufenthaltsstatus: "",
+    zivilstand: "geschieden", zivilstandSeit: "01.03.2018",
     strasse: "Musterweg 7", plz: "3012", ort: "Bern",
     email: "j.weber@gmx.ch", telefon: "+41 31 777 88 99",
     krankenkasseName: "Swica", versicherungsnummer: "KK-556783",
@@ -198,7 +202,7 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
     partnerName: "—", partnerGeburtsdatum: "—",
     partnerAhvNummer: "—", partnerZemisNummer: "—", partnerAufenthaltsstatus: "—",
     kinder: [
-      { nachname: "Weber", vorname: "Tim", geburtsdatum: "20.01.2008", ahvNummer: "756.7777.8888.99", geschlecht: "Männlich", zulagenart: "W", ausbildungsbeginn: "01.08.2024" },
+      { nachname: "Weber", vorname: "Tim", geburtsdatum: "20.01.2008", ahvNummer: "756.7777.8888.99", geschlecht: "maennlich", zulagenart: "W", ausbildungsbeginn: "01.08.2024" },
     ],
     kinderzulagenAktiv: "Ja", kinderzulagenUeberSpitex: "Ja", familienausgleichskasse: "SVA Bern",
     lohnsumme: "4'160.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
@@ -219,9 +223,9 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
 function getDetail(id: string): AngehoerigerDetail {
   if (detailLookup[id]) return detailLookup[id];
   return {
-    geschlecht: "Weiblich", geburtsdatum: "10.05.1975", ahvNummer: "756.5555.6666.77",
-    nationalitaet: "Schweiz", heimatort: "Basel", aufenthaltsstatus: "—",
-    zivilstand: "Verheiratet", zivilstandSeit: "20.09.2002",
+    geschlecht: "weiblich", geburtsdatum: "10.05.1975", ahvNummer: "756.5555.6666.77",
+    nationalitaet: "schweiz", heimatort: "Basel", aufenthaltsstatus: "",
+    zivilstand: "verheiratet", zivilstandSeit: "20.09.2002",
     strasse: "Hauptstrasse 10", plz: "4051", ort: "Basel",
     email: "kontakt@example.ch", telefon: "+41 61 222 33 44",
     krankenkasseName: "Concordia", versicherungsnummer: "KK-112233",
@@ -863,7 +867,7 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <EditableField label="Vorname" value={vorname} editing={isEd("personalien")} onChange={setVorname} />
             <EditableField label="Nachname" value={nachname} editing={isEd("personalien")} onChange={setNachname} />
-            <EditableField label="Geschlecht" value={geschlecht} editing={isEd("personalien")} onChange={setGeschlecht} />
+            <EditableField label="Geschlecht" value={isEd("personalien") ? geschlecht : geschlechtLabel(geschlecht)} editing={isEd("personalien")} onChange={setGeschlecht} />
             <EditableField label="Geburtsdatum" value={geburtsdatum} editing={isEd("personalien")} onChange={setGeburtsdatum} />
             {isEd("personalien") ? (
               <EditableField label="AHV-Nummer" value={ahvNummer} editing mono onChange={setAhvNummer} />
@@ -880,10 +884,10 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
                 </div>
               </div>
             )}
-            <EditableField label="Nationalität" value={nationalitaet} editing={isEd("personalien")} onChange={setNationalitaet} />
+            <EditableField label="Staatsangehörigkeit" value={isEd("personalien") ? nationalitaet : staatsangehoerigkeitLabel(nationalitaet)} editing={isEd("personalien")} onChange={setNationalitaet} />
             <EditableField label="Heimatort" value={heimatort} editing={isEd("personalien")} onChange={setHeimatort} />
-            <EditableField label="Aufenthaltsstatus" value={aufenthaltsstatus} editing={isEd("personalien")} onChange={setAufenthaltsstatus} />
-            <EditableField label="Zivilstand" value={zivilstand} editing={isEd("personalien")} onChange={setZivilstand} />
+            <EditableField label="Aufenthaltsstatus" value={isEd("personalien") ? aufenthaltsstatus : aufenthaltsstatusLabel(aufenthaltsstatus)} editing={isEd("personalien")} onChange={setAufenthaltsstatus} />
+            <EditableField label="Zivilstand" value={isEd("personalien") ? zivilstand : zivilstandLabel(zivilstand)} editing={isEd("personalien")} onChange={setZivilstand} />
             <EditableField label="Zivilstand seit" value={zivilstandSeit} editing={isEd("personalien")} onChange={setZivilstandSeit} />
           </div>
           <div className="mt-5 pt-4 border-t border-border-light">
@@ -949,7 +953,7 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
         </SectionCard>
 
         {/* 3. Partner */}
-        {zivilstand === "Verheiratet" && (
+        {zivilstand === "verheiratet" && (
           <SectionCard title="Partner" icon={Heart} editable editing={isEd("partner")} onEdit={() => startEdit("partner")} onSave={saveEdit} onCancel={() => cancelEdit("partner")}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <EditableField label="Name" value={partnerName} editing={isEd("partner")} onChange={setPartnerName} />
@@ -2064,7 +2068,7 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
   };
 
   const handleAddKind = () => {
-    setKinder((prev) => [...prev, { id: kinderNextId, nachname: "", vorname: "", geburtsdatum: "", ahvNummer: "", geschlecht: "Männlich", zulagenart: "K", ausbildungsbeginn: "—" }]);
+    setKinder((prev) => [...prev, { id: kinderNextId, nachname: "", vorname: "", geburtsdatum: "", ahvNummer: "", geschlecht: "maennlich", zulagenart: "K", ausbildungsbeginn: "—" }]);
     setKinderNextId((n) => n + 1);
   };
 
