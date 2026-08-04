@@ -284,7 +284,18 @@ function MaskedAhv({ ahv }: { ahv: string }) {
 /* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
+/**
+ * Beim Wechsel von einem Patienten zum nächsten trifft React dieselbe Route und
+ * montiert nicht neu — die Bearbeitungsfelder unten werden aber einmalig aus dem
+ * Datensatz vorbelegt. Ohne eigene Kennung behielte das Dossier des zweiten
+ * Patienten die Werte des ersten. Der Schlüssel erzwingt den Neuaufbau.
+ */
 export function Patient360Page() {
+  const { patientId } = useParams();
+  return <Patient360Inhalt key={patientId ?? "keiner"} />;
+}
+
+function Patient360Inhalt() {
   const { patientId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
