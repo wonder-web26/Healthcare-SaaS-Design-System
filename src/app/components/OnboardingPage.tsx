@@ -1,8 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import {
-  Users,
-  HeartPulse,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
@@ -12,10 +10,7 @@ import {
   Clock,
   Loader2,
   ArrowLeft,
-  FileSignature,
   FileText,
-  ShieldAlert,
-  Lock,
   AlertTriangle,
   Sparkles,
   Ban,
@@ -80,9 +75,6 @@ interface WizardStep {
   id: number;
   key: string;
   label: string;
-  shortLabel: string;
-  icon: React.ElementType;
-  description: string;
   blocked?: boolean;
   danger?: boolean;
 }
@@ -92,25 +84,16 @@ const baseSteps: WizardStep[] = [
     id: 1,
     key: "angehoeriger",
     label: "Angehöriger",
-    shortLabel: "Angehöriger",
-    icon: Users,
-    description: "Personalangaben und HR-Daten des Angehörigen",
   },
   {
     id: 2,
     key: "patient",
     label: "Patient",
-    shortLabel: "Patient",
-    icon: HeartPulse,
-    description: "Medizinische und pflegerische Angaben zum Patienten",
   },
   {
     id: 3,
     key: "vertrag",
     label: "Vertragsunterzeichnung",
-    shortLabel: "Vertrag",
-    icon: FileSignature,
-    description: "Arbeitsvertrag auswählen und digital unterzeichnen",
   },
 ];
 
@@ -123,13 +106,10 @@ function buildSteps(requiresB: boolean, bewilligungEingereicht: boolean): Wizard
       id: 2,
       key: "spezialbewilligung",
       label: "Spezialbewilligung B",
-      shortLabel: "Bewilligung B",
-      icon: eingereicht ? CheckCircle2 : ShieldAlert,
-      description: "Erwerbstätigkeitsbewilligung beim Migrationsamt",
       danger: !eingereicht,
     },
     { ...baseSteps[1], id: 3 },
-    { ...baseSteps[2], id: 4, icon: eingereicht ? FileSignature : Lock, blocked: !eingereicht },
+    { ...baseSteps[2], id: 4, blocked: !eingereicht },
   ];
 }
 
