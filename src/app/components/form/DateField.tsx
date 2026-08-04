@@ -38,6 +38,8 @@ export interface DateFieldProps {
   label?: string;
   required?: boolean;
   hint?: string;
+  /** Maximalbreite des Bedienelements; die Beschriftung bleibt spaltenbreit. */
+  steuerelementMaxBreite?: string;
   disabled?: boolean;
   onBlur?: () => void;
 }
@@ -124,6 +126,7 @@ function macheKalenderKopf(vonJahr: number, bisJahr: number) {
 }
 
 export function DateField({
+  steuerelementMaxBreite,
   value,
   onChange,
   wertFormat,
@@ -333,7 +336,7 @@ export function DateField({
 
   if (label) {
     return (
-      <FormField label={label} required={required} error={error ?? undefined} hint={hint} focused={focused || open}>
+      <FormField label={label} required={required} error={error ?? undefined} hint={hint} steuerelementMaxBreite={steuerelementMaxBreite} focused={focused || open}>
         {control}
         {feedback}
       </FormField>

@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { User, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
-import { FELD_MAX } from "./feldbreiten";
+import { FELD_MAX, katalogFeldBreite } from "./feldbreiten";
 import { TextInput } from "./TextInput";
 import { TextareaInput } from "./TextareaInput";
 import { NumberInput } from "./NumberInput";
@@ -59,31 +59,35 @@ interface TabProps {
 export function TabAnmeldungV2({ data, touched, onUpdate, onBlur }: TabProps) {
   const t = (f: string) => touched.has(f);
   const istAndereInstitution = data.anmeldendeInstitution === INSTITUTION_ANDERE;
+  // Katalogfelder bemessen sich an ihrem längsten Wert — die Regel steht in feldbreiten.ts.
+  const bEroeffnungsgrund = katalogFeldBreite(SDA_EROEFFNUNGSGRUND_OPTIONS);
+  const bInstitution = katalogFeldBreite(SDA_ANMELDENDE_INSTITUTION_OPTIONS);
+  const bEinschaetzung = katalogFeldBreite(SDA_EINSCHAETZUNG_SITUATION_OPTIONS);
 
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={ClipboardList} label="Anmeldung" first />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Eröffnungsgrund" required value={data.eroeffnungsgrund || null} onChange={v => onUpdate("eroeffnungsgrund", v || "")} options={SDA_EROEFFNUNGSGRUND_OPTIONS} placeholder="Bitte wählen" error={t("eroeffnungsgrund") && !filled(data.eroeffnungsgrund) ? "Pflichtfeld" : undefined} /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Datum der Eröffnung des Dossiers" required wertFormat="display" value={data.dossierEroeffnetAm || null} onChange={v => onUpdate("dossierEroeffnetAm", (v as string) ?? "")} onBlur={() => onBlur("dossierEroeffnetAm")} /></div>
+        <div style={bEroeffnungsgrund.zelle}><FormSelect label="Eröffnungsgrund" required steuerelementMaxBreite={bEroeffnungsgrund.steuerelement} value={data.eroeffnungsgrund || null} onChange={v => onUpdate("eroeffnungsgrund", v || "")} options={SDA_EROEFFNUNGSGRUND_OPTIONS} placeholder="Bitte wählen" error={t("eroeffnungsgrund") && !filled(data.eroeffnungsgrund) ? "Pflichtfeld" : undefined} /></div>
+        <div><DateField label="Datum der Eröffnung des Dossiers" required steuerelementMaxBreite={FELD_MAX.schmal} wertFormat="display" value={data.dossierEroeffnetAm || null} onChange={v => onUpdate("dossierEroeffnetAm", (v as string) ?? "")} onBlur={() => onBlur("dossierEroeffnetAm")} /></div>
       </div>
 
       <SectionHeader icon={Phone} label="Anmeldende Stelle" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Anmeldende Institution" required value={data.anmeldendeInstitution || null} onChange={v => onUpdate("anmeldendeInstitution", v || "")} options={SDA_ANMELDENDE_INSTITUTION_OPTIONS} placeholder="Bitte wählen" error={t("anmeldendeInstitution") && !filled(data.anmeldendeInstitution) ? "Pflichtfeld" : undefined} /></div>
+        <div style={bInstitution.zelle}><FormSelect label="Anmeldende Institution" required steuerelementMaxBreite={bInstitution.steuerelement} value={data.anmeldendeInstitution || null} onChange={v => onUpdate("anmeldendeInstitution", v || "")} options={SDA_ANMELDENDE_INSTITUTION_OPTIONS} placeholder="Bitte wählen" error={t("anmeldendeInstitution") && !filled(data.anmeldendeInstitution) ? "Pflichtfeld" : undefined} /></div>
         {/* Bei Code 8 ist die Institution als Freitext zu erfassen. */}
-        {istAndereInstitution && <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Welche Institution" required value={data.anmeldendeInstitutionAndere} onChange={v => onUpdate("anmeldendeInstitutionAndere", v)} onBlur={() => onBlur("anmeldendeInstitutionAndere")} placeholder="z.B. Beratungsstelle" error={t("anmeldendeInstitutionAndere") && !filled(data.anmeldendeInstitutionAndere) ? "Pflichtfeld" : undefined} /></div>}
+        {istAndereInstitution && <div><TextInput label="Welche Institution" required steuerelementMaxBreite={FELD_MAX.mittel} value={data.anmeldendeInstitutionAndere} onChange={v => onUpdate("anmeldendeInstitutionAndere", v)} onBlur={() => onBlur("anmeldendeInstitutionAndere")} placeholder="z.B. Beratungsstelle" error={t("anmeldendeInstitutionAndere") && !filled(data.anmeldendeInstitutionAndere) ? "Pflichtfeld" : undefined} /></div>}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Anmeldende Person" value={data.anmeldendePersonName} onChange={v => onUpdate("anmeldendePersonName", v)} placeholder="Optional — wer angerufen oder geschrieben hat" /></div>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Funktion oder Rolle" value={data.anmeldendePersonFunktion} onChange={v => onUpdate("anmeldendePersonFunktion", v)} placeholder="Optional" /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" value={data.anmeldendePersonTelefon} onChange={v => onUpdate("anmeldendePersonTelefon", v)} placeholder="Optional" /></div>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" value={data.anmeldendePersonEmail} onChange={v => onUpdate("anmeldendePersonEmail", v)} placeholder="Optional" /></div>
+        <div><TextInput label="Anmeldende Person" steuerelementMaxBreite={FELD_MAX.mittel} value={data.anmeldendePersonName} onChange={v => onUpdate("anmeldendePersonName", v)} placeholder="Optional — wer angerufen oder geschrieben hat" /></div>
+        <div><TextInput label="Funktion oder Rolle" steuerelementMaxBreite={FELD_MAX.mittel} value={data.anmeldendePersonFunktion} onChange={v => onUpdate("anmeldendePersonFunktion", v)} placeholder="Optional" /></div>
+        <div><TextInput label="Telefon" steuerelementMaxBreite={FELD_MAX.schmal} value={data.anmeldendePersonTelefon} onChange={v => onUpdate("anmeldendePersonTelefon", v)} placeholder="Optional" /></div>
+        <div><TextInput label="E-Mail" steuerelementMaxBreite={FELD_MAX.mittel} value={data.anmeldendePersonEmail} onChange={v => onUpdate("anmeldendePersonEmail", v)} placeholder="Optional" /></div>
       </div>
 
       <SectionHeader icon={Stethoscope} label="Einschätzung" />
-      <div style={{ maxWidth: FELD_MAX.mittel }}>
-        <FormSelect label="Einschätzung der Situation" required value={data.einschaetzungSituation || null} onChange={v => onUpdate("einschaetzungSituation", v || "")} options={SDA_EINSCHAETZUNG_SITUATION_OPTIONS} placeholder="Bitte wählen"
+      <div style={bEinschaetzung.zelle}>
+        <FormSelect label="Einschätzung der Situation" required steuerelementMaxBreite={bEinschaetzung.steuerelement} value={data.einschaetzungSituation || null} onChange={v => onUpdate("einschaetzungSituation", v || "")} options={SDA_EINSCHAETZUNG_SITUATION_OPTIONS} placeholder="Bitte wählen"
           hint={sdaEinschaetzungFolge(data.einschaetzungSituation) || undefined}
           error={t("einschaetzungSituation") && !filled(data.einschaetzungSituation) ? "Pflichtfeld" : undefined} />
       </div>

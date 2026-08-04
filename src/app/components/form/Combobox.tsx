@@ -10,6 +10,8 @@ interface ComboboxProps {
   error?: string;
   success?: string;
   hint?: string;
+  /** Maximalbreite des Bedienelements; die Beschriftung bleibt spaltenbreit. */
+  steuerelementMaxBreite?: string;
   value: string | null;
   onChange: (value: string | null) => void;
   options: Option[];
@@ -18,7 +20,7 @@ interface ComboboxProps {
   disabled?: boolean;
 }
 
-export function Combobox({ label, required, error, success, hint, value, onChange, options, placeholder = "Bitte wählen", searchPlaceholder = "Suchen…", disabled }: ComboboxProps) {
+export function Combobox({ label, required, error, success, hint, steuerelementMaxBreite, value, onChange, options, placeholder = "Bitte wählen", searchPlaceholder = "Suchen…", disabled }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
   const [search, setSearch] = useState("");
@@ -66,7 +68,7 @@ export function Combobox({ label, required, error, success, hint, value, onChang
   };
 
   return (
-    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={open || focused}>
+    <FormField label={label} required={required} error={error} success={success} hint={hint} steuerelementMaxBreite={steuerelementMaxBreite} focused={open || focused}>
       <div ref={ref} className="relative">
         <button
           type="button"

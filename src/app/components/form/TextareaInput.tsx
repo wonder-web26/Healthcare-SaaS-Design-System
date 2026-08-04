@@ -7,18 +7,20 @@ interface TextareaInputProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaEle
   error?: string;
   success?: string;
   hint?: string;
+  /** Maximalbreite des Bedienelements; die Beschriftung bleibt spaltenbreit. */
+  steuerelementMaxBreite?: string;
   value: string;
   onChange: (value: string) => void;
 }
 
-export function TextareaInput({ label, required, error, success, hint, value, onChange, ...props }: TextareaInputProps) {
+export function TextareaInput({ label, required, error, success, hint, steuerelementMaxBreite, value, onChange, ...props }: TextareaInputProps) {
   const [focused, setFocused] = useState(false);
 
   const borderColor = error ? "var(--status-danger)" : focused ? "var(--brand-primary)" : "var(--border-default)";
   const borderWidth = error || focused ? "1.5px" : "var(--border-thin)";
 
   return (
-    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={focused}>
+    <FormField label={label} required={required} error={error} success={success} hint={hint} steuerelementMaxBreite={steuerelementMaxBreite} focused={focused}>
       <textarea
         value={value}
         onChange={e => onChange(e.target.value)}

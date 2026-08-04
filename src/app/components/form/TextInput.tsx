@@ -7,18 +7,20 @@ interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "on
   error?: string;
   success?: string;
   hint?: string;
+  /** Maximalbreite des Bedienelements; die Beschriftung bleibt spaltenbreit. */
+  steuerelementMaxBreite?: string;
   value: string;
   onChange: (value: string) => void;
 }
 
-export function TextInput({ label, required, error, success, hint, value, onChange, ...inputProps }: TextInputProps) {
+export function TextInput({ label, required, error, success, hint, steuerelementMaxBreite, value, onChange, ...inputProps }: TextInputProps) {
   const [focused, setFocused] = useState(false);
 
   const borderColor = error ? "var(--status-danger)" : focused ? "var(--brand-primary)" : "var(--border-default)";
   const borderWidth = error || focused ? "1.5px" : "var(--border-thin)";
 
   return (
-    <FormField label={label} required={required} error={error} success={success} hint={hint} focused={focused}>
+    <FormField label={label} required={required} error={error} success={success} hint={hint} steuerelementMaxBreite={steuerelementMaxBreite} focused={focused}>
       <input
         type="text"
         value={value}
