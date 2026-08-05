@@ -430,19 +430,20 @@ export function ServiceDeskPage() {
     </div>
   );
 
-  // Feste Spalten: maxSpur = minCh (kein Wachstum). Elastisch sind Betreff und
-  // Person (wachsen, absorbieren Überschuss zu gleichen Teilen); die Beschreibung
-  // ist auf 34 ch gedeckelt. Kein fr → die Tabelle maximiert die wachsenden Spuren.
+  // Jede Spalte hat Mindest- und Obergrenze (am längsten realen Wert bemessen).
+  // Überschuss wird geordnet verteilt (wachsRang): Beschreibung, dann Betreff, dann
+  // Person, dann die schmalen Restspalten — jede nur bis zu ihrer Obergrenze; reicht
+  // die Breite für alle Obergrenzen, bleibt der Rest rechts leer.
   // Spaltenfall (abwerfRang, kleinster zuerst): Beschreibung, dann Art, dann Zuständig.
   const spalten: SpalteDef<UnifiedEntry>[] = [
     { id: "kennzeichen", label: "", festBreitePx: 24, align: "center", ausKarte: true, render: kennzeichenIcon },
-    { id: "art", label: "Art", minCh: 14, maxSpur: "14ch", abwerfRang: 2, align: "left", render: artZelle },
-    { id: "betreff", label: "Betreff", minCh: 20, maxSpur: "80ch", align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
-    { id: "status", label: "Status", minCh: 13, maxSpur: "13ch", align: "left", render: statusZelle },
-    { id: "person", label: "Person", minCh: 18, maxSpur: "80ch", align: "left", sortierbar: true, render: personZelle },
-    { id: "beschreibung", label: "Beschreibung", minCh: 10, maxSpur: "34ch", abwerfRang: 1, align: "left", render: beschreibungZelle },
-    { id: "faellig", label: "Fällig", minCh: 13, maxSpur: "13ch", align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
-    { id: "zustaendig", label: "Zuständig", minCh: 4, maxSpur: "4ch", abwerfRang: 3, align: "center", sortierbar: true, render: zustaendigZelle },
+    { id: "art", label: "Art", minCh: 14, maxSpur: "16ch", wachsRang: 4, abwerfRang: 2, align: "left", render: artZelle },
+    { id: "betreff", label: "Betreff", minCh: 20, maxSpur: "30ch", wachsRang: 2, align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
+    { id: "status", label: "Status", minCh: 16, maxSpur: "16ch", align: "left", render: statusZelle },
+    { id: "person", label: "Person", minCh: 18, maxSpur: "30ch", wachsRang: 3, align: "left", sortierbar: true, render: personZelle },
+    { id: "beschreibung", label: "Beschreibung", minCh: 10, maxSpur: "34ch", wachsRang: 1, abwerfRang: 1, align: "left", render: beschreibungZelle },
+    { id: "faellig", label: "Fällig", minCh: 13, maxSpur: "14ch", wachsRang: 5, align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
+    { id: "zustaendig", label: "Zuständig", minCh: 4, maxSpur: "5ch", wachsRang: 6, abwerfRang: 3, align: "center", sortierbar: true, render: zustaendigZelle },
   ];
 
   // Flächentönung ausschliesslich für Dringlichkeit (rot kräftiger als gelb) bzw.

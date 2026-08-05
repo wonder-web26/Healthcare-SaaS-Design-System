@@ -52,9 +52,13 @@ export interface SpalteDef<T> {
    *  statt am rechten Rand zu klippen. Spalten ohne Rang bleiben immer. */
   abwerfRang?: number;
   /** Obere Spur der Spalte (max-Seite von minmax). Fehlt sie, gilt `${anteil}fr`.
-   *  Erlaubt feste Spalten (z. B. "14ch"), gedeckelte (z. B. "34ch") und
-   *  inhaltsgetriebene ("max-content") ohne fr — dann greift das Maximieren. */
+   *  Bei reinen ch/px-Obergrenzen (kein fr) berechnet die DataTable die Spurbreiten
+   *  explizit und verteilt Überschuss geordnet (siehe wachsRang) — kein Klippen. */
   maxSpur?: string;
+  /** Wachstums-Rang für die geordnete Überschuss-Verteilung (kleinster zuerst),
+   *  jede Spalte nur bis zu ihrer Obergrenze. Ohne Rang wächst die Spalte nicht
+   *  (bleibt bei der Mindestbreite). Nur wirksam im ch/px-Obergrenzen-Modus. */
+  wachsRang?: number;
   render: (row: T) => React.ReactNode;
 }
 
@@ -258,14 +262,40 @@ export function DataTable<T>({
     anzeige = sichtbare.filter(s => !weg.has(s.id));
   }
 
-  /* ── Tabellendarstellung: CSS-Grid, minmax(Mindestbreite, obere Spur) ── */
+  /* ── Spurbreiten. Bei reinen ch/px-Obergrenzen (kein fr) rechnet die DataTable
+     explizit: jede Spalte startet auf ihrer Mindestbreite, der Überschuss wird
+     geordnet (wachsRang) bis zur Obergrenze verteilt; reicht die Breite für alle
+     Obergrenzen, bleibt der Rest rechts leer (kein Strecken). Sonst minmax/fr. ── */
   const auswahlSpur = auswahl ? ["40px"] : [];
-  const gridCols = [
-    ...auswahlSpur,
-    ...anzeige.map(s =>
-      s.festBreitePx != null ? `${s.festBreitePx}px` : `minmax(${s.minCh ?? 8}ch, ${s.maxSpur ?? `${s.anteil ?? 1}fr`})`,
-    ),
-  ].join(" ");
+  const spurPx = (spur: string | undefined, fallback: number) => {
+    if (!spur) return fallback;
+    if (spur.endsWith("px")) return parseFloat(spur);
+    if (spur.endsWith("ch")) return parseFloat(spur) * chPx;
+    return fallback;
+  };
+  const inhaltsModus = anzeige.length > 0 && anzeige.every(s => s.festBreitePx != null || (s.maxSpur != null && !s.maxSpur.endsWith("fr")));
+  let gridCols: string;
+  if (inhaltsModus && breite > 0) {
+    const minA = anzeige.map(s => s.festBreitePx ?? (s.minCh ?? 8) * chPx);
+    const maxA = anzeige.map((s, i) => s.festBreitePx ?? spurPx(s.maxSpur, minA[i]));
+    const w = [...minA];
+    let rest = breite - auswahlPx - w.reduce((a, b) => a + b, 0);
+    const wachsend = anzeige
+      .map((s, i) => ({ i, rang: s.wachsRang }))
+      .filter(x => x.rang != null && maxA[x.i] > w[x.i])
+      .sort((a, b) => a.rang! - b.rang!);
+    for (const { i } of wachsend) {
+      if (rest <= 0) break;
+      const zuwachs = Math.min(rest, maxA[i] - w[i]);
+      w[i] += zuwachs; rest -= zuwachs;
+    }
+    gridCols = [...auswahlSpur, ...w.map(p => `${Math.round(p)}px`)].join(" ");
+  } else {
+    gridCols = [
+      ...auswahlSpur,
+      ...anzeige.map(s => s.festBreitePx != null ? `${s.festBreitePx}px` : `minmax(${s.minCh ?? 8}ch, ${s.maxSpur ?? `${s.anteil ?? 1}fr`})`),
+    ].join(" ");
+  }
   const zellPad = `${TABELLE_LAYOUT.zeilePadY} ${TABELLE_LAYOUT.zeilePadX}`;
 
   return (
