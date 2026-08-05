@@ -143,6 +143,16 @@ export interface PatientFormData {
   kartennummer: string;
   /** SP-03: BAG-Nr. der Kasse (vorbefuellt aus Krankenkasse-Picklist) */
   bagNr: string;
+  /** BB7b — Kassen-Code der Zusatzversicherung. NICHT aus BB7a abgeleitet. */
+  zusatzversicherungKasse: string;
+  /** BB7c — Invaliden-, Unfall- oder Militärversicherung, Freitext. */
+  weitereVersicherung: string;
+  /** BB13 — Code aus lib/stammdaten/sda-sprache. */
+  spracheCode: string;
+  /** BB13 Code 21 — Sprache als Freitext. */
+  spracheAndere: string;
+  /** BB14 — Code aus lib/stammdaten/sda-ja-nein. */
+  uebersetzerNotwendig: string;
 
   /* Tab 2 – Steuer & Sozialversicherungen */
   sozialamtKontakt: string;
@@ -200,9 +210,6 @@ export interface PatientFormData {
   /* Tab 5 – Dokumente */
   scans: Record<string, PatientScanFile | null>;
 
-  /* backward-compat fields (kept for StepValidierung) */
-  haushaltsgroesse: string;
-  zusatzversicherung: string;
 }
 
 const ATL_CATEGORIES = [
@@ -265,6 +272,11 @@ export const emptyPatientForm: PatientFormData = {
   spezialAerzte: "",
   kartennummer: "",
   bagNr: "",
+  zusatzversicherungKasse: "",
+  weitereVersicherung: "",
+  spracheCode: "",
+  spracheAndere: "",
+  uebersetzerNotwendig: "",
 
   sozialamtKontakt: "nein",
   sozialamtKontaktDetail: "",
@@ -309,8 +321,6 @@ export const emptyPatientForm: PatientFormData = {
 
   scans: {},
 
-  haushaltsgroesse: "1",
-  zusatzversicherung: "nein",
 };
 
 /* ── Validation helpers ──────────────────── */

@@ -45,6 +45,19 @@ const ZEICHEN_PX = 7.3;
 /** Innenabstand, Rahmen und Auswahlpfeil eines Auswahlfelds. */
 const STEUERELEMENT_ZUGABE_PX = 56;
 
+/**
+ * Untergrenze eines Auswahlfelds — entspricht FELD_MAX.schmal.
+ *
+ * Nötig, weil kurze Wertelisten sonst ein Feld ergeben, das schmaler ist als
+ * sein eigener Platzhalter: bei Ja/Nein misst der längste Wert vier Zeichen,
+ * "Bitte wählen" braucht zwölf. Gemessen wird deshalb das Maximum aus längstem
+ * Wert, Platzhalter und dieser Grenze.
+ */
+const MINDESTBREITE_PX = 192;
+
+/** Platzhalter, den die Auswahlfelder des Formulars voreingestellt zeigen. */
+const STANDARD_PLATZHALTER = "Bitte wählen";
+
 export interface KatalogFeldBreite {
   /** Style für die Rasterzelle — spannt über beide Spalten, wenn eine nicht reicht. */
   zelle?: CSSProperties;
@@ -63,9 +76,13 @@ export interface KatalogFeldBreite {
  * Gilt für alle Katalogfelder; BB9 mit dreizehn und BB13 mit einundzwanzig
  * langen Werten erben die Regel, ohne sie zu wiederholen.
  */
-export function katalogFeldBreite(optionen: readonly { label: string }[]): KatalogFeldBreite {
-  const laengster = optionen.reduce((max, o) => Math.max(max, o.label.length), 0);
-  const noetig = laengster * ZEICHEN_PX + STEUERELEMENT_ZUGABE_PX;
+export function katalogFeldBreite(
+  optionen: readonly { label: string }[],
+  platzhalter: string = STANDARD_PLATZHALTER,
+): KatalogFeldBreite {
+  const laengsterWert = optionen.reduce((max, o) => Math.max(max, o.label.length), 0);
+  const laengster = Math.max(laengsterWert, platzhalter.length);
+  const noetig = Math.max(laengster * ZEICHEN_PX + STEUERELEMENT_ZUGABE_PX, MINDESTBREITE_PX);
 
   if (noetig > SPALTEN_BREITE_PX) {
     return { zelle: { gridColumn: "1 / -1" }, steuerelement: `${Math.ceil(noetig)}px` };

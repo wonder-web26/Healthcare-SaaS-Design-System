@@ -93,6 +93,16 @@ export const demoSteinerPatient: PatientFormData = {
   notfallkontaktName: "Vera Steiner", notfallkontaktTelefon: "+41 79 412 55 08", notfallkontaktBeziehung: "Ehefrau",
   spezialAerzte: "Dr. med. A. Frei (Kardiologie), Kantonsspital Winterthur",
   kartennummer: "80756000987654321", bagNr: "0580",
+  // BB7b: Zusatzversicherung bei derselben Kasse wie die Grundversicherung —
+  // im Fall dokumentiert, aber bewusst eigenständig gewählt, nicht abgeleitet.
+  zusatzversicherungKasse: "helsana",
+  // BB7c: keine Invaliden-, Unfall- oder Militärversicherung im Spiel.
+  weitereVersicherung: "",
+  // BB13 = 1: Winterthurer Ehepaar, Umgangssprache Schweizerdeutsch.
+  // BB14 = 0: kein Übersetzungsbedarf, die Verständigung läuft auf Deutsch.
+  spracheCode: "1",
+  spracheAndere: "",
+  uebersetzerNotwendig: "0",
   sozialamtKontakt: "nein", ivBezug: "nein", hilflosenentschaedigung: "ja", assistenzbeitrag: "nein",
   konfession: "evangelisch_reformiert",
   groesse: "174", gewicht: "78", gewichtsverlust: "nein", brille: "ja", hoergeraet: "ja",
@@ -132,7 +142,6 @@ export const demoSteinerPatient: PatientFormData = {
     "Medikamente verabreichen": { ja: true, bemerkungen: "Insulin morgens" },
     "Vitalwerte-Messungen": { ja: true, bemerkungen: "Blutdruck und Blutzucker täglich" },
   },
-  haushaltsgroesse: "2", zusatzversicherung: "ja",
 };
 
 /**

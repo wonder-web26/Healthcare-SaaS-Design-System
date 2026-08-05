@@ -18,6 +18,7 @@ import { useSyncExternalStore } from "react";
 import { type Patient, type PatientStatus, type AbrechnungsStatus, patientenSeed } from "../../app/components/patientData";
 import { getKrankenkasseLabel } from "../stammdaten/krankenkassen";
 import { isoZuDate } from "../datum";
+import { sdaSpracheLabel } from "../stammdaten/sda-sprache";
 
 /** Zeichen für "keine Pflegefachkraft zugewiesen" — Bestandskonvention. */
 export const NICHT_ZUGEWIESEN = "—";
@@ -108,6 +109,8 @@ export interface PatientStammdatenEingabe {
   ahvNummer: string;
   /** AA2 — Datum der Eröffnung des Dossiers; alleinige Quelle des Aufnahmedatums. */
   dossierEroeffnetAm: string;
+  /** BB13 — Code der üblicherweise gesprochenen Sprache. */
+  spracheCode: string;
   adresseStrasse: string;
   adressePlz: string;
   adresseOrt: string;
@@ -161,7 +164,7 @@ function stammdatenAbbilden(
   angehoeriger: AngehoerigerVerknuepfung | null,
 ): Pick<Patient,
   "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "adresse" | "krankenkasse" | "aufnahmeDatum" |
-  "kartennummer" | "hausarztName" | "hausarztTelefon" |
+  "kartennummer" | "hausarztName" | "hausarztTelefon" | "sprache" |
   "notfallkontaktName" | "notfallkontaktTelefon" | "notfallkontaktBeziehung" |
   "angehoeriger" | "angehoerigerTelefon"> {
   return {
@@ -171,6 +174,9 @@ function stammdatenAbbilden(
     ahvNummer: eingabe.ahvNummer,
     // AA2 ist die einzige Quelle; die Detailseite zeigt den Wert nur noch an.
     aufnahmeDatum: eingabe.dossierEroeffnetAm,
+    // BB13 ist die einzige Quelle. Der Bestand hält die BESCHRIFTUNG, weil
+    // Zuweisungs-Übereinstimmung, Sprachfilter und Suche gegen Klartext prüfen.
+    sprache: eingabe.spracheCode ? sdaSpracheLabel(eingabe.spracheCode) : "",
     adresse: adresseZusammensetzen(eingabe.adresseStrasse, eingabe.adressePlz, eingabe.adresseOrt),
     krankenkasse: eingabe.krankenkasse ? getKrankenkasseLabel(eingabe.krankenkasse) : "",
     kartennummer: eingabe.kartennummer,
@@ -222,7 +228,6 @@ export function erfassePatientImOnboarding(
     pflegefachkraftInitialen: NICHT_ZUGEWIESEN,
     leistungsart: "",
     letzterBesuch: "",
-    sprache: "",
     hausarztFachgebiet: "",
     abrechnungsStatus: abrechnungsStatusZu("im_onboarding"),
     reAssessmentFrist: null,

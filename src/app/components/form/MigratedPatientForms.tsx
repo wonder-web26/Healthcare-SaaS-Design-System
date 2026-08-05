@@ -3,7 +3,7 @@
  * Uses new form components from components/form/.
  */
 import { useState } from "react";
-import { User, Users, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
+import { User, Users, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, Languages, ChevronDown, ChevronUp } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { FELD_MAX, katalogFeldBreite } from "./feldbreiten";
 import { TextInput } from "./TextInput";
@@ -28,6 +28,7 @@ import { SDA_ANMELDENDE_INSTITUTION_OPTIONS, INSTITUTION_ANDERE } from "../../..
 import { SDA_EINSCHAETZUNG_SITUATION_OPTIONS, sdaEinschaetzungFolge } from "../../../lib/stammdaten/sda-einschaetzung-situation";
 import { SDA_ZUSAMMENLEBEN_OPTIONS } from "../../../lib/stammdaten/sda-zusammenleben";
 import { SDA_JA_NEIN_OPTIONS } from "../../../lib/stammdaten/sda-ja-nein";
+import { SDA_SPRACHE_OPTIONS, SPRACHE_ANDERE } from "../../../lib/stammdaten/sda-sprache";
 
 function filled(v: string | undefined | null): boolean {
   return typeof v === "string" && v.trim().length > 0;
@@ -107,6 +108,9 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
   const t = (f: string) => touched.has(f);
   const istSchweizerin = istSchweiz(data.staatsangehoerigkeit);
   const istAusland = filled(data.staatsangehoerigkeit) && !istSchweizerin;
+  const istAndereSprache = data.spracheCode === SPRACHE_ANDERE;
+  const bSprache = katalogFeldBreite(SDA_SPRACHE_OPTIONS);
+  const bUebersetzer = katalogFeldBreite(SDA_JA_NEIN_OPTIONS);
 
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
@@ -147,6 +151,11 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Kartennummer" required value={data.kartennummer} onChange={v => onUpdate("kartennummer", v)} onBlur={() => onBlur("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} /></div>
         {/* SP-03: BAG-Nr. */}
         <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="BAG-Nr. der Kasse" value={data.bagNr} onChange={v => onUpdate("bagNr", v)} placeholder="z.B. 0271" /></div>
+        {/* BB7b — bewusst ohne Vorbelegung aus BB7a: Grund- und Zusatzversicherung
+            derselben Person können bei verschiedenen Kassen bestehen. */}
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zusatzversicherung" value={data.zusatzversicherungKasse || null} onChange={v => onUpdate("zusatzversicherungKasse", v || "")} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" hint="Kann eine andere Krankenkasse sein als die Grundversicherung." /></div>
+        {/* BB7c */}
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Invaliden-, Unfall-, Militärversicherung" steuerelementMaxBreite={FELD_MAX.mittel} value={data.weitereVersicherung} onChange={v => onUpdate("weitereVersicherung", v)} placeholder="Optional — Name der Versicherung" /></div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Hausarzt Name" required value={data.hausarztName} onChange={v => onUpdate("hausarztName", v)} onBlur={() => onBlur("hausarztName")} placeholder="Dr. Müller" error={t("hausarztName") && !filled(data.hausarztName) ? "Pflichtfeld" : undefined} /></div>
@@ -161,6 +170,28 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" value={data.email} onChange={v => onUpdate("email", v)} placeholder="Optional" /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="Optional" /></div>
+      </div>
+
+      <SectionHeader icon={Languages} label="Sprache und Verständigung" />
+      <div style={bSprache.zelle}>
+        <FormSelect label="Üblicherweise gesprochene Sprache" required steuerelementMaxBreite={bSprache.steuerelement}
+          value={data.spracheCode || null} onChange={v => onUpdate("spracheCode", v || "")} options={SDA_SPRACHE_OPTIONS} placeholder="Bitte wählen"
+          hint="Bevorzugte Sprache für die tägliche Kommunikation. Ist die Person der lokalen Sprache nicht mächtig, wird die Sprache erfasst, die sie normalerweise spricht."
+          error={t("spracheCode") && !filled(data.spracheCode) ? "Pflichtfeld" : undefined} />
+      </div>
+      {/* Bei Code 21 ist die Sprache als Freitext zu erfassen. */}
+      {istAndereSprache && (
+        <div style={{ marginTop: "var(--space-4)", maxWidth: FELD_MAX.mittel }}>
+          <TextInput label="Welche Sprache" required steuerelementMaxBreite={FELD_MAX.mittel} value={data.spracheAndere} onChange={v => onUpdate("spracheAndere", v)} onBlur={() => onBlur("spracheAndere")} placeholder="z.B. Vietnamesisch"
+            error={t("spracheAndere") && !filled(data.spracheAndere) ? "Pflichtfeld" : undefined} />
+        </div>
+      )}
+      <div style={{ marginTop: "var(--space-4)" }}>
+        <div style={bUebersetzer.zelle}>
+          <FormSelect label="Übersetzer/in notwendig" required steuerelementMaxBreite={bUebersetzer.steuerelement}
+            value={data.uebersetzerNotwendig || null} onChange={v => onUpdate("uebersetzerNotwendig", v || "")} options={SDA_JA_NEIN_OPTIONS} placeholder="Bitte wählen"
+            error={t("uebersetzerNotwendig") && !filled(data.uebersetzerNotwendig) ? "Pflichtfeld" : undefined} />
+        </div>
       </div>
 
       <SectionHeader icon={Phone} label="Notfallkontakt" />

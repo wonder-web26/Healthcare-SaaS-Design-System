@@ -649,7 +649,6 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
   /* ── Editable fields: Adresse & Mandat ── */
   const [adresse, setAdresse] = useState(patient.adresse);
   const [kanton, setKanton] = useState(patient.kanton);
-  const [sprache, setSprache] = useState(patient.sprache);
   const [leistungsart, setLeistungsart] = useState(patient.leistungsart);
   const [letzterBesuch, setLetzterBesuch] = useState(patient.letzterBesuch);
 
@@ -676,7 +675,7 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
   const startEdit = (section: string) => {
     // Snapshot current values for the section
     if (section === "adresse") {
-      setSnapshot({ adresse, kanton, sprache, leistungsart, letzterBesuch });
+      setSnapshot({ adresse, kanton, leistungsart, letzterBesuch });
     } else if (section === "kontakt") {
       setSnapshot({ angehName, angehRelation, angehTelefon, notfallName, notfallRelation, notfallTelefon });
     } else if (section === "versicherung") {
@@ -690,7 +689,6 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
     if (section === "adresse") {
       setAdresse(snapshot.adresse ?? adresse);
       setKanton(snapshot.kanton ?? kanton);
-      setSprache(snapshot.sprache ?? sprache);
       setLeistungsart(snapshot.leistungsart ?? leistungsart);
       setLetzterBesuch(snapshot.letzterBesuch ?? letzterBesuch);
     } else if (section === "kontakt") {
@@ -719,7 +717,7 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
   const saveEdit = () => {
     if (editingSection === "adresse") {
       aktualisierePatient(patient.id, {
-        adresse, kanton, sprache, leistungsart, letzterBesuch,
+        adresse, kanton, leistungsart, letzterBesuch,
       });
     } else if (editingSection === "kontakt") {
       const angehoerigerText = angehRelation.trim()
@@ -767,7 +765,8 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <PEditableField label="Adresse" value={adresse} editing={editingSection === "adresse"} onChange={setAdresse} />
             <PEditableField label="Kanton" value={kanton} editing={editingSection === "adresse"} onChange={setKanton} />
-            <PEditableField label="Sprache" value={sprache} editing={editingSection === "adresse"} onChange={setSprache} />
+            {/* Quelle ist BB13 im Reiter Personalien — hier nur Anzeige. */}
+            <PEditableField label="Sprache" value={patient.sprache} editing={false} onChange={() => {}} />
             <PEditableField label="Leistungsart" value={leistungsart} editing={editingSection === "adresse"} onChange={setLeistungsart} />
             {/* Quelle ist AA2 im Reiter Anmeldung — hier nur Anzeige, nicht bearbeitbar. */}
             <PEditableField label="Aufnahmedatum" value={patient.aufnahmeDatum} editing={false} onChange={() => {}} />
