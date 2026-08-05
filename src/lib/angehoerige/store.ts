@@ -174,6 +174,7 @@ export function erfasseAngehoerigenImOnboarding(
     pflegefachkraft: NICHT_ZUGEWIESEN,
     pflegefachkraftInitialen: NICHT_ZUGEWIESEN,
     monatsSchritt: { aktuell: 0, total: 0, label: "" },
+    dokumente: [],
   };
   setzeBestand([...bestand, neu]);
   return neu;

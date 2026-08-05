@@ -56,8 +56,10 @@ import {
   qualifikationConfig,
   billingReadinessConfig,
   type Angehoeriger,
+  type AngehoerigerKind,
+  type AngehoerigerStatus,
 } from "./angehoerigeData";
-import { useAngehoerige } from "../../lib/angehoerige/store";
+import { useAngehoerige, getAngehoerigen } from "../../lib/angehoerige/store";
 import { TabDokumenteGeneric, type DocFolder } from "./TabDokumente";
 import { geschlechtLabel } from "../../lib/stammdaten/geschlecht";
 import { zivilstandLabel } from "../../lib/stammdaten/zivilstand";
@@ -73,185 +75,23 @@ import { getKontrollenFuerAngehoeriger, erstelleKontrolle, getNaechsteFaelligkei
 import { exportiereArbeitskontrollePDF } from "../../lib/arbeitskontrolle/pdf-export";
 import "../../lib/schulung/demo-seed";
 import "../../lib/arbeitskontrolle/demo-seed";
+import { srkAmpel, srkFrist, srkFristAnzeige, istFluechtling, istGrenzgaenger } from "../../lib/angehoerige/regeln";
+import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
 
 /* ══════════════════════════════════════════
    EXTENDED MOCK DATA — HR detail fields
    (simulates onboarding-captured data)
    ══════════════════════════════════════════ */
-interface AngehoerigerDetail {
-  /* Personalien */
-  geschlecht: string;
-  geburtsdatum: string;
-  ahvNummer: string;
-  nationalitaet: string;
-  heimatort: string;
-  aufenthaltsstatus: string;
-  zivilstand: string;
-  zivilstandSeit: string;
-  strasse: string;
-  plz: string;
-  ort: string;
-  email: string;
-  telefon: string;
-  krankenkasseName: string;
-  versicherungsnummer: string;
-  /* Steuer & Sozialversicherung */
-  quellensteuer: string;
-  konfession: string;
-  quellensteuerTarif: string;
-  steuergemeinde: string;
-  sozialamtInvolviert: string;
-  sozialamtKontakt: string;
-  lohnabtretung: string;
-  /* Partner */
-  partnerName: string;
-  partnerGeburtsdatum: string;
-  partnerAhvNummer: string;
-  partnerZemisNummer: string;
-  partnerAufenthaltsstatus: string;
-  /* Kinder */
-  kinder: { nachname: string; vorname: string; geburtsdatum: string; ahvNummer: string; geschlecht: string; zulagenart: string; ausbildungsbeginn: string }[];
-  kinderzulagenAktiv: string;
-  kinderzulagenUeberSpitex: string;
-  familienausgleichskasse: string;
-  /* Lohn & Aufenthalt */
-  lohnsumme: string;
-  fluechtlingsstatus: string;
-  grenzgaenger: string;
-  /* Anstellung & Auszahlung */
-  funktion: string;
-  eintrittsdatum: string;
-  stundenlohn: string;
-  bankname: string;
-  iban: string;
-  /* SRK Kurs */
-  srkStatus: "abgeschlossen" | "offen" | "ueberfaellig";
-  srkAngemeldet: boolean;
-  srkDeadline: string;
-  srkAbgeschlossenAm: string;
-  /* Dokumente */
-  dokumente: { name: string; status: "hochgeladen" | "fehlend" | "abgelaufen"; datum: string }[];
-}
-
-const detailLookup: Record<string, AngehoerigerDetail> = {
-  "A-2026-0101": {
-    geschlecht: "maennlich", geburtsdatum: "14.03.1978", ahvNummer: "756.1234.5678.97",
-    nationalitaet: "schweiz", heimatort: "Luzern", aufenthaltsstatus: "",
-    zivilstand: "verheiratet", zivilstandSeit: "12.06.2005",
-    strasse: "Bahnhofstrasse 42", plz: "8001", ort: "Zürich",
-    email: "peter.mueller@bluewin.ch", telefon: "+41 44 321 65 87",
-    krankenkasseName: "CSS", versicherungsnummer: "KK-834291",
-    quellensteuer: "Nein", konfession: "Evangelisch-reformiert",
-    quellensteuerTarif: "—", steuergemeinde: "Zürich",
-    sozialamtInvolviert: "Nein", sozialamtKontakt: "—", lohnabtretung: "Nein",
-    partnerName: "Anna Müller", partnerGeburtsdatum: "22.08.1980",
-    partnerAhvNummer: "756.9876.5432.10", partnerZemisNummer: "—", partnerAufenthaltsstatus: "Schweizer/in",
-    kinder: [
-      { nachname: "Müller", vorname: "Luca", geburtsdatum: "15.04.2010", ahvNummer: "756.1111.2222.33", geschlecht: "maennlich", zulagenart: "K", ausbildungsbeginn: "—" },
-      { nachname: "Müller", vorname: "Sophie", geburtsdatum: "03.09.2012", ahvNummer: "756.4444.5555.66", geschlecht: "weiblich", zulagenart: "K", ausbildungsbeginn: "—" },
-    ],
-    kinderzulagenAktiv: "Ja", kinderzulagenUeberSpitex: "Ja", familienausgleichskasse: "SVA Zürich",
-    lohnsumme: "3'540.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
-    funktion: "Pflegende/r Angehörige/r", eintrittsdatum: "01.01.2026", stundenlohn: "29.50",
-    bankname: "UBS", iban: "CH93 0076 2011 6238 5295 7",
-    srkStatus: "abgeschlossen", srkAngemeldet: true, srkDeadline: "31.12.2026", srkAbgeschlossenAm: "15.01.2026",
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.01.2026" },
-      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "02.01.2026" },
-      { name: "Bankkarte", status: "hochgeladen", datum: "03.01.2026" },
-      { name: "Familienbüchlein", status: "hochgeladen", datum: "05.01.2026" },
-      { name: "Partner Krankenkassenkarte", status: "hochgeladen", datum: "05.01.2026" },
-    ],
-  },
-  "A-2026-0102": {
-    geschlecht: "weiblich", geburtsdatum: "28.11.1985", ahvNummer: "756.2345.6789.08",
-    nationalitaet: "deutschland", heimatort: "—", aufenthaltsstatus: "B",
-    zivilstand: "ledig", zivilstandSeit: "—",
-    strasse: "Seestrasse 15", plz: "8002", ort: "Zürich",
-    email: "lisa.schmid@gmail.com", telefon: "+41 76 555 12 34",
-    krankenkasseName: "Helsana", versicherungsnummer: "—",
-    quellensteuer: "Ja", konfession: "Konfessionslos",
-    quellensteuerTarif: "A", steuergemeinde: "Zürich",
-    sozialamtInvolviert: "Nein", sozialamtKontakt: "—", lohnabtretung: "Nein",
-    partnerName: "—", partnerGeburtsdatum: "—",
-    partnerAhvNummer: "—", partnerZemisNummer: "—", partnerAufenthaltsstatus: "—",
-    kinder: [],
-    kinderzulagenAktiv: "Nein", kinderzulagenUeberSpitex: "Nein", familienausgleichskasse: "—",
-    lohnsumme: "2'800.00", fluechtlingsstatus: "Nein", grenzgaenger: "Ja",
-    funktion: "Pflegende/r Angehörige/r", eintrittsdatum: "15.02.2026", stundenlohn: "28.00",
-    bankname: "—", iban: "—",
-    srkStatus: "offen", srkAngemeldet: true, srkDeadline: "15.03.2026", srkAbgeschlossenAm: "—",
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "16.02.2026" },
-      { name: "Krankenkassenkarte", status: "fehlend", datum: "—" },
-      { name: "Bankkarte", status: "fehlend", datum: "—" },
-      { name: "Familienbüchlein", status: "fehlend", datum: "—" },
-      { name: "Partner Krankenkassenkarte", status: "fehlend", datum: "—" },
-    ],
-  },
-  "A-2026-0103": {
-    geschlecht: "maennlich", geburtsdatum: "05.07.1972", ahvNummer: "756.3456.7890.19",
-    nationalitaet: "schweiz", heimatort: "Bern", aufenthaltsstatus: "",
-    zivilstand: "geschieden", zivilstandSeit: "01.03.2018",
-    strasse: "Musterweg 7", plz: "3012", ort: "Bern",
-    email: "j.weber@gmx.ch", telefon: "+41 31 777 88 99",
-    krankenkasseName: "Swica", versicherungsnummer: "KK-556783",
-    quellensteuer: "Nein", konfession: "Römisch-katholisch",
-    quellensteuerTarif: "—", steuergemeinde: "Bern",
-    sozialamtInvolviert: "Nein", sozialamtKontakt: "—", lohnabtretung: "Nein",
-    partnerName: "—", partnerGeburtsdatum: "—",
-    partnerAhvNummer: "—", partnerZemisNummer: "—", partnerAufenthaltsstatus: "—",
-    kinder: [
-      { nachname: "Weber", vorname: "Tim", geburtsdatum: "20.01.2008", ahvNummer: "756.7777.8888.99", geschlecht: "maennlich", zulagenart: "W", ausbildungsbeginn: "01.08.2024" },
-    ],
-    kinderzulagenAktiv: "Ja", kinderzulagenUeberSpitex: "Ja", familienausgleichskasse: "SVA Bern",
-    lohnsumme: "4'160.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
-    funktion: "Pflegende/r Angehörige/r", eintrittsdatum: "01.11.2025", stundenlohn: "32.00",
-    bankname: "PostFinance", iban: "CH55 0900 0000 1234 5678 9",
-    srkStatus: "ueberfaellig", srkAngemeldet: false, srkDeadline: "15.02.2026", srkAbgeschlossenAm: "—",
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "01.11.2025" },
-      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "01.11.2025" },
-      { name: "Bankkarte", status: "hochgeladen", datum: "02.11.2025" },
-      { name: "Familienbüchlein", status: "hochgeladen", datum: "05.11.2025" },
-      { name: "Partner Krankenkassenkarte", status: "fehlend", datum: "—" },
-    ],
-  },
-};
-
-/* Fallback detail for any angehoeriger not in the lookup */
-function getDetail(id: string): AngehoerigerDetail {
-  if (detailLookup[id]) return detailLookup[id];
-  return {
-    geschlecht: "weiblich", geburtsdatum: "10.05.1975", ahvNummer: "756.5555.6666.77",
-    nationalitaet: "schweiz", heimatort: "Basel", aufenthaltsstatus: "",
-    zivilstand: "verheiratet", zivilstandSeit: "20.09.2002",
-    strasse: "Hauptstrasse 10", plz: "4051", ort: "Basel",
-    email: "kontakt@example.ch", telefon: "+41 61 222 33 44",
-    krankenkasseName: "Concordia", versicherungsnummer: "KK-112233",
-    quellensteuer: "Nein", konfession: "Evangelisch-reformiert",
-    quellensteuerTarif: "—", steuergemeinde: "Basel-Stadt",
-    sozialamtInvolviert: "Nein", sozialamtKontakt: "—", lohnabtretung: "Nein",
-    partnerName: "Max Muster", partnerGeburtsdatum: "01.01.1974",
-    partnerAhvNummer: "756.8888.9999.00", partnerZemisNummer: "—", partnerAufenthaltsstatus: "Schweizer/in",
-    kinder: [],
-    kinderzulagenAktiv: "Nein", kinderzulagenUeberSpitex: "Nein", familienausgleichskasse: "—",
-    lohnsumme: "3'100.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
-    funktion: "Pflegende/r Angehörige/r", eintrittsdatum: "01.01.2026", stundenlohn: "29.50",
-    bankname: "ZKB", iban: "CH12 0070 0110 0061 5200 0",
-    srkStatus: "offen", srkAngemeldet: false, srkDeadline: "30.06.2026", srkAbgeschlossenAm: "—",
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "01.01.2026" },
-      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "01.01.2026" },
-      { name: "Bankkarte", status: "hochgeladen", datum: "02.01.2026" },
-      { name: "Familienbüchlein", status: "fehlend", datum: "—" },
-      { name: "Partner Krankenkassenkarte", status: "fehlend", datum: "—" },
-    ],
-  };
-}
+/* Personenbestand und Rückfall-Datensatz entfernt: sie zeigten Angaben
+   fremder Personen. Die Seite liest jede Angabe aus dem Bestand
+   (angehoerigeData / lib/angehoerige/store) oder aus einer Ableitung
+   (lib/angehoerige/regeln). Trägt der Bestand ein Feld nicht, bleibt es leer. */
 
 /* ── Status config (same pattern as Patient) �� */
-const statusConfig: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+/* Vollständig über AngehoerigerStatus — ein neuer Zustand fällt beim Übersetzen
+   auf, statt zur Laufzeit ins Leere zu greifen. */
+const statusConfig: Record<AngehoerigerStatus, { label: string; bg: string; text: string; dot: string }> = {
+  in_erfassung: { label: "In Erfassung", bg: "bg-muted", text: "text-muted-foreground", dot: "bg-border" },
   aktiv: { label: "Aktiv", bg: "bg-success-light", text: "text-success-foreground", dot: "bg-success" },
   in_onboarding: { label: "In Onboarding", bg: "bg-warning-light", text: "text-warning-foreground", dot: "bg-warning" },
   fehlende_dokumente: { label: "Fehlende Dokumente", bg: "bg-error-light", text: "text-error-foreground", dot: "bg-error" },
@@ -388,7 +228,6 @@ const sozialversicherungDaten: SozialversicherungEntry[] = [
   { kategorie: "Quellensteuer", status: "aktiv", gueltigBis: "—", details: "Tarif gemäss HR-Daten" },
 ];
 
-/* (SRK Kurs data is now per-angehöriger in AngehoerigerDetail) */
 
 /* ── Historie mock ───────────────────────── */
 interface HistoryEntry {
@@ -429,7 +268,9 @@ export function Angehoerige360Page() {
 
   const angehoerige = useAngehoerige();
   const allAngehoerigeIds = angehoerige.map(x => x.id);
-  const a = angehoerige.find((x) => x.id === angehoerigerIdOrNew);
+  /* Die Blätter-Navigation folgt der Liste; die Seite selbst findet auch eine
+     Person im Zustand "in_erfassung", die dort noch nicht erscheint. */
+  const a = angehoerige.find((x) => x.id === angehoerigerIdOrNew) ?? getAngehoerigen(angehoerigerIdOrNew);
 
   if (!a) {
     return (
@@ -450,13 +291,12 @@ export function Angehoerige360Page() {
     );
   }
 
-  const detail = getDetail(a.id);
 
   // WF-01: Rhythmus-Tickets generieren (idempotent) wenn aktiv + eintrittsdatum gesetzt
-  if (a.status === "aktiv" && detail.eintrittsdatum) {
+  if (a.status === "aktiv" && a.eintrittsdatum) {
     // eintrittsdatum ist im Format "DD.MM.YYYY" → ISO konvertieren
-    const parts = detail.eintrittsdatum.split(".");
-    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : detail.eintrittsdatum;
+    const parts = a.eintrittsdatum.split(".");
+    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : a.eintrittsdatum;
     generiereRhythmusTickets("angehoeriger", a.id, `${a.vorname} ${a.nachname}`, isoAnker, a.pflegefachkraft);
   }
 
@@ -550,7 +390,7 @@ export function Angehoerige360Page() {
 
         {/* Anna HR-Zusammenfassung */}
         <div style={{ marginTop: 12 }}>
-          <AnnaAngehoerigeSummary angehoeriger={a} detail={detail ? { funktion: detail.funktion, eintrittsdatum: detail.eintrittsdatum, stundenlohn: detail.stundenlohn, aufenthaltsstatus: detail.aufenthaltsstatus, srkStatus: detail.srkStatus, srkDeadline: detail.srkDeadline } : undefined} />
+          <AnnaAngehoerigeSummary angehoeriger={a} detail={{ funktion: a.funktion, eintrittsdatum: a.eintrittsdatum, stundenlohn: a.stundenlohn, aufenthaltsstatus: a.aufenthaltsstatus, srkAmpel: srkAmpel(a, new Date(2026, 2, 3)), srkFrist: srkFristAnzeige(a.eintrittsdatum) }} />
         </div>
       </div>
 
@@ -590,10 +430,10 @@ export function Angehoerige360Page() {
 
       {/* ── Tab Content ────────────────────── */}
       <div style={{ padding: "20px var(--space-6) 40px" }}>
-        {activeTab === "ueberblick" && <TabUeberblick a={a} detail={detail} />}
-        {activeTab === "workflow" && <TabWorkflow a={a} detail={detail} />}
+        {activeTab === "ueberblick" && <TabUeberblick a={a} />}
+        {activeTab === "workflow" && <TabWorkflow a={a} />}
         {activeTab === "dokumente" && <TabDokumenteAngehoerige a={a} />}
-        {activeTab === "related" && <TabRelatedLists a={a} detail={detail} />}
+        {activeTab === "related" && <TabRelatedLists a={a} />}
         {activeTab === "tickets" && <TabTickets tickets={tickets} navigate={navigate} />}
         {activeTab === "historie" && <TabHistorie />}
       </div>
@@ -675,11 +515,11 @@ function SectionCard({
 /* ══════════════════════════════════════════
    TAB: ÜBERBLICK
    ══════════════════════════════════════════ */
-function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDetail }) {
+function TabUeberblick({ a }: { a: Angehoeriger }) {
   const st = statusConfig[a.status];
   const br = billingReadinessConfig[a.billingReadiness];
-  const uploadedDocs = detail.dokumente.filter((d) => d.status === "hochgeladen").length;
-  const totalDocs = detail.dokumente.length;
+  const uploadedDocs = a.dokumente.filter((d) => d.status === "hochgeladen").length;
+  const totalDocs = a.dokumente.length;
 
   /* ── Editing state ── */
   const [editingSection, setEditingSection] = useState<string | null>(null);
@@ -688,49 +528,47 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
   /* ── Personalien fields ── */
   const [vorname, setVorname] = useState(a.vorname);
   const [nachname, setNachname] = useState(a.nachname);
-  const [geschlecht, setGeschlecht] = useState(detail.geschlecht);
-  const [geburtsdatum, setGeburtsdatum] = useState(detail.geburtsdatum);
-  const [ahvNummer, setAhvNummer] = useState(detail.ahvNummer);
-  const [nationalitaet, setNationalitaet] = useState(detail.nationalitaet);
-  const [heimatort, setHeimatort] = useState(detail.heimatort);
-  const [aufenthaltsstatus, setAufenthaltsstatus] = useState(detail.aufenthaltsstatus);
-  const [zivilstand, setZivilstand] = useState(detail.zivilstand);
-  const [zivilstandSeit, setZivilstandSeit] = useState(detail.zivilstandSeit);
-  const [strasse, setStrasse] = useState(detail.strasse);
-  const [plz, setPlz] = useState(detail.plz);
-  const [ort, setOrt] = useState(detail.ort);
-  const [email, setEmail] = useState(detail.email);
-  const [telefon, setTelefon] = useState(detail.telefon);
-  const [kkName, setKkName] = useState(detail.krankenkasseName);
-  const [kkNummer, setKkNummer] = useState(detail.versicherungsnummer);
+  const [geschlecht, setGeschlecht] = useState(a.geschlecht);
+  const [geburtsdatum, setGeburtsdatum] = useState(a.geburtsdatum);
+  const [ahvNummer, setAhvNummer] = useState(a.ahvNummer);
+  const [nationalitaet, setNationalitaet] = useState(a.nationalitaet);
+  const [heimatort, setHeimatort] = useState(a.heimatort);
+  const [aufenthaltsstatus, setAufenthaltsstatus] = useState(a.aufenthaltsstatus);
+  const [zivilstand, setZivilstand] = useState(a.zivilstand);
+  const [zivilstandSeit, setZivilstandSeit] = useState(a.zivilstandSeit);
+  const [strasse, setStrasse] = useState(a.strasse);
+  const [plz, setPlz] = useState(a.plz);
+  const [ort, setOrt] = useState(a.ort);
+  const [email, setEmail] = useState(a.email);
+  const [telefon, setTelefon] = useState(a.telefon);
+  const [kkName, setKkName] = useState(a.krankenkasseName);
+  const [kkNummer, setKkNummer] = useState(a.kartennummer);
 
   /* ── Steuer fields ── */
-  const [quellensteuer, setQuellensteuer] = useState(detail.quellensteuer);
-  const [konfession, setKonfession] = useState(detail.konfession);
-  const [qsTarif, setQsTarif] = useState(detail.quellensteuerTarif);
-  const [steuergemeinde, setSteuergemeinde] = useState(detail.steuergemeinde);
-  const [sozialamtInvolviert, setSozialamtInvolviert] = useState(detail.sozialamtInvolviert);
-  const [sozialamtKontakt, setSozialamtKontakt] = useState(detail.sozialamtKontakt);
-  const [lohnabtretung, setLohnabtretung] = useState(detail.lohnabtretung);
+  const [quellensteuer, setQuellensteuer] = useState(a.quellensteuer);
+  const [konfession, setKonfession] = useState(a.konfession);
+  const [qsTarif, setQsTarif] = useState(a.quellensteuerTarif);
+  const [steuergemeinde, setSteuergemeinde] = useState(a.steuergemeinde);
+  const [sozialamtInvolviert, setSozialamtInvolviert] = useState(a.sozialamtInvolviert);
+  const [sozialamtKontakt, setSozialamtKontakt] = useState(a.sozialamtKontakt);
+  const [lohnabtretung, setLohnabtretung] = useState(a.lohnabtretung);
 
   /* ── Partner fields ── */
-  const [partnerName, setPartnerName] = useState(detail.partnerName);
-  const [partnerGeb, setPartnerGeb] = useState(detail.partnerGeburtsdatum);
-  const [partnerAhv, setPartnerAhv] = useState(detail.partnerAhvNummer);
-  const [partnerZemis, setPartnerZemis] = useState(detail.partnerZemisNummer);
-  const [partnerAufenthalt, setPartnerAufenthalt] = useState(detail.partnerAufenthaltsstatus);
+  const [partnerVorname, setPartnerVorname] = useState(a.partnerVorname);
+  const [partnerName, setPartnerName] = useState(a.partnerName);
+  const [partnerGeb, setPartnerGeb] = useState(a.partnerGeburtsdatum);
+  const [partnerAufenthalt, setPartnerAufenthalt] = useState(a.partnerAufenthaltsstatus);
 
   /* ── Kinder fields ── */
-  const [kinderList, setKinderList] = useState(detail.kinder.map((k, i) => ({ ...k, id: i })));
-  const [kinderZulagenSpitex, setKinderZulagenSpitex] = useState(detail.kinderzulagenUeberSpitex);
-  const [familienAk, setFamilienAk] = useState(detail.familienausgleichskasse);
+  const [kinderList, setKinderList] = useState<(Omit<AngehoerigerKind, "id"> & { id: number })[]>(a.kinder.map((k, i) => ({ ...k, id: i })));
+  const [kinderZulagenSpitex, setKinderZulagenSpitex] = useState(a.kinderzulagenUeberSpitex);
 
   /* ── Anstellung fields ── */
-  const [funktion, setFunktion] = useState(detail.funktion);
-  const [eintrittsdatum, setEintrittsdatum] = useState(detail.eintrittsdatum);
-  const [stundenlohn, setStundenlohn] = useState(detail.stundenlohn);
-  const [bankname, setBankname] = useState(detail.bankname);
-  const [iban, setIban] = useState(detail.iban);
+  const [funktion, setFunktion] = useState(a.funktion);
+  const [eintrittsdatum, setEintrittsdatum] = useState(a.eintrittsdatum);
+  const [stundenlohn, setStundenlohn] = useState(a.stundenlohn);
+  const [bankname, setBankname] = useState(a.bankname);
+  const [iban, setIban] = useState(a.iban);
 
   /* ── AHV masking ── */
   const [revealedAhv, setRevealedAhv] = useState(false);
@@ -749,9 +587,9 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
     } else if (section === "steuer") {
       setSnapshot({ quellensteuer, konfession, qsTarif, steuergemeinde, sozialamtInvolviert, sozialamtKontakt, lohnabtretung });
     } else if (section === "partner") {
-      setSnapshot({ partnerName, partnerGeb, partnerAhv, partnerZemis, partnerAufenthalt });
+      setSnapshot({ partnerVorname, partnerName, partnerGeb, partnerAufenthalt });
     } else if (section === "kinder") {
-      setSnapshot({ kinderZulagenSpitex, familienAk, _kinder: JSON.stringify(kinderList) });
+      setSnapshot({ kinderZulagenSpitex, _kinder: JSON.stringify(kinderList) });
     } else if (section === "anstellung") {
       setSnapshot({ funktion, eintrittsdatum, stundenlohn, bankname, iban });
     }
@@ -774,12 +612,11 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
       setSozialamtInvolviert(snapshot.sozialamtInvolviert ?? sozialamtInvolviert);
       setSozialamtKontakt(snapshot.sozialamtKontakt ?? sozialamtKontakt); setLohnabtretung(snapshot.lohnabtretung ?? lohnabtretung);
     } else if (section === "partner") {
+      setPartnerVorname(snapshot.partnerVorname ?? partnerVorname);
       setPartnerName(snapshot.partnerName ?? partnerName); setPartnerGeb(snapshot.partnerGeb ?? partnerGeb);
-      setPartnerAhv(snapshot.partnerAhv ?? partnerAhv); setPartnerZemis(snapshot.partnerZemis ?? partnerZemis);
       setPartnerAufenthalt(snapshot.partnerAufenthalt ?? partnerAufenthalt);
     } else if (section === "kinder") {
       setKinderZulagenSpitex(snapshot.kinderZulagenSpitex ?? kinderZulagenSpitex);
-      setFamilienAk(snapshot.familienAk ?? familienAk);
       if (snapshot._kinder) setKinderList(JSON.parse(snapshot._kinder));
     } else if (section === "anstellung") {
       setFunktion(snapshot.funktion ?? funktion); setEintrittsdatum(snapshot.eintrittsdatum ?? eintrittsdatum);
@@ -796,7 +633,7 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
   /* Kinder helpers */
   const addKind = () => {
     const newId = kinderList.length > 0 ? Math.max(...kinderList.map(k => k.id)) + 1 : 0;
-    setKinderList([...kinderList, { id: newId, nachname: "", vorname: "", geburtsdatum: "", ahvNummer: "", geschlecht: "", zulagenart: "K", ausbildungsbeginn: "" }]);
+    setKinderList([...kinderList, { id: newId, vorname: "", name: "", geburtsdatum: "", geschlecht: "", ahvNummer: "", inAusbildung: "", ausbildungsbeginn: "", zulagenart: "", typQuelle: "", overrideBegruendung: "" }]);
   };
   const removeKind = (id: number) => setKinderList(kinderList.filter(k => k.id !== id));
   const updateKind = (id: number, field: string, value: string) => setKinderList(kinderList.map(k => k.id === id ? { ...k, [field]: value } : k));
@@ -933,7 +770,7 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
             <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-3" style={{ fontWeight: 600 }}>Krankenkasse</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <EditableField label="Krankenkasse" value={kkName} editing={isEd("personalien")} onChange={setKkName} />
-              <EditableField label="Versicherungsnummer" value={kkNummer} editing={isEd("personalien")} onChange={setKkNummer} mono />
+              <EditableField label="Kartennummer" value={kkNummer} editing={isEd("personalien")} onChange={setKkNummer} mono />
             </div>
           </div>
         </SectionCard>
@@ -954,27 +791,12 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
         </SectionCard>
 
         {/* 3. Partner */}
-        {zivilstand === "verheiratet" && (
+        {istVerheiratetOderPartnerschaft(zivilstand) && (
           <SectionCard title="Partner" icon={Heart} editable editing={isEd("partner")} onEdit={() => startEdit("partner")} onSave={saveEdit} onCancel={() => cancelEdit("partner")}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <EditableField label="Vorname" value={partnerVorname} editing={isEd("partner")} onChange={setPartnerVorname} />
               <EditableField label="Name" value={partnerName} editing={isEd("partner")} onChange={setPartnerName} />
               <EditableField label="Geburtsdatum" value={partnerGeb} editing={isEd("partner")} onChange={setPartnerGeb} />
-              {isEd("partner") ? (
-                <EditableField label="AHV-Nummer" value={partnerAhv} editing mono onChange={setPartnerAhv} />
-              ) : (
-                <div>
-                  <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>AHV-Nummer</div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-[13px] text-foreground font-mono">{revealedPartnerAhv ? partnerAhv : maskAhv(partnerAhv)}</span>
-                    {partnerAhv && partnerAhv !== "—" && (
-                      <button type="button" onClick={() => setRevealedPartnerAhv(!revealedPartnerAhv)} className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                        {revealedPartnerAhv ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-              <EditableField label="ZEMIS-Nummer" value={partnerZemis} editing={isEd("partner")} onChange={setPartnerZemis} mono />
               <EditableField label="Aufenthaltsstatus" value={partnerAufenthalt} editing={isEd("partner")} onChange={setPartnerAufenthalt} />
             </div>
           </SectionCard>
@@ -1003,10 +825,10 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
                             {isEd("kinder") ? (
                               <div className="flex gap-1">
                                 <input type="text" value={k.vorname} onChange={e => updateKind(k.id, "vorname", e.target.value)} placeholder="Vorname" className={inputClass + " !py-1.5 !text-[12px]"} style={{ maxWidth: 90 }} />
-                                <input type="text" value={k.nachname} onChange={e => updateKind(k.id, "nachname", e.target.value)} placeholder="Nachname" className={inputClass + " !py-1.5 !text-[12px]"} style={{ maxWidth: 90 }} />
+                                <input type="text" value={k.name} onChange={e => updateKind(k.id, "name", e.target.value)} placeholder="Nachname" className={inputClass + " !py-1.5 !text-[12px]"} style={{ maxWidth: 90 }} />
                               </div>
                             ) : (
-                              <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{k.vorname} {k.nachname}</span>
+                              <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{k.vorname} {k.name}</span>
                             )}
                           </td>
                           <td className="px-3 py-2.5">
@@ -1069,7 +891,6 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
               )}
               <div className="mt-4 pt-3 border-t border-border-light grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <EditableField label="Kinderzulagen über Spitex" value={kinderZulagenSpitex} editing={isEd("kinder")} onChange={setKinderZulagenSpitex} />
-                <EditableField label="Familienausgleichskasse" value={familienAk} editing={isEd("kinder")} onChange={setFamilienAk} />
               </div>
             </>
           ) : (
@@ -1208,7 +1029,7 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
 /* ══════════════════════════════════════════
    TAB: WORKFLOW / ACTION PLAN
    ══════════════════════════════════════════ */
-function TabWorkflow({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDetail }) {
+function TabWorkflow({ a }: { a: Angehoeriger }) {
   const navigate = useNavigate();
   const [, forceUpdate] = useState(0);
   const nachweise = getNachweiseFuerAngehoeriger(a.id);
@@ -1230,7 +1051,7 @@ function TabWorkflow({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDetai
                   <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2 }}>{n.unterschriften.length} von {n.positionen.length} Positionen unterschrieben</div>
                 </div>
                 <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: n.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: n.status === "abgeschlossen" ? "var(--status-success)" : "var(--status-warning-text)" }}>
-                  {n.status === "abgeschlossen" ? "Abgeschlossen" : "In Bearbeitung"}
+                  {n.status === "abgeschlossen" ? "Abgeschlossen" : n.status === "in_bearbeitung" ? "In Bearbeitung" : "—"}
                 </span>
               </div>
             ))}
@@ -1239,7 +1060,7 @@ function TabWorkflow({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDetai
       )}
 
       {/* Arbeitskontrollen */}
-      <ArbeitskontrolleHistorie a={a} detail={detail} kontrollen={kontrollen} navigate={navigate} onRefresh={() => forceUpdate(n => n + 1)} />
+      <ArbeitskontrolleHistorie a={a} kontrollen={kontrollen} navigate={navigate} onRefresh={() => forceUpdate(n => n + 1)} />
     </div>
   );
 }
@@ -1248,15 +1069,14 @@ function TabWorkflow({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDetai
    ARBEITSKONTROLLE HISTORIE
    ══════════════════════════════════════════ */
 
-function ArbeitskontrolleHistorie({ a, detail, kontrollen, navigate, onRefresh }: {
+function ArbeitskontrolleHistorie({ a, kontrollen, navigate, onRefresh }: {
   a: Angehoeriger;
-  detail: AngehoerigerDetail;
   kontrollen: ReturnType<typeof getKontrollenFuerAngehoeriger>;
   navigate: ReturnType<typeof useNavigate>;
   onRefresh: () => void;
 }) {
   // Eintrittsdatum in ISO konvertieren
-  const parts = detail.eintrittsdatum?.split(".") ?? [];
+  const parts = a.eintrittsdatum?.split(".") ?? [];
   const isoEintritt = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : undefined;
   const naechsteFaellig = getNaechsteFaelligkeit(a.id, isoEintritt);
   const heute = new Date().toISOString().slice(0, 10);
@@ -1334,7 +1154,7 @@ function ArbeitskontrolleHistorie({ a, detail, kontrollen, navigate, onRefresh }
                   </button>
                 )}
                 <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: k.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: k.status === "abgeschlossen" ? "var(--status-success)" : "var(--status-warning-text)" }}>
-                  {k.status === "abgeschlossen" ? "Abgeschlossen" : "In Bearbeitung"}
+                  {k.status === "abgeschlossen" ? "Abgeschlossen" : k.status === "in_bearbeitung" ? "In Bearbeitung" : "—"}
                 </span>
               </div>
             </div>
@@ -1472,7 +1292,7 @@ function TabDokumenteAngehoerige({ a }: { a: Angehoeriger }) {
 /* ══════════════════════════════════════════
    TAB: RELATED LISTS
    ══════════════════════════════════════════ */
-function TabRelatedLists({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDetail }) {
+function TabRelatedLists({ a }: { a: Angehoeriger }) {
   const [activeList, setActiveList] = useState("stempel");
   const lists = [
     { id: "stempel", label: "Stempelkontrolle & Absenzen", icon: Stamp },
@@ -1503,8 +1323,8 @@ function TabRelatedLists({ a, detail }: { a: Angehoeriger; detail: AngehoerigerD
       </div>
 
       {activeList === "stempel" && <TableStempel />}
-      {activeList === "sozial" && <TableSozial detail={detail} />}
-      {activeList === "qualifikation" && <TableQualifikation detail={detail} />}
+      {activeList === "sozial" && <TableSozial a={a} />}
+      {activeList === "qualifikation" && <TableQualifikation a={a} />}
     </div>
   );
 }
@@ -2039,25 +1859,23 @@ function TableStempel() {
   );
 }
 
-function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
+function TableSozial({ a }: { a: Angehoeriger }) {
   const [isEditing, setIsEditing] = useState(false);
   const [revealedAhv, setRevealedAhv] = useState<Record<number, boolean>>({});
 
   /* ── Editable local state (initialized from detail) ── */
-  const [kinderzulagenAktiv, setKinderzulagenAktiv] = useState(detail.kinderzulagenAktiv);
-  const [kinderzulagenUeberSpitex, setKinderzulagenUeberSpitex] = useState(detail.kinderzulagenUeberSpitex);
-  const [kinder, setKinder] = useState(detail.kinder.map((k, i) => ({ ...k, id: i })));
-  const [kinderNextId, setKinderNextId] = useState(detail.kinder.length);
+  const [kinderzulagenUeberSpitex, setKinderzulagenUeberSpitex] = useState(a.kinderzulagenUeberSpitex);
+  const [kinder, setKinder] = useState<(Omit<AngehoerigerKind, "id"> & { id: number })[]>(a.kinder.map((k, i) => ({ ...k, id: i })));
+  const [kinderNextId, setKinderNextId] = useState(a.kinder.length);
 
-  const [quellensteuer, setQuellensteuer] = useState(detail.quellensteuer);
-  const [quellensteuerTarif, setQuellensteuerTarif] = useState(detail.quellensteuerTarif);
-  const [konfession, setKonfession] = useState(detail.konfession);
+  const [quellensteuer, setQuellensteuer] = useState(a.quellensteuer);
+  const [quellensteuerTarif, setQuellensteuerTarif] = useState(a.quellensteuerTarif);
+  const [konfession, setKonfession] = useState(a.konfession);
 
-  const [lohnsumme, setLohnsumme] = useState(detail.lohnsumme);
 
-  const [fluechtlingsstatus, setFluechtlingsstatus] = useState(detail.fluechtlingsstatus);
-  const [grenzgaenger, setGrenzgaenger] = useState(detail.grenzgaenger);
-  const [aufenthaltsstatus, setAufenthaltsstatus] = useState(detail.aufenthaltsstatus);
+  /* R22 und R23: Anzeigen, keine gespeicherten Felder — sie folgen dem
+     Aufenthaltsstatus und lassen sich nicht getrennt setzen. */
+  const [aufenthaltsstatus, setAufenthaltsstatus] = useState(a.aufenthaltsstatus);
 
   const toggleAhv = (idx: number) => setRevealedAhv((p) => ({ ...p, [idx]: !p[idx] }));
 
@@ -2069,7 +1887,7 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
   };
 
   const handleAddKind = () => {
-    setKinder((prev) => [...prev, { id: kinderNextId, nachname: "", vorname: "", geburtsdatum: "", ahvNummer: "", geschlecht: "maennlich", zulagenart: "K", ausbildungsbeginn: "—" }]);
+    setKinder((prev) => [...prev, { id: kinderNextId, vorname: "", name: "", geburtsdatum: "", geschlecht: "maennlich", ahvNummer: "", inAusbildung: "", ausbildungsbeginn: "", zulagenart: "", typQuelle: "", overrideBegruendung: "" }]);
     setKinderNextId((n) => n + 1);
   };
 
@@ -2078,16 +1896,12 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
   };
 
   const handleCancel = () => {
-    setKinderzulagenAktiv(detail.kinderzulagenAktiv);
-    setKinderzulagenUeberSpitex(detail.kinderzulagenUeberSpitex);
-    setKinder(detail.kinder.map((k, i) => ({ ...k, id: i })));
-    setQuellensteuer(detail.quellensteuer);
-    setQuellensteuerTarif(detail.quellensteuerTarif);
-    setKonfession(detail.konfession);
-    setLohnsumme(detail.lohnsumme);
-    setFluechtlingsstatus(detail.fluechtlingsstatus);
-    setGrenzgaenger(detail.grenzgaenger);
-    setAufenthaltsstatus(detail.aufenthaltsstatus);
+    setKinderzulagenUeberSpitex(a.kinderzulagenUeberSpitex);
+    setKinder(a.kinder.map((k, i) => ({ ...k, id: i })));
+    setQuellensteuer(a.quellensteuer);
+    setQuellensteuerTarif(a.quellensteuerTarif);
+    setKonfession(a.konfession);
+    setAufenthaltsstatus(a.aufenthaltsstatus);
     setIsEditing(false);
   };
 
@@ -2203,10 +2017,10 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
                             {isEditing ? (
                               <div className="flex items-center gap-1.5">
                                 <input type="text" value={k.vorname} onChange={(e) => updateKind(k.id, "vorname", e.target.value)} placeholder="Vorname" className={inputClass + " !py-1.5 !text-[12px]"} />
-                                <input type="text" value={k.nachname} onChange={(e) => updateKind(k.id, "nachname", e.target.value)} placeholder="Name" className={inputClass + " !py-1.5 !text-[12px]"} />
+                                <input type="text" value={k.name} onChange={(e) => updateKind(k.id, "name", e.target.value)} placeholder="Name" className={inputClass + " !py-1.5 !text-[12px]"} />
                               </div>
                             ) : (
-                              <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{k.vorname} {k.nachname}</span>
+                              <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{k.vorname} {k.name}</span>
                             )}
                           </td>
                           {/* Geburtsdatum */}
@@ -2287,15 +2101,7 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
               )}
 
               {/* Footer fields — matches Überblick tab */}
-              <div className="mt-4 pt-3 border-t border-border-light grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4">
-                <div>
-                  <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>Kinderzulagen aktiv</div>
-                  {isEditing ? (
-                    <YesNoToggle value={kinderzulagenAktiv} onChange={setKinderzulagenAktiv} />
-                  ) : (
-                    <YesNoBadge value={kinderzulagenAktiv} />
-                  )}
-                </div>
+              <div className="mt-4 pt-3 border-t border-border-light grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                 <div>
                   <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>Kinderzulagen über Spitex</div>
                   {isEditing ? (
@@ -2304,7 +2110,6 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
                     <div className="text-[13px] text-foreground" style={{ fontWeight: 450 }}>{kinderzulagenUeberSpitex || "—"}</div>
                   )}
                 </div>
-                <Field label="Familienausgleichskasse" value={detail.familienausgleichskasse} />
               </div>
             </>
           ) : (
@@ -2367,31 +2172,8 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
         </div>
       </div>
 
-      {/* ═══ BLOCK 3: Lohnsumme ═══ */}
-      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-        <div className="px-5 py-4 border-b border-border-light flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-primary" />
-          <h5 className="text-foreground">Lohnsumme</h5>
-        </div>
-        <div className="p-5">
-          <div className="max-w-xs">
-            <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Lohnsumme (CHF)</div>
-            {isEditing ? (
-              <input
-                type="text"
-                value={lohnsumme}
-                onChange={(e) => setLohnsumme(e.target.value)}
-                placeholder="z.B. 3'540.00"
-                className={inputClass}
-              />
-            ) : (
-              <div className="text-[22px] text-foreground tracking-tight" style={{ fontWeight: 600, lineHeight: 1.2 }}>
-                CHF {lohnsumme || "—"}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* Block "Lohnsumme" entfallen: der Katalog kennt kein solches Feld, es
+         wurde nirgends erhoben und nirgends berechnet. */}
 
       {/* ═══ BLOCK 4: Arbeits-/Aufenthaltsstatus ═══ */}
       <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
@@ -2403,19 +2185,13 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4">
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Flüchtlingsstatus</div>
-              {isEditing ? (
-                <YesNoToggle value={fluechtlingsstatus} onChange={setFluechtlingsstatus} />
-              ) : (
-                <YesNoBadge value={fluechtlingsstatus} />
-              )}
+              {/* R22: folgt dem Aufenthaltsstatus, wird nicht gespeichert. */}
+              <YesNoBadge value={istFluechtling(aufenthaltsstatus) ? "ja" : "nein"} />
             </div>
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Grenzgänger</div>
-              {isEditing ? (
-                <YesNoToggle value={grenzgaenger} onChange={setGrenzgaenger} />
-              ) : (
-                <YesNoBadge value={grenzgaenger} />
-              )}
+              {/* R23: folgt dem Aufenthaltsstatus, wird nicht gespeichert. */}
+              <YesNoBadge value={istGrenzgaenger(aufenthaltsstatus) ? "ja" : "nein"} />
             </div>
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Aufenthaltsstatus</div>
@@ -2452,7 +2228,7 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
   );
 }
 
-function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
+function TableQualifikation({ a }: { a: Angehoeriger }) {
   const TODAY = new Date(2026, 2, 3); // March 3, 2026
 
   /* ── Date helpers ── */
@@ -2474,70 +2250,36 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
     return Math.ceil((d.getTime() - TODAY.getTime()) / (1000 * 60 * 60 * 24));
   };
 
-  /* ── Editable state ── */
-  const [isEditing, setIsEditing] = useState(false);
-  const [showSaved, setShowSaved] = useState(false);
-  const [status, setStatus] = useState<"abgeschlossen" | "offen" | "ueberfaellig">(detail.srkStatus);
-  const [angemeldet, setAngemeldet] = useState(detail.srkAngemeldet);
-  const [deadline, setDeadline] = useState(detail.srkDeadline);
-  const [abgeschlossenAm, setAbgeschlossenAm] = useState(detail.srkAbgeschlossenAm);
+  /* ── R21 · SRK-Gate. Nichts davon wird gespeichert; alles folgt aus dem
+     Eintrittsdatum (AN-F8), dem Zertifikat (AN-G3) und der Qualifikationsstufe.
+     Ohne Eintrittsdatum gibt es keine Ampel — ein fehlender Wert ist keine
+     Freigabe. ── */
+  const ampel = srkAmpel(a, TODAY);
+  const frist = srkFrist(a.eintrittsdatum);
+  const grenze12Str = frist ? formatDe(frist) : "—";
+  const daysToGrenze = frist ? Math.ceil((frist.getTime() - TODAY.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
-  const handleCancel = () => {
-    setStatus(detail.srkStatus);
-    setAngemeldet(detail.srkAngemeldet);
-    setDeadline(detail.srkDeadline);
-    setAbgeschlossenAm(detail.srkAbgeschlossenAm);
-    setIsEditing(false);
+  const gateConfig: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
+    erlaubt:   { label: "Leistungen erlaubt",    bg: "bg-success/10", text: "text-success", border: "border-success/15", dot: "bg-success" },
+    risiko:    { label: "Leistungen in Risiko",   bg: "bg-warning/10", text: "text-warning", border: "border-warning/15", dot: "bg-warning" },
+    pausiert:  { label: "Leistungen pausiert",    bg: "bg-error/10",   text: "text-error",   border: "border-error/15",   dot: "bg-error" },
+    kein_gate: { label: "Kein SRK-Gate",          bg: "bg-muted",      text: "text-muted-foreground", border: "border-border", dot: "bg-border" },
+    offen:     { label: "Kein Eintrittsdatum",    bg: "bg-muted",      text: "text-muted-foreground", border: "border-border", dot: "bg-border" },
+  };
+  const statusBadgeConfig: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
+    erlaubt:   { label: "SRK erfüllt",       bg: "bg-success/10", text: "text-success", border: "border-success/20", dot: "bg-success" },
+    risiko:    { label: "SRK offen",          bg: "bg-warning/10", text: "text-warning", border: "border-warning/20", dot: "bg-warning" },
+    pausiert:  { label: "SRK überfällig",     bg: "bg-error/10",   text: "text-error",   border: "border-error/20",   dot: "bg-error" },
+    kein_gate: { label: "Ausbildung ersetzt den Nachweis", bg: "bg-muted", text: "text-muted-foreground", border: "border-border", dot: "bg-border" },
+    offen:     { label: "Kein Eintrittsdatum", bg: "bg-muted",      text: "text-muted-foreground", border: "border-border", dot: "bg-border" },
   };
 
-  const handleSave = () => {
-    setIsEditing(false);
-    setShowSaved(true);
-    setTimeout(() => setShowSaved(false), 2500);
-  };
-
-  /* ── Compliance calculations ── */
-  const vertragsDate = parseDe(detail.eintrittsdatum);
-  const grenze12 = vertragsDate ? new Date(vertragsDate.getFullYear() + 1, vertragsDate.getMonth(), vertragsDate.getDate()) : null;
-  const grenze12Str = grenze12 ? formatDe(grenze12) : "—";
-  const daysToGrenze = grenze12 ? Math.ceil((grenze12.getTime() - TODAY.getTime()) / (1000 * 60 * 60 * 24)) : null;
-
-  const deadlineDays = daysUntil(deadline);
-  const isOverdue = status === "ueberfaellig";
-  const isSoonDeadline = status === "offen" && deadlineDays !== null && deadlineDays <= 30;
-
-  // Gate status
-  let gateStatus: "erlaubt" | "risiko" | "pausiert" = "erlaubt";
-  if (status === "abgeschlossen") {
-    gateStatus = "erlaubt";
-  } else if (grenze12 && TODAY >= grenze12) {
-    gateStatus = "pausiert";
-  } else if (daysToGrenze !== null && daysToGrenze <= 30) {
-    gateStatus = "risiko";
-  } else if (isOverdue || isSoonDeadline) {
-    gateStatus = "risiko";
-  }
-
-  const gateConfig = {
-    erlaubt:  { label: "Leistungen erlaubt",   bg: "bg-success/10", text: "text-success", border: "border-success/15", dot: "bg-success" },
-    risiko:   { label: "Leistungen in Risiko",  bg: "bg-warning/10", text: "text-warning", border: "border-warning/15", dot: "bg-warning" },
-    pausiert: { label: "Leistungen pausiert",   bg: "bg-error/10",   text: "text-error",   border: "border-error/15",   dot: "bg-error" },
-  };
-
-  const statusBadgeConfig = {
-    abgeschlossen: { label: "SRK erfüllt",     bg: "bg-success/10", text: "text-success", border: "border-success/20", dot: "bg-success" },
-    offen:         { label: "SRK offen",        bg: "bg-warning/10", text: "text-warning", border: "border-warning/20", dot: "bg-warning" },
-    ueberfaellig:  { label: "SRK überfällig",   bg: "bg-error/10",   text: "text-error",   border: "border-error/20",   dot: "bg-error" },
-  };
-
-  const statusDropdownConfig = {
-    abgeschlossen: "Abgeschlossen",
-    offen: "Offen",
-    ueberfaellig: "Überfällig",
-  };
-
-  const sb = statusBadgeConfig[status];
-  const gc = gateConfig[gateStatus];
+  /* Schlüssel für beide Zuordnungen — nie leer, damit kein Zugriff ins Leere
+     greift. `null` (kein Eintrittsdatum) wird eigens benannt, nicht "erlaubt". */
+  const ampelKey = ampel ?? "offen";
+  const gateStatus = ampelKey;
+  const sb = statusBadgeConfig[ampelKey];
+  const gc = gateConfig[ampelKey];
 
   const inputClass = "w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all";
   const selectClass = inputClass + " appearance-none";
@@ -2565,42 +2307,9 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-2 shrink-0">
-            {showSaved && (
-              <span className="text-[11px] text-success flex items-center gap-1" style={{ fontWeight: 500 }}>
-                <CheckCircle2 className="w-3.5 h-3.5" /> Änderungen gespeichert
-              </span>
-            )}
-            {!isEditing ? (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors cursor-pointer"
-                style={{ fontWeight: 500 }}
-              >
-                <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                Bearbeiten
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleCancel}
-                  className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors cursor-pointer text-foreground"
-                  style={{ fontWeight: 500 }}
-                >
-                  Abbrechen
-                </button>
-                <button
-                  onClick={handleSave}
-                  className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl text-primary-foreground bg-primary hover:bg-primary-hover transition-colors cursor-pointer"
-                  style={{ fontWeight: 500 }}
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  Speichern
-                </button>
-              </div>
-            )}
-          </div>
+          {/* Aktionsleiste entfernt: Status, Anmeldung, Frist und Abschluss
+              sind keine Felder mehr, sondern folgen nach R21 aus Eintrittsdatum,
+              Zertifikat und Qualifikationsstufe. Es gibt nichts zu bearbeiten. */}
         </div>
 
         {/* Rule text */}
@@ -2613,21 +2322,21 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
           </div>
         </div>
 
-        {/* Warning banner */}
-        {(isOverdue || isSoonDeadline) && (
+        {/* Warnband — aus der Ampel nach R21 */}
+        {(ampelKey === "pausiert" || ampelKey === "risiko") && (
           <div className="px-5 pb-4">
             <div className={`flex items-start gap-2.5 px-4 py-3 rounded-xl border ${
-              isOverdue ? "bg-error/[0.04] border-error/15" : "bg-warning/[0.04] border-warning/15"
+              ampelKey === "pausiert" ? "bg-error/[0.04] border-error/15" : "bg-warning/[0.04] border-warning/15"
             }`}>
-              <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${isOverdue ? "text-error" : "text-warning"}`} />
+              <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${ampelKey === "pausiert" ? "text-error" : "text-warning"}`} />
               <div>
-                <div className={`text-[12px] ${isOverdue ? "text-error" : "text-warning"}`} style={{ fontWeight: 500 }}>
-                  {isOverdue ? "SRK Kurs überfällig – Risiko Leistungs-Pause" : "SRK Kurs bald fällig"}
+                <div className={`text-[12px] ${ampelKey === "pausiert" ? "text-error" : "text-warning"}`} style={{ fontWeight: 500 }}>
+                  {ampelKey === "pausiert" ? "SRK-Frist überschritten – Leistungen pausiert" : "SRK-Zertifikat fehlt, Frist läuft"}
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">
-                  Deadline: {deadline}
-                  {deadlineDays !== null && (
-                    <span> ({isOverdue ? `${Math.abs(deadlineDays)} Tage überfällig` : `Fällig in ${deadlineDays} Tagen`})</span>
+                  Frist: {grenze12Str}
+                  {daysToGrenze !== null && (
+                    <span> ({ampelKey === "pausiert" ? `${Math.abs(daysToGrenze)} Tage überschritten` : `noch ${daysToGrenze} Tage`})</span>
                   )}
                 </div>
               </div>
@@ -2647,114 +2356,42 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
           </div>
           <div className="p-5 space-y-4">
             {/* Status */}
+            {/* Status — abgeleitet nach R21, nicht erfassbar */}
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Status</div>
-              {isEditing ? (
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as "abgeschlossen" | "offen" | "ueberfaellig")}
-                  className={selectClass}
-                >
-                  {Object.entries(statusDropdownConfig).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-              ) : (
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] ${statusBadgeConfig[status].bg} ${statusBadgeConfig[status].text} border ${statusBadgeConfig[status].border}`} style={{ fontWeight: 600 }}>
-                  <span className={`w-[5px] h-[5px] rounded-full ${statusBadgeConfig[status].dot}`} />
-                  {statusDropdownConfig[status]}
-                </span>
-              )}
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] ${sb.bg} ${sb.text} border ${sb.border}`} style={{ fontWeight: 500 }}>
+                <span className={`w-[5px] h-[5px] rounded-full ${sb.dot}`} />
+                {sb.label}
+              </span>
             </div>
 
-            {/* Angemeldet */}
+            {/* Zertifikat — das einzige erhobene SRK-Feld (AN-G3) */}
             <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Angemeldet</div>
-              {isEditing ? (
-                <div className="flex gap-2">
-                  {[true, false].map((opt) => (
-                    <button
-                      key={String(opt)}
-                      type="button"
-                      onClick={() => setAngemeldet(opt)}
-                      className={`px-3 py-1.5 rounded-lg text-[12px] border transition-colors cursor-pointer ${
-                        angemeldet === opt
-                          ? opt ? "bg-success/10 text-success border-success/20" : "bg-muted text-foreground border-border"
-                          : "bg-card text-muted-foreground border-border hover:bg-secondary/60"
-                      }`}
-                      style={{ fontWeight: angemeldet === opt ? 500 : 400 }}
-                    >
-                      {opt ? "Ja" : "Nein"}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border ${
-                  angemeldet ? "bg-primary/[0.06] text-primary border-primary/15" : "bg-muted text-muted-foreground border-border"
-                }`} style={{ fontWeight: 500 }}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${angemeldet ? "bg-primary" : "bg-muted-foreground/40"}`} />
-                  {angemeldet ? "Ja" : "Nein"}
-                </span>
-              )}
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Zertifikat vorhanden</div>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] border ${
+                a.srkZertifikatVorhanden === "ja"
+                  ? "bg-success/10 text-success border-success/20"
+                  : "bg-warning/10 text-warning border-warning/20"
+              }`} style={{ fontWeight: 500 }}>
+                {a.srkZertifikatVorhanden === "ja" ? "Ja" : "Nein"}
+              </span>
             </div>
 
-            {/* Deadline */}
+            {/* Frist — AN-F8 plus zwölf Monate. Ohne Eintrittsdatum keine Frist. */}
             <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Deadline</div>
-              {isEditing ? (
-                <DateField wertFormat="display" bereich="any" value={deadline || null} onChange={v => setDeadline((v as string) ?? "")} />
-              ) : (
-                <div className="flex items-center gap-2.5">
-                  <div className="flex items-center gap-1.5 text-[13px] text-foreground" style={{ fontWeight: 450 }}>
-                    <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
-                    {deadline}
-                  </div>
-                  {status !== "abgeschlossen" && deadlineDays !== null && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                      isOverdue
-                        ? "bg-error/10 text-error border border-error/15"
-                        : isSoonDeadline
-                          ? "bg-warning/10 text-warning border border-warning/15"
-                          : "bg-muted text-muted-foreground border border-border"
-                    }`} style={{ fontWeight: 500 }}>
-                      {isOverdue ? `${Math.abs(deadlineDays)} Tage überfällig` : `Fällig in ${deadlineDays} Tagen`}
-                    </span>
-                  )}
-                </div>
-              )}
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Frist</div>
+              <div className="text-[13px] text-foreground" style={{ fontWeight: 450 }}>
+                {grenze12Str}
+                {daysToGrenze !== null && ampelKey !== "kein_gate" && (
+                  <span className="text-muted-foreground"> · {daysToGrenze >= 0 ? `noch ${daysToGrenze} Tage` : `${Math.abs(daysToGrenze)} Tage überschritten`}</span>
+                )}
+              </div>
             </div>
 
-            {/* Abgeschlossen am */}
+            {/* Eintrittsdatum — der Anker der Frist */}
             <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Abgeschlossen am</div>
-              {isEditing ? (
-                <DateField
-                  wertFormat="display"
-                  bereich="past"
-                  value={abgeschlossenAm && abgeschlossenAm !== "—" ? abgeschlossenAm : null}
-                  onChange={v => setAbgeschlossenAm((v as string) ?? "")}
-                  disabled={status !== "abgeschlossen"}
-                />
-              ) : (
-                <div className="flex items-center gap-1.5 text-[13px]" style={{ fontWeight: 450 }}>
-                  {abgeschlossenAm && abgeschlossenAm !== "—" ? (
-                    <>
-                      <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-                      <span className="text-foreground">{abgeschlossenAm}</span>
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground/60">—</span>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Nachweis hochladen */}
-            <div className="pt-1">
-              <button className="inline-flex items-center gap-1.5 text-[12px] text-primary hover:text-primary-hover transition-colors cursor-pointer" style={{ fontWeight: 450 }}>
-                <Upload className="w-3.5 h-3.5" />
-                Nachweis hochladen
-              </button>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Eintrittsdatum</div>
+              <div className="text-[13px] text-foreground" style={{ fontWeight: 450 }}>{a.eintrittsdatum || "—"}</div>
             </div>
           </div>
         </div>
@@ -2779,7 +2416,7 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
                 </div>
                 <div className="pt-0.5">
                   <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Vertragsunterzeichnung</div>
-                  <div className="text-[13px] text-foreground mt-0.5" style={{ fontWeight: 500 }}>{detail.eintrittsdatum}</div>
+                  <div className="text-[13px] text-foreground mt-0.5" style={{ fontWeight: 500 }}>{a.eintrittsdatum}</div>
                 </div>
               </div>
 

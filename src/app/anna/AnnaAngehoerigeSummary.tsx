@@ -23,8 +23,8 @@ interface DetailData {
   eintrittsdatum?: string;
   stundenlohn?: string;
   aufenthaltsstatus?: string;
-  srkStatus?: "abgeschlossen" | "offen" | "ueberfaellig";
-  srkDeadline?: string;
+  srkAmpel?: "erlaubt" | "risiko" | "pausiert" | "kein_gate" | null;
+  srkFrist?: string;
 }
 
 function generateSummary(a: Angehoeriger, detail?: DetailData): string {
@@ -40,14 +40,14 @@ function generateSummary(a: Angehoeriger, detail?: DetailData): string {
     statusParts.push(`{{warning}}${detail.aufenthaltsstatus}{{/warning}}`);
   }
   if (detail?.stundenlohn) statusParts.push(`CHF ${detail.stundenlohn}/h`);
-  if (detail?.srkStatus === "abgeschlossen") statusParts.push("SRK abgeschlossen ✓");
+  if (detail?.srkAmpel === "erlaubt") statusParts.push("SRK-Zertifikat liegt vor ✓");
   if (statusParts.length > 0) parts.push(statusParts.join(", ") + ".");
 
   // Sentence 3: Compliance triggers
-  if (detail?.srkStatus === "ueberfaellig") {
-    parts.push(`{{danger}}SRK-Schulung überfällig (Frist ${detail.srkDeadline || "–"}).{{/danger}}`);
-  } else if (detail?.srkStatus === "offen") {
-    parts.push(`{{warning}}SRK-Schulung noch ausstehend, Frist am ${detail.srkDeadline || "–"}.{{/warning}}`);
+  if (detail?.srkAmpel === "pausiert") {
+    parts.push(`{{danger}}SRK-Frist überschritten (Frist ${detail.srkFrist || "–"}).{{/danger}}`);
+  } else if (detail?.srkAmpel === "risiko") {
+    parts.push(`{{warning}}SRK-Zertifikat fehlt, Frist am ${detail.srkFrist || "–"}.{{/warning}}`);
   }
 
   // Sentence 4: HR-Check
@@ -76,7 +76,7 @@ export function AnnaAngehoerigeSummary({ angehoeriger, detail }: Props) {
   const [displayed, setDisplayed] = useState("");
 
   const cacheId = `anna_angehoerige_${angehoeriger.id}`;
-  const dataHash = JSON.stringify({ id: angehoeriger.id, status: angehoeriger.status, srkStatus: detail?.srkStatus, role });
+  const dataHash = JSON.stringify({ id: angehoeriger.id, status: angehoeriger.status, srkAmpel: detail?.srkAmpel, role });
 
   useEffect(() => {
     const cached = sessionStorage.getItem(cacheId);
