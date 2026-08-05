@@ -1,5 +1,5 @@
 import { getPatienten, tageBisReAssessment } from "../../lib/patienten/store";
-import { getAngehoerige } from "../../lib/angehoerige/store";
+import { getAngehoerige, srkZertifikatFehlt } from "../../lib/angehoerige/store";
 import { unifiedEntries, entryTitle, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
 
 export interface AnnaMessage {
@@ -226,7 +226,7 @@ const rules: MatchRule[] = [
   {
     patterns: [/srk.*(offen|ausstehend|nicht.*gemacht)/i, /(?:ohne|kein).*srk/i],
     handler: () => {
-      const matches = getAngehoerige().filter(a => a.srkZertifikatVorhanden !== "ja");
+      const matches = getAngehoerige().filter(srkZertifikatFehlt);
       const cards = matches.map(a => ({ id: a.id, title: `${a.nachname}, ${a.vorname}`, subtitle: "SRK ausstehend", path: `/angehoerige/${a.id}` }));
       return { role: "anna", text: `${formatCount(matches.length, "Angehörige/r hat", "Angehörige haben")} den SRK-Kurs noch nicht absolviert:`, cards: cards.slice(0, 5), navAction: "/angehoerige?view=srk_offen", chips: ["Zur Angehörigen-Übersicht", "Wessen Frist läuft bald ab?"] };
     },

@@ -4,7 +4,7 @@
  */
 import { getPatienten, tageBisReAssessment } from "../../lib/patienten/store";
 import { fallById, patientAnzeigeName } from "../../lib/onboarding/faelle";
-import { getAngehoerige } from "../../lib/angehoerige/store";
+import { getAngehoerige, srkZertifikatFehlt } from "../../lib/angehoerige/store";
 import { unifiedEntries, entryTitle, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
 import { pendenzTypen } from "../../types/pendenz";
 
@@ -213,7 +213,7 @@ function generatePatientDetail(patientId: string): AnnaContextResult {
 
 /* ── Angehörige-Liste ── */
 function generateAngehoerigeListe(): AnnaContextResult {
-  const srkOffen = getAngehoerige().filter(a => a.srkZertifikatVorhanden !== "ja");
+  const srkOffen = getAngehoerige().filter(srkZertifikatFehlt);
   const parts: string[] = [`${getAngehoerige().length} aktive Angehörige.`];
   if (srkOffen.length > 0) parts.push(`{{danger}}${srkOffen.length} Compliance-Themen offen{{/danger}} – ausstehende SRK-Anmeldungen.`);
   return {
@@ -234,7 +234,7 @@ function generateAngehoerigeDetail(angehoerigeId: string): AnnaContextResult {
   const name = `${a.vorname} ${a.nachname}`;
   const patient = a.zugeordnetePatientenList[0]?.name || "–";
   const parts: string[] = [`Wir schauen ${name} an. Pflegende/r Angehörige/r für ${patient}.`];
-  if (a.srkZertifikatVorhanden !== "ja") parts.push(`{{warning}}SRK-Zertifikat fehlt.{{/warning}}`);
+  if (srkZertifikatFehlt(a)) parts.push(`{{warning}}SRK-Zertifikat fehlt.{{/warning}}`);
   if (!a.hrCheck.bankdaten) parts.push(`{{warning}}Bankdaten fehlen im HR-Check.{{/warning}}`);
   return {
     greeting: parts.join(" "),

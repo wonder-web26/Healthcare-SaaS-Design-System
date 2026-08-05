@@ -13,8 +13,14 @@ export type BillingReadiness =
   | "gekuendigt";
 
 export type AngehoerigerStatus =
-  /** Im Onboarding erfasst, noch nicht abgeschlossen — erscheint nicht in der Liste. */
-  | "im_onboarding"
+  /**
+   * Die Person wird gerade erfasst; das Onboarding ist nicht abgeschlossen.
+   * Sie erscheint nicht in der Liste und nicht in deren Zählungen.
+   *
+   * Nicht zu verwechseln mit "in_onboarding" — jenem Altwert dreier
+   * Datensätze, der eine sichtbare, laufende Betreuung bezeichnet.
+   */
+  | "in_erfassung"
   | "aktiv"
   | "in_onboarding"
   | "fehlende_dokumente";

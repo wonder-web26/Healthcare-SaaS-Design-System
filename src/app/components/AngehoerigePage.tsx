@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { Search, Plus, X, ChevronDown, Check, AlertTriangle, AlertCircle, ExternalLink } from "lucide-react";
 import { type Angehoeriger, type Qualifikation } from "./angehoerigeData";
-import { useAngehoerige } from "../../lib/angehoerige/store";
+import { useAngehoerige, srkZertifikatFehlt } from "../../lib/angehoerige/store";
 import { isoZuAnzeige } from "../../lib/datum";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
 
@@ -16,12 +16,12 @@ const MEINE_PFK = "Sandra Weber";
 
 /* ── Status-Chips: kombinierbar (UND). Reine Prädikate, dieselben Ableitungen
    wie die Tabelle/Kennzeichen. ── */
-type StatusChipId = "srk_offen" | "schritt_ueberfaellig" | "im_onboarding" | "nicht_zugewiesen";
+type StatusChipId = "srk_offen" | "schritt_ueberfaellig" | "in_onboarding" | "nicht_zugewiesen";
 function nichtZugewiesen(a: Angehoeriger): boolean { return !a.pflegefachkraft || a.pflegefachkraft.trim() === "" || a.pflegefachkraft === "—"; }
 const STATUS_CHIPS: { id: StatusChipId; label: string; praedikat: (a: Angehoeriger) => boolean }[] = [
-  { id: "srk_offen", label: "SRK-Zertifikat fehlt", praedikat: a => a.srkZertifikatVorhanden !== "ja" },
+  { id: "srk_offen", label: "SRK-Zertifikat fehlt", praedikat: srkZertifikatFehlt },
   { id: "schritt_ueberfaellig", label: "Monatsschritt überfällig", praedikat: a => a.monatsSchritt.ueberfaellig === true },
-  { id: "im_onboarding", label: "Im Onboarding", praedikat: a => a.status === "in_onboarding" },
+  { id: "in_onboarding", label: "Im Onboarding", praedikat: a => a.status === "in_onboarding" },
   { id: "nicht_zugewiesen", label: "Nicht zugewiesen", praedikat: nichtZugewiesen },
 ];
 
@@ -34,7 +34,7 @@ const QUAL_OPTIONEN: Qualifikation[] = ["ohne_srk", "srk", "fage_dipl"];
 type KennzeichenTyp = "rot" | "gelb" | null;
 function ableitenKennzeichen(a: Angehoeriger): { typ: KennzeichenTyp; grund: string } {
   if (a.monatsSchritt.ueberfaellig === true) return { typ: "rot", grund: "Monatsschritt überfällig" };
-  if (a.srkZertifikatVorhanden !== "ja") return { typ: "gelb", grund: "SRK-Zertifikat fehlt" };
+  if (srkZertifikatFehlt(a)) return { typ: "gelb", grund: "SRK-Zertifikat fehlt" };
   if (nichtZugewiesen(a)) return { typ: "gelb", grund: "Keine Pflegefachkraft zugewiesen" };
   return { typ: null, grund: "" };
 }

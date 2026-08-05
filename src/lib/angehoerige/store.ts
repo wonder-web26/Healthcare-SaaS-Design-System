@@ -6,7 +6,7 @@
  * geöffnet wird, und trägt von da an dieselbe Kennung. Der Abschluss kopiert
  * nichts und erzeugt nichts — er wechselt nur den Zustand.
  *
- * Solange der Zustand "im_onboarding" ist, erscheint die Person weder in der
+ * Solange der Zustand "in_erfassung" ist, erscheint die Person weder in der
  * Angehörigenliste noch in deren Zählungen.
  *
  * Kein Speicher über die Sitzung hinaus; der Prototyp hat keine Persistenz.
@@ -27,12 +27,12 @@ export const NICHT_ZUGEWIESEN = "—";
 /* ── Bestand ───────────────────────────────────────────────────────────────── */
 
 let bestand: Angehoeriger[] = angehoerigeSeed;
-let sichtbarerBestand: Angehoeriger[] = bestand.filter(a => a.status !== "im_onboarding");
+let sichtbarerBestand: Angehoeriger[] = bestand.filter(a => a.status !== "in_erfassung");
 const hoerer = new Set<() => void>();
 
 function setzeBestand(neu: Angehoeriger[]): void {
   bestand = neu;
-  sichtbarerBestand = neu.filter(a => a.status !== "im_onboarding");
+  sichtbarerBestand = neu.filter(a => a.status !== "in_erfassung");
   hoerer.forEach(l => l());
 }
 
@@ -53,13 +53,29 @@ export function getAngehoerige(): Angehoeriger[] {
   return sichtbarerBestand;
 }
 
-/** Findet auch eine Person im Zustand "im_onboarding". */
+/** Findet auch eine Person im Zustand "in_erfassung". */
 export function getAngehoerigen(id: string): Angehoeriger | undefined {
   return bestand.find(a => a.id === id);
 }
 
 function angehoerigerFuerOnboarding(onboardingId: string): Angehoeriger | undefined {
   return bestand.find(a => a.onboardingId === onboardingId);
+}
+
+/* ── Fachliche Bedingungen ─────────────────────────────────────────────────── */
+
+/**
+ * Fehlt das SRK-Pflegehelfer-Zertifikat dort, wo es die Qualifikationsgrundlage
+ * ist?
+ *
+ * Nur bei der Stufe "srk" ist das Zertifikat der Nachweis. Eine diplomierte
+ * Fachperson ("fage_dipl") braucht es nicht, und bei "ohne_srk" ist sein
+ * Fehlen der Zustand selbst, nicht die Abweichung.
+ *
+ * EINE Stelle für Chip, Zeilenkennzeichen und Annas Hinweis.
+ */
+export function srkZertifikatFehlt(a: Angehoeriger): boolean {
+  return a.qualifikation === "srk" && a.srkZertifikatVorhanden !== "ja";
 }
 
 /* ── Kennungen ─────────────────────────────────────────────────────────────── */
@@ -146,7 +162,7 @@ export function erfasseAngehoerigenImOnboarding(
     vorname: eingabe.vorname,
     nachname: eingabe.nachname,
     qualifikation,
-    status: "im_onboarding",
+    status: "in_erfassung",
     billingReadiness: "in_vorbereitung",
     zugeordnetePatientenList: [],
     stempelTage: 0,
