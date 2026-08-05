@@ -26,6 +26,11 @@ interface MatchRule {
 const TODAY = "2026-03-03";
 const MOCK_HOUR = 8;
 
+/** Untertitel aus Teilen — leere Teile ("nicht erhoben") entfallen samt Trenner. */
+function untertitel(teile: (string | null | undefined)[]): string {
+  return teile.filter(t => t && t.trim() !== "").join(" · ");
+}
+
 function formatCount(n: number, singular: string, plural: string): string {
   return `${n} ${n === 1 ? singular : plural}`;
 }
@@ -117,7 +122,7 @@ const rules: MatchRule[] = [
       const pMatches = getPatienten().filter(p => `${p.vorname} ${p.nachname}`.toLowerCase().includes(q) || `${p.nachname} ${p.vorname}`.toLowerCase().includes(q));
       const aMatches = angehoerige.filter(a => `${a.vorname} ${a.nachname}`.toLowerCase().includes(q) || `${a.nachname} ${a.vorname}`.toLowerCase().includes(q));
       const cards: AnnaCard[] = [
-        ...pMatches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: `Patient · ${p.kanton} · ${p.schweregrad}`, path: `/patienten/${p.id}` })),
+        ...pMatches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: untertitel(["Patient", p.kanton, p.schweregrad]), path: `/patienten/${p.id}` })),
         ...aMatches.map(a => ({ id: a.id, title: `${a.nachname}, ${a.vorname}`, subtitle: "Angehörige/r", path: `/angehoerige/${a.id}` })),
       ];
       if (cards.length === 0) return { role: "anna", text: `Niemanden mit "${q}" gefunden. Überprüfe die Schreibweise.`, chips: ["Alle Patienten zeigen", "Alle Angehörigen zeigen"] };
@@ -132,7 +137,7 @@ const rules: MatchRule[] = [
       const region = m[1].toUpperCase().replace(/ZÜRICH/i, "ZH").replace(/BERN/i, "BE").replace(/LUZERN/i, "LU").replace(/AARGAU/i, "AG").replace(/ST\.?\s*GALLEN/i, "SG");
       const kanton = region.length <= 2 ? region : region;
       const matches = getPatienten().filter(p => p.kanton.toUpperCase() === kanton);
-      const cards = matches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: `${p.schweregrad} · ${p.pflegefachkraft}`, path: `/patienten/${p.id}` }));
+      const cards = matches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: untertitel([p.schweregrad, p.pflegefachkraft]), path: `/patienten/${p.id}` }));
       return { role: "anna", text: `${formatCount(matches.length, "Klient", "Klienten")} im Kanton ${kanton}:`, cards: cards.slice(0, 5), navAction: `/patienten?region=${kanton}`, chips: ["Davon mit Schweregrad schwer", "Zur gefilterten Liste"] };
     },
   },
@@ -152,7 +157,7 @@ const rules: MatchRule[] = [
     handler: (m) => {
       const name = m[1].trim().toLowerCase();
       const matches = getPatienten().filter(p => p.pflegefachkraft.toLowerCase().includes(name));
-      const cards = matches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: `${p.schweregrad} · ${p.kanton}`, path: `/patienten/${p.id}` }));
+      const cards = matches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: untertitel([p.schweregrad, p.kanton]), path: `/patienten/${p.id}` }));
       if (cards.length === 0) return { role: "anna", text: `Keine Klienten für "${m[1].trim()}" gefunden.`, chips: ["Alle Pflegefachkräfte zeigen"] };
       return { role: "anna", text: `${formatCount(matches.length, "Klient", "Klienten")} von ${m[1].trim()}:`, cards: cards.slice(0, 5), chips: ["Davon überfällig", "Zur Patientenliste"] };
     },
@@ -162,7 +167,7 @@ const rules: MatchRule[] = [
     patterns: [/(?:klient|patient).*(?:ohne|kein).*zuwe?i?sung/i, /nicht\s*zugewiesen/i],
     handler: () => {
       const matches = getPatienten().filter(p => p.pflegefachkraft === "—");
-      const cards = matches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: `${p.schweregrad} · ${p.kanton}`, path: `/patienten/${p.id}` }));
+      const cards = matches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: untertitel([p.schweregrad, p.kanton]), path: `/patienten/${p.id}` }));
       return { role: "anna", text: `${formatCount(matches.length, "Klient ist", "Klienten sind")} ohne Pflegefachkraft-Zuweisung:`, cards: cards.slice(0, 5), navAction: `/patienten?zuweisung=nicht_zugewiesen`, chips: ["Zur gefilterten Liste"] };
     },
   },

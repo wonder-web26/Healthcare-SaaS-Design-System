@@ -199,8 +199,12 @@ export function PflegefachkraftSidebar({
                     <MapPin className="w-3 h-3" />
                     {patient.kanton}
                   </span>
-                  <span className="text-border-light">·</span>
-                  <span>{patient.schweregrad}</span>
+                  {patient.schweregrad && (
+                    <>
+                      <span className="text-border-light">·</span>
+                      <span>{patient.schweregrad}</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

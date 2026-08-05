@@ -286,7 +286,9 @@ export function ZuteilungPage() {
                   <tbody>
                     {filtered.map((p) => {
                       const st = statusConfig[p.status];
-                      const sg = schweregradConfig[p.schweregrad];
+                      // Leerer Schweregrad heisst "nicht erhoben": keine Marke,
+                      // kein Platzhalter. schweregradConfig kennt "" nicht.
+                      const sg = p.schweregrad ? schweregradConfig[p.schweregrad] : null;
                       const unassigned = isUnassigned(p);
                       const assignedName = getAssignedName(p);
                       const isSelected = selectedPatient?.id === p.id;
@@ -334,9 +336,11 @@ export function ZuteilungPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`inline-flex items-center px-2 py-[2px] rounded-md text-[11px] ${sg.bg} ${sg.text}`} style={{ fontWeight: 500 }}>
-                              {sg.label}
-                            </span>
+                            {sg && (
+                              <span className={`inline-flex items-center px-2 py-[2px] rounded-md text-[11px] ${sg.bg} ${sg.text}`} style={{ fontWeight: 500 }}>
+                                {sg.label}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <span className="inline-flex items-center gap-1 text-[12px] text-foreground" style={{ fontWeight: 400 }}>

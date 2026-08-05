@@ -28,8 +28,11 @@ function generatePatientSummary(p: Patient): string {
     return Math.floor((new Date("2026-03-03").getTime() - new Date(+y, +m - 1, +d).getTime()) / 31557600000);
   })() : null;
 
-  const sgLabel = p.schweregrad === "kritisch" ? "Kritisch" : p.schweregrad === "schwer" ? "Schwer" : p.schweregrad === "mittel" ? "Mittel" : "Leicht";
-  parts.push(`${p.nachname}, ${p.vorname}${age ? ` (${age} Jahre)` : ""}, Schweregrad „${sgLabel}", ${p.leistungsart}.`);
+  // Ohne erhobenen Schweregrad entfaellt die Angabe. Die frühere Kette fiel auf
+  // "Leicht" durch und behauptete damit einen Wert, der nie erhoben wurde.
+  const sgLabel = p.schweregrad === "kritisch" ? "Kritisch" : p.schweregrad === "schwer" ? "Schwer" : p.schweregrad === "mittel" ? "Mittel" : p.schweregrad === "leicht" ? "Leicht" : null;
+  const sgTeil = sgLabel ? `, Schweregrad „${sgLabel}"` : "";
+  parts.push(`${p.nachname}, ${p.vorname}${age ? ` (${age} Jahre)` : ""}${sgTeil}, ${p.leistungsart}.`);
 
   // Sentence 2: Current state
   if (p.status === "nicht_abrechenbar") {

@@ -127,16 +127,48 @@ function filterPatienten(list: Patient[], f: FilterZustand, bezugIso: string, me
 type SortKey = "name" | "schweregrad" | "reassessment" | "tasks";
 const SORT_LABEL: Record<SortKey, string> = { name: "Name", schweregrad: "Schweregrad", reassessment: "Re-Assessment", tasks: "Tasks" };
 /** Leerer Schweregrad sortiert ans Ende, nicht an den Anfang. */
-const SCHWEREGRAD_RANK: Record<Schweregrad | "", number> = { leicht: 0, mittel: 1, schwer: 2, kritisch: 3, "": 4 };
+const SCHWEREGRAD_RANK: Record<Schweregrad, number> = { leicht: 0, mittel: 1, schwer: 2, kritisch: 3 };
+
+/**
+ * "Ohne Angabe" steht in BEIDEN Richtungen am Ende.
+ *
+ * Ein Rangwert am oberen Ende der Skala würde beim Umkehren nach vorne
+ * wandern — dann stünden die nicht erhobenen Werte zuoberst. Leere werden
+ * deshalb vor dem Richtungsfaktor abgehandelt und nie mit ihm multipliziert.
+ * Rückgabe null heisst "beide haben einen Wert, normal weitervergleichen".
+ */
+function ohneAngabeZuletzt(aLeer: boolean, bLeer: boolean): number | null {
+  if (aLeer && bLeer) return 0;
+  if (aLeer) return 1;
+  if (bLeer) return -1;
+  return null;
+}
 
 function sortPatients(list: Patient[], key: SortKey, dir: "asc" | "desc"): Patient[] {
   const f = dir === "asc" ? 1 : -1;
+  const nachName = (a: Patient, b: Patient) => a.nachname.localeCompare(b.nachname, "de");
   return [...list].sort((a, b) => {
     switch (key) {
-      case "schweregrad": return f * ((SCHWEREGRAD_RANK[a.schweregrad] - SCHWEREGRAD_RANK[b.schweregrad]) || a.nachname.localeCompare(b.nachname, "de"));
-      case "reassessment": return f * ((tageBisReAssessment(a, BEZUGSDATUM_ISO) ?? Infinity) - (tageBisReAssessment(b, BEZUGSDATUM_ISO) ?? Infinity));
-      case "tasks": return f * ((a.offeneActionTasks ?? Infinity) - (b.offeneActionTasks ?? Infinity));
-      case "name": default: return f * (a.nachname.localeCompare(b.nachname, "de") || a.vorname.localeCompare(b.vorname, "de"));
+      case "schweregrad": {
+        const leer = ohneAngabeZuletzt(!a.schweregrad, !b.schweregrad);
+        if (leer !== null || !a.schweregrad || !b.schweregrad) return (leer ?? 0) || nachName(a, b);
+        return f * ((SCHWEREGRAD_RANK[a.schweregrad] - SCHWEREGRAD_RANK[b.schweregrad]) || nachName(a, b));
+      }
+      case "reassessment": {
+        const ta = tageBisReAssessment(a, BEZUGSDATUM_ISO);
+        const tb = tageBisReAssessment(b, BEZUGSDATUM_ISO);
+        const leer = ohneAngabeZuletzt(ta === null, tb === null);
+        if (leer !== null || ta === null || tb === null) return (leer ?? 0) || nachName(a, b);
+        return f * ((ta - tb) || nachName(a, b));
+      }
+      case "tasks": {
+        const ta = a.offeneActionTasks;
+        const tb = b.offeneActionTasks;
+        const leer = ohneAngabeZuletzt(ta === null, tb === null);
+        if (leer !== null || ta === null || tb === null) return (leer ?? 0) || nachName(a, b);
+        return f * ((ta - tb) || nachName(a, b));
+      }
+      case "name": default: return f * (nachName(a, b) || a.vorname.localeCompare(b.vorname, "de"));
     }
   });
 }
@@ -149,7 +181,7 @@ const STATUS_LABEL: Record<Patient["status"], string> = {
   gekuendigt: "Gekündigt",
 };
 /** Leerer Schweregrad wird nirgends dargestellt — weder als Text noch als Pille. */
-const SCHWEREGRAD_LABEL: Record<Schweregrad | "", string> = { leicht: "Leicht", mittel: "Mittel", schwer: "Schwer", kritisch: "Kritisch", "": "" };
+const SCHWEREGRAD_LABEL: Record<Schweregrad, string> = { leicht: "Leicht", mittel: "Mittel", schwer: "Schwer", kritisch: "Kritisch" };
 
 /** "Sandra Weber" → "S. Weber" (Kurzname wie in der Onboarding-Liste). */
 function kurzname(voll: string): string {
