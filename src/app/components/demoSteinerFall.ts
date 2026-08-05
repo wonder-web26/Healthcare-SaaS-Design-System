@@ -53,7 +53,7 @@ export const demoSteinerAngehoeriger: AngehoerigerFormData = {
   // Anstellung & Auszahlung
   funktion: "pflegehilfe", eintrittsdatum: "18.02.2026", stundenlohn: "34.50",
   arbeitetExtern: "nein", bvgAnbindungGewuenscht: "ja",
-  qualifikation: "pflegehilfe", deutschNiveau: "muttersprache",
+  deutschNiveau: "muttersprache",
   zertifikatVorhanden: "ja", srkZertifikatVorhanden: "ja",
   lohnart: "stundenlohn", ferienanspruchWochen: "5.0",
   bankname: "Zürcher Kantonalbank", iban: "CH93 0076 2011 6238 5295 7",

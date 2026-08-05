@@ -25,3 +25,29 @@ export const FUNKTIONEN: FunktionDefinition[] = [
 
 /** Dropdown-Optionen (value + label) */
 export const FUNKTIONEN_OPTIONS = FUNKTIONEN.map(f => ({ value: f.value, label: f.label }));
+
+/**
+ * R14 des Standardkatalogs Pflegende Angehörige: die Qualifikationsstufe wird
+ * nicht erhoben, sondern aus der Funktion abgeleitet. EINZIGE Stelle dieser
+ * Zuordnung — Liste, Abrechenbarkeit, Anna und Qualifikationsnachweis lesen
+ * das Ergebnis, nicht die Regel.
+ *
+ * Die Zuordnung von "ags" und "fage" ist im Katalog als [offen] vermerkt: sie
+ * bestimmt mit, welche KLV-Leistungen erbracht werden dürfen, und ist
+ * fachlich nicht abgenommen.
+ *
+ * Leere oder unbekannte Funktion ergibt "" — nicht erhoben, nicht geraten.
+ */
+const QUALIFIKATION_JE_FUNKTION: Record<string, "ohne_srk" | "srk" | "fage_dipl"> = {
+  pf_hf: "fage_dipl",
+  pf_fh: "fage_dipl",
+  fage: "fage_dipl",
+  ags: "srk",
+  ph_srk: "srk",
+  ph_ohne_srk: "ohne_srk",
+  hauswirtschaft: "ohne_srk",
+};
+
+export function qualifikationAusFunktion(funktion: string): "ohne_srk" | "srk" | "fage_dipl" | "" {
+  return QUALIFIKATION_JE_FUNKTION[funktion] ?? "";
+}

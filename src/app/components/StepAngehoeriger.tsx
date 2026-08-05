@@ -151,7 +151,6 @@ export interface AngehoerigerFormData {
   ferienanspruchWochen: string;
   /** Qualifikation */
   /** Pflegerische Qualifikationsstufe: ohne_srk | srk | fage_dipl */
-  qualifikation: string;
   deutschNiveau: string;
   zertifikatVorhanden: string;
   srkZertifikatVorhanden: string;
@@ -303,7 +302,6 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   externesPensumProzent: "",
   externerEintritt: "",
   bvgAnbindungGewuenscht: "",
-  qualifikation: "",
   deutschNiveau: "",
   zertifikatVorhanden: "nein",
   srkZertifikatVorhanden: "nein",

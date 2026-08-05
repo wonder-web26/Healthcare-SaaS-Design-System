@@ -4,7 +4,7 @@
  */
 import { getPatienten, tageBisReAssessment } from "../../lib/patienten/store";
 import { fallById, patientAnzeigeName } from "../../lib/onboarding/faelle";
-import { angehoerige } from "../components/angehoerigeData";
+import { getAngehoerige } from "../../lib/angehoerige/store";
 import { unifiedEntries, entryTitle, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
 import { pendenzTypen } from "../../types/pendenz";
 
@@ -213,8 +213,8 @@ function generatePatientDetail(patientId: string): AnnaContextResult {
 
 /* ── Angehörige-Liste ── */
 function generateAngehoerigeListe(): AnnaContextResult {
-  const srkOffen = angehoerige.filter(a => a.qualifikation === "ohne_srk" && !a.srkKursDatum);
-  const parts: string[] = [`${angehoerige.length} aktive Angehörige.`];
+  const srkOffen = getAngehoerige().filter(a => a.srkZertifikatVorhanden !== "ja");
+  const parts: string[] = [`${getAngehoerige().length} aktive Angehörige.`];
   if (srkOffen.length > 0) parts.push(`{{danger}}${srkOffen.length} Compliance-Themen offen{{/danger}} – ausstehende SRK-Anmeldungen.`);
   return {
     greeting: parts.join(" "),
@@ -229,12 +229,12 @@ function generateAngehoerigeListe(): AnnaContextResult {
 
 /* ── Angehörige-Detail ── */
 function generateAngehoerigeDetail(angehoerigeId: string): AnnaContextResult {
-  const a = angehoerige.find(x => x.id === angehoerigeId);
+  const a = getAngehoerige().find(x => x.id === angehoerigeId);
   if (!a) return { greeting: "Ich kann diese/n Angehörige/n nicht finden.", quickReplies: [], contextLabel: "Angehörigen-Detail" };
   const name = `${a.vorname} ${a.nachname}`;
   const patient = a.zugeordnetePatientenList[0]?.name || "–";
   const parts: string[] = [`Wir schauen ${name} an. Pflegende/r Angehörige/r für ${patient}.`];
-  if (a.qualifikation === "ohne_srk" && !a.srkKursDatum) parts.push(`{{warning}}SRK-Schulung noch ausstehend.{{/warning}}`);
+  if (a.srkZertifikatVorhanden !== "ja") parts.push(`{{warning}}SRK-Zertifikat fehlt.{{/warning}}`);
   if (!a.hrCheck.bankdaten) parts.push(`{{warning}}Bankdaten fehlen im HR-Check.{{/warning}}`);
   return {
     greeting: parts.join(" "),

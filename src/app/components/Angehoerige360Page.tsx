@@ -53,11 +53,11 @@ import {
   MessageSquare,
 } from "lucide-react";
 import {
-  angehoerige,
   qualifikationConfig,
   billingReadinessConfig,
   type Angehoeriger,
 } from "./angehoerigeData";
+import { useAngehoerige } from "../../lib/angehoerige/store";
 import { TabDokumenteGeneric, type DocFolder } from "./TabDokumente";
 import { geschlechtLabel } from "../../lib/stammdaten/geschlecht";
 import { zivilstandLabel } from "../../lib/stammdaten/zivilstand";
@@ -427,6 +427,7 @@ export function Angehoerige360Page() {
     setSearchParams(next, { replace: true });
   };
 
+  const angehoerige = useAngehoerige();
   const allAngehoerigeIds = angehoerige.map(x => x.id);
   const a = angehoerige.find((x) => x.id === angehoerigerIdOrNew);
 

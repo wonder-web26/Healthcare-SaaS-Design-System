@@ -159,24 +159,14 @@ export function PersonalienFormV2({
       {/* Qualifikation */}
       <SectionHeader icon={User} label="Qualifikation" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Qualifikationsstufe" required value={data.qualifikation || null} onChange={v => { set("qualifikation", v || ""); touch("qualifikation"); }} options={QUALIFIKATION_OPTIONS} placeholder="Qualifikation wählen" error={touched.qualifikation && !filled(data.qualifikation) ? "Pflichtfeld" : undefined} /></div>
+        {/* Qualifikationsstufe entfällt als Erhebungsfeld — sie wird nach R14 aus
+            der Funktion abgeleitet (lib/stammdaten/funktionen.ts). */}
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Deutschkenntnisse" required value={data.deutschNiveau || null} onChange={v => { set("deutschNiveau", v || ""); touch("deutschNiveau"); }} options={DEUTSCH_NIVEAU_OPTIONS} placeholder="Niveau wählen" error={touched.deutschNiveau && !filled(data.deutschNiveau) ? "Bitte ausfüllen" : undefined} /></div>
         {data.deutschNiveau && data.deutschNiveau !== "muttersprache" && (
           <SegmentedControl label="Sprachzertifikat vorhanden?" value={data.zertifikatVorhanden} onChange={v => set("zertifikatVorhanden", v)} options={JA_NEIN} />
         )}
         <SegmentedControl label="SRK-Pflegehelfer-Zertifikat vorhanden?" required value={data.srkZertifikatVorhanden} onChange={v => set("srkZertifikatVorhanden", v)} options={JA_NEIN} />
       </div>
-      {/* Konsistenz Qualifikation ↔ SRK-Zertifikat */}
-      {data.qualifikation === "ohne_srk" && data.srkZertifikatVorhanden === "ja" && (
-        <div style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
-          Qualifikation «ohne SRK» gewählt, aber SRK-Zertifikat als vorhanden markiert — bitte prüfen.
-        </div>
-      )}
-      {(data.qualifikation === "srk" || data.qualifikation === "fage_dipl") && data.srkZertifikatVorhanden === "nein" && (
-        <div style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
-          Qualifikation «{data.qualifikation === "srk" ? "SRK" : "FaGe / Dipl"}» gewählt, aber SRK-Zertifikat nicht als vorhanden markiert — bitte prüfen.
-        </div>
-      )}
       {/* Konsistenz Funktion ↔ SRK */}
       {data.funktion === "ph_srk" && data.srkZertifikatVorhanden === "nein" && (
         <div style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>

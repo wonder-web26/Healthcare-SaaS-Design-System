@@ -17,6 +17,7 @@ import { erstelleNachweis } from "../schulung/nachweis-store";
 import { MOCK_KLV_VERORDNUNGEN } from "../mocks/klinische-artefakte-mock";
 import { getPersonByOnboardingId, updatePersonZustand } from "../interrai/store";
 import { schliessePatientOnboardingAb } from "../patienten/store";
+import { schliesseAngehoerigenOnboardingAb } from "../angehoerige/store";
 
 export interface KonvertierungsErgebnis {
   patientId: string;
@@ -61,7 +62,13 @@ export function konvertiereOnboarding(
   //    haben keinen Patientendatensatz; dann bleibt die Kennung leer.
   const patient = schliessePatientOnboardingAb(onboardingId);
   const patientId = patient?.id ?? "";
-  const angehoerigerId = `A-${Date.now()}`;
+
+  //    Dasselbe gilt für die angehörige Person: sie entsteht mit dem Schritt
+  //    "Angehöriger" und trägt seither ihre Kennung. Der Abschluss wechselt
+  //    nur ihren Zustand. Zuvor stand hier `A-${Date.now()}` — eine Kennung
+  //    ohne Datensatz, die nirgends ankam.
+  const angehoerigerDatensatz = schliesseAngehoerigenOnboardingAb(onboardingId);
+  const angehoerigerId = angehoerigerDatensatz?.id ?? "";
 
   // 2. Update person state — assessments reference the person, not the
   //    onboarding or patient. The assessment itself stays untouched.

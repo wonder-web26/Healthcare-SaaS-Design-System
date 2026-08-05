@@ -14,7 +14,7 @@
  *   • Angehörige → angehoerige aus app/components/angehoerigeData (Kennung A-2026-01xx)
  */
 import { getPatient } from "../patienten/store";
-import { angehoerige } from "../../app/components/angehoerigeData";
+import { getAngehoerige } from "../angehoerige/store";
 
 export type PersonArt = "patient" | "angehoeriger";
 
@@ -31,7 +31,7 @@ export function personName(ref: PersonenBezug): string {
     const p = getPatient(ref.kennung);
     return p ? `${p.vorname} ${p.nachname}` : "Unbekannte Person";
   }
-  const a = angehoerige.find(a => a.id === ref.kennung);
+  const a = getAngehoerige().find(a => a.id === ref.kennung);
   return a ? `${a.vorname} ${a.nachname}` : "Unbekannte Person";
 }
 

@@ -1,5 +1,5 @@
 import { getPatienten, tageBisReAssessment } from "../../lib/patienten/store";
-import { angehoerige } from "../components/angehoerigeData";
+import { getAngehoerige } from "../../lib/angehoerige/store";
 import { unifiedEntries, entryTitle, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
 
 export interface AnnaMessage {
@@ -120,7 +120,7 @@ const rules: MatchRule[] = [
     handler: (_m, query) => {
       const q = query.replace(/^(wo\s*ist|zeig\s*mir|finde|suche)\s+/i, "").trim().toLowerCase();
       const pMatches = getPatienten().filter(p => `${p.vorname} ${p.nachname}`.toLowerCase().includes(q) || `${p.nachname} ${p.vorname}`.toLowerCase().includes(q));
-      const aMatches = angehoerige.filter(a => `${a.vorname} ${a.nachname}`.toLowerCase().includes(q) || `${a.nachname} ${a.vorname}`.toLowerCase().includes(q));
+      const aMatches = getAngehoerige().filter(a => `${a.vorname} ${a.nachname}`.toLowerCase().includes(q) || `${a.nachname} ${a.vorname}`.toLowerCase().includes(q));
       const cards: AnnaCard[] = [
         ...pMatches.map(p => ({ id: p.id, title: `${p.nachname}, ${p.vorname}`, subtitle: untertitel(["Patient", p.kanton, p.schweregrad]), path: `/patienten/${p.id}` })),
         ...aMatches.map(a => ({ id: a.id, title: `${a.nachname}, ${a.vorname}`, subtitle: "Angehörige/r", path: `/angehoerige/${a.id}` })),
@@ -226,7 +226,7 @@ const rules: MatchRule[] = [
   {
     patterns: [/srk.*(offen|ausstehend|nicht.*gemacht)/i, /(?:ohne|kein).*srk/i],
     handler: () => {
-      const matches = angehoerige.filter(a => a.qualifikation === "ohne_srk" && !a.srkKursDatum);
+      const matches = getAngehoerige().filter(a => a.srkZertifikatVorhanden !== "ja");
       const cards = matches.map(a => ({ id: a.id, title: `${a.nachname}, ${a.vorname}`, subtitle: "SRK ausstehend", path: `/angehoerige/${a.id}` }));
       return { role: "anna", text: `${formatCount(matches.length, "Angehörige/r hat", "Angehörige haben")} den SRK-Kurs noch nicht absolviert:`, cards: cards.slice(0, 5), navAction: "/angehoerige?view=srk_offen", chips: ["Zur Angehörigen-Übersicht", "Wessen Frist läuft bald ab?"] };
     },

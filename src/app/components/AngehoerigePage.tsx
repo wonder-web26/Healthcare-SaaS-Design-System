@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { Search, Plus, X, ChevronDown, Check, AlertTriangle, AlertCircle, ExternalLink } from "lucide-react";
-import { angehoerige, type Angehoeriger, type Qualifikation } from "./angehoerigeData";
+import { type Angehoeriger, type Qualifikation } from "./angehoerigeData";
+import { useAngehoerige } from "../../lib/angehoerige/store";
 import { isoZuAnzeige } from "../../lib/datum";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
 
@@ -18,7 +19,7 @@ const MEINE_PFK = "Sandra Weber";
 type StatusChipId = "srk_offen" | "schritt_ueberfaellig" | "im_onboarding" | "nicht_zugewiesen";
 function nichtZugewiesen(a: Angehoeriger): boolean { return !a.pflegefachkraft || a.pflegefachkraft.trim() === "" || a.pflegefachkraft === "—"; }
 const STATUS_CHIPS: { id: StatusChipId; label: string; praedikat: (a: Angehoeriger) => boolean }[] = [
-  { id: "srk_offen", label: "SRK-Kurs offen", praedikat: a => a.qualifikation === "ohne_srk" && !a.srkKursDatum },
+  { id: "srk_offen", label: "SRK-Zertifikat fehlt", praedikat: a => a.srkZertifikatVorhanden !== "ja" },
   { id: "schritt_ueberfaellig", label: "Monatsschritt überfällig", praedikat: a => a.monatsSchritt.ueberfaellig === true },
   { id: "im_onboarding", label: "Im Onboarding", praedikat: a => a.status === "in_onboarding" },
   { id: "nicht_zugewiesen", label: "Nicht zugewiesen", praedikat: nichtZugewiesen },
@@ -27,14 +28,13 @@ const STATUS_CHIPS: { id: StatusChipId; label: string; praedikat: (a: Angehoerig
 /* ── Auswahlfelder (Mehrfachauswahl) ── */
 const QUAL_LABEL: Record<Qualifikation, string> = { ohne_srk: "ohne SRK", srk: "SRK", fage_dipl: "FaGe / Dipl" };
 const QUAL_OPTIONEN: Qualifikation[] = ["ohne_srk", "srk", "fage_dipl"];
-const allePflegefachkraefte = [...new Set(angehoerige.map(a => a.pflegefachkraft))].sort();
 
 /* ── Kennzeichen: Rot (Monatsschritt überfällig) schlägt Gelb (kein SRK-Kurs
    oder nicht zugewiesen). Grund als Klartext (a11y + sichtbar in der Fachspalte). ── */
 type KennzeichenTyp = "rot" | "gelb" | null;
 function ableitenKennzeichen(a: Angehoeriger): { typ: KennzeichenTyp; grund: string } {
   if (a.monatsSchritt.ueberfaellig === true) return { typ: "rot", grund: "Monatsschritt überfällig" };
-  if (a.qualifikation === "ohne_srk" && !a.srkKursDatum) return { typ: "gelb", grund: "SRK-Kurs offen" };
+  if (a.srkZertifikatVorhanden !== "ja") return { typ: "gelb", grund: "SRK-Zertifikat fehlt" };
   if (nichtZugewiesen(a)) return { typ: "gelb", grund: "Keine Pflegefachkraft zugewiesen" };
   return { typ: null, grund: "" };
 }
@@ -146,13 +146,15 @@ export function AngehoerigePage() {
   const togglePfk = (pf: string) => setFilter(f => { const s = new Set(f.pflegefachkraefte); if (s.has(pf)) s.delete(pf); else s.add(pf); return { ...f, pflegefachkraefte: s }; });
   const resetFilter = () => setFilter(f => ({ ...LEERER_FILTER, suche: f.suche }));
 
-  const segmentBasis = useMemo(() => angehoerige.filter(a => imSegment(a, filter.segment)), [filter.segment]);
+  const angehoerige = useAngehoerige();
+  const allePflegefachkraefte = useMemo(() => [...new Set(angehoerige.map(a => a.pflegefachkraft))].sort(), [angehoerige]);
+  const segmentBasis = useMemo(() => angehoerige.filter(a => imSegment(a, filter.segment)), [filter.segment, angehoerige]);
   const chipCounts = useMemo(() => {
     const r = {} as Record<StatusChipId, number>;
     for (const chip of STATUS_CHIPS) r[chip.id] = segmentBasis.filter(chip.praedikat).length;
     return r;
   }, [segmentBasis]);
-  const filtered = useMemo(() => filterAngehoerige(angehoerige, filter, BEZUGSDATUM), [filter]);
+  const filtered = useMemo(() => filterAngehoerige(angehoerige, filter, BEZUGSDATUM), [filter, angehoerige]);
   const sorted = useMemo(() => sort ? sortAngehoerige(filtered, sort.key, sort.dir) : filtered, [filtered, sort]);
 
   const filterTags = useMemo(() => {
@@ -219,14 +221,14 @@ export function AngehoerigePage() {
         ? <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)", whiteSpace: "nowrap" }}>ohne SRK</span>
         : <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{QUAL_LABEL[a.qualifikation]}</span> },
     { id: "srk", label: "SRK Kurs", anteil: 11, minCh: 13, align: "left",
-      render: a => a.srkKursDatum ? (
-        <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{isoZuAnzeige(a.srkKursDatum)}</span>
-      ) : a.qualifikation === "ohne_srk" ? (
+      // Entscheid 2 des Katalogs: kein Kursdatum mehr, nur noch ob das
+      // Zertifikat vorliegt. Der Nachweis ist das Dokument srk_zertifikat.
+      render: a => a.srkZertifikatVorhanden === "ja" ? (
+        <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Vorhanden</span>
+      ) : (
         <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>
           <AlertCircle style={{ width: 14, height: 14 }} /> Ausstehend
         </span>
-      ) : (
-        <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>–</span>
       ) },
     { id: "monatsschritt", label: "Monatsschritt", anteil: 20, minCh: 20, align: "left", sortierbar: true,
       // Balken entfällt (aus "aktuell/total" ableitbar). Farbe nur bei Überfälligkeit.
@@ -300,7 +302,7 @@ export function AngehoerigePage() {
                   })}
                 </div>
 
-                <AuswahlDropdown label="Qualifikation" optionen={QUAL_OPTIONEN.map(q => ({ value: q, label: QUAL_LABEL[q] }))} ausgewaehlt={filter.qualifikationen as Set<string>} onToggle={v => toggleQual(v as Qualifikation)} />
+                <AuswahlDropdown label="Qualifikation" optionen={QUAL_OPTIONEN.map(q => ({ value: q as string, label: QUAL_LABEL[q] }))} ausgewaehlt={filter.qualifikationen as Set<string>} onToggle={v => toggleQual(v as Qualifikation)} />
                 <AuswahlDropdown label="Pflegefachkraft" optionen={allePflegefachkraefte.map(pf => ({ value: pf, label: pf }))} ausgewaehlt={filter.pflegefachkraefte} onToggle={togglePfk} />
               </div>
 

@@ -13,6 +13,8 @@ export type BillingReadiness =
   | "gekuendigt";
 
 export type AngehoerigerStatus =
+  /** Im Onboarding erfasst, noch nicht abgeschlossen — erscheint nicht in der Liste. */
+  | "im_onboarding"
   | "aktiv"
   | "in_onboarding"
   | "fehlende_dokumente";
@@ -42,11 +44,131 @@ export interface MonatsSchritt {
   abgeschlossen?: boolean; // true when all steps done
 }
 
-export interface Angehoeriger {
+/**
+ * Erhebungsfelder des Standardkatalogs Pflegende Angehörige, Bereiche A bis G.
+ *
+ * Alle Werte stammen aus dem Onboarding-Schritt "Angehöriger"; die Schlüssel
+ * sind die Feldnamen des Formulars. Leer heisst "nicht erhoben" — es wird
+ * nichts vorbelegt und nichts geraten.
+ *
+ * Nicht enthalten: die betrieblichen Felder (Status, Abrechenbarkeit,
+ * Stempeltage, Monatsschritt, zugeordnete Patienten, Mutationsverlauf). Sie
+ * entstehen im Betrieb, nicht in der Erfassung, und stehen unten am Typ.
+ */
+export interface AngehoerigerErhebung {
+  /* ── Bereich A · Person ── */
+  geschlecht: string;
+  geburtsdatum: string;
+  ahvNummer: string;
+  zivilstand: string;
+  zivilstandSeit: string;
+  strasse: string;
+  plz: string;
+  ort: string;
+  email: string;
+  telefon: string;
+  krankenkasseName: string;
+  kartennummer: string;
+  bagNr: string;
+  /* ── Bereich B · Staatsangehörigkeit und Aufenthalt ── */
+  nationalitaet: string;
+  heimatort: string;
+  aufenthaltsstatus: string;
+  einreisedatum: string;
+  zemisNummer: string;
+  einreichungsdatumMigrationsamt: string;
+  bewilligungAblaufdatum: string;
+  spezialbewilligungEinreichungsDatum: string;
+  spezialbewilligungStatus: string;
+  /* ── Bereich C · Steuer und Sozialversicherung ── */
+  quellensteuer: string;
+  konfession: string;
+  quellensteuerTarif: string;
+  tarifcodeQuelle: string;
+  tarifcodeOverrideBegruendung: string;
+  steuergemeinde: string;
+  bvgVersichert: string;
+  uvgVersichert: string;
+  sozialamtInvolviert: string;
+  sozialamtKontakt: string;
+  lohnabtretung: string;
+  /* ── Bereich D · Partnerin oder Partner ── */
+  partnerVorname: string;
+  partnerName: string;
+  partnerGeburtsdatum: string;
+  partnerNationalitaet: string;
+  partnerAufenthaltsstatus: string;
+  partnerErwerbstaetig: string;
+  /* ── Bereich E · Kinder und Zulagen ── */
+  hatUnterhaltspflichtigeKinder: string;
+  anzahlKinder: string;
+  kinderzulagenUeberSpitex: string;
+  kinder: AngehoerigerKind[];
+  /* ── Bereich F · Anstellung und Auszahlung ── */
+  arbeitetExtern: string;
+  externeFunktion: string;
+  externesPensumProzent: string;
+  externerEintritt: string;
+  bvgAnbindungGewuenscht: string;
+  funktion: string;
+  eintrittsdatum: string;
+  stundenlohn: string;
+  ferienanspruchWochen: string;
+  bankname: string;
+  iban: string;
+  lohnart: string;
+  /* ── Bereich G · Sprache und Qualifikationsnachweis ── */
+  deutschNiveau: string;
+  zertifikatVorhanden: string;
+  srkZertifikatVorhanden: string;
+}
+
+/** Kind im Sinne von Bereich E des Katalogs. */
+export interface AngehoerigerKind {
   id: string;
-  obNummer: string;
+  vorname: string;
+  name: string;
+  geburtsdatum: string;
+  geschlecht: string;
+  ahvNummer: string;
+  inAusbildung: string;
+  ausbildungsbeginn: string;
+  zulagenart: string;
+  typQuelle: string;
+  overrideBegruendung: string;
+}
+
+/** Leere Erhebung — jeder Wert "nicht erhoben". */
+export const LEERE_ERHEBUNG: AngehoerigerErhebung = {
+  geschlecht: "", geburtsdatum: "", ahvNummer: "", zivilstand: "", zivilstandSeit: "",
+  strasse: "", plz: "", ort: "", email: "", telefon: "",
+  krankenkasseName: "", kartennummer: "", bagNr: "",
+  nationalitaet: "", heimatort: "", aufenthaltsstatus: "", einreisedatum: "", zemisNummer: "",
+  einreichungsdatumMigrationsamt: "", bewilligungAblaufdatum: "",
+  spezialbewilligungEinreichungsDatum: "", spezialbewilligungStatus: "",
+  quellensteuer: "", konfession: "", quellensteuerTarif: "", tarifcodeQuelle: "",
+  tarifcodeOverrideBegruendung: "", steuergemeinde: "", bvgVersichert: "", uvgVersichert: "",
+  sozialamtInvolviert: "", sozialamtKontakt: "", lohnabtretung: "",
+  partnerVorname: "", partnerName: "", partnerGeburtsdatum: "", partnerNationalitaet: "",
+  partnerAufenthaltsstatus: "", partnerErwerbstaetig: "",
+  hatUnterhaltspflichtigeKinder: "", anzahlKinder: "", kinderzulagenUeberSpitex: "", kinder: [],
+  arbeitetExtern: "", externeFunktion: "", externesPensumProzent: "", externerEintritt: "",
+  bvgAnbindungGewuenscht: "", funktion: "", eintrittsdatum: "", stundenlohn: "",
+  ferienanspruchWochen: "", bankname: "", iban: "", lohnart: "",
+  deutschNiveau: "", zertifikatVorhanden: "", srkZertifikatVorhanden: "",
+};
+
+export interface Angehoeriger extends AngehoerigerErhebung {
+  id: string;
+  /** Fall, aus dem die Person entstanden ist. Fehlt bei den Altdatensätzen. */
+  onboardingId?: string;
   vorname: string;
   nachname: string;
+  /**
+   * Abgeleitet aus `funktion` nach R14 — kein Erhebungsfeld mehr.
+   * Die zwölf Altdatensätze behalten ihren erfassten Wert; sie tragen keine
+   * Funktion, aus der er sich ableiten liesse, und es wird keine erfunden.
+   */
   qualifikation: Qualifikation;
   status: AngehoerigerStatus;
   billingReadiness: BillingReadiness;
@@ -55,7 +177,6 @@ export interface Angehoeriger {
   stempelSoll: number;
   stempelWarnings: StempelWarning[];
   hrCheck: HRCheck;
-  srkKursDatum: string | null;
   letzteMutationDatum: string;
   letzteMutationUser: string;
   pflegefachkraft: string;
@@ -117,10 +238,9 @@ export const billingReadinessConfig: Record<
 };
 
 /* ── Realistic Swiss German sample data ──── */
-export const angehoerige: Angehoeriger[] = [
+export const angehoerigeSeed: Angehoeriger[] = [
   {
     id: "A-2026-0101",
-    obNummer: "OB-2026-041",
     vorname: "Vera",
     nachname: "Steiner",
     qualifikation: "srk",
@@ -133,7 +253,8 @@ export const angehoerige: Angehoeriger[] = [
     stempelSoll: 22,
     stempelWarnings: [],
     hrCheck: { bankdaten: true, kinderzulagen: true, quellensteuerTarif: "C" },
-    srkKursDatum: "2025-06-15",
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "ja",
     letzteMutationDatum: "28.02.2026",
     letzteMutationUser: "S. Weber",
     pflegefachkraft: "Sandra Weber",
@@ -147,7 +268,6 @@ export const angehoerige: Angehoeriger[] = [
   },
   {
     id: "A-2026-0102",
-    obNummer: "OB-2026-042",
     vorname: "Beatrice",
     nachname: "Hübscher-Wiederkehr",
     qualifikation: "ohne_srk",
@@ -160,7 +280,8 @@ export const angehoerige: Angehoeriger[] = [
     stempelSoll: 22,
     stempelWarnings: [{ type: "fehlende_tage", label: "Fehlende Tage" }],
     hrCheck: { bankdaten: false, kinderzulagen: false, quellensteuerTarif: null },
-    srkKursDatum: null,
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "nein",
     letzteMutationDatum: "25.02.2026",
     letzteMutationUser: "K. Meier",
     pflegefachkraft: "Kathrin Meier",
@@ -174,7 +295,6 @@ export const angehoerige: Angehoeriger[] = [
   },
   {
     id: "A-2026-0103",
-    obNummer: "OB-2026-043",
     vorname: "Arben",
     nachname: "Rexhepi",
     qualifikation: "fage_dipl",
@@ -189,7 +309,8 @@ export const angehoerige: Angehoeriger[] = [
     stempelSoll: 22,
     stempelWarnings: [],
     hrCheck: { bankdaten: true, kinderzulagen: false, quellensteuerTarif: "A" },
-    srkKursDatum: null,
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "nein",
     letzteMutationDatum: "01.03.2026",
     letzteMutationUser: "L. Brunner",
     pflegefachkraft: "Laura Brunner",
@@ -203,7 +324,6 @@ export const angehoerige: Angehoeriger[] = [
   },
   {
     id: "A-2026-0104",
-    obNummer: "OB-2026-044",
     vorname: "Yusuf",
     nachname: "Kaya",
     qualifikation: "srk",
@@ -216,7 +336,8 @@ export const angehoerige: Angehoeriger[] = [
     stempelSoll: 22,
     stempelWarnings: [],
     hrCheck: { bankdaten: true, kinderzulagen: true, quellensteuerTarif: "B" },
-    srkKursDatum: "2025-07-20",
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "ja",
     letzteMutationDatum: "15.02.2026",
     letzteMutationUser: "M. Keller",
     pflegefachkraft: "Maria Keller",
@@ -230,7 +351,6 @@ export const angehoerige: Angehoeriger[] = [
   },
   {
     id: "A-2026-0105",
-    obNummer: "OB-2026-045",
     vorname: "Erika",
     nachname: "Huber",
     qualifikation: "ohne_srk",
@@ -245,7 +365,8 @@ export const angehoerige: Angehoeriger[] = [
       { type: "unstimmigkeit", label: "Unstimmigkeit" },
     ],
     hrCheck: { bankdaten: true, kinderzulagen: false, quellensteuerTarif: null },
-    srkKursDatum: null,
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "nein",
     letzteMutationDatum: "26.02.2026",
     letzteMutationUser: "S. Weber",
     pflegefachkraft: "Sandra Weber",
@@ -260,7 +381,6 @@ export const angehoerige: Angehoeriger[] = [
   },
   {
     id: "A-2026-0106",
-    obNummer: "OB-2026-046",
     vorname: "Marta",
     nachname: "Da Silva",
     qualifikation: "srk",
@@ -273,7 +393,8 @@ export const angehoerige: Angehoeriger[] = [
     stempelSoll: 22,
     stempelWarnings: [{ type: "fehlende_tage", label: "Fehlende Tage" }],
     hrCheck: { bankdaten: false, kinderzulagen: false, quellensteuerTarif: null },
-    srkKursDatum: "2025-05-20",
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "ja",
     letzteMutationDatum: "24.02.2026",
     letzteMutationUser: "K. Meier",
     pflegefachkraft: "Kathrin Meier",
@@ -288,7 +409,6 @@ export const angehoerige: Angehoeriger[] = [
   },
   {
     id: "A-2026-0107",
-    obNummer: "OB-2026-047",
     vorname: "Heidi",
     nachname: "Bösiger",
     qualifikation: "fage_dipl",
@@ -302,7 +422,8 @@ export const angehoerige: Angehoeriger[] = [
     stempelSoll: 22,
     stempelWarnings: [],
     hrCheck: { bankdaten: true, kinderzulagen: true, quellensteuerTarif: "A" },
-    srkKursDatum: null,
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "nein",
     letzteMutationDatum: "01.03.2026",
     letzteMutationUser: "L. Brunner",
     pflegefachkraft: "Laura Brunner",
@@ -316,7 +437,6 @@ export const angehoerige: Angehoeriger[] = [
   },
   {
     id: "A-2026-0108",
-    obNummer: "OB-2026-048",
     vorname: "Lucia",
     nachname: "Ferrari",
     qualifikation: "ohne_srk",
@@ -332,7 +452,8 @@ export const angehoerige: Angehoeriger[] = [
       { type: "fehlende_tage", label: "Fehlende Tage" },
     ],
     hrCheck: { bankdaten: false, kinderzulagen: false, quellensteuerTarif: null },
-    srkKursDatum: null,
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "nein",
     letzteMutationDatum: "22.02.2026",
     letzteMutationUser: "L. Brunner",
     pflegefachkraft: "Laura Brunner",
@@ -347,7 +468,6 @@ export const angehoerige: Angehoeriger[] = [
   },
   {
     id: "A-2026-0109",
-    obNummer: "OB-2026-049",
     vorname: "Karl",
     nachname: "Zimmermann",
     qualifikation: "srk",
@@ -360,7 +480,8 @@ export const angehoerige: Angehoeriger[] = [
     stempelSoll: 22,
     stempelWarnings: [],
     hrCheck: { bankdaten: true, kinderzulagen: true, quellensteuerTarif: "C" },
-    srkKursDatum: "2025-08-10",
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "ja",
     letzteMutationDatum: "27.02.2026",
     letzteMutationUser: "S. Weber",
     pflegefachkraft: "Sandra Weber",
@@ -374,7 +495,6 @@ export const angehoerige: Angehoeriger[] = [
   },
   {
     id: "A-2026-0110",
-    obNummer: "OB-2026-050",
     vorname: "Margrit",
     nachname: "Keller",
     qualifikation: "fage_dipl",
@@ -388,7 +508,8 @@ export const angehoerige: Angehoeriger[] = [
     stempelSoll: 22,
     stempelWarnings: [],
     hrCheck: { bankdaten: true, kinderzulagen: true, quellensteuerTarif: "B" },
-    srkKursDatum: null,
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "nein",
     letzteMutationDatum: "01.03.2026",
     letzteMutationUser: "M. Keller",
     pflegefachkraft: "Maria Keller",
@@ -402,7 +523,6 @@ export const angehoerige: Angehoeriger[] = [
   },
   {
     id: "A-2026-0111",
-    obNummer: "OB-2026-051",
     vorname: "Andreas",
     nachname: "Frei",
     qualifikation: "srk",
@@ -413,7 +533,8 @@ export const angehoerige: Angehoeriger[] = [
     stempelSoll: 22,
     stempelWarnings: [{ type: "fehlende_tage", label: "Fehlende Tage" }],
     hrCheck: { bankdaten: false, kinderzulagen: false, quellensteuerTarif: null },
-    srkKursDatum: null,
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "nein",
     letzteMutationDatum: "28.02.2026",
     letzteMutationUser: "K. Meier",
     pflegefachkraft: "Kathrin Meier",
@@ -427,7 +548,6 @@ export const angehoerige: Angehoeriger[] = [
   },
   {
     id: "A-2026-0112",
-    obNummer: "OB-2026-052",
     vorname: "Claudia",
     nachname: "Huber",
     qualifikation: "ohne_srk",
@@ -440,7 +560,8 @@ export const angehoerige: Angehoeriger[] = [
     stempelSoll: 22,
     stempelWarnings: [{ type: "spitalaufenthalt", label: "Spitalaufenthalt" }],
     hrCheck: { bankdaten: true, kinderzulagen: false, quellensteuerTarif: "A" },
-    srkKursDatum: null,
+    ...LEERE_ERHEBUNG,
+    srkZertifikatVorhanden: "nein",
     letzteMutationDatum: "26.02.2026",
     letzteMutationUser: "S. Weber",
     pflegefachkraft: "Sandra Weber",

@@ -47,9 +47,11 @@ import { type NotizReferenz } from "../../lib/notizen/notizen";
 import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient, seedDemoRhythmus } from "./demoSteinerFall";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
+import { qualifikationAusFunktion } from "../../lib/stammdaten/funktionen";
 import { naechsteFallKennung } from "../../lib/onboarding/faelle";
 import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
 import { erfassePatientImOnboarding, patientFuerOnboarding } from "../../lib/patienten/store";
+import { erfasseAngehoerigenImOnboarding, type AngehoerigenEingabe } from "../../lib/angehoerige/store";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
 import { formatFaelligkeit, isoZuDate } from "../../lib/datum";
@@ -200,6 +202,52 @@ function vollerName(nachname: string, vorname: string): boolean {
  */
 function NochKeineKennung({ text }: { text: string }) {
   return <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{text}</div>;
+}
+
+/**
+ * Formular → Bestand. Nur die Erhebungsfelder des Katalogs; alles Übrige
+ * (Zustand, Abrechenbarkeit, Stempeltage, Monatsschritt) entsteht im Betrieb.
+ * Die Qualifikationsstufe steht nicht dabei — der Bestand leitet sie ab.
+ */
+function angehoerigenEingabe(d: AngehoerigerFormData): AngehoerigenEingabe {
+  return {
+    vorname: d.vorname, nachname: d.name,
+    geschlecht: d.geschlecht, geburtsdatum: d.geburtsdatum, ahvNummer: d.ahvNummer,
+    zivilstand: d.zivilstand, zivilstandSeit: d.zivilstandSeit,
+    strasse: d.strasse, plz: d.plz, ort: d.ort, email: d.email, telefon: d.telefon,
+    krankenkasseName: d.krankenkasseName, kartennummer: d.kartennummer, bagNr: d.bagNr,
+    nationalitaet: d.nationalitaet, heimatort: d.heimatort, aufenthaltsstatus: d.aufenthaltsstatus,
+    einreisedatum: d.einreisedatum, zemisNummer: d.zemisNummer,
+    einreichungsdatumMigrationsamt: d.einreichungsdatumMigrationsamt,
+    bewilligungAblaufdatum: d.bewilligungAblaufdatum,
+    spezialbewilligungEinreichungsDatum: d.spezialbewilligungEinreichungsDatum,
+    spezialbewilligungStatus: d.spezialbewilligungStatus,
+    quellensteuer: d.quellensteuer, konfession: d.konfession,
+    quellensteuerTarif: d.quellensteuerTarif, tarifcodeQuelle: d.tarifcodeQuelle,
+    tarifcodeOverrideBegruendung: d.tarifcodeOverrideBegruendung, steuergemeinde: d.steuergemeinde,
+    bvgVersichert: d.bvgVersichert, uvgVersichert: d.uvgVersichert,
+    sozialamtInvolviert: d.sozialamtInvolviert, sozialamtKontakt: d.sozialamtKontakt,
+    lohnabtretung: d.lohnabtretung,
+    partnerVorname: d.partnerVorname, partnerName: d.partnerName,
+    partnerGeburtsdatum: d.partnerGeburtsdatum, partnerNationalitaet: d.partnerNationalitaet,
+    partnerAufenthaltsstatus: d.partnerAufenthaltsstatus, partnerErwerbstaetig: d.partnerErwerbstaetig,
+    hatUnterhaltspflichtigeKinder: d.hatUnterhaltspflichtigeKinder, anzahlKinder: d.anzahlKinder,
+    kinderzulagenUeberSpitex: d.kinderzulagenUeberSpitex,
+    kinder: d.kinder.map(k => ({
+      id: k.id, vorname: k.vorname, name: k.name, geburtsdatum: k.geburtsdatum,
+      geschlecht: k.geschlecht, ahvNummer: k.ahvNummer, inAusbildung: k.inAusbildung,
+      ausbildungsbeginn: k.ausbildungsbeginn, zulagenart: k.zulagenart,
+      typQuelle: k.typQuelle, overrideBegruendung: k.overrideBegruendung,
+    })),
+    arbeitetExtern: d.arbeitetExtern, externeFunktion: d.externeFunktion,
+    externesPensumProzent: d.externesPensumProzent, externerEintritt: d.externerEintritt,
+    bvgAnbindungGewuenscht: d.bvgAnbindungGewuenscht,
+    funktion: d.funktion, eintrittsdatum: d.eintrittsdatum, stundenlohn: d.stundenlohn,
+    ferienanspruchWochen: d.ferienanspruchWochen, bankname: d.bankname, iban: d.iban,
+    lohnart: d.lohnart,
+    deutschNiveau: d.deutschNiveau, zertifikatVorhanden: d.zertifikatVorhanden,
+    srkZertifikatVorhanden: d.srkZertifikatVorhanden,
+  };
 }
 
 export function OnboardingPage() {
@@ -377,9 +425,17 @@ export function OnboardingPage() {
   const activeStepData = wizardSteps.find((s) => s.id === currentStep) ?? wizardSteps[0];
 
   useEffect(() => {
-    if (caseId || activeStepData.key !== "patient") return;
+    if (caseId || (activeStepData.key !== "patient" && activeStepData.key !== "angehoeriger")) return;
     setNeueFallKennung(k => k ?? naechsteFallKennung());
   }, [caseId, activeStepData.key]);
+
+  /* ── Die angehörige Person entsteht mit dem Schritt "Angehöriger" und trägt
+     ab da dieselbe Kennung. Fortschreiben, nicht neu anlegen; der Abschluss
+     wechselt nur den Zustand. Bis dahin erscheint sie nicht in der Liste. ── */
+  useEffect(() => {
+    if (!wirksameFallKennung) return;
+    erfasseAngehoerigenImOnboarding(wirksameFallKennung, angehoerigenEingabe(angehoerigerData));
+  }, [wirksameFallKennung, angehoerigerData]);
 
   // Erfasste Felder fortschreiben — dieselbe Kennung, kein zweiter Patient.
   useEffect(() => {
@@ -1104,7 +1160,7 @@ export function OnboardingPage() {
                       quellensteuerpflichtig: angehoerigerData.quellensteuer === "ja",
                       aufenthaltsstatus: angehoerigerData.aufenthaltsstatus,
                       bvgAnbindungGewuenscht: angehoerigerData.bvgAnbindungGewuenscht === "ja",
-                      qualifikation: angehoerigerData.qualifikation,
+                      qualifikation: qualifikationAusFunktion(angehoerigerData.funktion),
                       eintrittsdatum: angehoerigerData.eintrittsdatum,
                     }, ausloeser);
 
