@@ -51,14 +51,9 @@ export interface SpalteDef<T> {
    *  entfallen Spalten mit gesetztem Rang (kleinster zuerst), bis die Summe passt —
    *  statt am rechten Rand zu klippen. Spalten ohne Rang bleiben immer. */
   abwerfRang?: number;
-  /** Obere Spur der Spalte (max-Seite von minmax). Fehlt sie, gilt `${anteil}fr`.
-   *  Bei reinen ch/px-Obergrenzen (kein fr) berechnet die DataTable die Spurbreiten
-   *  explizit und verteilt Überschuss geordnet (siehe wachsRang) — kein Klippen. */
+  /** Obere Spur der Spalte (max-Seite von minmax, z. B. "21ch"). Fehlt sie, gilt
+   *  `${anteil}fr`. Der Browser verteilt zwischen Mindestbreite und dieser Obergrenze. */
   maxSpur?: string;
-  /** Wachstums-Rang für die geordnete Überschuss-Verteilung (kleinster zuerst),
-   *  jede Spalte nur bis zu ihrer Obergrenze. Ohne Rang wächst die Spalte nicht
-   *  (bleibt bei der Mindestbreite). Nur wirksam im ch/px-Obergrenzen-Modus. */
-  wachsRang?: number;
   render: (row: T) => React.ReactNode;
 }
 
@@ -256,7 +251,7 @@ export function DataTable<T>({
   // Footprint einer Spalte = Textbreite (ch→px) PLUS die tatsächlichen Innenabstände
   // der Zelle (beide Seiten), nicht nur die ch-Umrechnung.
   const zellInnenPx = parseFloat(TABELLE_LAYOUT.zeilePadX) * remPx * 2;
-  const SICHERHEIT_PX = 16;
+  const SICHERHEIT_PX = 24; // deckt Rahmenlinien, Rundung und einen möglichen senkrechten Bildlaufbalken
   const minPx = (s: SpalteDef<T>) => s.festBreitePx != null ? s.festBreitePx : (s.minCh ?? 8) * chPx + zellInnenPx;
   let anzeige = sichtbare;
   if (hatAbwurf) {
@@ -269,40 +264,15 @@ export function DataTable<T>({
     anzeige = sichtbare.filter(s => !weg.has(s.id));
   }
 
-  /* ── Spurbreiten. Bei reinen ch/px-Obergrenzen (kein fr) rechnet die DataTable
-     explizit: jede Spalte startet auf ihrer Mindestbreite, der Überschuss wird
-     geordnet (wachsRang) bis zur Obergrenze verteilt; reicht die Breite für alle
-     Obergrenzen, bleibt der Rest rechts leer (kein Strecken). Sonst minmax/fr. ── */
+  /* ── Spurbreiten: keine eigene Pixelrechnung. Je Spalte minmax(Mindestbreite,
+     Obergrenze) in ch (bzw. fr, wenn keine Obergrenze gesetzt ist) — der Browser
+     verteilt zwischen den Grenzen und überschreitet den Container nicht, solange die
+     Summe der Mindestbreiten (via Abwurf oben gesichert) hineinpasst. ── */
   const auswahlSpur = auswahl ? ["40px"] : [];
-  const spurPx = (spur: string | undefined, fallback: number) => {
-    if (!spur) return fallback;
-    if (spur.endsWith("px")) return parseFloat(spur);
-    if (spur.endsWith("ch")) return parseFloat(spur) * chPx;
-    return fallback;
-  };
-  const inhaltsModus = anzeige.length > 0 && anzeige.every(s => s.festBreitePx != null || (s.maxSpur != null && !s.maxSpur.endsWith("fr")));
-  let gridCols: string;
-  if (inhaltsModus && breite > 0) {
-    const minA = anzeige.map(s => minPx(s));
-    const maxA = anzeige.map(s => s.festBreitePx ?? spurPx(s.maxSpur, (s.minCh ?? 8) * chPx) + zellInnenPx);
-    const w = [...minA];
-    let rest = breite - auswahlPx - w.reduce((a, b) => a + b, 0);
-    const wachsend = anzeige
-      .map((s, i) => ({ i, rang: s.wachsRang }))
-      .filter(x => x.rang != null && maxA[x.i] > w[x.i])
-      .sort((a, b) => a.rang! - b.rang!);
-    for (const { i } of wachsend) {
-      if (rest <= 0) break;
-      const zuwachs = Math.min(rest, maxA[i] - w[i]);
-      w[i] += zuwachs; rest -= zuwachs;
-    }
-    gridCols = [...auswahlSpur, ...w.map(p => `${Math.round(p)}px`)].join(" ");
-  } else {
-    gridCols = [
-      ...auswahlSpur,
-      ...anzeige.map(s => s.festBreitePx != null ? `${s.festBreitePx}px` : `minmax(${s.minCh ?? 8}ch, ${s.maxSpur ?? `${s.anteil ?? 1}fr`})`),
-    ].join(" ");
-  }
+  const gridCols = [
+    ...auswahlSpur,
+    ...anzeige.map(s => s.festBreitePx != null ? `${s.festBreitePx}px` : `minmax(${s.minCh ?? 8}ch, ${s.maxSpur ?? `${s.anteil ?? 1}fr`})`),
+  ].join(" ");
   const zellPad = `${TABELLE_LAYOUT.zeilePadY} ${TABELLE_LAYOUT.zeilePadX}`;
 
   return (
