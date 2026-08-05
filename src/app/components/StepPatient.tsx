@@ -64,6 +64,8 @@ import { InlineSelect } from "./ui/InlineSelect";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
+import { sdaVerlangtInterrai } from "../../lib/stammdaten/sda-einschaetzung-situation";
+import { INTERRAI_SCHRITTE } from "../../lib/rhythmus/vorlage";
 import { SectionAccordion, SektionBadge } from "./ui/SectionAccordion";
 import { ItemRow } from "./ui/ItemRow";
 import { hProWoche, einmaligeMin, istPeriodisch, einheitLabel, werLabel, berechnungsText, kompaktParams, berechneSummen, getSimultanPartner } from "../../lib/klv/berechnung";
@@ -80,7 +82,7 @@ import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/kranke
 import { Combobox } from "./form/Combobox";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import { getPatient } from "../../lib/patienten/store";
-import { EROEFFNUNGSGRUND_STANDARD } from "../../lib/stammdaten/sda-eroeffnungsgrund";
+import { EROEFFNUNGSGRUND_STANDARD, EROEFFNUNGSGRUND_EINSATZABBRUCH } from "../../lib/stammdaten/sda-eroeffnungsgrund";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext, type DokumentTypDefinition } from "../../lib/stammdaten/dokumenttypen";
 import { DokumentScanUpload, type ScanFile } from "./form/DokumentScanUpload";
 import { EinwilligungModal } from "./einwilligung/EinwilligungModal";
@@ -517,8 +519,16 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
   const recording = useRecording();
 
   /* Compute overall validity — Pflichtfelder + Pflichtdokumente.
-   * InterRAI, Pflegeplanung, KLV, Workflow: ausgenommen (Zertifizierung ausstehend, siehe MODUL_ZERTIFIZIERUNG). */
-  const requiredTabs = ["anmeldung", "personalien", "steuer", "wohnen", "anamnese", "dokumente"];
+   * InterRAI, Pflegeplanung, KLV, Workflow: ausgenommen (Zertifizierung ausstehend, siehe MODUL_ZERTIFIZIERUNG).
+   *
+   * AA1 = 2 (Einsatzabbruch): das SDA gilt als abgeschlossen, obwohl nicht
+   * alle Items im Bereich BB kodiert sind. Der Reiter Anmeldung bleibt
+   * vollständig pflichtig — AA1, AA2, AA3 und BB16 sind auch beim Abbruch zu
+   * kodieren; nur die BB-Reiter entfallen. */
+  const istEinsatzabbruch = data.eroeffnungsgrund === EROEFFNUNGSGRUND_EINSATZABBRUCH;
+  const requiredTabs = istEinsatzabbruch
+    ? ["anmeldung"]
+    : ["anmeldung", "personalien", "steuer", "wohnen", "anamnese", "dokumente"];
   const allRequiredComplete = requiredTabs.every((k) => isTabComplete(k, data));
 
   useEffect(() => {
@@ -664,7 +674,10 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {activeTab === "workflow" && (onboardingId
             ? (() => {
                 // Patient-Workflow: Tickets ab Aufnahmedatum (= heute im Onboarding-Kontext)
-                generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, new Date().toISOString().slice(0, 10));
+                // Triage nach BB16: verlangt der Wert keine Abklärung, fallen die
+                // beiden interRAI-Schritte weg — kein offener Schritt, keine Aufgabe.
+                generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, new Date().toISOString().slice(0, 10), undefined,
+                  sdaVerlangtInterrai(data.einschaetzungSituation) ? undefined : INTERRAI_SCHRITTE);
                 return <RhythmusTimeline subjektTyp="patient" subjektId={onboardingId} />;
               })()
             : <OhneFallkennung />)}

@@ -48,6 +48,7 @@ import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient, seedDemoRhyt
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { qualifikationAusFunktion } from "../../lib/stammdaten/funktionen";
+import { sdaVerlangtInterrai } from "../../lib/stammdaten/sda-einschaetzung-situation";
 import { naechsteFallKennung } from "../../lib/onboarding/faelle";
 import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
 import { erfassePatientImOnboarding, patientFuerOnboarding } from "../../lib/patienten/store";
@@ -1125,7 +1126,9 @@ export function OnboardingPage() {
             {(() => {
               const ba = MOCK_ASSESSMENTS.find(a => a.onboardingId === wirksameFallKennung);
               const hints: string[] = [];
-              if (!ba || ba.status !== "abgeschlossen") hints.push("Das InterRAI ist noch nicht abgeschlossen. Es wird mitkonvertiert und kann später vervollständigt werden.");
+              // Triage nach BB16: verlangt der Wert keine Abklärung, wird ihr
+              // Fehlen nicht als Lücke gemeldet.
+              if (sdaVerlangtInterrai(patientData.einschaetzungSituation) && (!ba || ba.status !== "abgeschlossen")) hints.push("Das InterRAI ist noch nicht abgeschlossen. Es wird mitkonvertiert und kann später vervollständigt werden.");
               if (!MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === wirksameFallKennung)) hints.push("Es wurde noch keine Pflegeplanung erstellt.");
               const klv = MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === wirksameFallKennung);
               if (klv && klv.status !== "kostengutsprache-erhalten") hints.push(`Die KLV ist im Status "${klv.status}". Die Pipeline läuft am aktiven Patient weiter.`);

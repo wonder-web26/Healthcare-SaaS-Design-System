@@ -63,6 +63,14 @@ export interface RhythmusVorlage {
    SEED: Angehörigen-Vorlage "Betriebshandbuch Angehörige" v1
    ══════════════════════════════════════════ */
 
+/**
+ * Die Schritte des Patienten-Prozesses, die eine interRAI-Abklärung sind.
+ * Bei BB16 ∈ {5, 6, 7} verlangt der Standard keine Abklärung; dann fallen
+ * genau diese beiden Schritte weg. Codes statt Beschriftungen, damit die
+ * Triage nicht auf Text vergleicht.
+ */
+export const INTERRAI_SCHRITTE = ["pp_01", "pp_11"] as const;
+
 export const RHYTHMUS_VORLAGEN: RhythmusVorlage[] = [
   /* ── Angehörigen-Vorlage ── */
   {

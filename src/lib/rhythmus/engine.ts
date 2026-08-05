@@ -110,6 +110,8 @@ export function generiereRhythmusTickets(
   subjektName: string,
   ankerDatum: string,
   zugewiesenAn?: string,
+  /** Schrittcodes, die für dieses Subjekt nicht anfallen (z. B. Triage BB16). */
+  ohneSchritte?: readonly string[],
 ): RhythmusInstanz | null {
   // Passende aktive Vorlage
   const vorlage = getAktiveVorlage(subjektTyp);
@@ -138,6 +140,8 @@ export function generiereRhythmusTickets(
   // Pro Schritt ein Ticket (nur zeit_offset, bedingung nicht ausgewertet)
   for (const schritt of vorlage.schritte) {
     if (schritt.triggerTyp !== "zeit_offset") continue;
+    // Für dieses Subjekt ausgeschlossene Schritte erzeugen kein Ticket.
+    if (ohneSchritte?.includes(schritt.code)) continue;
 
     const ticketId = `rt-${instanz.id}-${schritt.code}`;
 

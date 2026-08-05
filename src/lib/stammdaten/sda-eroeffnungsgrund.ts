@@ -5,14 +5,22 @@
  * eines Einsatzabbruchs. Code 1 ist laut Handbuch als Vorbelegung zu setzen —
  * die einzige Vorbelegung im Reiter Anmeldung.
  *
- * Code 2 hat Prozessfolgen (SDA gilt trotz unvollständigem Bereich BB als
- * abgeschlossen, kein Formular Entlassung). Diese Wirkung ist noch nicht
- * gebaut; hier wird der Wert nur erhoben.
+ * Code 2 hat Prozessfolgen: das SDA gilt trotz unvollständigem Bereich BB als
+ * abgeschlossen. Die Vollständigkeitsprüfung des Patienten-Schritts kennt
+ * diese Ausnahme. Das Formular Entlassung entfällt ebenfalls — das gehört zum
+ * Fall-Objekt und ist noch nicht gebaut.
  */
 import { type SdaWert } from "./sda-wert";
 
 /** Vorbelegung gemäss Handbuch. */
 export const EROEFFNUNGSGRUND_STANDARD = "1";
+
+/**
+ * Einsatzabbruch. Bei diesem Wert wird das SDA abgeschlossen, obwohl nicht
+ * alle Items im Bereich BB kodiert sind; der Reiter Anmeldung bleibt
+ * vollständig pflichtig.
+ */
+export const EROEFFNUNGSGRUND_EINSATZABBRUCH = "2";
 
 export const SDA_EROEFFNUNGSGRUND: SdaWert[] = [
   { code: "1", label: "Eintritt in die Spitex-Organisation" },
