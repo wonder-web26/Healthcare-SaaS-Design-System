@@ -62,7 +62,7 @@ export function TabAktivitaetenV2({ data, onUpdateATL }: Props) {
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       {/* TabHeader per styleguide 8.11 — Fortschritt-Modus */}
       <TabHeader
-        titel="Aktivitäten"
+        titel="Aktivitäten des täglichen Lebens"
         meta={<HeaderMeta modus="fortschritt" text={`${completedCategories} von ${ATL_CATEGORIES.length} Kategorien erfasst`} prozent={ATL_CATEGORIES.length > 0 ? (completedCategories / ATL_CATEGORIES.length) * 100 : 0} />}
         aktion={
           <div className="flex items-center" style={{ gap: 4 }}>

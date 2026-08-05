@@ -103,7 +103,7 @@ const profileTabs = [
   { id: "klv", label: "KLV", icon: FileText },
   { id: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
   { id: "atl", label: "Aktivitäten (ATL)", icon: ClipboardList },
-  { id: "workflow", label: "Workflow / Action Plan", icon: ListChecks },
+  { id: "workflow", label: "Betreuungsrhythmus", icon: ListChecks },
   { id: "dokumente", label: "Dokumente", icon: FileText },
   { id: "related", label: "Related Lists", icon: Table2 },
   { id: "tickets", label: "Tickets", icon: Headphones },

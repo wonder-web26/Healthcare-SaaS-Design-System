@@ -201,7 +201,7 @@ interface SectionDef {
 const sections: SectionDef[] = [
   { key: "vollstaendigkeit", label: "Vollständigkeitsprüfung", icon: ListChecks },
   { key: "billing", label: "Abrechnungsbereitschaft", icon: ReceiptText },
-  { key: "actionplan", label: "Action Plan Status", icon: ClipboardCheck },
+  { key: "actionplan", label: "Betreuungsrhythmus Status", icon: ClipboardCheck },
 ];
 
 /* ══════════════════════════════════════════
@@ -309,7 +309,7 @@ export function StepValidierung({
               <p className="text-[13px] text-muted-foreground mt-0.5">
                 {isRunning
                   ? "Systemprüfung wird durchgeführt..."
-                  : "Vollständigkeitsprüfung, Abrechnungsbereitschaft und Action Plan"}
+                  : "Vollständigkeitsprüfung, Abrechnungsbereitschaft und Betreuungsrhythmus"}
               </p>
             </div>
           </div>
@@ -378,7 +378,7 @@ export function StepValidierung({
               </div>
               <div>
                 <div className="text-[17px] text-foreground" style={{ fontWeight: 700 }}>Locked</div>
-                <div className="text-[10px] text-muted-foreground" style={{ fontWeight: 500 }}>Action Plan</div>
+                <div className="text-[10px] text-muted-foreground" style={{ fontWeight: 500 }}>Betreuungsrhythmus</div>
               </div>
             </div>
           </div>
@@ -859,7 +859,7 @@ function ActionPlanSection() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-[14px] text-foreground" style={{ fontWeight: 600 }}>
-              Action Plan generiert
+              Betreuungsrhythmus generiert
             </span>
             <span
               className="inline-flex items-center gap-1 px-2 py-[2px] rounded-full text-[11px] bg-muted text-muted-foreground"
@@ -907,7 +907,7 @@ function ActionPlanSection() {
       <div className="flex items-start gap-2.5 p-3 rounded-xl bg-info-light/40 border border-info/10">
         <Info className="w-4 h-4 text-info mt-0.5 shrink-0" />
         <p className="text-[12px] text-info-foreground leading-relaxed">
-          Der Action Plan wird nach Abschluss des Onboardings automatisch an die zuständige Pflegedienstleitung weitergeleitet. Alle Massnahmen werden in MedLink synchronisiert.
+          Der Betreuungsrhythmus wird nach Abschluss des Onboardings automatisch an die zuständige Pflegedienstleitung weitergeleitet. Alle Massnahmen werden in MedLink synchronisiert.
         </p>
       </div>
     </div>

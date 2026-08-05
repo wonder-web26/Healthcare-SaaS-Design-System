@@ -103,7 +103,7 @@ export function RhythmusTimeline({ subjektTyp, subjektId, aktuellerBenutzer = "S
       {/* Header */}
       <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
         <div>
-          <div style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)" }}>Betreuungs-Rhythmus</div>
+          <div style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)" }}>Betreuungsrhythmus</div>
           <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 2 }}>
             {instanz.vorlageName} · Version {instanz.vorlageVersion} · Anker: {formatDatum(instanz.ankerDatum)}
           </div>

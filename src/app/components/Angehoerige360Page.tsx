@@ -107,7 +107,7 @@ const profileTabs = [
   { id: "historie", label: "Historie", icon: History },
 ];
 
-/* ── Workflow / Action Plan ──────────────── */
+/* ── Betreuungsrhythmus ──────────────────── */
 interface ProcessStep {
   nr: number;
   label: string;
