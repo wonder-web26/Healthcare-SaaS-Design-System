@@ -649,9 +649,9 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
   const [angehName, setAngehName] = useState(origAngehName);
   const [angehRelation, setAngehRelation] = useState(origAngehRelation);
   const [angehTelefon, setAngehTelefon] = useState(patient.angehoerigerTelefon);
-  const [notfallName, setNotfallName] = useState(origAngehName);
-  const [notfallRelation, setNotfallRelation] = useState("Notfallkontakt");
-  const [notfallTelefon, setNotfallTelefon] = useState(patient.angehoerigerTelefon);
+  const [notfallName, setNotfallName] = useState(patient.notfallkontaktName);
+  const [notfallRelation, setNotfallRelation] = useState(patient.notfallkontaktBeziehung);
+  const [notfallTelefon, setNotfallTelefon] = useState(patient.notfallkontaktTelefon);
 
   /* ── Editable fields: Versicherung & Arzt ── */
   const [kkName, setKkName] = useState("CSS Versicherung");
