@@ -49,7 +49,7 @@ import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient, seedDemoRhyt
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { naechsteFallKennung } from "../../lib/onboarding/faelle";
 import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
-import { erfassePatientImOnboarding } from "../../lib/patienten/store";
+import { erfassePatientImOnboarding, patientFuerOnboarding } from "../../lib/patienten/store";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
 import { formatFaelligkeit, isoZuDate } from "../../lib/datum";
@@ -188,23 +188,24 @@ function AnnaHinweisZeile({ onJumpToPflegeplanung }: { onJumpToPflegeplanung: ()
   return null;
 }
 
+/** Ein Name zählt erst, wenn beide Teile erfasst sind — sonst Platzhalter. */
+function vollerName(nachname: string, vorname: string): boolean {
+  return nachname.trim() !== "" && vorname.trim() !== "";
+}
+
+/**
+ * Erklärter Leerzustand für die Zustandsspalte: was fehlt, und wo es entsteht.
+ * Gleiche Form wie der Abschnitt Workflow — ein Satz, kein Strich, kein
+ * ausgegrautes Bedienelement.
+ */
+function NochKeineKennung({ text }: { text: string }) {
+  return <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{text}</div>;
+}
+
 export function OnboardingPage() {
   const navigate = useNavigate();
   const { caseId } = useParams<{ caseId: string }>();
   const [searchParams] = useSearchParams();
-  const isExisting = !!caseId;
-
-  /* ── Fallkontext aus dem EINEN Fallverzeichnis (lib/onboarding/faelle.ts).
-     Zuvor lag daneben ein zweites Verzeichnis mit eigenen Kennungen, das nie
-     traf; es ist entfernt. `fall` ist ab hier die Quelle für Kopfzeile,
-     Vertragsschritt, Abschlussdialog und Notizspur.
-     Schreibweise "Nachname, Vorname" wie in der Liste; der Angehörigenname
-     steht im Verzeichnis bereits in Anzeigeform. ── */
-  const fall = fallById(caseId);
-  const caseInfo = fall
-    ? { patient: `${fall.patientNachname}, ${fall.patientVorname}`, angehoeriger: fall.angehoeriger }
-    : null;
-
   const [currentStep, setCurrentStep] = useState(1);
   const [visitedSteps, setVisitedSteps] = useState<Set<number>>(new Set([1]));
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
@@ -233,7 +234,38 @@ export function OnboardingPage() {
      Die acht Mandate aus dem Mockbestand bleiben davon unberührt: sie sind
      Altbestand ohne Patientendatensatz und erzeugen beim Abschluss keinen. ── */
   const [neueFallKennung, setNeueFallKennung] = useState<string | null>(null);
-  const wirksameFallKennung = caseId ?? neueFallKennung;
+
+  /* Die eine Kennung des Bildschirms. Aus der Adresszeile, sonst die im
+     Patienten-Schritt vergebene. Alles, was einen Schlüssel braucht — Bezugs-
+     person, Status, Aufgaben, Gespräch, klinische Reiter, Vitaldaten —, liest
+     ab hier diese und nicht mehr `caseId`. `caseId` bleibt nur dort stehen, wo
+     die Frage wirklich "kommt der Fall aus der Adresszeile" lautet: bei der
+     Vergabe selbst und bei der Erkennung des Demo-Falls. */
+  const wirksameFallKennung: string | null = caseId ?? neueFallKennung;
+  const hatKennung = wirksameFallKennung !== null;
+
+  /* ── Fallkontext. Erste Quelle ist das Fallverzeichnis
+     (lib/onboarding/faelle.ts). Ein neu begonnener Fall steht dort nicht —
+     `naechsteFallKennung()` vergibt nur die Zeichenkette und trägt nichts ein.
+     Für ihn treten die bereits erfassten Formularwerte an die Stelle des
+     Verzeichnisses.
+
+     Zwei Regeln: Das Verzeichnis hat Vorrang und wird nie mit Formularwerten
+     gemischt — es gewinnt als Ganzes. Und ein Name zählt erst, wenn Vorname
+     und Nachname da sind; sonst bleibt der Wert null und die verwendende
+     Stelle zeigt weiter ihren Platzhalter. Kein Teilname, kein Komma ohne
+     Vornamen. ── */
+  const fall = fallById(wirksameFallKennung);
+  const caseInfo: { patient: string | null; angehoeriger: string | null } = fall
+    ? { patient: `${fall.patientNachname}, ${fall.patientVorname}`, angehoeriger: fall.angehoeriger }
+    : {
+        patient: vollerName(patientData.name, patientData.vorname)
+          ? `${patientData.name.trim()}, ${patientData.vorname.trim()}`
+          : null,
+        angehoeriger: vollerName(angehoerigerData.name, angehoerigerData.vorname)
+          ? `${angehoerigerData.vorname.trim()} ${angehoerigerData.name.trim()}`
+          : null,
+      };
 
   /* ── Step 3 (Vertrag) validity ───── */
   const [step3Valid, setStep3Valid] = useState(false);
@@ -247,7 +279,7 @@ export function OnboardingPage() {
     zeitpunkt: string; person: string; fehlendeDokumente: string[]; begruendung: string;
   } | null>(null);
   const recording = useRecording();
-  const obPerson = caseId ? getPersonByOnboardingId(caseId) : null;
+  const obPerson = wirksameFallKennung ? getPersonByOnboardingId(wirksameFallKennung) : null;
   const isRecording = recording.phase === "recording" && obPerson != null && recording.session?.personId === obPerson.id;
   const hasRecording = false; // No "done" phase in new recording model
 
@@ -359,18 +391,39 @@ export function OnboardingPage() {
     });
   }, [neueFallKennung, patientData, angehoerigerData.vorname, angehoerigerData.name, angehoerigerData.telefon]);
 
-  /* ── Notizspur: Person des aktiven Schritts (aus der geteilten Fall-Quelle).
-     angehoeriger/spezialbewilligung → Angehörige, patient → Patient, vertrag →
-     keiner Einzelperson zugeordnet, daher keine Spur. Ohne Fall (z. B. 001er-
-     Demofälle ohne Kennungen) bleibt die Spur aus. ── */
-  const notizFall = fall;
+  /* ── Notizspur: Person des aktiven Schritts.
+     Eine Notiz hängt an einer PERSON, nicht am Fall — sie braucht deshalb eine
+     Personen-Kennung, keine Fallkennung.
+
+     Bestehender Fall: beide Kennungen stehen im Fallverzeichnis.
+     Neu begonnener Fall: der Patient existiert bereits im Bestand und bringt
+     seine Kennung mit; die angehörige Person erhält ihre erst beim Abschluss
+     (konvertiereOnboarding vergibt sie). Bis dahin steht dort ein Satz.
+     Vertragsschritt: keiner Einzelperson zugeordnet, daher keine Spur. ── */
+  const notizPatient = wirksameFallKennung ? patientFuerOnboarding(wirksameFallKennung) : undefined;
   const notizPerson: { referenz: NotizReferenz; name: string } | null = (() => {
-    if (!notizFall) return null;
     const k = activeStepData.key;
-    if (k === "patient") return { referenz: patientRef(notizFall), name: patientAnzeigeName(notizFall) };
-    if (k === "angehoeriger" || k === "spezialbewilligung") return { referenz: angehoerigerRef(notizFall), name: angehoerigerAnzeigeName(notizFall) };
+    if (k === "patient") {
+      if (fall) return { referenz: patientRef(fall), name: patientAnzeigeName(fall) };
+      if (notizPatient && caseInfo.patient) {
+        return { referenz: { art: "patient", kennung: notizPatient.id }, name: caseInfo.patient };
+      }
+      return null;
+    }
+    if (k === "angehoeriger" || k === "spezialbewilligung") {
+      if (fall) return { referenz: angehoerigerRef(fall), name: angehoerigerAnzeigeName(fall) };
+      return null;
+    }
     return null;
   })();
+
+  /** Satz statt Spur — nur in den beiden Schritten, die eine Spur führen. */
+  const notizHinweis: string | null = notizPerson ? null
+    : activeStepData.key === "patient"
+      ? "Noch keine Notizen möglich. Sie werden möglich, sobald Name und Vorname des Patienten erfasst sind."
+      : activeStepData.key === "angehoeriger" || activeStepData.key === "spezialbewilligung"
+        ? "Noch keine Notizen möglich. Die angehörige Person erhält ihre Kennung mit dem Abschluss des Onboardings."
+        : null;
 
   const completedCount = completedSteps.size;
   const totalSteps = wizardSteps.length;
@@ -430,21 +483,21 @@ export function OnboardingPage() {
   const bumpStatus = () => setStatusTick(t => t + 1);
   void statusTick; // read so the badge recomputes after store mutations
 
-  const caseStatus: OnboardingStatus = caseId ? getStatus(caseId) : "neu";
-  const statusGrund = caseId ? getGrund(caseId) : null;
+  const caseStatus: OnboardingStatus = wirksameFallKennung ? getStatus(wirksameFallKennung) : "neu";
+  const statusGrund = wirksameFallKennung ? getGrund(wirksameFallKennung) : null;
   const statusDarstellung = ONBOARDING_STATUS_CFG[caseStatus];
 
   // Abbruch-Dialog (Grund erforderlich) — ausgelöst über die Status-Auswahl im Abzeichen
   const [abbruchOffen, setAbbruchOffen] = useState(false);
   const [abbruchGrund, setAbbruchGrund] = useState("");
   const waehleStatus = (s: OnboardingStatus) => {
-    if (!caseId) return;
+    if (!wirksameFallKennung) return;
     if (s === "abgebrochen") { setAbbruchGrund(""); setAbbruchOffen(true); return; }
-    if (setzeStatus(caseId, s, ausloeser)) bumpStatus();
+    if (setzeStatus(wirksameFallKennung, s, ausloeser)) bumpStatus();
   };
   const bestaetigeAbbruch = () => {
-    if (!caseId) return;
-    if (setzeStatus(caseId, "abgebrochen", ausloeser, abbruchGrund)) {
+    if (!wirksameFallKennung) return;
+    if (setzeStatus(wirksameFallKennung, "abgebrochen", ausloeser, abbruchGrund)) {
       setAbbruchOffen(false);
       setAbbruchGrund("");
       bumpStatus();
@@ -459,7 +512,7 @@ export function OnboardingPage() {
 
   // Workflow-Aggregat (aus Rhythmus-Engine). Nur Rhythmus-Tickets, keine WorkflowTasks.
   aktualisiereUeberfaellige();
-  const rhythmusTickets = getTicketsFuerSubjekt("patient", caseId);
+  const rhythmusTickets = wirksameFallKennung ? getTicketsFuerSubjekt("patient", wirksameFallKennung) : [];
   const erledigteTickets = rhythmusTickets.filter(t => t.status === "erledigt");
   // Offene Aufgaben: überfällige zuerst, danach nach Fälligkeit.
   const offeneTickets = rhythmusTickets
@@ -494,8 +547,8 @@ export function OnboardingPage() {
   // "Gespräch" (§E): startet die Aufzeichnung. Der Erklärsatz erscheint als Hinweis
   // beim ERSTEN Öffnen der Funktion und danach nicht mehr (einmal gelesen).
   const startGespraech = () => {
-    if (!caseId) return;
-    const person = getPersonByOnboardingId(caseId);
+    if (!wirksameFallKennung) return;
+    const person = getPersonByOnboardingId(wirksameFallKennung);
     if (!person) return;
     if (!gespraechHinweisGezeigt) {
       gespraechHinweisGezeigt = true;
@@ -508,7 +561,7 @@ export function OnboardingPage() {
 
   // "Gespräch" (§D): steht am rechten Ende der Reiterzeile des jeweiligen Schritts,
   // fix sichtbar. Während der Aufzeichnung ein stiller Hinweis statt Knopf.
-  const gespraechReiter = isExisting ? (
+  const gespraechReiter = hatKennung ? (
     isRecording ? (
       <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-meta)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--status-danger)", animation: "pulse 1.5s ease-in-out infinite" }} />
@@ -539,8 +592,8 @@ export function OnboardingPage() {
   // der Onboarding-Status (ONBOARDING_STATUS_CFG) ist die eine Wahrheit.
 
   return (
-    <EinwilligungProvider onboardingId={caseId || null} patientId={null}>
-    <ArztAnfrageProvider onboardingId={caseId || null} patientId={null} hausarztName={patientData.hausarztName} hausarztEmail={patientData.hausarztEmail}>
+    <EinwilligungProvider onboardingId={wirksameFallKennung} patientId={null}>
+    <ArztAnfrageProvider onboardingId={wirksameFallKennung} patientId={null} hausarztName={patientData.hausarztName} hausarztEmail={patientData.hausarztEmail}>
     <div className="flex flex-col h-full min-h-0">
       {/* ── Kopfleiste (§B): keine Karte, kein Avatar. Der Patient ist Subjekt des Falls
              (Titel); die Angehörige ist Kontext. Zeile 1 Rückweg, Zeile 2 Titel + Marken. ── */}
@@ -564,9 +617,9 @@ export function OnboardingPage() {
               {/* Titel = Patientenname aus der Fallquelle (Schreibweise der Liste: Nachname, Vorname),
                   zur Anzeigezeit aufgelöst; zeigt immer den Patienten (auch im Angehörigen-Schritt).
                   Ohne Fall — Neuanlage oder unbekannte Kennung — die Neuanlage-Beschriftung. */}
-              {caseInfo ? caseInfo.patient : "Neues Mandat eröffnen"}
+              {caseInfo.patient ?? "Neues Mandat eröffnen"}
             </span>
-            {caseId ? (
+            {hatKennung ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -596,7 +649,7 @@ export function OnboardingPage() {
             ) : (
               <StatusMarke label={statusDarstellung.label} variante="neutral" />
             )}
-            {caseInfo && (
+            {caseInfo.angehoeriger && (
               <span className="inline-flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)" }}>
                 <span style={{ color: "var(--text-tertiary)" }}>Angehörige</span>
                 <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{caseInfo.angehoeriger}</span>
@@ -616,7 +669,7 @@ export function OnboardingPage() {
                 ? <StatusMarke label={`${fehlendeDocs} Pflichtdok. fehlen`} variante="warnung" />
                 : <StatusMarke label={`${fehlendeDocs} Dokumente offen`} variante="neutral" />
             )}
-            {caseId && (
+            {hatKennung && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -725,7 +778,9 @@ export function OnboardingPage() {
                 {/* ── Abschnitt BEZUGSPERSON (§E): Überschrift IST die Beschriftung; der Chip
                        steht allein darunter, linksbündig, über volle Spaltenbreite (Name bricht nicht um). ── */}
                 <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-3)" }}>Bezugsperson</div>
-                {caseId ? <BezugspersonAuswahl caseId={caseId} /> : <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>—</span>}
+                {wirksameFallKennung
+                  ? <BezugspersonAuswahl caseId={wirksameFallKennung} />
+                  : <NochKeineKennung text="Noch keine Zuweisung möglich. Sie wird möglich, sobald der Patienten-Schritt geöffnet wurde." />}
 
                 {/* Trennlinie */}
                 <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "var(--space-4) 0" }} />
@@ -779,10 +834,17 @@ export function OnboardingPage() {
 
                 {/* ── Abschnitt NOTIZEN: Spur der Person des aktiven Schritts.
                        Beim Vertragsschritt (keiner Einzelperson zugeordnet) ausgeblendet. ── */}
-                {notizPerson && (
+                {(notizPerson || notizHinweis) && (
                   <>
                     <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "var(--space-4) 0" }} />
-                    <NotizSpur referenz={notizPerson.referenz} personName={notizPerson.name} />
+                    {notizPerson
+                      ? <NotizSpur referenz={notizPerson.referenz} personName={notizPerson.name} />
+                      : (
+                        <>
+                          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-3)" }}>Notizen</div>
+                          <NochKeineKennung text={notizHinweis!} />
+                        </>
+                      )}
                   </>
                 )}
 
@@ -860,7 +922,7 @@ export function OnboardingPage() {
                   data={patientData}
                   onChange={setPatientData}
                   onValidityChange={setStep2Valid}
-                  onboardingId={caseId || undefined}
+                  onboardingId={wirksameFallKennung ?? undefined}
                   requestedTab={requestedPatientTab}
                   onTabSwitched={() => setRequestedPatientTab(null)}
                   reiterAktion={gespraechReiter}
@@ -868,7 +930,7 @@ export function OnboardingPage() {
               )}
               {activeStepData.key === "vertrag" && (
                 <VertragsStep
-                  angehoerigerName={caseInfo?.angehoeriger ?? "Angehörige/r"}
+                  angehoerigerName={caseInfo.angehoeriger ?? "Angehörige/r"}
                   stundenlohn={angehoerigerData.stundenlohn}
                   eintrittsdatum={angehoerigerData.eintrittsdatum}
                   onValidityChange={setStep3Valid}
@@ -955,12 +1017,12 @@ export function OnboardingPage() {
 
             <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 6, fontWeight: "var(--weight-medium)" }}>Patient (im Werden → aktiv)</div>
             <div style={{ padding: "8px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius-card)", marginBottom: 12, fontSize: "var(--text-small)" }}>
-              {caseInfo?.patient || "–"}
+              {caseInfo.patient ?? "–"}
             </div>
 
             <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 6, fontWeight: "var(--weight-medium)" }}>Angehöriger (im Werden → aktiv)</div>
             <div style={{ padding: "8px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius-card)", marginBottom: 12, fontSize: "var(--text-small)" }}>
-              {caseInfo?.angehoeriger || "–"}
+              {caseInfo.angehoeriger ?? "–"}
             </div>
 
             {/* Override-Block: fehlende Pflichtdokumente (weiche Sperre) */}
@@ -1005,11 +1067,11 @@ export function OnboardingPage() {
 
             {/* Compliance hints (klinische Artefakte) */}
             {(() => {
-              const ba = MOCK_ASSESSMENTS.find(a => a.onboardingId === caseId);
+              const ba = MOCK_ASSESSMENTS.find(a => a.onboardingId === wirksameFallKennung);
               const hints: string[] = [];
               if (!ba || ba.status !== "abgeschlossen") hints.push("Das InterRAI ist noch nicht abgeschlossen. Es wird mitkonvertiert und kann später vervollständigt werden.");
-              if (!MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === caseId)) hints.push("Es wurde noch keine Pflegeplanung erstellt.");
-              const klv = MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === caseId);
+              if (!MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === wirksameFallKennung)) hints.push("Es wurde noch keine Pflegeplanung erstellt.");
+              const klv = MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === wirksameFallKennung);
               if (klv && klv.status !== "kostengutsprache-erhalten") hints.push(`Die KLV ist im Status "${klv.status}". Die Pipeline läuft am aktiven Patient weiter.`);
               if (hints.length === 0) return null;
               return hints.map((h, i) => (
@@ -1057,7 +1119,7 @@ export function OnboardingPage() {
                   }
                   setShowAbschlussDialog(false);
                   const overrideHint = abschlussPruefung.fehlendePflichtdokumente.length > 0 ? " (mit ausstehenden Dokumenten)" : "";
-                  toast(`Onboarding abgeschlossen${overrideHint}. ${caseInfo?.patient || "Patient"} ist jetzt ein aktiver Klient.`);
+                  toast(`Onboarding abgeschlossen${overrideHint}. ${caseInfo.patient ?? "Patient"} ist jetzt ein aktiver Klient.`);
                   setTimeout(() => navigate("/patienten"), 1500);
                 }}
               >

@@ -643,21 +643,31 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {activeTab === "wohnen" && (
             <TabWohnenUmfeldV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
-          {activeTab === "vitaldaten" && <VitaldatenTab patientId={onboardingId || "new"} />}
+          {activeTab === "vitaldaten" && (onboardingId
+            ? <VitaldatenTab patientId={onboardingId} />
+            : <OhneFallkennung />)}
           {activeTab === "anamnese" && (
             <TabAnamneseV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
           {activeTab === "aktivitaeten" && (
             <TabAktivitaetenV2 data={data} onUpdateATL={updateATL} />
           )}
-          {activeTab === "interrai" && onboardingId && <OnboardingTabBA onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />}
-          {activeTab === "pflegeplanung" && onboardingId && <OnboardingTabPP onboardingId={onboardingId} />}
-          {activeTab === "klv" && onboardingId && <OnboardingTabKLV onboardingId={onboardingId} />}
-          {activeTab === "workflow" && onboardingId && (() => {
-            // Patient-Workflow: Tickets ab Aufnahmedatum (= heute im Onboarding-Kontext)
-            generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, new Date().toISOString().slice(0, 10));
-            return <RhythmusTimeline subjektTyp="patient" subjektId={onboardingId} />;
-          })()}
+          {activeTab === "interrai" && (onboardingId
+            ? <OnboardingTabBA onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />
+            : <OhneFallkennung />)}
+          {activeTab === "pflegeplanung" && (onboardingId
+            ? <OnboardingTabPP onboardingId={onboardingId} />
+            : <OhneFallkennung />)}
+          {activeTab === "klv" && (onboardingId
+            ? <OnboardingTabKLV onboardingId={onboardingId} />
+            : <OhneFallkennung />)}
+          {activeTab === "workflow" && (onboardingId
+            ? (() => {
+                // Patient-Workflow: Tickets ab Aufnahmedatum (= heute im Onboarding-Kontext)
+                generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, new Date().toISOString().slice(0, 10));
+                return <RhythmusTimeline subjektTyp="patient" subjektId={onboardingId} />;
+              })()
+            : <OhneFallkennung />)}
           {activeTab === "dokumente" && <TabDokumente data={data} onChange={onChange} />}
         </div>
       </div>
@@ -1245,6 +1255,24 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
 /* ══════════════════════════════════════════
    ONBOARDING CLINICAL TABS (read by onboardingId)
    ══════════════════════════════════════════ */
+
+/**
+ * Erklärter Leerzustand für die Reiter, die eine Fallkennung brauchen.
+ *
+ * Sie entsteht beim ersten Öffnen dieses Schritts; bis dahin — und nur so
+ * lange — steht hier ein Satz statt einer leeren Fläche. Der Reiter bleibt
+ * anklickbar: ein Reiter, der sich stumm weigert, ist schlechter als einer,
+ * der sagt warum.
+ */
+function OhneFallkennung() {
+  return (
+    <LeerZustand
+      icon={ClipboardList}
+      titel="Noch keine Fallkennung"
+      untertitel="Sie entsteht, sobald der Schritt Patient geöffnet ist. Danach zeigt dieser Reiter seinen Inhalt."
+    />
+  );
+}
 
 function OnboardingTabBA({ onboardingId, patientVorname, patientNachname }: { onboardingId: string; patientVorname: string; patientNachname: string }) {
   const navigate = useNavigate();

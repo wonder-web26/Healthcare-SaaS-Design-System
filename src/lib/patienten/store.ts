@@ -78,8 +78,14 @@ export function getPatient(id: string): Patient | undefined {
   return bestand.find(p => p.id === id);
 }
 
-/** Der Patient eines Onboardings, sofern dieses bereits einen erzeugt hat. */
-function patientFuerOnboarding(onboardingId: string): Patient | undefined {
+/**
+ * Der Patient eines Onboardings, sofern dieses bereits einen erzeugt hat.
+ *
+ * Exportiert, weil die Notizspur eines neu begonnenen Onboardings eine
+ * Personen-Kennung braucht: der Fall selbst steht noch nicht im
+ * Fallverzeichnis, der Patient aber bereits im Bestand.
+ */
+export function patientFuerOnboarding(onboardingId: string): Patient | undefined {
   return bestand.find(p => p.onboardingId === onboardingId);
 }
 

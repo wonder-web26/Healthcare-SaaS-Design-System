@@ -51,17 +51,36 @@ export const onboardingFaelle: OnboardingFall[] = [
 ];
 
 /**
+ * Bereits vergebene Kennungen dieser Sitzung.
+ *
+ * Nötig, weil ein neu begonnener Fall NICHT in onboardingFaelle eingetragen
+ * wird — die Liste bleibt der Mockbestand. Ohne dieses Gedächtnis läge die
+ * höchste belegte Nummer immer bei 108, und jeder neue Fall bekäme dieselbe
+ * Kennung: zwei nacheinander begonnene Onboardings teilten sich Bezugsperson,
+ * Status, Aufgaben, Vitalwerte und Patientendatensatz.
+ */
+const vergebeneKennungen = new Set<string>();
+
+/**
  * Nächste freie Mandatskennung. Wird vergeben, sobald ein neu begonnenes
  * Onboarding den Schritt "Patient" erreicht — ab da trägt der Vorgang seine
  * Kennung unverändert, auch über den Abschluss hinaus.
+ *
+ * Zählt über den Mockbestand UND die in dieser Sitzung bereits vergebenen
+ * Kennungen hinweg weiter, damit keine zweimal herausgegeben wird.
  */
 export function naechsteFallKennung(): string {
   let hoechste = 0;
-  for (const f of onboardingFaelle) {
-    const m = f.id.match(/^OB-\d{4}-(\d{3})$/);
-    if (m) hoechste = Math.max(hoechste, parseInt(m[1], 10));
-  }
-  return `OB-2026-${hoechste + 1}`;
+  const nummer = (id: string) => {
+    const m = id.match(/^OB-\d{4}-(\d{3})$/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  for (const f of onboardingFaelle) hoechste = Math.max(hoechste, nummer(f.id));
+  for (const k of vergebeneKennungen) hoechste = Math.max(hoechste, nummer(k));
+
+  const neu = `OB-2026-${hoechste + 1}`;
+  vergebeneKennungen.add(neu);
+  return neu;
 }
 
 export function fallById(id: string | undefined | null): OnboardingFall | undefined {
