@@ -12,12 +12,14 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type { Patient, Schweregrad } from "./patientData";
+import { sdaSpracheCode } from "../../lib/stammdaten/sda-sprache";
 
 /* ── Caregiver Pool ──────────────────────── */
 export interface Caregiver {
   id: string;
   name: string;
   initialen: string;
+  /** Sprachcodes aus dem Spitex-Schweiz-Katalog (lib/stammdaten/sda-sprache.ts). */
   sprachen: string[];
   regionen: string[]; // kantons
   qualifikationen: string[];
@@ -30,7 +32,7 @@ export const caregiverPool: Caregiver[] = [
     id: "PFK-001",
     name: "Sandra Weber",
     initialen: "SW",
-    sprachen: ["Deutsch", "Französisch"],
+    sprachen: ["1", "2"], // Schweizerdeutsch, Französisch
     regionen: ["ZH", "AG"],
     qualifikationen: ["HöFa I", "Wundmanagement", "Palliative Care"],
     schweregrade: ["leicht", "mittel", "schwer", "kritisch"],
@@ -40,7 +42,7 @@ export const caregiverPool: Caregiver[] = [
     id: "PFK-002",
     name: "Kathrin Meier",
     initialen: "KM",
-    sprachen: ["Deutsch", "Italienisch"],
+    sprachen: ["1", "3"], // Schweizerdeutsch, Italienisch
     regionen: ["ZH", "SG"],
     qualifikationen: ["HöFa II", "Diabetesberatung"],
     schweregrade: ["leicht", "mittel", "schwer"],
@@ -50,7 +52,7 @@ export const caregiverPool: Caregiver[] = [
     id: "PFK-003",
     name: "Laura Brunner",
     initialen: "LB",
-    sprachen: ["Deutsch", "Französisch", "Italienisch"],
+    sprachen: ["1", "2", "3"], // Schweizerdeutsch, Französisch, Italienisch
     regionen: ["ZH", "BE", "LU"],
     qualifikationen: ["HöFa I", "Gerontologie", "Palliative Care"],
     schweregrade: ["leicht", "mittel", "schwer", "kritisch"],
@@ -60,7 +62,7 @@ export const caregiverPool: Caregiver[] = [
     id: "PFK-004",
     name: "Maria Keller",
     initialen: "MK",
-    sprachen: ["Deutsch", "Portugiesisch", "Spanisch"],
+    sprachen: ["1", "7", "8"], // Schweizerdeutsch, Portugiesisch, Spanisch
     regionen: ["ZH", "LU", "AG"],
     qualifikationen: ["HöFa I", "Kinästhetik"],
     schweregrade: ["leicht", "mittel"],
@@ -70,7 +72,7 @@ export const caregiverPool: Caregiver[] = [
     id: "PFK-005",
     name: "Thomas Huber",
     initialen: "TH",
-    sprachen: ["Deutsch", "Türkisch"],
+    sprachen: ["1", "14"], // Schweizerdeutsch, Türkisch
     regionen: ["ZH", "SG", "AG"],
     qualifikationen: ["HöFa I", "Psychiatriepflege"],
     schweregrade: ["leicht", "mittel", "schwer"],
@@ -90,7 +92,9 @@ function computeMatch(
   caregiver: Caregiver,
   patient: Patient
 ): { score: number; detail: MatchDetail } {
-  const spracheMatch = caregiver.sprachen.includes(patient.sprache);
+  // Abgleich über den Katalogcode, nicht über die Beschriftung: der Bestand
+  // hält die Beschriftung, die Pflegefachpersonen halten Codes.
+  const spracheMatch = caregiver.sprachen.includes(sdaSpracheCode(patient.sprache));
   const regionMatch = caregiver.regionen.includes(patient.kanton);
   const schweregradMatch = !!patient.schweregrad && caregiver.schweregrade.includes(patient.schweregrad);
   const freeSlots = caregiver.kapazitaet.max - caregiver.kapazitaet.aktuell;

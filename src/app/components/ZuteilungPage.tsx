@@ -23,12 +23,14 @@ import {
   type Patient,
 } from "./patientData";
 import { usePatienten } from "../../lib/patienten/store";
+import { sdaSpracheCode, sdaSpracheLabel } from "../../lib/stammdaten/sda-sprache";
 
 /* ── Pflegefachkraft pool for matching ──── */
 interface Pflegefachkraft {
   id: string;
   name: string;
   initialen: string;
+  /** Sprachcodes aus dem Spitex-Schweiz-Katalog (lib/stammdaten/sda-sprache.ts). */
   sprachen: string[];
   skills: string[];
   regionen: string[];
@@ -38,12 +40,12 @@ interface Pflegefachkraft {
 }
 
 const pflegefachkraefte: Pflegefachkraft[] = [
-  { id: "pf1", name: "Sandra Weber", initialen: "SW", sprachen: ["Deutsch", "Englisch"], skills: ["Pflege HKP", "Wundmanagement", "Palliative Care"], regionen: ["ZH", "AG"], kapazitaet: 35, maxKapazitaet: 40, bewertung: 4.8 },
-  { id: "pf2", name: "Kathrin Meier", initialen: "KM", sprachen: ["Deutsch", "Französisch"], skills: ["Pflege HKP", "Hauswirtschaft", "Demenzpflege"], regionen: ["ZH", "SG"], kapazitaet: 32, maxKapazitaet: 40, bewertung: 4.6 },
-  { id: "pf3", name: "Laura Brunner", initialen: "LB", sprachen: ["Deutsch", "Italienisch", "Englisch"], skills: ["Pflege A", "Onkologie", "Psychiatrie"], regionen: ["ZH", "BE"], kapazitaet: 28, maxKapazitaet: 40, bewertung: 4.9 },
-  { id: "pf4", name: "Maria Keller", initialen: "MK", sprachen: ["Deutsch", "Portugiesisch", "Spanisch"], skills: ["Pflege HKP", "Beratung", "Therapie"], regionen: ["AG", "LU", "ZH"], kapazitaet: 30, maxKapazitaet: 40, bewertung: 4.5 },
-  { id: "pf5", name: "Ayşe Yılmaz", initialen: "AY", sprachen: ["Türkisch", "Deutsch", "Englisch"], skills: ["Pflege HKP", "Hauswirtschaft", "Gerontologie"], regionen: ["ZH", "SG", "TG"], kapazitaet: 22, maxKapazitaet: 40, bewertung: 4.7 },
-  { id: "pf6", name: "Sophie Dubois", initialen: "SD", sprachen: ["Französisch", "Deutsch"], skills: ["Pflege A", "Palliative Care", "Wundmanagement"], regionen: ["BE", "FR", "VD"], kapazitaet: 25, maxKapazitaet: 40, bewertung: 4.4 },
+  { id: "pf1", name: "Sandra Weber", initialen: "SW", sprachen: ["1", "6"] /* Schweizerdeutsch, Englisch */, skills: ["Pflege HKP", "Wundmanagement", "Palliative Care"], regionen: ["ZH", "AG"], kapazitaet: 35, maxKapazitaet: 40, bewertung: 4.8 },
+  { id: "pf2", name: "Kathrin Meier", initialen: "KM", sprachen: ["1", "2"] /* Schweizerdeutsch, Französisch */, skills: ["Pflege HKP", "Hauswirtschaft", "Demenzpflege"], regionen: ["ZH", "SG"], kapazitaet: 32, maxKapazitaet: 40, bewertung: 4.6 },
+  { id: "pf3", name: "Laura Brunner", initialen: "LB", sprachen: ["1", "3", "6"] /* Schweizerdeutsch, Italienisch, Englisch */, skills: ["Pflege A", "Onkologie", "Psychiatrie"], regionen: ["ZH", "BE"], kapazitaet: 28, maxKapazitaet: 40, bewertung: 4.9 },
+  { id: "pf4", name: "Maria Keller", initialen: "MK", sprachen: ["1", "7", "8"] /* Schweizerdeutsch, Portugiesisch, Spanisch */, skills: ["Pflege HKP", "Beratung", "Therapie"], regionen: ["AG", "LU", "ZH"], kapazitaet: 30, maxKapazitaet: 40, bewertung: 4.5 },
+  { id: "pf5", name: "Ayşe Yılmaz", initialen: "AY", sprachen: ["14", "1", "6"] /* Türkisch, Schweizerdeutsch, Englisch */, skills: ["Pflege HKP", "Hauswirtschaft", "Gerontologie"], regionen: ["ZH", "SG", "TG"], kapazitaet: 22, maxKapazitaet: 40, bewertung: 4.7 },
+  { id: "pf6", name: "Sophie Dubois", initialen: "SD", sprachen: ["2", "1"] /* Französisch, Schweizerdeutsch */, skills: ["Pflege A", "Palliative Care", "Wundmanagement"], regionen: ["BE", "FR", "VD"], kapazitaet: 25, maxKapazitaet: 40, bewertung: 4.4 },
 ];
 
 /* ── Matching algorithm ──────────────────── */
@@ -53,8 +55,9 @@ function getTopMatches(patient: Patient): (Pflegefachkraft & { score: number; re
       let score = 0;
       const reasons: string[] = [];
 
-      // Language match (highest weight)
-      if (pf.sprachen.includes(patient.sprache)) {
+      // Language match (highest weight) — über den Katalogcode, nicht über
+      // die Beschriftung. Die Begründung nennt weiterhin den Klartext.
+      if (pf.sprachen.includes(sdaSpracheCode(patient.sprache))) {
         score += 40;
         reasons.push(`Spricht ${patient.sprache}`);
       }
@@ -454,7 +457,7 @@ export function ZuteilungPage() {
                         <div className="space-y-1.5 mb-3">
                           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                             <Globe className="w-3 h-3 shrink-0" />
-                            <span>{match.sprachen.join(", ")}</span>
+                            <span>{match.sprachen.map(sdaSpracheLabel).join(", ")}</span>
                           </div>
                           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                             <Briefcase className="w-3 h-3 shrink-0" />

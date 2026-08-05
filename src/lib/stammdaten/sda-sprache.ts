@@ -45,3 +45,20 @@ export const SDA_SPRACHE_OPTIONS = SDA_SPRACHE.map(w => ({ value: w.code, label:
 export function sdaSpracheLabel(code: string): string {
   return SDA_SPRACHE.find(w => w.code === code)?.label ?? "";
 }
+
+/**
+ * Code zu einer Beschriftung — der Rückweg von sdaSpracheLabel().
+ *
+ * Nötig, weil der Patientenbestand die BESCHRIFTUNG hält (Entscheid aus
+ * Lauf 4), der Abgleich mit den Pflegefachpersonen aber über Codes läuft.
+ * Der Code wird damit aus dieser Liste geholt statt als zweites Feld an den
+ * Bestand gehängt; es gibt weiterhin nur diese eine Sprachliste.
+ *
+ * Liefert "" für eine Beschriftung ausserhalb des Katalogs — etwa den
+ * Freitext, den Code 21 erlaubt. Ein leerer Code trifft auf keine
+ * Pflegefachperson; das ist richtig, denn eine Sprache ausserhalb des
+ * Katalogs ist im Bestand der Pflegefachpersonen nicht abgebildet.
+ */
+export function sdaSpracheCode(label: string): string {
+  return SDA_SPRACHE.find(w => w.label === label)?.code ?? "";
+}
