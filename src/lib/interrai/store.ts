@@ -183,7 +183,7 @@ function initDemo() {
     vorname: "Fritz",
     nachname: "Huber",
     zustand: "mandat",
-    onboardingId: "OB-2026-009",
+    onboardingId: "OB-2026-105",
   });
 
   // Anna Müller — active patient, already converted

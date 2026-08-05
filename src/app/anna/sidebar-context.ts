@@ -3,6 +3,7 @@
  * Each route/entity combination gets its own greeting + quick replies.
  */
 import { getPatienten, tageBisReAssessment } from "../../lib/patienten/store";
+import { fallById, patientAnzeigeName } from "../../lib/onboarding/faelle";
 import { angehoerige } from "../components/angehoerigeData";
 import { unifiedEntries, entryTitle, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
 import { pendenzTypen } from "../../types/pendenz";
@@ -151,16 +152,16 @@ function generateOnboardingListe(): AnnaContextResult {
   };
 }
 
-/* ── Onboarding-Detail ── */
+/* ── Onboarding-Detail ──
+   Namen stammen aus dem Fallverzeichnis (lib/onboarding/faelle.ts). Zuvor lag
+   hier ein eigenes Verzeichnis mit zwei Einträgen auf Kennungen, die es dort
+   nicht gibt; es traf nie, und Anna nannte durchgehend die Kennung. Ohne Fall
+   — neu begonnenes oder unbekanntes Onboarding — bleibt es bei der Kennung. */
 function generateOnboardingDetail(mandatId: string): AnnaContextResult {
-  const lookup: Record<string, { patient: string; angehoeriger: string }> = {
-    "OB-2026-001": { patient: "Thomas Schmid", angehoeriger: "Lisa Schmid" },
-    "OB-2026-009": { patient: "Fritz Huber", angehoeriger: "Erika Huber" },
-  };
-  const info = lookup[mandatId];
-  const patient = info?.patient || mandatId;
+  const fall = fallById(mandatId);
+  const patient = fall ? patientAnzeigeName(fall) : mandatId;
   return {
-    greeting: `Wir sind beim Onboarding von ${patient}. ${info ? `${info.angehoeriger} ist die Angehörige.` : ""} Wie kann ich helfen?`,
+    greeting: `Wir sind beim Onboarding von ${patient}. ${fall ? `Angehörige/r ist ${fall.angehoeriger}.` : ""} Wie kann ich helfen?`,
     quickReplies: [
       { id: "fields", label: "Welche Felder sind noch offen?", prompt: "Welche Felder sind noch offen?" },
       { id: "next", label: "Was sind die nächsten Schritte?", prompt: "Was sind die nächsten Schritte in diesem Onboarding?" },

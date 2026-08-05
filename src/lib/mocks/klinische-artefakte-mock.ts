@@ -1,7 +1,12 @@
 /**
  * Mock data for klinische Artefakte — Lead-Konvertierungs-Modell.
- * 4 scenarios: konvertiert (Anna Müller), laufendes OB (Fritz Huber),
- * leeres OB (Rosa Ammann), abgebrochenes OB (Walter Frei).
+ *
+ * Drei Szenarien: konvertiert (Anna Müller, über patientId), laufendes
+ * Onboarding (Fritz Huber, OB-2026-105) und der vollständige Demo-Fall
+ * (Hans-Rudolf Steiner, OB-2026-101).
+ *
+ * Fallkennungen stammen aus lib/onboarding/faelle.ts. Artefakte an Kennungen
+ * ausserhalb dieses Verzeichnisses wären über die Oberfläche nicht erreichbar.
  */
 import type { InterRAIAssessment, InterRAIItem, AnnaKonfidenz, CapResult, OutcomeScale, Pflegeplanung, Pflegediagnose, Massnahme, Pflegeziel, KLVVerordnung, WorkflowPlan, WorkflowSchritt, AerztlicheDiagnose } from "../../types/klinische-artefakte";
 
@@ -178,11 +183,14 @@ const ANNA_KLV: KLVVerordnung = {
 };
 
 /* ══════════════════════════════════════════
-   SZENARIO 2: Fritz Huber (laufendes OB)
+   SZENARIO 2: Fritz Huber (laufendes OB) — OB-2026-105 aus dem Fallverzeichnis.
+   Hing zuvor an OB-2026-009, einer Kennung ausserhalb des Verzeichnisses;
+   die Artefakte waren dadurch über die Oberfläche nicht erreichbar. Nur die
+   Fallkennung wurde gewechselt, Inhalte und Artefakt-Kennungen sind unberührt.
    ══════════════════════════════════════════ */
 
 const HUBER_BA: InterRAIAssessment = {
-  id: "BA-2026-020", onboardingId: "OB-2026-009", patientId: null,
+  id: "BA-2026-020", onboardingId: "OB-2026-105", patientId: null,
   patientName: "Huber, Fritz", typ: "erstassessment", status: "in-bearbeitung",
   durchgefuehrtVon: "Maria Keller", startDatum: "20.02.2026", abschlussDatum: null,
   erfassungsgrad: 45, items: DEMO_ITEMS.slice(0, 16).map(i => ({ ...i, id: `item-${i.code}-BA-2026-020`, assessmentId: "BA-2026-020", validiert: false, status: "teilweise" as const })),
@@ -219,7 +227,7 @@ const HUBER_ZIELE: Pflegeziel[] = [
 ];
 
 const HUBER_PP: Pflegeplanung = {
-  id: "PP-2026-020", onboardingId: "OB-2026-009", patientId: null,
+  id: "PP-2026-020", onboardingId: "OB-2026-105", patientId: null,
   patientName: "Huber, Fritz", interRAIAssessmentId: null,
   status: "entwurf", erstelltVon: "Maria Keller",
   erstellDatum: "25.02.2026", abschlussDatum: null,
@@ -227,7 +235,7 @@ const HUBER_PP: Pflegeplanung = {
 };
 
 const HUBER_KLV: KLVVerordnung = {
-  id: "KLV-2026-020", onboardingId: "OB-2026-009", patientId: null,
+  id: "KLV-2026-020", onboardingId: "OB-2026-105", patientId: null,
   patientName: "Huber, Fritz", pflegeplanungId: null,
   status: "entwurf", erstelltVon: "Maria Keller",
   erstellDatum: "25.02.2026", beginnDatum: null, endDatum: null,
@@ -309,7 +317,7 @@ const ANNA_WORKFLOW: WorkflowPlan = {
 };
 
 const HUBER_WORKFLOW: WorkflowPlan = {
-  id: "WF-2026-020", typ: "patient-prozess", onboardingId: "OB-2026-009", patientId: null, angehoerigerId: null,
+  id: "WF-2026-020", typ: "patient-prozess", onboardingId: "OB-2026-105", patientId: null, angehoerigerId: null,
   bezeichnung: "Patient Prozess — Huber, Fritz",
   schritte: buildSchritte(3),
 };
@@ -384,9 +392,9 @@ const ANNA_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [
 
 /** Fritz Huber: laufendes OB, Diagnosen noch als Entwurf (aus simulierter Arzt-Antwort) */
 const HUBER_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [
-  { id: "AD-H1", onboardingId: "OB-2026-009", patientId: null, icdCode: "I10", bezeichnung: "Arterielle Hypertonie", quelle: "Arzt-Antwort Dr. R. Steiner, 28.02.2026", status: "entwurf" },
-  { id: "AD-H2", onboardingId: "OB-2026-009", patientId: null, icdCode: "M54.5", bezeichnung: "Kreuzschmerzen", quelle: "Arzt-Antwort Dr. R. Steiner, 28.02.2026", status: "entwurf" },
-  { id: "AD-H3", onboardingId: "OB-2026-009", patientId: null, icdCode: "E78.0", bezeichnung: "Reine Hypercholesterinämie", quelle: "Arzt-Antwort Dr. R. Steiner, 28.02.2026", status: "entwurf" },
+  { id: "AD-H1", onboardingId: "OB-2026-105", patientId: null, icdCode: "I10", bezeichnung: "Arterielle Hypertonie", quelle: "Arzt-Antwort Dr. R. Steiner, 28.02.2026", status: "entwurf" },
+  { id: "AD-H2", onboardingId: "OB-2026-105", patientId: null, icdCode: "M54.5", bezeichnung: "Kreuzschmerzen", quelle: "Arzt-Antwort Dr. R. Steiner, 28.02.2026", status: "entwurf" },
+  { id: "AD-H3", onboardingId: "OB-2026-105", patientId: null, icdCode: "E78.0", bezeichnung: "Reine Hypercholesterinämie", quelle: "Arzt-Antwort Dr. R. Steiner, 28.02.2026", status: "entwurf" },
 ];
 
 /* ══════════════════════════════════════════
