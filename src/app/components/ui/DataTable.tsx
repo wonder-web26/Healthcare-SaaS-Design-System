@@ -128,22 +128,23 @@ function useContainerBreite(ref: React.RefObject<HTMLElement>, aktiv: boolean): 
   return breite;
 }
 
-/** Breite eines "0" (1ch) in px, gemessen an der Schrift des Rahmens. Für den
- *  Spaltenfall, der Mindestbreiten (in ch) gegen die Containerbreite (in px) prüft.
- *  Inaktiv (Fallback 8), solange keine abwerfbaren Spalten existieren. */
-function useChPx(ref: React.RefObject<HTMLElement>, aktiv: boolean): number {
-  const [ch, setCh] = React.useState(8);
+/** Gemessene Masse für den Spaltenfall: Breite eines "0" (1ch) an der Schrift des
+ *  Rahmens und die Wurzel-Schriftgrösse (für rem-basierte Innenabstände). Inaktiv
+ *  (Fallbacks), solange keine abwerfbaren Spalten existieren. */
+function useTabellenMasse(ref: React.RefObject<HTMLElement>, aktiv: boolean): { chPx: number; remPx: number } {
+  const [masse, setMasse] = React.useState({ chPx: 7, remPx: 14 });
   React.useEffect(() => {
     if (!aktiv || typeof document === "undefined" || !ref.current) return;
     const cs = window.getComputedStyle(ref.current);
+    const remPx = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 14;
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.font = `${cs.fontSize} ${cs.fontFamily}`;
     const w = ctx.measureText("0").width;
-    if (w > 0) setCh(w);
+    setMasse({ chPx: w > 0 ? w : 7, remPx });
   }, [aktiv, ref]);
-  return ch;
+  return masse;
 }
 
 /** Selbstständiges Kontrollkästchen (icon-frei, damit die DataTable keine Icon-Abhängigkeit bekommt).
@@ -180,7 +181,7 @@ export function DataTable<T>({
   const containerBreite = useContainerBreite(rahmenRef, containerHaltepunkte);
   const breite = containerHaltepunkte ? containerBreite : fensterBreite;
   const hatAbwurf = spalten.some(s => s.abwerfRang != null);
-  const chPx = useChPx(rahmenRef, hatAbwurf);
+  const { chPx, remPx } = useTabellenMasse(rahmenRef, hatAbwurf);
   const bp = TABELLE_LAYOUT.haltepunktePx;
   const istKarte = breite < (karteAbPx ?? bp.karte);
   const zweizeilig = breite < bp.zweizeilig;
@@ -252,13 +253,19 @@ export function DataTable<T>({
   /* ── Spaltenfall: reicht die Breite nicht für alle Mindestbreiten, entfallen
      Spalten nach abwerfRang (kleinster zuerst), bis die Summe passt — nie klippen. ── */
   const auswahlPx = auswahl ? 40 : 0;
-  const minPx = (s: SpalteDef<T>) => s.festBreitePx != null ? s.festBreitePx : (s.minCh ?? 8) * chPx;
+  // Footprint einer Spalte = Textbreite (ch→px) PLUS die tatsächlichen Innenabstände
+  // der Zelle (beide Seiten), nicht nur die ch-Umrechnung.
+  const zellInnenPx = parseFloat(TABELLE_LAYOUT.zeilePadX) * remPx * 2;
+  const SICHERHEIT_PX = 16;
+  const minPx = (s: SpalteDef<T>) => s.festBreitePx != null ? s.festBreitePx : (s.minCh ?? 8) * chPx + zellInnenPx;
   let anzeige = sichtbare;
   if (hatAbwurf) {
     const weg = new Set<string>();
     const summe = () => auswahlPx + sichtbare.filter(s => !weg.has(s.id)).reduce((n, s) => n + minPx(s), 0);
     const abwerfbar = sichtbare.filter(s => s.abwerfRang != null).sort((a, b) => a.abwerfRang! - b.abwerfRang!);
-    for (const s of abwerfbar) { if (summe() <= breite) break; weg.add(s.id); }
+    // Sicherheitsabstand: eine Spalte bleibt nur, wenn die Summe den Container um
+    // mindestens SICHERHEIT_PX unterschreitet; bei Gleichstand fällt die niederrangigste.
+    for (const s of abwerfbar) { if (summe() <= breite - SICHERHEIT_PX) break; weg.add(s.id); }
     anzeige = sichtbare.filter(s => !weg.has(s.id));
   }
 
@@ -276,8 +283,8 @@ export function DataTable<T>({
   const inhaltsModus = anzeige.length > 0 && anzeige.every(s => s.festBreitePx != null || (s.maxSpur != null && !s.maxSpur.endsWith("fr")));
   let gridCols: string;
   if (inhaltsModus && breite > 0) {
-    const minA = anzeige.map(s => s.festBreitePx ?? (s.minCh ?? 8) * chPx);
-    const maxA = anzeige.map((s, i) => s.festBreitePx ?? spurPx(s.maxSpur, minA[i]));
+    const minA = anzeige.map(s => minPx(s));
+    const maxA = anzeige.map(s => s.festBreitePx ?? spurPx(s.maxSpur, (s.minCh ?? 8) * chPx) + zellInnenPx);
     const w = [...minA];
     let rest = breite - auswahlPx - w.reduce((a, b) => a + b, 0);
     const wachsend = anzeige
