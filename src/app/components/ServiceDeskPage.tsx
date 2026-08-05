@@ -151,23 +151,34 @@ function filterEntries(list: UnifiedEntry[], f: FilterZustand): UnifiedEntry[] {
   });
 }
 
-/* ── Sortierung (Fälligkeit aufsteigend als Standard: überfällig zuerst, ohne
-   Termin zuletzt). ── */
-type SortKey = "faellig" | "betreff" | "person" | "zustaendig";
-const SORT_LABEL: Record<SortKey, string> = { faellig: "Fälligkeit", betreff: "Betreff", person: "Person", zustaendig: "Zuständig" };
-function faelligRank(e: UnifiedEntry): number { return e.faellig ? daysFromToday(e.faellig)! : Number.POSITIVE_INFINITY; }
+/* ── Sortierung: jede Spalte, inhaltliche Rangfolge wo sinnvoll, Leerwerte immer
+   ans Ende. Standard bleibt Fälligkeit aufsteigend (überfällig zuerst, ohne Termin
+   zuletzt). ── */
+type SortKey = "kennzeichen" | "art" | "betreff" | "status" | "person" | "beschreibung" | "faellig" | "zustaendig";
+const SORT_LABEL: Record<SortKey, string> = { kennzeichen: "Kennzeichen", art: "Art", betreff: "Betreff", status: "Status", person: "Person", beschreibung: "Beschreibung", faellig: "Fälligkeit", zustaendig: "Zuständig" };
+const KENN_RANK: Record<string, number> = { rot: 0, gelb: 1 }; // kein Kennzeichen = 2
+const STATUS_RANK: Record<string, number> = { offen: 0, in_bearbeitung: 1, erledigt: 2 };
+function kennRang(e: UnifiedEntry): number { const t = ableitenKennzeichen(e).typ; return t ? KENN_RANK[t] : 2; }
+/** Leere Werte stehen unabhängig von der Richtung am Ende. */
+function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): number {
+  if (la && lb) return 0;
+  if (la) return 1;
+  if (lb) return -1;
+  return f * cmp();
+}
 function sortEntries(list: UnifiedEntry[], key: SortKey, dir: "asc" | "desc"): UnifiedEntry[] {
   const f = dir === "asc" ? 1 : -1;
+  const artLabel = (e: UnifiedEntry) => pendenzTypen[e.pendenzTyp]?.label || e.typLabel;
   return [...list].sort((a, b) => {
     switch (key) {
-      case "faellig": {
-        const ra = faelligRank(a), rb = faelligRank(b);
-        if (ra === rb) return entryBetreff(a).localeCompare(entryBetreff(b), "de");
-        return f * (ra - rb);
-      }
+      case "kennzeichen": return f * (kennRang(a) - kennRang(b)) || entryBetreff(a).localeCompare(entryBetreff(b), "de");
+      case "art": return f * artLabel(a).localeCompare(artLabel(b), "de");
       case "betreff": return f * entryBetreff(a).localeCompare(entryBetreff(b), "de");
+      case "status": return f * ((STATUS_RANK[a.status] ?? 0) - (STATUS_RANK[b.status] ?? 0)) || entryBetreff(a).localeCompare(entryBetreff(b), "de");
       case "person": return f * entryPersonName(a).localeCompare(entryPersonName(b), "de");
-      case "zustaendig": return f * a.verantwortlich.name.localeCompare(b.verantwortlich.name, "de");
+      case "beschreibung": return leerZuletzt(!a.kontext, !b.kontext, f, () => a.kontext.localeCompare(b.kontext, "de"));
+      case "faellig": return leerZuletzt(!a.faellig, !b.faellig, f, () => daysFromToday(a.faellig)! - daysFromToday(b.faellig)!);
+      case "zustaendig": return leerZuletzt(istNichtZugewiesen(a), istNichtZugewiesen(b), f, () => a.verantwortlich.initialen.localeCompare(b.verantwortlich.initialen, "de"));
       default: return 0;
     }
   });
@@ -434,12 +445,12 @@ export function ServiceDeskPage() {
   // Keine eigene Pixelrechnung, keine gesteuerte Verteilungsreihenfolge.
   // Spaltenfall (abwerfRang, kleinster zuerst): Beschreibung, dann Art, dann Zuständig.
   const spalten: SpalteDef<UnifiedEntry>[] = [
-    { id: "kennzeichen", label: "", festBreitePx: 24, align: "center", ausKarte: true, render: kennzeichenIcon },
-    { id: "art", label: "Art", minCh: 14, maxSpur: "21ch", abwerfRang: 2, align: "left", render: artZelle },
+    { id: "kennzeichen", label: "", festBreitePx: 24, align: "center", sortierbar: true, ausKarte: true, render: kennzeichenIcon },
+    { id: "art", label: "Art", minCh: 14, maxSpur: "21ch", abwerfRang: 2, align: "left", sortierbar: true, render: artZelle },
     { id: "betreff", label: "Betreff", minCh: 20, maxSpur: "40ch", align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
-    { id: "status", label: "Status", minCh: 16, maxSpur: "16ch", align: "left", render: statusZelle },
+    { id: "status", label: "Status", minCh: 16, maxSpur: "16ch", align: "left", sortierbar: true, render: statusZelle },
     { id: "person", label: "Person", minCh: 18, maxSpur: "34ch", align: "left", sortierbar: true, render: personZelle },
-    { id: "beschreibung", label: "Beschreibung", minCh: 13, maxSpur: "34ch", abwerfRang: 1, align: "left", render: beschreibungZelle },
+    { id: "beschreibung", label: "Beschreibung", minCh: 13, maxSpur: "34ch", abwerfRang: 1, align: "left", sortierbar: true, render: beschreibungZelle },
     { id: "faellig", label: "Fällig", minCh: 13, maxSpur: "14ch", align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
     { id: "zustaendig", label: "Zuständig", minCh: 10, maxSpur: "11ch", abwerfRang: 3, align: "center", sortierbar: true, render: zustaendigZelle },
   ];

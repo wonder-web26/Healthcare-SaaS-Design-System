@@ -83,16 +83,34 @@ function buildFilterDefs(patients: Patient[]): FilterDef[] {
    MAIN COMPONENT
    ══════════════════════════════════════════ */
 
-type SortKey = "name" | "schweregrad" | "reassessment" | "tasks";
+/* ── Sortierung: jede Spalte; Status/Schweregrad nach Rangfolge, Datum chronologisch,
+   Zähler numerisch, sonst alphabetisch nach angezeigtem Wert; Leerwerte immer ans
+   Ende. Keine Vorsortierung (Standard unverändert). ── */
+type SortKey = "name" | "angehoeriger" | "status" | "schweregrad" | "pflegefachkraft" | "prozessstatus" | "reassessment" | "tasks" | "aktivitaet";
 const SCHWEREGRAD_RANK: Record<string, number> = { leicht: 0, mittel: 1, schwer: 2, kritisch: 3 };
+const PAT_STATUS_RANK: Record<string, number> = { aktiv: 0, nicht_abrechenbar: 1, gekuendigt: 2 };
+function datumKey(d: string): string { const [dd, mm, yy] = d.split("."); return `${yy ?? ""}${mm ?? ""}${dd ?? ""}`; }
+/** Leere Werte stehen unabhängig von der Richtung am Ende. */
+function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): number {
+  if (la && lb) return 0;
+  if (la) return 1;
+  if (lb) return -1;
+  return f * cmp();
+}
 function sortPatients(list: Patient[], key: SortKey, dir: "asc" | "desc"): Patient[] {
   const f = dir === "asc" ? 1 : -1;
+  const angeh = (p: Patient) => p.angehoeriger.split(" (")[0];
   return [...list].sort((a, b) => {
     switch (key) {
       case "name": return f * (a.nachname.localeCompare(b.nachname, "de") || a.vorname.localeCompare(b.vorname, "de"));
+      case "angehoeriger": return f * angeh(a).localeCompare(angeh(b), "de");
+      case "status": return f * ((PAT_STATUS_RANK[a.status] ?? 0) - (PAT_STATUS_RANK[b.status] ?? 0)) || a.nachname.localeCompare(b.nachname, "de");
       case "schweregrad": return f * ((SCHWEREGRAD_RANK[a.schweregrad] ?? 0) - (SCHWEREGRAD_RANK[b.schweregrad] ?? 0));
-      case "reassessment": return f * ((a.reAssessmentTage ?? Infinity) - (b.reAssessmentTage ?? Infinity));
+      case "pflegefachkraft": return leerZuletzt(a.pflegefachkraft === "—", b.pflegefachkraft === "—", f, () => a.pflegefachkraft.localeCompare(b.pflegefachkraft, "de"));
+      case "prozessstatus": return leerZuletzt(!a.prozessStatus, !b.prozessStatus, f, () => datumKey(a.prozessStatus!.faelligDatum).localeCompare(datumKey(b.prozessStatus!.faelligDatum)));
+      case "reassessment": return leerZuletzt(a.reAssessmentTage == null, b.reAssessmentTage == null, f, () => a.reAssessmentTage! - b.reAssessmentTage!);
       case "tasks": return f * (a.offeneActionTasks - b.offeneActionTasks);
+      case "aktivitaet": return f * datumKey(a.letzteAktivitaet).localeCompare(datumKey(b.letzteAktivitaet));
       default: return 0;
     }
   });
@@ -243,21 +261,21 @@ export function PatientenPage() {
      der Aufrufstelle; Zahlen rechtsbündig/tabellarisch). Inhalte unverändert. ── */
   const patientSpalten: SpalteDef<Patient>[] = [
     { id: "name", label: "Name", anteil: 18, minCh: 24, align: "left", sortierbar: true, ausKarte: true, render: nameZelle },
-    { id: "angehoeriger", label: "Angehöriger", anteil: 15, minCh: 22, align: "left", zweitzeileUnter: "name",
+    { id: "angehoeriger", label: "Angehöriger", anteil: 15, minCh: 22, align: "left", sortierbar: true, zweitzeileUnter: "name",
       render: p => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{p.angehoeriger.split(" (")[0]}</span> },
-    { id: "status", label: "Status", anteil: 9, minCh: 13, align: "left",
+    { id: "status", label: "Status", anteil: 9, minCh: 13, align: "left", sortierbar: true,
       render: p => { const st = STATUS_STYLE[p.status] || STATUS_STYLE.aktiv; return (
         <button onClick={e => { e.stopPropagation(); setStatusModal({ open: true, patient: p }); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: st.bg, color: st.color, border: "none", fontFamily: "inherit", whiteSpace: "nowrap" }}>
           <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: st.dot }} />{st.label}
         </button>); } },
     { id: "schweregrad", label: "Schweregrad", anteil: 7, minCh: 12, align: "left", sortierbar: true,
       render: p => { const sg = SCHWEREGRAD_STYLE[p.schweregrad] || SCHWEREGRAD_STYLE.leicht; return <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: sg.bg, color: sg.color, whiteSpace: "nowrap" }}>{sg.label}</span>; } },
-    { id: "pflegefachkraft", label: "Pflegefachkraft", anteil: 11, minCh: 15, align: "left",
+    { id: "pflegefachkraft", label: "Pflegefachkraft", anteil: 11, minCh: 15, align: "left", sortierbar: true,
       render: p => { const isUn = p.pflegefachkraft === "—"; return (
         <button onClick={e => { e.stopPropagation(); setAssignSidebar({ open: true, patient: p }); }} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors" style={{ gap: 6, padding: "3px 8px", borderRadius: "var(--radius-card)", background: "transparent", border: "none", fontSize: "var(--text-small)", color: isUn ? "var(--status-warning-text)" : "var(--text-primary)", fontWeight: isUn ? "var(--weight-medium)" : "var(--weight-regular)", fontFamily: "inherit", whiteSpace: "nowrap" }} onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
           {isUn ? (<><AlertTriangle style={{ width: 12, height: 12, color: "var(--status-warning)" }} /> Nicht zugewiesen</>) : (<><div className="shrink-0 flex items-center justify-center" style={{ width: 20, height: 20, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}><span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{p.pflegefachkraftInitialen}</span></div>{p.pflegefachkraft}</>)}
         </button>); } },
-    { id: "prozessstatus", label: "Prozessstatus", anteil: 16, minCh: 20, align: "left", ausblendenUnter: "eng",
+    { id: "prozessstatus", label: "Prozessstatus", anteil: 16, minCh: 20, align: "left", sortierbar: true, ausblendenUnter: "eng",
       render: p => p.prozessStatus ? (
         <div>
           <div className="flex items-center" style={{ gap: 4 }}>
@@ -282,7 +300,7 @@ export function PatientenPage() {
       render: p => p.offeneActionTasks > 0 ? (
         <span className="inline-flex items-center justify-center" style={{ minWidth: 22, height: 22, borderRadius: "var(--radius-card)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-semibold)", fontVariantNumeric: "tabular-nums" }}>{p.offeneActionTasks}</span>
       ) : <CheckCircle2 style={{ width: 16, height: 16, color: "var(--status-success)" }} /> },
-    { id: "aktivitaet", label: "Aktivität", anteil: 10, minCh: 12, align: "left",
+    { id: "aktivitaet", label: "Aktivität", anteil: 10, minCh: 12, align: "left", sortierbar: true,
       render: p => <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{p.letzteAktivitaet}</span> },
   ];
 
