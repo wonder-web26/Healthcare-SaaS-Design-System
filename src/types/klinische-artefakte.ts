@@ -1,3 +1,5 @@
+import type { KlvWerCode } from "../lib/stammdaten/klv-wer";
+
 /**
  * Klinische Artefakte — Lead-Konvertierungs-Modell.
  *
@@ -235,7 +237,11 @@ export interface KLVLeistung {
   klvNummer: string;
   bezeichnung: string;
   kategorie: "a" | "b" | "c";
-  wer: "S" | "A" | "S+A";
+  /**
+   * Spalte W des Leistungsplanungsblatts — wer die Leistung erbringt.
+   * Werteliste: lib/stammdaten/klv-wer.ts. Code, nie Beschriftung.
+   */
+  wer: KlvWerCode;
   training: "N" | "T";
   anzahl: number;
   einheit: KLVEinheit;

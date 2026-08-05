@@ -4,6 +4,7 @@
  * Folgt dem KLV-Standard (RAI-Home-Care Suisse Leistungsplanungsblatt).
  */
 import type { KLVLeistung, KLVEinheit } from "../../types/klinische-artefakte";
+import { klvWerLabel, type KlvWerCode } from "../stammdaten/klv-wer";
 
 /** Tage pro Woche für einheit tN. */
 function tageProWoche(einheit: KLVEinheit): number {
@@ -64,12 +65,12 @@ export function einheitLabel(e: KLVEinheit): string {
 }
 
 /** Menschenlesbarer Wer-Text. */
-export function werLabel(w: "S" | "A" | "S+A"): string {
-  switch (w) {
-    case "S": return "Spitex";
-    case "A": return "Angehörige";
-    case "S+A": return "Spitex+Ang.";
-  }
+/**
+ * Beschriftung der Spalte W. Kommt aus der Werteliste, nicht aus einer
+ * zweiten Zuordnung — sonst laufen Katalog und Anzeige auseinander.
+ */
+export function werLabel(w: KlvWerCode): string {
+  return klvWerLabel(w);
 }
 
 /** Berechnungstext für Live-Anzeige (z.B. "7 × 1 × 26 min"). */

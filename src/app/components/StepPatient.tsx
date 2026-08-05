@@ -88,6 +88,7 @@ import { DokumentScanUpload, type ScanFile } from "./form/DokumentScanUpload";
 import { EinwilligungModal } from "./einwilligung/EinwilligungModal";
 import { ScanDisplay, ScanSlot } from "./form/MigratedAngehoerigerForms2";
 import { useCurrentUser } from "../auth";
+import { KLV_WER_OPTIONS, KLV_WER_STANDARD } from "../../lib/stammdaten/klv-wer";
 
 export interface ATLEntry {
   ja: boolean | null;
@@ -1887,7 +1888,7 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
       klvNummer: pos.nr,
       bezeichnung: pos.bezeichnung,
       kategorie: pos.klvKategorie ?? "c",
-      wer: "S",
+      wer: KLV_WER_STANDARD,
       training: "N",
       anzahl: 1,
       einheit: "w",
@@ -2081,7 +2082,7 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
                         return (
                           <div style={{ marginTop: 8, paddingTop: 10, borderTop: "0.5px solid var(--border-default)", borderLeft: `4px solid ${l.validiert ? "var(--status-success)" : "var(--status-warning)"}`, paddingLeft: 12 }}>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginBottom: 10 }}>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Wer</label><InlineSelect value={l.wer} onChange={v => updateLeistung(l.id, { wer: v as KLVLeistung["wer"] })} options={[{ value: "S", label: werLabel("S") }, { value: "A", label: werLabel("A") }, { value: "S+A", label: werLabel("S+A") }]} /></div>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Wer</label><InlineSelect value={l.wer} onChange={v => updateLeistung(l.id, { wer: v as KLVLeistung["wer"] })} options={KLV_WER_OPTIONS} /></div>
                               <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Rhythmus</label><InlineSelect value={rhythmus} onChange={v => setRhythmus(v)} options={[{ value: "täglich", label: "Täglich" }, { value: "wöchentlich", label: "Wöchentlich" }, { value: "monatlich", label: "Monatlich" }, { value: "einmalig", label: "Einmalig" }, { value: "nachBedarf", label: "Nach Bedarf" }]} /></div>
                               <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>an wie vielen Tagen</label><input type="number" min={1} max={7} value={tage} onChange={e => setTage(parseInt(e.target.value) || 1)} disabled={tageDisabled} style={tageDisabled ? ssDis : ss} /></div>
                               <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Anzahl</label><input type="number" min={1} value={l.anzahl} onChange={e => updateLeistung(l.id, { anzahl: Math.max(1, parseInt(e.target.value) || 1) })} disabled={anzahlDisabled} style={anzahlDisabled ? ssDis : ss} /></div>

@@ -10,6 +10,7 @@ import { KLV_STATUS_PIPELINE, type KLVStatus, type KLVDiagnose, type KLVLeistung
 import { SPITEX_LEISTUNGSKATALOG_2025, type LeistungskatalogPosition } from "../../lib/klv/spitex-leistungskatalog-2025";
 import { hProWoche, berechneSummen, kompaktParams, berechnungsText, einheitLabel, werLabel, istPeriodisch, einmaligeMin, getSimultanPartner } from "../../lib/klv/berechnung";
 import { toast } from "sonner";
+import { KLV_WER_OPTIONS, KLV_WER_STANDARD } from "../../lib/stammdaten/klv-wer";
 
 const MOCK_AERZTE = ["Dr. med. Markus Huber", "Dr. med. Petra Schmid", "Dr. med. Hans Keller", "Dr. med. Lisa Weber"];
 const MOCK_KASSEN = ["CSS", "Helsana", "Swica", "Concordia", "Visana", "Sanitas", "KPT", "Groupe Mutuel"];
@@ -235,7 +236,7 @@ export function KLVArbeitsbereich() {
                         return (
                           <div style={{ background: "var(--bg-secondary)", borderLeft: "3px solid var(--brand-primary)", borderRadius: "0 var(--radius-card) var(--radius-card) 0", padding: "12px 14px", marginBottom: 4 }}>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginBottom: 10 }}>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Wer</label><select value={l.wer} onChange={e => upd({ wer: e.target.value as KLVLeistung["wer"] })} style={ss}><option value="S">{werLabel("S")}</option><option value="A">{werLabel("A")}</option><option value="S+A">{werLabel("S+A")}</option></select></div>
+                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Wer</label><select value={l.wer} onChange={e => upd({ wer: e.target.value as KLVLeistung["wer"] })} style={ss}>{KLV_WER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>
                               <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Rhythmus</label><select value={rhythmus} onChange={e => setRhythmus(e.target.value)} style={ss}><option value="täglich">Täglich</option><option value="wöchentlich">Wöchentlich</option><option value="monatlich">Monatlich</option><option value="einmalig">Einmalig</option><option value="nachBedarf">Nach Bedarf</option></select></div>
                               <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>an wie vielen Tagen</label><input type="number" min={1} max={7} value={tage} onChange={e => setTage(parseInt(e.target.value) || 1)} disabled={tageDisabled} style={tageDisabled ? ssDis : ss} /></div>
                               <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Anzahl</label><input type="number" min={1} value={l.anzahl} onChange={e => upd({ anzahl: Math.max(1, parseInt(e.target.value) || 1) })} disabled={anzahlDisabled} style={anzahlDisabled ? ssDis : ss} /></div>
@@ -424,7 +425,7 @@ function KatalogDialog({ onAdd, onClose }: { onAdd: (pos: Omit<KLVLeistung, "id"
           {filtered.slice(0, 40).map(p => {
             const kc = KAT_COLORS[p.klvKategorie as "a" | "b" | "c"];
             return (
-              <button key={p.nr} onClick={() => onAdd({ klvNummer: p.nr, bezeichnung: p.bezeichnung, kategorie: p.klvKategorie as "a" | "b" | "c", wer: "S", training: "N", anzahl: 1, einheit: "w", zeitMin: p.zeitMin || 15, ausAnna: false, annaKonfidenz: null, validiert: false, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null })}
+              <button key={p.nr} onClick={() => onAdd({ klvNummer: p.nr, bezeichnung: p.bezeichnung, kategorie: p.klvKategorie as "a" | "b" | "c", wer: KLV_WER_STANDARD, training: "N", anzahl: 1, einheit: "w", zeitMin: p.zeitMin || 15, ausAnna: false, annaKonfidenz: null, validiert: false, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null })}
                 className="w-full flex items-center text-left cursor-pointer transition-colors" style={{ padding: "8px 10px", borderRadius: "var(--radius-card)", border: "none", background: "transparent", gap: 8 }}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <span style={{ padding: "1px 5px", borderRadius: 4, fontSize: 9, fontWeight: "var(--weight-semibold)", background: kc.bg, color: kc.color }}>{p.klvKategorie}</span>
