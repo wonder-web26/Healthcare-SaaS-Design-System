@@ -49,7 +49,7 @@ import {
 
 import { useNavigate } from "react-router";
 import { LeerZustand } from "./ui/LeerZustand";
-import { TabAnmeldungV2, TabPersonalienV2, TabSteuerV2, TabWohnenUmfeldV2, TabAnamneseV2 } from "./form/MigratedPatientForms";
+import { TabAnmeldungV2, TabPersonalienV2, TabSteuerV2, TabWohnenUmfeldV2, TabAnamneseV2, TabAbschlussV2 } from "./form/MigratedPatientForms";
 import { FORMULAR_MAX } from "./form/feldbreiten";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
@@ -87,6 +87,7 @@ import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext, 
 import { DokumentScanUpload, type ScanFile } from "./form/DokumentScanUpload";
 import { EinwilligungModal } from "./einwilligung/EinwilligungModal";
 import { ScanDisplay, ScanSlot } from "./form/MigratedAngehoerigerForms2";
+import { useCurrentUser } from "../auth";
 
 export interface ATLEntry {
   ja: boolean | null;
@@ -95,6 +96,12 @@ export interface ATLEntry {
 
 /** Alias — identisch mit ScanFile aus DokumentScanUpload */
 export type PatientScanFile = ScanFile;
+
+/** Ein Protokolleintrag nach BB17 — Benutzerin und Zeitpunkt, keine Unterschrift. */
+export interface SdaProtokollEintrag {
+  benutzer: string;
+  zeitpunkt: string;
+}
 
 export interface PatientFormData {
   /* Reiter Anmeldung – Bereich AA und BB16 */
@@ -113,6 +120,13 @@ export interface PatientFormData {
   /** BB16 — Code aus lib/stammdaten/sda-einschaetzung-situation. */
   einschaetzungSituation: string;
   anmeldungPraezisierungen: string;
+  /** Bereich BB · Individuelle Präzisierungen — Freitext, optional. */
+  stammdatenPraezisierungen: string;
+  /** BB17a — Protokoll statt Unterschrift: wer am SDA gearbeitet hat, je einmal. */
+  sdaBearbeitende: SdaProtokollEintrag[];
+  /** BB17b — wer das SDA abgeschlossen hat. Leer, solange offen. */
+  sdaAbgeschlossenVon: string;
+  sdaAbgeschlossenAm: string;
 
   /* Tab 1 – Personalien */
   name: string;
@@ -249,6 +263,10 @@ export const emptyPatientForm: PatientFormData = {
   anmeldendePersonEmail: "",
   einschaetzungSituation: "",
   anmeldungPraezisierungen: "",
+  stammdatenPraezisierungen: "",
+  sdaBearbeitende: [],
+  sdaAbgeschlossenVon: "",
+  sdaAbgeschlossenAm: "",
 
   name: "",
   vorname: "",
@@ -366,9 +384,20 @@ function formatAHV(v: string): string {
   return parts.join(".");
 }
 
+/** Zeitpunkt für das Protokoll — TT.MM.JJJJ, HH:MM. */
+function jetztAnzeige(): string {
+  const d = new Date();
+  const zz = (n: number) => String(n).padStart(2, "0");
+  return `${zz(d.getDate())}.${zz(d.getMonth() + 1)}.${d.getFullYear()}, ${zz(d.getHours())}:${zz(d.getMinutes())}`;
+}
+
 /* ── Tab completion logic ──────────────── */
 function getTabCompletion(tabKey: string, data: PatientFormData): { done: number; total: number } {
   switch (tabKey) {
+    // Der Reiter Abschluss trägt kein Pflichtfeld: die Präzisierungen sind
+    // optional, das Protokoll wird nicht erfasst. Er zählt deshalb nicht mit.
+    case "abschluss":
+      return { done: 0, total: 0 };
     case "anmeldung": {
       const checks = [
         filled(data.eroeffnungsgrund),
@@ -474,6 +503,7 @@ const tabDefs = [
   { key: "klv", label: "KLV", icon: FileText },
   { key: "workflow", label: "Workflow", icon: ClipboardList },
   { key: "dokumente", label: "Dokumente", icon: FileText },
+  { key: "abschluss", label: "Abschluss", icon: CheckCircle2 },
 ] as const;
 
 /** Schlüssel eines Reiters — aus tabDefs abgeleitet, damit beide nicht auseinanderlaufen. */
@@ -484,8 +514,18 @@ export const TAB_KEYS: readonly PatientReiter[] = tabDefs.map(t => t.key);
 
 /** Reiter, die reine Formulare sind — ihr Inhalt wird auf FORMULAR_MAX begrenzt. */
 const FORMULARREITER: ReadonlySet<PatientReiter> = new Set<PatientReiter>([
-  "anmeldung", "personalien", "steuer", "wohnen", "anamnese", "aktivitaeten", "dokumente",
+  "anmeldung", "personalien", "steuer", "wohnen", "anamnese", "aktivitaeten", "dokumente", "abschluss",
 ]);
+
+/**
+ * Die Reiter, die Felder des SDA tragen — Bereiche AA und BB des Katalogs.
+ * Nur sie werden mit dem Abschluss gesperrt. Vitaldaten, Aktivitäten,
+ * InterRAI, Pflegeplanung, KLV, Workflow und Dokumente tragen keine
+ * SDA-Felder und führen eigene Lebenszyklen.
+ */
+export const SDA_REITER: readonly PatientReiter[] = [
+  "anmeldung", "personalien", "steuer", "wohnen", "anamnese",
+];
 
 /* ══════════════════════════════════════════
    PROPS
@@ -507,6 +547,7 @@ interface StepPatientProps {
    ══════════════════════════════════════════ */
 export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion }: StepPatientProps) {
   const [activeTab, setActiveTab] = useState<PatientReiter>("anmeldung");
+  const benutzer = useCurrentUser();
 
   // External tab-switch request
   useEffect(() => {
@@ -540,11 +581,34 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
     []
   );
 
+  /* ── Abschluss und Sperrung ────────────────────────────────────────────────
+     Der Abschluss ist ein gespeicherter Zustand, kein gerechneter: einmal
+     gesetzt, bleibt er, auch wenn danach ein Pflichtfeld geleert wird.
+     Gesperrt sind ausschliesslich die SDA-Reiter. ── */
+  const sdaAbgeschlossen = data.sdaAbgeschlossenAm !== "";
+  const aktiverReiterGesperrt = sdaAbgeschlossen && SDA_REITER.includes(activeTab);
+
+  /**
+   * BB17a — ein Eintrag je Benutzerin, beim ersten Ändern eines SDA-Feldes.
+   * Wiederholte Änderungen derselben Person erzeugen keinen zweiten Eintrag.
+   * Als SDA-Änderung zählt jede Änderung, während ein SDA-Reiter offen ist.
+   */
+  const protokollErgaenzen = useCallback(
+    (bisher: SdaProtokollEintrag[]): SdaProtokollEintrag[] => {
+      if (!SDA_REITER.includes(activeTab)) return bisher;
+      const name = `${benutzer.vorname} ${benutzer.name}`;
+      if (bisher.some(e => e.benutzer === name)) return bisher;
+      return [...bisher, { benutzer: name, zeitpunkt: jetztAnzeige() }];
+    },
+    [activeTab, benutzer],
+  );
+
   const updateField = useCallback(
     (field: keyof PatientFormData, value: string) => {
-      onChange({ ...data, [field]: value });
+      if (aktiverReiterGesperrt) return;
+      onChange({ ...data, [field]: value, sdaBearbeitende: protokollErgaenzen(data.sdaBearbeitende) });
     },
-    [data, onChange]
+    [data, onChange, aktiverReiterGesperrt, protokollErgaenzen]
   );
 
   /** Mehrere Felder in EINEM Zug — zwei getrennte Aufrufe im selben Rendertakt
@@ -552,9 +616,10 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
    *  wieder überschreiben (betraf Krankenkasse + BAG-Nr.). */
   const updateFields = useCallback(
     (patch: Partial<PatientFormData>) => {
-      onChange({ ...data, ...patch });
+      if (aktiverReiterGesperrt) return;
+      onChange({ ...data, ...patch, sdaBearbeitende: protokollErgaenzen(data.sdaBearbeitende) });
     },
-    [data, onChange]
+    [data, onChange, aktiverReiterGesperrt, protokollErgaenzen]
   );
 
   const updateATL = useCallback(
@@ -641,6 +706,14 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
             Steuer/Anamnese) sowie ATL (4) und Dokumente (9); klinische Reiter
             (Vitaldaten, InterRAI, Pflegeplanung, KLV, Workflow) behalten volle Breite. */}
         <div style={{ padding: "20px 32px 24px", maxWidth: FORMULARREITER.has(activeTab) ? FORMULAR_MAX : undefined }}>
+          {aktiverReiterGesperrt && (
+            <div style={{ marginBottom: "var(--space-4)", padding: "10px 14px", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+              Das SDA ist abgeschlossen. Die Angaben beschreiben den Zeitpunkt des Eintritts und sind nicht mehr änderbar; spätere Änderungen gehören in die Pflegedokumentation.
+            </div>
+          )}
+          {/* Gesperrte Reiter bleiben vollständig lesbar — nur die Bedienung ist
+              stillgelegt. Keine Ausgrauung, kein Ausblenden. */}
+          <div style={aktiverReiterGesperrt ? { pointerEvents: "none" } : undefined}>
           {activeTab === "anmeldung" && (
             <TabAnmeldungV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
@@ -682,6 +755,19 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
               })()
             : <OhneFallkennung />)}
           {activeTab === "dokumente" && <TabDokumente data={data} onChange={onChange} />}
+          {activeTab === "abschluss" && (
+            <TabAbschlussV2
+              data={data}
+              abschliessbar={allRequiredComplete}
+              onUpdate={updateField}
+              onAbschliessen={() => onChange({
+                ...data,
+                sdaAbgeschlossenVon: `${benutzer.vorname} ${benutzer.name}`,
+                sdaAbgeschlossenAm: jetztAnzeige(),
+              })}
+            />
+          )}
+          </div>
         </div>
       </div>
       {/* Hinweistext entfernt (§A). Recording handled globally via RecordingContext + GlobalRecordingBar */}

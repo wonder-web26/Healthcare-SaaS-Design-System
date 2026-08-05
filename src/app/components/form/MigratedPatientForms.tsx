@@ -3,7 +3,7 @@
  * Uses new form components from components/form/.
  */
 import { useState } from "react";
-import { User, Users, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, Languages, ChevronDown, ChevronUp } from "lucide-react";
+import { User, Users, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, Languages, ChevronDown, ChevronUp, CheckCircle2, FileText } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { FELD_MAX, katalogFeldBreite } from "./feldbreiten";
 import { TextInput } from "./TextInput";
@@ -29,6 +29,7 @@ import { SDA_EINSCHAETZUNG_SITUATION_OPTIONS, sdaEinschaetzungFolge } from "../.
 import { SDA_ZUSAMMENLEBEN_OPTIONS } from "../../../lib/stammdaten/sda-zusammenleben";
 import { SDA_JA_NEIN_OPTIONS } from "../../../lib/stammdaten/sda-ja-nein";
 import { SDA_SPRACHE_OPTIONS, SPRACHE_ANDERE } from "../../../lib/stammdaten/sda-sprache";
+import { AppButton } from "../ui/AppButton";
 
 function filled(v: string | undefined | null): boolean {
   return typeof v === "string" && v.trim().length > 0;
@@ -381,6 +382,91 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Stimmung" value={data.stimmungAktuell || null} onChange={v => onUpdate("stimmungAktuell", v || "")} options={STIMMUNG} placeholder="Stimmung einschätzen" /></div>
         <TextareaInput label="Behandlungsziel" value={data.behandlungszielFokus} onChange={v => onUpdate("behandlungszielFokus", v)} placeholder="Hauptziel der Pflege und Betreuung" />
       </div>
+    </div>
+  );
+}
+
+
+/* ══════════════════════════════════════════
+   REITER ABSCHLUSS — BB17 und individuelle Präzisierungen
+   ══════════════════════════════════════════ */
+
+/**
+ * Letzter Reiter des Schritts Patient.
+ *
+ * Er nimmt die individuelle Präzisierung des Bereichs BB auf, zeigt beide
+ * Präzisierungen zusammen, führt das Protokoll nach BB17 und trägt die
+ * Aktion "SDA abschliessen".
+ *
+ * Das Protokoll ersetzt die beiden Unterschriften des Standards (Entscheid
+ * 4.8.2026) und ist nicht bearbeitbar.
+ */
+export function TabAbschlussV2({ data, abschliessbar, onUpdate, onAbschliessen }: {
+  data: PatientFormData;
+  abschliessbar: boolean;
+  onUpdate: (feld: keyof PatientFormData, wert: string) => void;
+  onAbschliessen: () => void;
+}) {
+  const abgeschlossen = data.sdaAbgeschlossenAm !== "";
+
+  return (
+    <div className="flex flex-col" style={{ gap: "var(--space-5)" }}>
+      <SectionHeader icon={FileText} label="Individuelle Präzisierungen" />
+      <TextareaInput
+        label="Individuelle Präzisierungen Stammdaten"
+        value={data.stammdatenPraezisierungen}
+        onChange={v => onUpdate("stammdatenPraezisierungen", v)}
+        hint="Zusätzliche Informationen zum Bereich Stammdaten, die für Abklärung, Betreuung oder Pflege wesentlich sind."
+        rows={4}
+      />
+      {/* Anzeige, keine zweite Eingabe — das Feld des Bereichs AA bleibt im
+          Reiter Anmeldung. */}
+      <div>
+        <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Individuelle Präzisierungen Anmeldung</div>
+        <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>
+          {data.anmeldungPraezisierungen || "—"}
+        </div>
+      </div>
+
+      <SectionHeader icon={User} label="Verantwortliche Personen" />
+      <div>
+        <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Bearbeitende Personen</div>
+        {data.sdaBearbeitende.length === 0 ? (
+          <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Noch niemand hat am SDA gearbeitet.</div>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {data.sdaBearbeitende.map((e, i) => (
+              <div key={i} style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
+                {e.benutzer} · {e.zeitpunkt}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div>
+        <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Abschliessende Person</div>
+        <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
+          {abgeschlossen ? `${data.sdaAbgeschlossenVon} · ${data.sdaAbgeschlossenAm}` : "—"}
+        </div>
+      </div>
+
+      <SectionHeader icon={CheckCircle2} label="Abschluss" />
+      {abgeschlossen ? (
+        <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+          Das SDA ist abgeschlossen. Die Angaben beschreiben den Zeitpunkt des Eintritts und sind nicht mehr änderbar; spätere Änderungen gehören in die Pflegedokumentation.
+        </div>
+      ) : (
+        <div className="flex flex-col" style={{ gap: "var(--space-3)", alignItems: "flex-start" }}>
+          <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+            {abschliessbar
+              ? "Mit dem Abschluss sind die Angaben der Reiter Anmeldung, Personalien, Soziales, Wohnen und Anamnese nicht mehr änderbar. Der Abschluss lässt sich nicht zurücknehmen."
+              : "Der Abschluss ist möglich, sobald alle Pflichtfelder der SDA-Reiter gesetzt sind."}
+          </div>
+          <AppButton variant="primaer" icon={CheckCircle2} onClick={onAbschliessen} disabled={!abschliessbar}>
+            SDA abschliessen
+          </AppButton>
+        </div>
+      )}
     </div>
   );
 }
