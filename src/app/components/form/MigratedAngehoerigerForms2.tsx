@@ -244,7 +244,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                   >
                     <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
                       <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required value={kind.vorname} onChange={v => updateKind(kind.id, "vorname", v)} placeholder="Vorname" /></div>
-                      <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Nachname" required value={kind.name} onChange={v => updateKind(kind.id, "name", v)} placeholder="Nachname" /></div>
+                      <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Nachname" required value={kind.nachname} onChange={v => updateKind(kind.id, "nachname", v)} placeholder="Nachname" /></div>
                       <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={kind.geburtsdatum || null} onChange={v => updateKind(kind.id, "geburtsdatum", (v as string) ?? "")} /></div>
                       <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" value={kind.geschlecht || null} onChange={v => updateKind(kind.id, "geschlecht", v || "")} options={GESCHLECHT} placeholder="Waehlen" /></div>
                     </div>
@@ -479,7 +479,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
         {/* Pro-Kind-Dokumente: ein Upload pro Kind, das über Spitex abgerechnet wird */}
         {kinderMitZulagen.map((kind, idx) => {
           const kindKey = `kind_kk_${kind.id}`;
-          const kindLabel = `Krankenkassenkarte — ${kind.vorname || ""} ${kind.name || `Kind ${idx + 1}`}`.trim();
+          const kindLabel = `Krankenkassenkarte — ${kind.vorname || ""} ${kind.nachname || `Kind ${idx + 1}`}`.trim();
           const kindScan = data.scans[kindKey];
           return (
             <div key={kindKey} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>

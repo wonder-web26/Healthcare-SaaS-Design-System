@@ -37,12 +37,11 @@ export const demoSteinerAngehoeriger: AngehoerigerFormData = {
   // Partner = der Patient (Ehemann)
   partnerManualToggle: true, partnerVorname: "Hans-Rudolf", partnerName: "Steiner",
   partnerGeburtsdatum: "14.06.1956", partnerNationalitaet: "schweiz", partnerAufenthaltsstatus: "CH",
-  partnerErwerbstaetig: "nein", partnerAhvNummer: "756.9876.5432.10", partnerBerufstaetig: "nein",
-  partnerAhv: "756.9876.5432.10",
+  partnerErwerbstaetig: "nein", partnerAhvNummer: "756.9876.5432.10",
   // Ein erwachsenes Kind in Ausbildung → Ausbildungszulage über Spitex
   hatUnterhaltspflichtigeKinder: "ja", anzahlKinder: "1",
   kinder: [{
-    id: "K-Steiner-1", vorname: "Lena", name: "Steiner", geburtsdatum: "03.03.2005",
+    id: "K-Steiner-1", vorname: "Lena", nachname: "Steiner", geburtsdatum: "03.03.2005",
     geschlecht: "weiblich", ahvNummer: "756.2233.4455.66", inAusbildung: "ja",
     ausbildungsbeginn: "01.09.2023", ausbildungsstatus: "laufend", zulagenart: "ausbildungszulage",
     typQuelle: "abgeleitet", overrideBegruendung: "", doppelbezug: "nein",

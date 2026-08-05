@@ -121,13 +121,10 @@ export interface AngehoerigerFormData {
   partnerAufenthaltsstatus: string;
   /** SP-06: Erwerbstaetig (Ja/Nein) */
   partnerErwerbstaetig: string;
-  /* Legacy-Felder (beibehalten fuer Datenkonsistenz) */
   partnerAhvNummer: string;
   partnerZemisNummer: string;
   partnerFbAusweisAngemeldet: string;
   partnerAnmeldungDatum: string;
-  partnerBerufstaetig: string;
-  partnerAhv: string;
   /* 4. Kinder & Zulagen */
   hatUnterhaltspflichtigeKinder: string;
   kinder: KindEntry[];
@@ -164,7 +161,7 @@ export interface AngehoerigerFormData {
 export interface KindEntry {
   id: string;
   vorname: string;
-  name: string;
+  nachname: string;
   geburtsdatum: string;
   geschlecht: string;
   ahvNummer: string;
@@ -186,7 +183,7 @@ export function createEmptyKind(): KindEntry {
   return {
     id: crypto.randomUUID(),
     vorname: "",
-    name: "",
+    nachname: "",
     geburtsdatum: "",
     geschlecht: "",
     ahvNummer: "",
@@ -202,7 +199,7 @@ export function createEmptyKind(): KindEntry {
 
 function isKindComplete(k: KindEntry): boolean {
   const base =
-    filled(k.name) &&
+    filled(k.nachname) &&
     filled(k.vorname) &&
     isValidDate(k.geburtsdatum) &&
     isValidAHV(k.ahvNummer) &&
@@ -217,7 +214,7 @@ function isKindComplete(k: KindEntry): boolean {
 
 function kindProgress(k: KindEntry): { done: number; total: number } {
   const checks: boolean[] = [
-    filled(k.name),
+    filled(k.nachname),
     filled(k.vorname),
     isValidDate(k.geburtsdatum),
     isValidAHV(k.ahvNummer),
@@ -287,8 +284,6 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   partnerZemisNummer: "",
   partnerFbAusweisAngemeldet: "nein",
   partnerAnmeldungDatum: "",
-  partnerBerufstaetig: "nein",
-  partnerAhv: "",
   hatUnterhaltspflichtigeKinder: "nein",
   kinder: [],
   kinderzulagenUeberSpitex: "nein",
@@ -498,7 +493,7 @@ function getSubStepStatus(
       // Stufe 2: Wenn Zulagen ueber Spitex → Detail-Block Pflicht
       if (data.kinderzulagenUeberSpitex === "ja") {
         if (data.kinder.length === 0) return "partial";
-        const allKidsComplete = data.kinder.every(k => filled(k.vorname) && filled(k.name) && filled(k.geburtsdatum));
+        const allKidsComplete = data.kinder.every(k => filled(k.vorname) && filled(k.nachname) && filled(k.geburtsdatum));
         return allKidsComplete ? "complete" : "partial";
       }
       // Frage 2 = Nein → nur Anzahl noetig, schon geprueft
@@ -1393,7 +1388,7 @@ function SteuerForm({
               zivilstand: data.zivilstand,
               hatKinder,
               anzahlKinder,
-              partnerErwerbstaetig: data.partnerErwerbstaetig || data.partnerBerufstaetig,
+              partnerErwerbstaetig: data.partnerErwerbstaetig,
               konfession: data.konfession,
             });
             // Auto-Update wenn abgeleitet und Code sich ändert
@@ -2100,8 +2095,8 @@ function KinderForm({
                 {/* Label */}
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] text-foreground truncate" style={{ fontWeight: 500 }}>
-                    {filled(kind.vorname) || filled(kind.name)
-                      ? `${kind.vorname} ${kind.name}`.trim()
+                    {filled(kind.vorname) || filled(kind.nachname)
+                      ? `${kind.vorname} ${kind.nachname}`.trim()
                       : `Kind ${idx + 1}`}
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -2145,15 +2140,15 @@ function KinderForm({
                         label="Name"
                         required
                         error={
-                          isTouched(kind.id, "name") && !filled(kind.name)
+                          isTouched(kind.id, "nachname") && !filled(kind.nachname)
                             ? "Pflichtfeld"
                             : undefined
                         }
                       >
                         <Input
-                          value={kind.name}
-                          onChange={(e) => updateKind(kind.id, "name", e.target.value)}
-                          onBlur={() => touchKid(kind.id, "name")}
+                          value={kind.nachname}
+                          onChange={(e) => updateKind(kind.id, "nachname", e.target.value)}
+                          onBlur={() => touchKid(kind.id, "nachname")}
                           placeholder="Nachname"
                         />
                       </FormField>

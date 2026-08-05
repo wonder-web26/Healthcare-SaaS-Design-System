@@ -68,6 +68,7 @@ import { getNachweiseFuerAngehoeriger } from "../../lib/schulung/nachweis-store"
 import { getKontrollenFuerAngehoeriger, erstelleKontrolle, getNaechsteFaelligkeit, type KontrolleArt } from "../../lib/arbeitskontrolle/store";
 import { exportiereArbeitskontrollePDF } from "../../lib/arbeitskontrolle/pdf-export";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
+import { type KindEntry, createEmptyKind } from "./StepAngehoeriger";
 import { isoZuAnzeige, anzeigeZuIso } from "../../lib/datum";
 import "../../lib/schulung/demo-seed";
 import "../../lib/arbeitskontrolle/demo-seed";
@@ -107,8 +108,8 @@ interface AngehoerigerDetail {
   partnerAhvNummer: string;
   partnerZemisNummer: string;
   partnerAufenthaltsstatus: string;
-  /* Kinder */
-  kinder: { nachname: string; vorname: string; geburtsdatum: string; ahvNummer: string; geschlecht: string; zulagenart: string; ausbildungsbeginn: string }[];
+  /* Kinder — einheitliches Modell (KindEntry aus dem Onboarding) */
+  kinder: KindEntry[];
   kinderzulagenAktiv: string;
   kinderzulagenUeberSpitex: string;
   familienausgleichskasse: string;
@@ -145,8 +146,8 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
     partnerName: "Anna Müller", partnerGeburtsdatum: "22.08.1980",
     partnerAhvNummer: "756.9876.5432.10", partnerZemisNummer: "—", partnerAufenthaltsstatus: "Schweizer/in",
     kinder: [
-      { nachname: "Müller", vorname: "Luca", geburtsdatum: "15.04.2010", ahvNummer: "756.1111.2222.33", geschlecht: "Männlich", zulagenart: "K", ausbildungsbeginn: "—" },
-      { nachname: "Müller", vorname: "Sophie", geburtsdatum: "03.09.2012", ahvNummer: "756.4444.5555.66", geschlecht: "Weiblich", zulagenart: "K", ausbildungsbeginn: "—" },
+      { id: "K-0101-1", nachname: "Müller", vorname: "Luca", geburtsdatum: "15.04.2010", ahvNummer: "756.1111.2222.33", geschlecht: "Männlich", zulagenart: "K", ausbildungsbeginn: "—", inAusbildung: "nein", ausbildungsstatus: "", typQuelle: "abgeleitet", overrideBegruendung: "", doppelbezug: "nein" },
+      { id: "K-0101-2", nachname: "Müller", vorname: "Sophie", geburtsdatum: "03.09.2012", ahvNummer: "756.4444.5555.66", geschlecht: "Weiblich", zulagenart: "K", ausbildungsbeginn: "—", inAusbildung: "nein", ausbildungsstatus: "", typQuelle: "abgeleitet", overrideBegruendung: "", doppelbezug: "nein" },
     ],
     kinderzulagenAktiv: "Ja", kinderzulagenUeberSpitex: "Ja", familienausgleichskasse: "SVA Zürich",
     lohnsumme: "3'540.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
@@ -200,7 +201,7 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
     partnerName: "—", partnerGeburtsdatum: "—",
     partnerAhvNummer: "—", partnerZemisNummer: "—", partnerAufenthaltsstatus: "—",
     kinder: [
-      { nachname: "Weber", vorname: "Tim", geburtsdatum: "20.01.2008", ahvNummer: "756.7777.8888.99", geschlecht: "Männlich", zulagenart: "W", ausbildungsbeginn: "01.08.2024" },
+      { id: "K-0103-1", nachname: "Weber", vorname: "Tim", geburtsdatum: "20.01.2008", ahvNummer: "756.7777.8888.99", geschlecht: "Männlich", zulagenart: "W", ausbildungsbeginn: "01.08.2024", inAusbildung: "ja", ausbildungsstatus: "laufend", typQuelle: "abgeleitet", overrideBegruendung: "", doppelbezug: "nein" },
     ],
     kinderzulagenAktiv: "Ja", kinderzulagenUeberSpitex: "Ja", familienausgleichskasse: "SVA Bern",
     lohnsumme: "4'160.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
@@ -718,7 +719,7 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
   const [partnerAufenthalt, setPartnerAufenthalt] = useState(detail.partnerAufenthaltsstatus);
 
   /* ── Kinder fields ── */
-  const [kinderList, setKinderList] = useState(detail.kinder.map((k, i) => ({ ...k, id: i })));
+  const [kinderList, setKinderList] = useState<KindEntry[]>(detail.kinder.map(k => ({ ...k })));
   const [kinderZulagenSpitex, setKinderZulagenSpitex] = useState(detail.kinderzulagenUeberSpitex);
   const [familienAk, setFamilienAk] = useState(detail.familienausgleichskasse);
 
@@ -790,13 +791,10 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
   const isEd = (s: string) => editingSection === s;
   const inputClass = "w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all";
 
-  /* Kinder helpers */
-  const addKind = () => {
-    const newId = kinderList.length > 0 ? Math.max(...kinderList.map(k => k.id)) + 1 : 0;
-    setKinderList([...kinderList, { id: newId, nachname: "", vorname: "", geburtsdatum: "", ahvNummer: "", geschlecht: "", zulagenart: "K", ausbildungsbeginn: "" }]);
-  };
-  const removeKind = (id: number) => setKinderList(kinderList.filter(k => k.id !== id));
-  const updateKind = (id: number, field: string, value: string) => setKinderList(kinderList.map(k => k.id === id ? { ...k, [field]: value } : k));
+  /* Kinder helpers — genau ein Weg, ein leeres Kind zu erzeugen: createEmptyKind() */
+  const addKind = () => setKinderList([...kinderList, { ...createEmptyKind(), zulagenart: "K" }]);
+  const removeKind = (id: string) => setKinderList(kinderList.filter(k => k.id !== id));
+  const updateKind = (id: string, field: keyof KindEntry, value: string) => setKinderList(kinderList.map(k => k.id === id ? { ...k, [field]: value } : k));
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -2076,8 +2074,7 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
   /* ── Editable local state (initialized from detail) ── */
   const [kinderzulagenAktiv, setKinderzulagenAktiv] = useState(detail.kinderzulagenAktiv);
   const [kinderzulagenUeberSpitex, setKinderzulagenUeberSpitex] = useState(detail.kinderzulagenUeberSpitex);
-  const [kinder, setKinder] = useState(detail.kinder.map((k, i) => ({ ...k, id: i })));
-  const [kinderNextId, setKinderNextId] = useState(detail.kinder.length);
+  const [kinder, setKinder] = useState<KindEntry[]>(detail.kinder.map(k => ({ ...k })));
 
   const [quellensteuer, setQuellensteuer] = useState(detail.quellensteuer);
   const [quellensteuerTarif, setQuellensteuerTarif] = useState(detail.quellensteuerTarif);
@@ -2099,18 +2096,17 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
   };
 
   const handleAddKind = () => {
-    setKinder((prev) => [...prev, { id: kinderNextId, nachname: "", vorname: "", geburtsdatum: "", ahvNummer: "", geschlecht: "Männlich", zulagenart: "K", ausbildungsbeginn: "—" }]);
-    setKinderNextId((n) => n + 1);
+    setKinder((prev) => [...prev, { ...createEmptyKind(), zulagenart: "K" }]);
   };
 
-  const updateKind = (id: number, field: string, value: string) => {
+  const updateKind = (id: string, field: keyof KindEntry, value: string) => {
     setKinder((prev) => prev.map((k) => k.id === id ? { ...k, [field]: value } : k));
   };
 
   const handleCancel = () => {
     setKinderzulagenAktiv(detail.kinderzulagenAktiv);
     setKinderzulagenUeberSpitex(detail.kinderzulagenUeberSpitex);
-    setKinder(detail.kinder.map((k, i) => ({ ...k, id: i })));
+    setKinder(detail.kinder.map(k => ({ ...k })));
     setQuellensteuer(detail.quellensteuer);
     setQuellensteuerTarif(detail.quellensteuerTarif);
     setKonfession(detail.konfession);
