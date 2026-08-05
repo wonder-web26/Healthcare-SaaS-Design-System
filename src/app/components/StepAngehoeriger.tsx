@@ -158,6 +158,23 @@ export interface AngehoerigerFormData {
   scans: Record<string, ScanFile | null>;
 }
 
+/**
+ * Zulagenart eines Kindes — Fachkürzel der CH-Familienzulagen:
+ * K = Kinderzulage, W = Ausbildungszulage. "" = noch nicht gewählt.
+ */
+export type Zulagenart = "" | "K" | "W";
+
+/** Einzige Quelle der Anzeigebezeichnung für zulagenart (K/W). */
+export const ZULAGENART_LABEL: Record<"K" | "W", string> = {
+  K: "Kinderzulage",
+  W: "Ausbildungszulage",
+};
+
+/** Anzeigebezeichnung für einen zulagenart-Wert; leer, solange nichts gewählt ist. */
+export function zulagenartLabel(v: Zulagenart): string {
+  return v === "" ? "" : ZULAGENART_LABEL[v];
+}
+
 export interface KindEntry {
   id: string;
   vorname: string;
@@ -169,8 +186,8 @@ export interface KindEntry {
   inAusbildung: string;
   ausbildungsbeginn: string;
   ausbildungsstatus: string;
-  /** SP-09: Zulagentyp (kinderzulage / ausbildungszulage / keine_zulage) */
-  zulagenart: string;
+  /** SP-09: Zulagenart — K = Kinderzulage, W = Ausbildungszulage */
+  zulagenart: Zulagenart;
   /** SP-09: Quelle des Zulagentyps ("abgeleitet" / "manuell_ueberschrieben") */
   typQuelle: string;
   /** SP-09: Begründung bei manuellem Override (Pflichtfeld) */
@@ -1913,7 +1930,7 @@ function KinderForm({
     onChange({
       ...data,
       kinder: data.kinder.map((k) =>
-        k.id === kidId ? { ...k, [field]: value } : k
+        k.id === kidId ? ({ ...k, [field]: value } as KindEntry) : k
       ),
       anzahlKinder: String(data.kinder.length),
     });
@@ -2100,7 +2117,7 @@ function KinderForm({
                       : `Kind ${idx + 1}`}
                   </p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {kind.zulagenart === "W" ? "Weiterbildungszulage" : "Kinderzulage"}
+                    {zulagenartLabel(kind.zulagenart)}
                     {filled(kind.geburtsdatum) && ` · ${kind.geburtsdatum}`}
                   </p>
                 </div>
@@ -2252,7 +2269,7 @@ function KinderForm({
                       <FormField
                         label="Zulagenart"
                         required
-                        hint="K = Kinderzulage (bis 16), W = Weiterbildungszulage (16–25)"
+                        hint="K = Kinderzulage (bis 16), W = Ausbildungszulage (16–25)"
                       >
                         <Select
                           value={kind.zulagenart}
@@ -2276,8 +2293,8 @@ function KinderForm({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="K">K – Kinderzulage</SelectItem>
-                            <SelectItem value="W">W – Weiterbildungszulage</SelectItem>
+                            <SelectItem value="K">K – {ZULAGENART_LABEL.K}</SelectItem>
+                            <SelectItem value="W">W – {ZULAGENART_LABEL.W}</SelectItem>
                           </SelectContent>
                         </Select>
                       </FormField>

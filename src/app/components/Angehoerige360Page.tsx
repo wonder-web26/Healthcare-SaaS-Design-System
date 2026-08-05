@@ -68,7 +68,7 @@ import { getNachweiseFuerAngehoeriger } from "../../lib/schulung/nachweis-store"
 import { getKontrollenFuerAngehoeriger, erstelleKontrolle, getNaechsteFaelligkeit, type KontrolleArt } from "../../lib/arbeitskontrolle/store";
 import { exportiereArbeitskontrollePDF } from "../../lib/arbeitskontrolle/pdf-export";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
-import { type KindEntry, createEmptyKind } from "./StepAngehoeriger";
+import { type KindEntry, createEmptyKind, ZULAGENART_LABEL, zulagenartLabel } from "./StepAngehoeriger";
 import { isoZuAnzeige, anzeigeZuIso } from "../../lib/datum";
 import "../../lib/schulung/demo-seed";
 import "../../lib/arbeitskontrolle/demo-seed";
@@ -794,7 +794,7 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
   /* Kinder helpers — genau ein Weg, ein leeres Kind zu erzeugen: createEmptyKind() */
   const addKind = () => setKinderList([...kinderList, { ...createEmptyKind(), zulagenart: "K" }]);
   const removeKind = (id: string) => setKinderList(kinderList.filter(k => k.id !== id));
-  const updateKind = (id: string, field: keyof KindEntry, value: string) => setKinderList(kinderList.map(k => k.id === id ? { ...k, [field]: value } : k));
+  const updateKind = (id: string, field: keyof KindEntry, value: string) => setKinderList(kinderList.map(k => k.id === id ? ({ ...k, [field]: value } as KindEntry) : k));
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -1028,12 +1028,12 @@ function TabUeberblick({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
                           <td className="px-3 py-2.5">
                             {isEd("kinder") ? (
                               <select value={k.zulagenart} onChange={e => updateKind(k.id, "zulagenart", e.target.value)} className={inputClass + " !py-1.5 !text-[12px]"}>
-                                <option value="K">Kinderzulage</option>
-                                <option value="W">Ausbildungszulage</option>
+                                <option value="K">{ZULAGENART_LABEL.K}</option>
+                                <option value="W">{ZULAGENART_LABEL.W}</option>
                               </select>
                             ) : (
                               <span className={`inline-flex items-center px-2 py-[2px] rounded-md text-[11px] ${k.zulagenart === "K" ? "bg-info-light text-info-foreground" : "bg-warning-light text-warning-foreground"}`} style={{ fontWeight: 500 }}>
-                                {k.zulagenart === "K" ? "Kinderzulage" : "Ausbildungszulage"}
+                                {zulagenartLabel(k.zulagenart)}
                               </span>
                             )}
                           </td>
@@ -2100,7 +2100,7 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
   };
 
   const updateKind = (id: string, field: keyof KindEntry, value: string) => {
-    setKinder((prev) => prev.map((k) => k.id === id ? { ...k, [field]: value } : k));
+    setKinder((prev) => prev.map((k) => k.id === id ? ({ ...k, [field]: value } as KindEntry) : k));
   };
 
   const handleCancel = () => {
@@ -2262,12 +2262,12 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
                           <td className="px-3 py-2.5">
                             {isEditing ? (
                               <select value={k.zulagenart} onChange={(e) => updateKind(k.id, "zulagenart", e.target.value)} className={selectClass + " !py-1.5 !text-[12px]"}>
-                                <option value="K">Kinderzulage</option>
-                                <option value="W">Ausbildungszulage</option>
+                                <option value="K">{ZULAGENART_LABEL.K}</option>
+                                <option value="W">{ZULAGENART_LABEL.W}</option>
                               </select>
                             ) : (
                               <span className={`inline-flex items-center px-2 py-[2px] rounded-md text-[11px] ${k.zulagenart === "K" ? "bg-info-light text-info-foreground" : "bg-warning-light text-warning-foreground"}`} style={{ fontWeight: 500 }}>
-                                {k.zulagenart === "K" ? "Kinderzulage" : "Ausbildungszulage"}
+                                {zulagenartLabel(k.zulagenart)}
                               </span>
                             )}
                           </td>

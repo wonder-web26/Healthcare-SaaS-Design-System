@@ -14,7 +14,7 @@ import { Combobox as FormSelect } from "./Combobox";
 import { GroupBox } from "./GroupBox";
 import { DokumentScanUpload, type ScanFile } from "./DokumentScanUpload";
 import type { AngehoerigerFormData } from "../StepAngehoeriger";
-import { createEmptyKind } from "../StepAngehoeriger";
+import { createEmptyKind, zulagenartLabel } from "../StepAngehoeriger";
 import { pruefeQuellensteuerAutomatik } from "../../../lib/stammdaten/quellensteuer-automatik";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../../lib/stammdaten/dokumenttypen";
 import { SEMMeldeBanner, NATIONALITAETEN } from "./MigratedAngehoerigerForms";
@@ -237,7 +237,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                   <GroupBox
                     key={kind.id}
                     title={`Kind ${idx + 1}`}
-                    subtitle={kind.zulagenart === "W" ? "W-Zulage" : "K-Zulage"}
+                    subtitle={zulagenartLabel(kind.zulagenart)}
                     onRemove={() => removeKind(kind.id)}
                     removeDisabled={data.kinder.length <= 1}
                     removeDisabledTooltip="Mindestens ein Kind erforderlich"
