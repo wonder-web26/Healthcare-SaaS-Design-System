@@ -2048,7 +2048,7 @@ function TableStempel() {
       render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--status-success)", fontVariantNumeric: "tabular-nums" }}>{b.minutenB}</span> },
     { id: "gesamt", label: "Gesamt / Wo.", minCh: 12, maxSpur: "12ch", align: "right", sortierbar: true, abwerfRang: 3,
       render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{b.taeglicheMin * b.tageProWoche}</span> },
-    { id: "status", label: "Status", minCh: 10, maxSpur: "11ch", align: "left", sortierbar: true,
+    { id: "status", label: "Status", minCh: 10, maxSpur: "13ch", align: "left", sortierbar: true,
       render: () => <span style={{ display: "inline-flex", alignItems: "center", padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: "var(--bg-secondary)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Abgelaufen</span> },
   ];
   const bewKarteTitel = (b: Bewilligung) => (
@@ -2550,6 +2550,13 @@ function TableStempel() {
 /* ══════════════════════════════════════════
    TAB: TICKETS
    ══════════════════════════════════════════ */
+// Zugewiesen: Kürzel aus dem Namen (wie die Initialen-Spalten der vier Listen), voller Name im title.
+function ticketKuerzel(name: string): string {
+  const teile = name.trim().split(/\s+/).filter(Boolean);
+  if (teile.length === 0) return "–";
+  if (teile.length === 1) return teile[0].slice(0, 2).toUpperCase();
+  return (teile[0][0] + teile[teile.length - 1][0]).toUpperCase();
+}
 const TICKET_STATUS_RANK: Record<string, number> = { offen: 0, in_bearbeitung: 1, erledigt: 2 };
 const TICKET_PRIO_RANK: Record<string, number> = { hoch: 0, mittel: 1, niedrig: 2 };
 function sortTickets(list: Ticket[], key: string, dir: "asc" | "desc"): Ticket[] {
@@ -2569,15 +2576,16 @@ function sortTickets(list: Ticket[], key: string, dir: "asc" | "desc"): Ticket[]
 }
 
 function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path: string) => void }) {
-  const ticketStatusConfig = {
-    offen: { label: "Offen", bg: "bg-error-light", text: "text-error-foreground", dot: "bg-error" },
-    in_bearbeitung: { label: "In Bearbeitung", bg: "bg-warning-light", text: "text-warning-foreground", dot: "bg-warning" },
-    erledigt: { label: "Erledigt", bg: "bg-success-light", text: "text-success-foreground", dot: "bg-success" },
+  // Nur die Abweichung trägt Farbe/Fläche; Regelzustände sind stiller Text (wie in den vier Listen).
+  const STATUS_CFG: Record<Ticket["status"], { label: string; dot: string; color: string; weight: string }> = {
+    offen: { label: "Offen", dot: "var(--text-tertiary)", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
+    in_bearbeitung: { label: "In Bearbeitung", dot: "var(--status-warning)", color: "var(--status-warning-text)", weight: "var(--weight-medium)" },
+    erledigt: { label: "Erledigt", dot: "var(--status-success)", color: "var(--text-tertiary)", weight: "var(--weight-regular)" },
   };
-  const priorityConfig = {
-    hoch: { label: "Hoch", bg: "bg-error-light", text: "text-error-foreground" },
-    mittel: { label: "Mittel", bg: "bg-warning-light", text: "text-warning-foreground" },
-    niedrig: { label: "Niedrig", bg: "bg-muted", text: "text-muted-foreground" },
+  const PRIO_CFG: Record<Ticket["priority"], { label: string; color: string; weight: string }> = {
+    hoch: { label: "Hoch", color: "var(--status-danger)", weight: "var(--weight-medium)" },
+    mittel: { label: "Mittel", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
+    niedrig: { label: "Niedrig", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
   };
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const toggleSort = (key: string) => setSort(s => s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
@@ -2590,15 +2598,15 @@ function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path:
     { id: "subject", label: "Betreff", minCh: 24, maxSpur: "50ch", align: "left", sortierbar: true, ausKarte: true,
       render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)" }}>{t.subject}</span> },
     { id: "category", label: "Kategorie", minCh: 14, maxSpur: "17ch", align: "left", sortierbar: true, abwerfRang: 1,
-      render: t => <span style={{ padding: "1px 8px", borderRadius: "var(--radius-card)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: "var(--bg-secondary)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{t.category}</span> },
+      render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{t.category}</span> },
     { id: "priority", label: "Priorität", minCh: 11, maxSpur: "11ch", align: "left", sortierbar: true,
-      render: t => { const p = priorityConfig[t.priority]; return <span className={`${p.bg} ${p.text}`} style={{ padding: "1px 8px", borderRadius: "var(--radius-card)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>{p.label}</span>; } },
-    { id: "status", label: "Status", minCh: 15, maxSpur: "16ch", align: "left", sortierbar: true,
-      render: t => { const s = ticketStatusConfig[t.status]; return <span className={`inline-flex items-center ${s.bg} ${s.text}`} style={{ gap: 6, padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}><span className={s.dot} style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)" }} />{s.label}</span>; } },
+      render: t => { const p = PRIO_CFG[t.priority]; return <span style={{ fontSize: "var(--text-small)", color: p.color, fontWeight: p.weight, whiteSpace: "nowrap" }}>{p.label}</span>; } },
+    { id: "status", label: "Status", minCh: 15, maxSpur: "18ch", align: "left", sortierbar: true,
+      render: t => { const s = STATUS_CFG[t.status]; return <span className="inline-flex items-center" style={{ gap: 6, minWidth: 0 }}><span style={{ width: 6, height: 6, borderRadius: "var(--radius-pill)", background: s.dot, flexShrink: 0 }} /><span style={{ fontSize: "var(--text-small)", color: s.color, fontWeight: s.weight, whiteSpace: "nowrap" }}>{s.label}</span></span>; } },
     { id: "created", label: "Erstellt", minCh: 12, maxSpur: "12ch", align: "left", sortierbar: true, abwerfRang: 3,
       render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{isoZuAnzeige(anzeigeZuIso(t.created))}</span> },
-    { id: "assignedTo", label: "Zugewiesen", minCh: 13, maxSpur: "16ch", align: "left", sortierbar: true, abwerfRang: 2,
-      render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{t.assignedTo}</span> },
+    { id: "assignedTo", label: "Zugewiesen", minCh: 10, maxSpur: "10ch", align: "left", sortierbar: true, abwerfRang: 2,
+      render: t => <span title={t.assignedTo} style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>{ticketKuerzel(t.assignedTo)}</span> },
   ];
   const karteTitel = (t: Ticket) => (
     <div className="flex items-center" style={{ gap: 8, width: "100%", minWidth: 0 }}>
@@ -2615,14 +2623,24 @@ function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path:
           <h5 className="text-foreground">Tickets für diesen Patienten</h5>
           <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground" style={{ fontWeight: 500 }}>{tickets.length}</span>
         </div>
-        <button
-          onClick={() => navigate("/servicedesk")}
-          className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors"
-          style={{ fontWeight: 500 }}
-        >
-          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-          Pendenzenliste öffnen
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/servicedesk")}
+            className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors"
+            style={{ fontWeight: 500 }}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Neue Pendenz
+          </button>
+          <button
+            onClick={() => navigate("/servicedesk")}
+            className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors"
+            style={{ fontWeight: 500 }}
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+            Pendenzenliste öffnen
+          </button>
+        </div>
       </div>
 
       <DataTable<Ticket>
@@ -2635,23 +2653,9 @@ function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path:
         karteTitel={karteTitel}
         containerHaltepunkte
         karteAbPx={640}
-        fusszeile={<span>{tickets.length} {tickets.length === 1 ? "Ticket" : "Tickets"}</span>}
-        leerText="Keine Tickets für diesen Patienten."
+        fusszeile={tickets.length > 0 ? <span>{tickets.length} {tickets.length === 1 ? "Ticket" : "Tickets"}</span> : undefined}
+        leerText="Für diesen Patienten sind keine Pendenzen erfasst."
       />
-
-      <div className="bg-card rounded-2xl border border-dashed border-primary/30 p-5 text-center">
-        <Plus className="w-6 h-6 text-primary mx-auto mb-2" />
-        <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>Neues Ticket erstellen</p>
-        <p className="text-[12px] text-muted-foreground mt-0.5">Erstellen Sie ein neues Service-Desk-Ticket für diesen Patienten</p>
-        <button
-          onClick={() => navigate("/servicedesk")}
-          className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors text-[13px]"
-          style={{ fontWeight: 500 }}
-        >
-          <Headphones className="w-4 h-4" />
-          Zur Pendenzenliste
-        </button>
-      </div>
     </div>
   );
 }
@@ -2850,7 +2854,7 @@ function TabKLV({ patientId }: { patientId: string }) {
       render: lp => <span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: katBg(lp.kategorie), color: katColor(lp.kategorie) }}>{lp.kategorie}</span> },
     { id: "nr", label: "Nr.", minCh: 5, maxSpur: "8ch", align: "left", sortierbar: true,
       render: lp => <span style={{ fontFamily: "monospace", fontSize: "var(--text-small)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{lp.klvNummer}</span> },
-    { id: "bezeichnung", label: "Bezeichnung", minCh: 12, maxSpur: "40ch", align: "left", sortierbar: true, ausKarte: true,
+    { id: "bezeichnung", label: "Bezeichnung", minCh: 12, maxSpur: "56ch", align: "left", sortierbar: true, ausKarte: true,
       render: lp => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{lp.bezeichnung}</span> },
     { id: "min", label: "Min.", minCh: 5, maxSpur: "6ch", align: "right", sortierbar: true, abwerfRang: 2,
       render: lp => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{lp.zeitMin}′</span> },
