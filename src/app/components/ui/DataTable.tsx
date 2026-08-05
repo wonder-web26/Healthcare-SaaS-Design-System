@@ -79,6 +79,9 @@ export interface DataTableProps<T> {
    *  Für eingebettete, schmalere Spalten (z. B. Listenspalte neben einem Detailbereich).
    *  Standard aus — bestehende Listen messen weiter die Fensterbreite. */
   containerHaltepunkte?: boolean;
+  /** Instanz-Override der Kartenschwelle in px. Fehlt sie, gilt der geteilte
+   *  Wert TABELLE_LAYOUT.haltepunktePx.karte — bestehende Listen bleiben unberührt. */
+  karteAbPx?: number;
 }
 
 /** Fensterbreite, reaktiv. SSR-sicher: startet gross, damit initial alle Spalten erscheinen. */
@@ -140,14 +143,14 @@ function Kontrollkaestchen({ gewaehlt, onToggle, label }: { gewaehlt: boolean; o
 export function DataTable<T>({
   spalten, zeilen, zeilenKey, onZeileKlick, zeilenHintergrund, zeilenAkzent,
   sort, onSort, fusszeile, karteTitel, leerText = "Keine Ergebnisse.",
-  auswahl, containerHaltepunkte = false,
+  auswahl, containerHaltepunkte = false, karteAbPx,
 }: DataTableProps<T>) {
   const rahmenRef = React.useRef<HTMLDivElement>(null);
   const fensterBreite = useFensterBreite();
   const containerBreite = useContainerBreite(rahmenRef, containerHaltepunkte);
   const breite = containerHaltepunkte ? containerBreite : fensterBreite;
   const bp = TABELLE_LAYOUT.haltepunktePx;
-  const istKarte = breite < bp.karte;
+  const istKarte = breite < (karteAbPx ?? bp.karte);
   const zweizeilig = breite < bp.zweizeilig;
 
   // Sichtbare Spalten: "eng"-Spalten entfallen unter ihrem Haltepunkt; Zweitzeile-Spalten

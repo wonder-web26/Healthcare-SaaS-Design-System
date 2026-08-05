@@ -5,7 +5,7 @@ import { getUnifiedEntries, entryBetreff, entryPersonName, CURRENT_USER, type Un
 import { personLink, personArtLabel } from "../../lib/mocks/personen-aufloesung";
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
-import { isoZuAnzeige } from "../../lib/datum";
+import { isoZuAnzeige, formatTagMonat, isoZuDate } from "../../lib/datum";
 import { useCurrentRole } from "../auth";
 import { AnnaPendenzVorschlag } from "../anna/AnnaPendenzVorschlag";
 import { AnnaDemoMockModal } from "../anna/AnnaDemoMockModal";
@@ -44,6 +44,14 @@ function faelligDarstellung(iso: string, status: string): { datum: string; abw: 
 /* ── Status: Anzeige-Labels (Fuss-Umschalter und Verlauf) ── */
 const STATUS_LABEL: Record<string, string> = { offen: "Offen", in_bearbeitung: "In Arbeit", erledigt: "Abgeschlossen" };
 const STATUS_SEGMENTE: [string, string][] = [["offen", "Offen"], ["in_bearbeitung", "In Arbeit"], ["erledigt", "Abgeschlossen"]];
+
+/* ── Status-Zelle (Liste): Punkt + Wort. Offen still, In Arbeit hervorgehoben,
+   Abgeschlossen zurückgenommen. Farbe UND Schriftstärke unterscheiden. ── */
+const STATUS_ZELL_CFG: Record<string, { dot: string; color: string; weight: string }> = {
+  offen: { dot: "var(--text-tertiary)", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
+  in_bearbeitung: { dot: "var(--status-warning)", color: "var(--status-warning-text)", weight: "var(--weight-medium)" },
+  erledigt: { dot: "var(--status-success)", color: "var(--text-tertiary)", weight: "var(--weight-regular)" },
+};
 
 /* ── "Zu erledigen": je Pendenzart ein hinterlegter Satz, was zu tun ist — kein
    Fliesstext über den Datensatz. ── */
@@ -353,13 +361,18 @@ export function ServiceDeskPage() {
 
   // Betreff: die Sache, einzeilig mit Ellipsis; bei laufender Bearbeitung eine
   // stille Kennzeichnung; abgeschlossene zurückgenommen.
-  const betreffZelle = (e: UnifiedEntry) => {
-    const erledigt = e.status === "erledigt";
+  // Betreff: die Sache, Schriftstärke 500, Normalgrösse, einzeilig mit Ellipsis.
+  // (Status steht in eigener Spalte, keine Kennzeichnung mehr am Betreff.)
+  const betreffZelle = (e: UnifiedEntry) => (
+    <span title={e.betreff} style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{e.betreff}</span>
+  );
+
+  const statusZelle = (e: UnifiedEntry) => {
+    const c = STATUS_ZELL_CFG[e.status] || STATUS_ZELL_CFG.offen;
     return (
-      <span className="flex items-baseline" style={{ gap: 8, minWidth: 0 }}>
-        <span title={e.betreff} style={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: erledigt ? "var(--text-tertiary)" : "var(--text-primary)" }}>{e.betreff}</span>
-        {e.status === "in_bearbeitung" && <span className="shrink-0" style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>In Bearbeitung</span>}
-        {erledigt && <span className="shrink-0" style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Abgeschlossen</span>}
+      <span className="inline-flex items-center" style={{ gap: 6, whiteSpace: "nowrap" }}>
+        <span style={{ width: 6, height: 6, borderRadius: "var(--radius-pill)", background: c.dot, flexShrink: 0 }} />
+        <span style={{ fontSize: "var(--text-small)", color: c.color, fontWeight: c.weight }}>{STATUS_LABEL[e.status]}</span>
       </span>
     );
   };
@@ -379,52 +392,55 @@ export function ServiceDeskPage() {
 
   const beschreibungZelle = (e: UnifiedEntry) => <span title={e.kontext} style={{ display: "block", fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.kontext}</span>;
 
+  // Fällig: Datum ohne Jahr (Datumsschicht) + Abweichung in Kurzform; Signalfarbe
+  // nur bei Überschreitung (danger) oder nahem Termin (warning).
   const faelligZelle = (e: UnifiedEntry) => {
     if (!e.faellig) return <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>–</span>;
-    const { datum, abw, ton } = faelligDarstellung(e.faellig, e.status);
+    const d = daysFromToday(e.faellig)!;
+    const datum = formatTagMonat(isoZuDate(e.faellig)!);
+    let abw: string | null = null, ton: "danger" | "warning" | "still" = "still";
+    if (e.status !== "erledigt" && d < 0) { abw = `+${Math.abs(d)} T.`; ton = "danger"; }
+    else if (e.status !== "erledigt" && d === 0) { abw = "heute"; ton = "danger"; }
+    else if (e.status !== "erledigt" && d <= 3) { abw = `in ${d} T.`; ton = "warning"; }
     const farbe = ton === "danger" ? "var(--status-danger)" : ton === "warning" ? "var(--status-warning-text)" : "var(--text-tertiary)";
     return (
-      <span className="inline-flex items-baseline" style={{ gap: 6, whiteSpace: "nowrap" }}>
+      <span className="inline-flex items-baseline" style={{ gap: 5, whiteSpace: "nowrap" }}>
         <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{datum}</span>
         {abw && <span style={{ fontSize: "var(--text-meta)", fontWeight: ton === "danger" ? "var(--weight-medium)" : "var(--weight-regular)", color: farbe }}>{abw}</span>}
       </span>
     );
   };
 
+  // Zuständig: Kürzel in Sekundärfarbe, kein Kreis, keine Fläche; leer → "Zuweisen".
   const zustaendigZelle = (e: UnifiedEntry) => istNichtZugewiesen(e) ? (
-    <button type="button" onClick={ev => { ev.stopPropagation(); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-      <Plus style={{ width: 12, height: 12 }} /> Zuweisen
+    <button type="button" onClick={ev => { ev.stopPropagation(); }} aria-label="Zuweisen" title="Zuweisen" className="ui-fokusring inline-flex items-center justify-center cursor-pointer" style={{ width: 22, height: 22, borderRadius: "var(--radius-card)", background: "transparent", border: "var(--border-thin) dashed var(--border-default)", color: "var(--text-tertiary)", padding: 0 }}>
+      <Plus style={{ width: 13, height: 13 }} />
     </button>
   ) : (
-    <div className="flex items-center" style={{ gap: 6 }}>
-      <MiniAvatar person={e.verantwortlich} size={18} />
-      <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{e.verantwortlich.name}</span>
-    </div>
+    <span title={e.verantwortlich.name} style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>{e.verantwortlich.initialen}</span>
   );
 
-  // Bei geöffnetem Detailbereich dient die Karte nur noch dem Wechsel: Betreff +
-  // Fälligkeit im Kopf, Person als zweite Zeile. Art/Beschreibung/Zuständig stehen
-  // dann rechts im Detail und werden aus dem Kartenkörper genommen (siehe Spalten).
-  const detailOffen = !!selected;
+  // Einzeilige Tabelle in allen Master-Detail-Breiten (Karten erst < 500 px, siehe
+  // karteAbPx). Kartenkopf nur für den seltenen Kartenfall: Kennzeichen + Betreff + Fälligkeit.
   const karteTitel = (e: UnifiedEntry) => (
-    <div style={{ width: "100%", minWidth: 0 }}>
-      <div className="flex items-center" style={{ gap: 8, minWidth: 0 }}>
-        {kennzeichenIcon(e)}
-        <span className="truncate" style={{ flex: 1, minWidth: 0, fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: e.status === "erledigt" ? "var(--text-tertiary)" : "var(--text-primary)" }}>{e.betreff}</span>
-        {e.faellig && faelligZelle(e)}
-      </div>
-      {detailOffen && <div style={{ marginTop: 4 }}>{personZelle(e)}</div>}
+    <div className="flex items-center" style={{ gap: 8, width: "100%", minWidth: 0 }}>
+      {kennzeichenIcon(e)}
+      <span className="truncate" style={{ flex: 1, minWidth: 0, fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{e.betreff}</span>
+      {e.faellig && faelligZelle(e)}
     </div>
   );
 
+  // Anteil 0 = feste Spalte (bleibt bei ihrer Mindestbreite); nur die Beschreibung
+  // ist elastisch (Anteil 1) und erhält die verbleibende Breite.
   const spalten: SpalteDef<UnifiedEntry>[] = [
-    { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", ausKarte: true, render: kennzeichenIcon },
-    { id: "art", label: "Art", anteil: 8, minCh: 10, align: "left", ausKarte: detailOffen, render: artZelle },
-    { id: "betreff", label: "Betreff", anteil: 20, minCh: 16, align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
-    { id: "person", label: "Person", anteil: 16, minCh: 22, align: "left", sortierbar: true, ausKarte: detailOffen, render: personZelle },
-    { id: "beschreibung", label: "Beschreibung", anteil: 22, minCh: 18, align: "left", ausblendenUnter: "eng", ausKarte: detailOffen, render: beschreibungZelle },
-    { id: "faellig", label: "Fällig", anteil: 12, minCh: 15, align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
-    { id: "zustaendig", label: "Zuständig", anteil: 12, minCh: 14, align: "left", sortierbar: true, ausKarte: detailOffen, render: zustaendigZelle },
+    { id: "kennzeichen", label: "", festBreitePx: 24, align: "center", ausKarte: true, render: kennzeichenIcon },
+    { id: "art", label: "Art", anteil: 0, minCh: 14, align: "left", render: artZelle },
+    { id: "betreff", label: "Betreff", anteil: 0, minCh: 20, align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
+    { id: "status", label: "Status", anteil: 0, minCh: 11, align: "left", render: statusZelle },
+    { id: "person", label: "Person", anteil: 0, minCh: 18, align: "left", sortierbar: true, render: personZelle },
+    { id: "beschreibung", label: "Beschreibung", anteil: 1, minCh: 10, align: "left", render: beschreibungZelle },
+    { id: "faellig", label: "Fällig", anteil: 0, minCh: 13, align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
+    { id: "zustaendig", label: "Zuständig", anteil: 0, minCh: 4, align: "center", sortierbar: true, render: zustaendigZelle },
   ];
 
   // Flächentönung ausschliesslich für Dringlichkeit (rot kräftiger als gelb) bzw.
@@ -588,6 +604,7 @@ export function ServiceDeskPage() {
               onSort={toggleSort}
               karteTitel={karteTitel}
               containerHaltepunkte
+              karteAbPx={500}
               auswahl={isBulkMode ? { istGewaehlt: e => bulkSelected.has(e.id), onToggle: e => toggleBulk(e.id), zeilenLabel: e => entryBetreff(e) } : undefined}
               fusszeile={<><span>{sorted.length} von {entries.length} Pendenzen</span><span>Stand: {isoZuAnzeige(TODAY)}</span></>}
               leerText="Keine Pendenzen mit diesen Filtern."
