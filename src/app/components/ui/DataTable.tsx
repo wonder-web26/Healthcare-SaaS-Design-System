@@ -231,7 +231,7 @@ export function DataTable<T>({
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.5rem 1rem" }}>
                 {koerper.map(s => (
                   <div key={s.id} style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)", fontWeight: 600 }}>{s.label}</div>
+                    <div style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)", fontWeight: "var(--weight-medium)" }}>{s.label}</div>
                     <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{s.render(row)}</div>
                   </div>
                 ))}
@@ -290,10 +290,9 @@ export function DataTable<T>({
                   aria-sort={aktiv ? (sort!.dir === "asc" ? "ascending" : "descending") : undefined}
                   onClick={klick}
                   title={typeof s.label === "string" ? s.label : undefined}
-                  style={{ padding: zellPad, textAlign: s.align ?? "left", cursor: klick ? "pointer" : "default", userSelect: "none", minWidth: 0, overflow: "hidden" }}>
-                  {/* Absicherung: passt der Kopf trotz korrekter Mindestbreite nicht, wird
-                     er sauber gekürzt statt hart am Kartenrand abgeschnitten; voller Text im title. */}
-                  <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                  style={{ padding: zellPad, textAlign: s.align ?? "left", cursor: klick ? "pointer" : "default", userSelect: "none", minWidth: 0 }}>
+                  {/* Kopf wird nie gekürzt (§148); die Mindestbreite trägt ihn (minCh = max(Datenwert, Kopf)). */}
+                  <span style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: "var(--weight-medium)", color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", whiteSpace: "nowrap" }}>
                     {s.label}
                     {aktiv && <span aria-hidden="true" style={{ marginLeft: "0.25rem" }}>{sort!.dir === "asc" ? "↑" : "↓"}</span>}
                   </span>

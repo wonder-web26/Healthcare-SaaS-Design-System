@@ -145,6 +145,25 @@ Niemals 600 oder 700 verwenden – wirkt zu schwer im Cockpit-Kontext.
 - Listen-Item-Subtitel: small, Weight 400, text-secondary
 - Meta-Infos (Datum, Verantwortlich-Kürzel): meta, Weight 400, text-secondary
 
+### Bezugsgrösse: rem und ch
+
+Die Wurzel-Schriftgrösse ist bewusst **14px**, nicht die üblichen 16px:
+
+```
+html { font-size: var(--text-body); }   /* = 14px */
+```
+
+Daraus folgt:
+
+- **1 rem = 14px** — alle `rem`-Werte (Abstände, Feldbreiten, Zellpolster) beziehen sich darauf.
+- **1 ch ≈ 7px** in der Grundschrift (Ziffernbreite bei 14px).
+
+**Verwendungs-Regel:** Wer in `rem` oder `ch` rechnet, rechnet gegen **14px**. Eine Rechnung
+gegen 16px liegt um rund **14 %** daneben.
+
+Der Eintrag steht hier, weil genau diese falsche Annahme (16px) mehrere Fehlversuche bei
+den Spaltenbreiten der Listentabellen gekostet hat.
+
 ### Beschriftungen: kein Kürzen mit Auslassungspunkten (produktweit, verbindlich)
 
 Beschriftungen werden **nie** mit Auslassungspunkten (`…`, `text-overflow: ellipsis`,
@@ -160,6 +179,16 @@ wird sie gross genug für Umbruch gewählt; ein zu schmaler Container kürzt nie
 mit Auslassungspunkten abgeschnitten. Das Eingabefeld wird am **tatsächlichen**
 Platzhalter bemessen, nicht am kurzen Entwurfstext. Reicht der Platz auch bei der
 Höchstbreite nicht, wird das gemeldet — nicht das Feld oder der Text gekürzt.
+
+**Ausnahme (eng begrenzt):** Kürzung ist nur zulässig, wenn der vollständige Wert an einem
+anderen sichtbaren Ort **derselben Ansicht** steht.
+
+- **Zulässig:** Datenzellen in einer Liste mit gleichzeitig sichtbarem Detailbereich.
+- **Unzulässig:** Spaltenköpfe, Formularfelder, Detailansichten und Listen ohne
+  begleitenden Detailbereich. Dort gilt weiterhin Umbruch.
+- Ein `title`-Attribut ist ein **Zusatz, nie eine Begründung**: auf dem Tablet gibt es kein
+  Überfahren mit dem Zeiger.
+- Ist die Kürzung zulässig, wird der **Hauptidentifikator** der Zeile **zuletzt** gekürzt.
 
 Bereits verletzt (Historie, zur Warnung): interRAI-Bereichsnavigation,
 Schrittbezeichnung im Onboarding-Fortschritt, Zustandsspalte im Onboarding,
@@ -1173,51 +1202,172 @@ Auf Tablet und Desktop wird die klassische Tabelle angezeigt:
 ## 15 · Listentabellen
 
 Geteilte, responsive Listentabelle: `components/ui/DataTable.tsx`. Sie kennt keine
-Fachlogik – sie bekommt je Spalte eine Beschreibung (Kennung, Beschriftung, Anteil,
-Mindestbreite, Ausrichtung, Ausblende-Haltepunkt, Sortierbarkeit) und eine render-Funktion.
-Fachliche Regeln (Kennzeichen, Zeilentönung, Feldnamen) leben ausschliesslich an der
-Aufrufstelle. Erste Verwendung: Onboarding-Liste.
+Fachlogik — sie bekommt je Spalte eine Beschreibung und eine render-Funktion; fachliche
+Regeln (Kennzeichen, Zeilentönung, Sortiervergleiche, Feldnamen) leben ausschliesslich an
+der Aufrufstelle. Verwender: die vier Listen Onboarding, Patienten, Angehörige, Pendenzen.
 
 ### Grundsatz: fluid ist der Rahmen, nicht der Inhalt
 
-- **Inhaltsbreite:** Der Inhaltsbereich wächst fluid bis **1400px** und wird darüber
-  zentriert (darüber wächst nur Leerfläche, kein Inhalt). Die Grenze gilt für den
-  **gesamten Seiteninhalt** — Titel, Steuerleiste, Tabelle und Fusszeile teilen dieselbe
-  linke und rechte Kante (`TABELLE_LAYOUT.inhaltMaxPx`, zentriert per `margin: 0 auto`),
-  nicht nur die Tabelle. Die Seiten-Polsterung skaliert separat
-  (`--mobile-page-padding` → `--space-6` ab 640px).
-- **Spaltenbreiten:** Anteile (Prozent bzw. `fr`-Gewicht) setzen die Proportion,
-  Mindestbreiten in `ch` sichern die Lesbarkeit. Umgesetzt als CSS-Grid
-  `minmax(<minCh>ch, <anteil>fr)`. Feste Pixel **nur** wo physisch bedeutsam
-  (Kennzeichen-Spalte, Klickflächen, Haarlinien).
-- **Einheiten:** Schrift und Abstände in `rem` (folgen der Systemschriftgrösse).
-  Klickflächen und Haarlinien in festen `px`.
+- **Inhaltsbreite:** Der Rahmen wächst fluid bis `TABELLE_LAYOUT.inhaltMaxPx` (1400px),
+  darüber zentriert. Titel, Steuerleiste, Tabelle und Fusszeile teilen dieselbe Kante.
+- **Einheiten:** Schrift und Abstände in `rem` (1 rem = 14px, siehe Kapitel 3). Feste `px`
+  nur physisch (Kennzeichen-Spalte, Haarlinien, Kontrollkästchen).
 
-### Haltepunkte (Fensterbreite)
+### Spaltenbreiten
 
-Verbindlich, an einer Stelle definiert: `TABELLE_LAYOUT.haltepunktePx` in `DataTable.tsx`.
+- **Modell:** je Spalte `minmax(minCh, maxCh)` in `ch`. **Keine `fr`-Anteile** mehr — der
+  Browser verteilt zwischen den beiden Grenzen.
+- **Mindestbreite (`minCh`):** das Maximum aus dem **längsten Datenwert** und dem
+  **Spaltenkopf** (in Grossbuchstaben). Ein Kopf wird nie gekürzt (§148); die Mindestbreite
+  trägt ihn.
+- **Obergrenze (`maxSpur`):** am längsten realen Wert plus rund zwei Zeichen.
+- **Überschuss:** reicht die Breite für alle Obergrenzen, bleibt der Rest **rechts leer** —
+  die Tabelle wird nicht gestreckt.
 
-| Bereich | Verhalten |
+> Zu jeder Breitenvorgabe gehören zwei Antworten: was geschieht bei zu wenig Platz, und was
+> bei zu viel. Fehlt eine davon, ist die Vorgabe unvollständig.
+
+### Spaltenfall statt Klippen
+
+Reicht die Breite nicht für alle Mindestbreiten, **entfallen** Spalten nach Rangfolge
+(`abwerfRang`, niederrangigste zuerst), bis die Summe passt — die Tabelle **klippt nie**,
+es gibt **keinen horizontalen Bildlauf**. Die Entscheidung rechnet mit der tatsächlichen
+Zellbreite einschliesslich Innenabständen plus einem **Sicherheitsabstand von 24px**
+(Rahmen, Rundung, möglicher senkrechter Bildlaufbalken).
+
+### Messung
+
+Gemessen wird die **Containerbreite** (per `ResizeObserver`, Prop `containerHaltepunkte`),
+nicht die Fensterbreite — damit die Tabelle auf einen geöffneten Detailbereich reagiert.
+
+### Kartenschwelle
+
+Unter einer Schwelle wechselt die Tabelle auf Kartendarstellung (kein horizontales
+Scrollen). Standard: `TABELLE_LAYOUT.haltepunktePx.karte` (900px). Je Instanz per `karteAbPx`
+überschreibbar; die Pendenzenliste setzt **500px**, weil sie im Master-Detail bis in schmale
+Breiten eine Tabelle bleiben soll (bei geöffnetem Detail wären Karten sonst leerer als eine
+Tabellenzeile).
+
+### Spaltenattribute (`SpalteDef`)
+
+| Attribut | Zweck |
 |---|---|
-| ≥ 1400px | alle Spalten nebeneinander |
-| 1100 – 1400px | als Zweitzeile markierte Spalte rutscht unter ihre Leitspalte |
-| 900 – 1100px | zusätzlich entfallen die als „eng" markierten Spalten |
-| < 900px | Kartendarstellung statt Tabelle, **kein** horizontales Scrollen |
+| `id`, `label`, `align` | Kennung, Beschriftung, Ausrichtung |
+| `minCh` | Mindestbreite in ch (Maximum aus Datenwert und Kopf) |
+| `maxSpur` | Obergrenze der Spur (z. B. `"21ch"`); fehlt sie, gilt `${anteil}fr` |
+| `festBreitePx` | feste Pixel (physisch: Kennzeichen, Kontrollkästchen) |
+| `abwerfRang` | Rang im Spaltenfall (kleinster zuerst); ohne Rang bleibt die Spalte |
+| `ausblendenUnter` | Haltepunkt, unter dem die Spalte entfällt |
+| `zweitzeileUnter` | rutscht unter ihre Leitspalte |
+| `ausKarte` | erscheint im Kartenkopf statt im Kartenkörper |
+| `sortierbar` | klickbarer Kopf |
+| `render` | Zellinhalt |
 
-Diese Tabellen-Haltepunkte sind bewusst grösser als die allgemeinen App-Breakpoints
-(640/1024/1280): eine breite Datentabelle bricht früher, weil sie mehr Spaltenbreite
-braucht als ein Formular oder eine Card-Fläche.
+### Zeilenhöhe
 
-### Kartendarstellung (< 900px)
+Einzeilige Zeilen (rund 38px, in allen Zeilen identisch). Begründung: eine Arbeitsliste wird
+**gescannt**, nicht gelesen; spaltenweise Ausrichtung ist dafür das entscheidende Mittel.
+Zellen kürzen nur unter der Ausnahme aus §148 (Datenzelle mit gleichzeitig sichtbarem
+Detailbereich).
 
-Kopf: die als `ausKarte` markierten Spalten (z. B. Name + Kennzeichen). Körper: die
-übrigen Spalten als beschriftete Wertepaare in einem zweispaltigen Raster. Nie horizontal
-scrollen.
+### Sortierung
+
+**Alle** Spalten sind sortierbar. Klick wechselt auf-/absteigend, die aktive Sortierung
+steht im Kopf (Pfeil) und in der Aktivzeile. Keine Mehrfachsortierung.
+
+- **Rangfolge statt Alphabet:** Kennzeichen (Schwere), Status, Schweregrad, Phase,
+  Qualifikation, Priorität sortieren nach ihrer Wertereihenfolge.
+- **Datum** chronologisch, **Zähler/Brüche** numerisch, zusammengesetzte Zellen nach ihrem
+  **führenden Wert**, sonst alphabetisch nach dem angezeigten Wert.
+- **Leerwerte stehen immer am Ende**, unabhängig von der Richtung — ein fehlender Wert ist
+  keine Aussage über die Reihenfolge.
+
+### Kennzeichen
+
+Warndreieck links, feste 24–28px, zentriert. **Rot vor Gelb** (rot gefüllt, gelb umrandet);
+der Grund steht als `aria-label`. Farbe ist **nie das einzige Merkmal** (Form und Text
+tragen die Bedeutung mit).
+
+### Auswahl und Dringlichkeit — getrennte Kanäle
+
+Die **Flächentönung** ist der Dringlichkeit vorbehalten (rot kräftiger als gelb). Die
+**Auswahl** (offene Detailzeile, Bulk) nutzt einen **eigenen Kanal**: linker Farbstreifen
+plus kräftigerer Rahmen. Die Auswahl **überschreibt die Dringlichkeitstönung nie**.
+
+### Steuerleiste und Fusszeile
+
+Suchfeld (8px-Radius, kein Pill), Segmentumschalter, kombinierbare Status-Chips (UND-Logik,
+mit Zähler), Auswahlfeld-Dropdowns, Aktivzeile (aktive Filter plus Sortierung), Fusszeile
+(„N von M …" plus Stand über die Datumsschicht). **Chip-Zahlen werden immer aus der
+Segmentbasis berechnet, nie fest verdrahtet.**
 
 ### Einzige Stelle für Layoutwerte
 
-Inhaltsbreite und Haltepunkte stehen ausschliesslich in `TABELLE_LAYOUT` (`DataTable.tsx`).
-Nicht an der Aufrufstelle duplizieren.
+Inhaltsbreite, Haltepunkte und Kartenschwelle stehen in `TABELLE_LAYOUT` (`DataTable.tsx`);
+Abweichungen nur per Instanz-Prop (`karteAbPx`), nicht an der Aufrufstelle dupliziert.
+
+---
+
+## 16 · Feldbreiten und Formularraster
+
+Einzige Quelle der Breitenwerte: `components/form/feldbreiten.ts`. Alle verwendenden
+Dateien importieren von dort; keine Breitenwerte an der Aufrufstelle.
+
+### Feldbreitenklassen
+
+```
+FELD_MAX = { schmal: "12rem", mittel: "22rem", voll: "none" }
+/* 12rem = 168px, 22rem = 308px bei 14px-Wurzel (Kapitel 3) */
+```
+
+| Klasse | Max-Breite | typische Inhalte |
+|---|---|---|
+| schmal | 12 rem | Datum, Betrag, PLZ, kurze Codes, Auswahl mit wenigen Optionen |
+| mittel | 22 rem | Name, Strasse, E-Mail, einzeilige Freitexte |
+| voll | keine Begrenzung (Rasterzelle) | lange Freitexte, Textareas, breite Selects |
+
+### Verwendungs-Regeln
+
+- **Breite folgt dem Inhalt, nicht der verfügbaren Fläche.**
+- Die Klasse wird **explizit je Feld** an der Aufrufstelle zugewiesen, **nie** aus Feldname
+  oder Feldart abgeleitet.
+- Ein schmales Feld füllt seine Rasterzelle nicht aus; die **Lücke rechts ist Absicht**. Die
+  rechte Kante des Rasters ist bewusst unregelmässig.
+- **Keine vierte Klasse** ohne ausdrücklichen Entscheid.
+- Intrinsisch dimensionierte Bauteile (Umschalter, Chips, eigenbreite Picker) erhalten
+  **keine** Breitenklasse.
+
+### Formularbereich
+
+```
+FORMULAR_MAX = 880   /* px; lesbare Formularbreite, linksbündig */
+```
+
+- `FORMULAR_MAX` begrenzt Raster, Abschnittsüberschriften, Trennlinien und `voll`-Felder
+  **gemeinsam** auf dieselbe rechte Kante (keine Stufe), linksbündig.
+- **Nicht** betroffen: die **Reiterzeile** sowie Reiter mit **Tabellen oder Matrizen** — sie
+  brauchen die volle Breite und erhalten `FORMULAR_MAX` nicht.
+- Reiterzeilen **brechen um**, sie scrollen nicht.
+
+### Linke Zustandsspalte (Onboarding-Assistent)
+
+Feste **260px** — breiter als der reine Inhalt, damit Notizen und Hinweistext **nicht
+umbrechen** und nichts gekürzt wird (§148).
+
+---
+
+## 17 · Terminologie
+
+Ein Begriff gilt im **gesamten Produkt** — einschliesslich Schaltflächen, Platzhaltern,
+Suchfeldern und Fusszeilen. Vor der Einführung eines neuen Begriffs wird nach dem
+bestehenden gesucht.
+
+| Begriff | gilt für | zu vermeiden |
+|---|---|---|
+| **Mandat** | das Objekt (Patient + Angehörige samt Beziehung) | Fall, „Onboarding" als Objektname |
+| **Onboarding** | die Phase eines Mandats | — |
+| **Pendenz** | die Aufgabe | Ticket |
+| **Anheften** | eine Notiz in der Liste sichtbar machen | „In Liste anzeigen", „In Liste sichtbar" |
 
 ---
 
