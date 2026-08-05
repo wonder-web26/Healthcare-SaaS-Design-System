@@ -370,9 +370,9 @@ export function ServiceDeskPage() {
   const statusZelle = (e: UnifiedEntry) => {
     const c = STATUS_ZELL_CFG[e.status] || STATUS_ZELL_CFG.offen;
     return (
-      <span className="inline-flex items-center" style={{ gap: 6, whiteSpace: "nowrap" }}>
+      <span className="inline-flex items-center" style={{ gap: 6, maxWidth: "100%", minWidth: 0 }}>
         <span style={{ width: 6, height: 6, borderRadius: "var(--radius-pill)", background: c.dot, flexShrink: 0 }} />
-        <span style={{ fontSize: "var(--text-small)", color: c.color, fontWeight: c.weight }}>{STATUS_LABEL[e.status]}</span>
+        <span title={STATUS_LABEL[e.status]} style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "var(--text-small)", color: c.color, fontWeight: c.weight }}>{STATUS_LABEL[e.status]}</span>
       </span>
     );
   };
@@ -430,17 +430,19 @@ export function ServiceDeskPage() {
     </div>
   );
 
-  // Anteil 0 = feste Spalte (bleibt bei ihrer Mindestbreite); nur die Beschreibung
-  // ist elastisch (Anteil 1) und erhält die verbleibende Breite.
+  // Feste Spalten: maxSpur = minCh (kein Wachstum). Elastisch sind Betreff und
+  // Person (wachsen, absorbieren Überschuss zu gleichen Teilen); die Beschreibung
+  // ist auf 34 ch gedeckelt. Kein fr → die Tabelle maximiert die wachsenden Spuren.
+  // Spaltenfall (abwerfRang, kleinster zuerst): Beschreibung, dann Art, dann Zuständig.
   const spalten: SpalteDef<UnifiedEntry>[] = [
     { id: "kennzeichen", label: "", festBreitePx: 24, align: "center", ausKarte: true, render: kennzeichenIcon },
-    { id: "art", label: "Art", anteil: 0, minCh: 14, align: "left", render: artZelle },
-    { id: "betreff", label: "Betreff", anteil: 0, minCh: 20, align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
-    { id: "status", label: "Status", anteil: 0, minCh: 11, align: "left", render: statusZelle },
-    { id: "person", label: "Person", anteil: 0, minCh: 18, align: "left", sortierbar: true, render: personZelle },
-    { id: "beschreibung", label: "Beschreibung", anteil: 1, minCh: 10, align: "left", render: beschreibungZelle },
-    { id: "faellig", label: "Fällig", anteil: 0, minCh: 13, align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
-    { id: "zustaendig", label: "Zuständig", anteil: 0, minCh: 4, align: "center", sortierbar: true, render: zustaendigZelle },
+    { id: "art", label: "Art", minCh: 14, maxSpur: "14ch", abwerfRang: 2, align: "left", render: artZelle },
+    { id: "betreff", label: "Betreff", minCh: 20, maxSpur: "80ch", align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
+    { id: "status", label: "Status", minCh: 13, maxSpur: "13ch", align: "left", render: statusZelle },
+    { id: "person", label: "Person", minCh: 18, maxSpur: "80ch", align: "left", sortierbar: true, render: personZelle },
+    { id: "beschreibung", label: "Beschreibung", minCh: 10, maxSpur: "34ch", abwerfRang: 1, align: "left", render: beschreibungZelle },
+    { id: "faellig", label: "Fällig", minCh: 13, maxSpur: "13ch", align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
+    { id: "zustaendig", label: "Zuständig", minCh: 4, maxSpur: "4ch", abwerfRang: 3, align: "center", sortierbar: true, render: zustaendigZelle },
   ];
 
   // Flächentönung ausschliesslich für Dringlichkeit (rot kräftiger als gelb) bzw.
