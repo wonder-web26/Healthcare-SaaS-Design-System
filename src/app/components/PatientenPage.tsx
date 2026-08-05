@@ -250,7 +250,7 @@ export function PatientenPage() {
         <button onClick={e => { e.stopPropagation(); setStatusModal({ open: true, patient: p }); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: st.bg, color: st.color, border: "none", fontFamily: "inherit", whiteSpace: "nowrap" }}>
           <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: st.dot }} />{st.label}
         </button>); } },
-    { id: "schweregrad", label: "Schweregrad", anteil: 7, minCh: 9, align: "left", sortierbar: true,
+    { id: "schweregrad", label: "Schweregrad", anteil: 7, minCh: 12, align: "left", sortierbar: true,
       render: p => { const sg = SCHWEREGRAD_STYLE[p.schweregrad] || SCHWEREGRAD_STYLE.leicht; return <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: sg.bg, color: sg.color, whiteSpace: "nowrap" }}>{sg.label}</span>; } },
     { id: "pflegefachkraft", label: "Pflegefachkraft", anteil: 11, minCh: 15, align: "left",
       render: p => { const isUn = p.pflegefachkraft === "—"; return (
@@ -269,7 +269,7 @@ export function PatientenPage() {
       ) : (
         <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", color: "var(--status-success-text)", fontWeight: "var(--weight-medium)" }}><CheckCircle2 style={{ width: 12, height: 12 }} /> Aktuell</span>
       ) },
-    { id: "reassessment", label: "Re-Assessment", anteil: 8, minCh: 11, align: "right", sortierbar: true,
+    { id: "reassessment", label: "Re-Assessment", anteil: 8, minCh: 13, align: "right", sortierbar: true,
       render: p => p.reAssessmentTage !== null ? (
         <div className="flex items-center justify-end" style={{ gap: 6 }}>
           <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-semibold)", fontVariantNumeric: "tabular-nums", color: p.reAssessmentTage <= 14 ? "var(--status-danger)" : p.reAssessmentTage <= 30 ? "var(--status-warning-text)" : "var(--text-primary)" }}>{p.reAssessmentTage}d</span>

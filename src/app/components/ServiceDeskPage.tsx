@@ -439,9 +439,9 @@ export function ServiceDeskPage() {
     { id: "betreff", label: "Betreff", minCh: 20, maxSpur: "40ch", align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
     { id: "status", label: "Status", minCh: 16, maxSpur: "16ch", align: "left", render: statusZelle },
     { id: "person", label: "Person", minCh: 18, maxSpur: "34ch", align: "left", sortierbar: true, render: personZelle },
-    { id: "beschreibung", label: "Beschreibung", minCh: 10, maxSpur: "34ch", abwerfRang: 1, align: "left", render: beschreibungZelle },
+    { id: "beschreibung", label: "Beschreibung", minCh: 13, maxSpur: "34ch", abwerfRang: 1, align: "left", render: beschreibungZelle },
     { id: "faellig", label: "Fällig", minCh: 13, maxSpur: "14ch", align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
-    { id: "zustaendig", label: "Zuständig", minCh: 4, maxSpur: "5ch", abwerfRang: 3, align: "center", sortierbar: true, render: zustaendigZelle },
+    { id: "zustaendig", label: "Zuständig", minCh: 10, maxSpur: "11ch", abwerfRang: 3, align: "center", sortierbar: true, render: zustaendigZelle },
   ];
 
   // Flächentönung ausschliesslich für Dringlichkeit (rot kräftiger als gelb) bzw.
