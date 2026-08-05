@@ -257,17 +257,10 @@ const HUBER_KLV: KLVVerordnung = {
    — kein Eintrag nötig, Listen sind einfach leer
    ══════════════════════════════════════════ */
 
-/* ══════════════════════════════════════════
-   SZENARIO 4: Walter Frei (abgebrochenes OB)
-   ══════════════════════════════════════════ */
-
-const FREI_BA: InterRAIAssessment = {
-  id: "BA-2026-030", onboardingId: "OB-2026-011", patientId: null,
-  patientName: "Frei, Walter", typ: "erstassessment", status: "in-bearbeitung",
-  durchgefuehrtVon: "Laura Brunner", startDatum: "15.02.2026", abschlussDatum: null,
-  erfassungsgrad: 12, items: DEMO_ITEMS.slice(0, 4).map(i => ({ ...i, id: `item-${i.code}-BA-2026-030`, assessmentId: "BA-2026-030", validiert: false, status: "teilweise" as const })),
-  getriggerteCaps: [], outcomeScales: [],
-};
+/* SZENARIO 4 (Walter Frei, abgebrochenes OB) entfernt: hing an der Kennung
+   OB-2026-011, die es im Fallverzeichnis nicht gibt und die über die
+   Oberfläche nicht erreichbar war. Kein Fall der Liste trägt den Status
+   "abgebrochen", ein Umhängen wäre Erfindung gewesen. */
 
 /* ══════════════════════════════════════════
    WORKFLOW / ACTION PLAN (persistiert)
@@ -475,7 +468,7 @@ const STEINER_KLV: KLVVerordnung = {
    COLLECTED EXPORTS
    ══════════════════════════════════════════ */
 
-export const MOCK_ASSESSMENTS: InterRAIAssessment[] = [ANNA_BA, ANNA_RE, HUBER_BA, FREI_BA, STEINER_BA];
+export const MOCK_ASSESSMENTS: InterRAIAssessment[] = [ANNA_BA, ANNA_RE, HUBER_BA, STEINER_BA];
 export const MOCK_PFLEGEPLANUNGEN: Pflegeplanung[] = [ANNA_PP, HUBER_PP, STEINER_PP];
 export const MOCK_KLV_VERORDNUNGEN: KLVVerordnung[] = [ANNA_KLV, HUBER_KLV, STEINER_KLV];
 export const MOCK_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [...ANNA_ARZT_DIAGNOSEN, ...HUBER_ARZT_DIAGNOSEN, ...STEINER_ARZT_DIAGNOSEN];

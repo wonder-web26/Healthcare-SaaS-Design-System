@@ -130,20 +130,6 @@ function phasenZustand(f: { isCompleted: boolean; isInProgress: boolean; isBlock
 }
 
 /* ══════════════════════════════════════════
-   CASE LOOKUP (mock) — maps caseId to patient context
-   ══════════════════════════════════════════ */
-const onboardingCaseLookup: Record<string, { patient: string; patientId: string; angehoeriger: string; vertragDatum: string }> = {
-  "OB-2026-001": { patient: "Schmid, Thomas", patientId: "P-2026-0042", angehoeriger: "Lisa Schmid", vertragDatum: "18.02.2026" },
-  "OB-2026-002": { patient: "Hoffmann, Peter", patientId: "P-2026-0046", angehoeriger: "Ruth Hoffmann", vertragDatum: "20.02.2026" },
-  "OB-2026-003": { patient: "Becker, Sabine", patientId: "P-2026-0045", angehoeriger: "Hans Becker", vertragDatum: "10.02.2026" },
-  "OB-2026-004": { patient: "Steiner, Heinrich", patientId: "P-2026-0048", angehoeriger: "Ursula Steiner", vertragDatum: "05.02.2026" },
-  "OB-2026-008": { patient: "Graf, Lena", patientId: "P-2026-0051", angehoeriger: "Martin Graf", vertragDatum: "24.02.2026" },
-  "OB-2026-009": { patient: "Huber, Fritz", patientId: "P-2026-0052", angehoeriger: "Erika Huber", vertragDatum: "15.02.2026" },
-  "OB-2026-010": { patient: "Ammann, Rosa", patientId: "P-2026-0053", angehoeriger: "Daniel Ammann", vertragDatum: "26.02.2026" },
-  "OB-2026-011": { patient: "Frei, Walter", patientId: "P-2026-0054", angehoeriger: "Margrit Frei", vertragDatum: "12.02.2026" },
-};
-
-/* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
 /**
@@ -207,7 +193,17 @@ export function OnboardingPage() {
   const { caseId } = useParams<{ caseId: string }>();
   const [searchParams] = useSearchParams();
   const isExisting = !!caseId;
-  const caseInfo = caseId ? onboardingCaseLookup[caseId] : null;
+
+  /* ── Fallkontext aus dem EINEN Fallverzeichnis (lib/onboarding/faelle.ts).
+     Zuvor lag daneben ein zweites Verzeichnis mit eigenen Kennungen, das nie
+     traf; es ist entfernt. `fall` ist ab hier die Quelle für Kopfzeile,
+     Vertragsschritt, Abschlussdialog und Notizspur.
+     Schreibweise "Nachname, Vorname" wie in der Liste; der Angehörigenname
+     steht im Verzeichnis bereits in Anzeigeform. ── */
+  const fall = fallById(caseId);
+  const caseInfo = fall
+    ? { patient: `${fall.patientNachname}, ${fall.patientVorname}`, angehoeriger: fall.angehoeriger }
+    : null;
 
   const [currentStep, setCurrentStep] = useState(1);
   const [visitedSteps, setVisitedSteps] = useState<Set<number>>(new Set([1]));
@@ -367,7 +363,7 @@ export function OnboardingPage() {
      angehoeriger/spezialbewilligung → Angehörige, patient → Patient, vertrag →
      keiner Einzelperson zugeordnet, daher keine Spur. Ohne Fall (z. B. 001er-
      Demofälle ohne Kennungen) bleibt die Spur aus. ── */
-  const notizFall = fallById(caseId);
+  const notizFall = fall;
   const notizPerson: { referenz: NotizReferenz; name: string } | null = (() => {
     if (!notizFall) return null;
     const k = activeStepData.key;
@@ -567,9 +563,8 @@ export function OnboardingPage() {
             <span style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere", minWidth: 0 }}>
               {/* Titel = Patientenname aus der Fallquelle (Schreibweise der Liste: Nachname, Vorname),
                   zur Anzeigezeit aufgelöst; zeigt immer den Patienten (auch im Angehörigen-Schritt).
-                  Rückfall auf den alten Fall-Lookup, sonst die Neuanlage-Beschriftung. */}
-              {notizFall ? `${notizFall.patientNachname}, ${notizFall.patientVorname}`
-                : isExisting && caseInfo ? caseInfo.patient : "Neues Mandat eröffnen"}
+                  Ohne Fall — Neuanlage oder unbekannte Kennung — die Neuanlage-Beschriftung. */}
+              {caseInfo ? caseInfo.patient : "Neues Mandat eröffnen"}
             </span>
             {caseId ? (
               <DropdownMenu>

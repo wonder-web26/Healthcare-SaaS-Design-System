@@ -195,14 +195,8 @@ function initDemo() {
     patientId: "P-2026-0041",
   });
 
-  // Walter Frei — mandate in onboarding, not yet converted
-  persons.set("PERS-003", {
-    id: "PERS-003",
-    vorname: "Walter",
-    nachname: "Frei",
-    zustand: "mandat",
-    onboardingId: "OB-2026-011",
-  });
+  // Walter Frei entfernt — hing an OB-2026-011, einer Kennung ausserhalb des
+  // Fallverzeichnisses. Seine Bedarfsabklärung BA-2026-030 ist mit entfallen.
 
   // Register conversation
   gespraeche.set("GES-HUBER-001", GESPRAECH_HUBER);
