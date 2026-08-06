@@ -1,6 +1,22 @@
-import React, { useState, useCallback, useRef, useLayoutEffect } from "react";
+import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
 import { useParams, useNavigate } from "react-router";
 import { AnnaPatientSummary } from "../anna/AnnaPatientSummary";
+import { InlineSelect } from "./ui/InlineSelect";
+import { KRANKENKASSEN_OPTIONS, getKrankenkasseLabel } from "../../lib/stammdaten/krankenkassen";
+import {
+  MANDATSART_OPTIONS, GESETZESGRUNDLAGE_OPTIONS, MANDATSGRUND_OPTIONS,
+  mandatsartLabel, gesetzesgrundlageLabel, mandatsgrundLabel,
+} from "../../lib/stammdaten/mandat";
+import {
+  TARIF_KATEGORIEN, tarifgrundlage, normkosten, chf,
+} from "../../lib/stammdaten/pflegetarife";
+import {
+  istAktiv, m1FehlendeVersicherung, m2Ueberschneidungen, m3VerknuepfungFehlt, type Mandat,
+} from "../../lib/mandate/mandate";
+import {
+  useMandate, aktualisiereMandat, verknuepftePatienten, MANDAT_STICHTAG,
+} from "../../lib/mandate/store";
+import { getAngehoerige } from "../../lib/angehoerige/store";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
 import { isoZuAnzeige, anzeigeZuIso, formatAnzeige, formatDatumZeit } from "../../lib/datum";
 import {
@@ -620,7 +636,7 @@ function Patient360Inhalt() {
    dieselbe Liste für ihre Marke "bald".
    ══════════════════════════════════════════ */
 const ANSICHT_HAT_INHALT: Record<string, true> = {
-  ueberblick: true, beziehungen: true, "interrai-hc": true, atl: true, anamnese: true,
+  ueberblick: true, beziehungen: true, mandate: true, "interrai-hc": true, atl: true, anamnese: true,
   pflegeplan: true, vitalwerte: true, betreuungsrhythmus: true,
   leistungsplanungsblatt: true, "verordnung-und-kostengutsprache": true,
   stempelkontrolle: true, dokumente: true, pendenzen: true, verlauf: true,
@@ -668,6 +684,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
         </>
       );
     case "beziehungen": return <AnsichtBeziehungen patient={patient} />;
+    case "mandate": return <AnsichtMandate patient={patient} />;
     case "interrai-hc": return <TabInterRAI patientId={patient.id} patientName={`${patient.nachname}, ${patient.vorname}`} navigate={navigate} />;
     case "atl": return <TabATL patient={patient} />;
     case "anamnese": return <TabAnamnese patient={patient} />;
@@ -2169,6 +2186,311 @@ function TabWorkflow({ patient }: { patient: Patient }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   ANSICHT: Leistungen › Mandate
+
+   Das Mandat ist die Abrechnungsbeziehung — wer zahlt, nach welchem Gesetz,
+   aus welchem Grund, in welchem Zeitraum. Drei Karten: aktives Mandat,
+   Finanzierung je Pflegestunde, beendete Mandate.
+   ══════════════════════════════════════════ */
+function AnsichtMandate({ patient }: { patient: Patient }) {
+  const navigate = useNavigate();
+  const alle = useMandate();
+  const eigene = alle.filter(m => m.patientId === patient.id);
+  const aktive = eigene.filter(m => istAktiv(m, MANDAT_STICHTAG));
+  const beendete = eigene.filter(m => !istAktiv(m, MANDAT_STICHTAG));
+  const ueberschneidend = m2Ueberschneidungen(alle, MANDAT_STICHTAG);
+
+  if (aktive.length === 0) {
+    return (
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-6)" }}>
+        <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Mandate</h3>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 6, maxWidth: 560 }}>
+          Noch kein Mandat erfasst. Ohne Abrechnungsbeziehung lässt sich weder
+          eine Finanzierung noch eine Verordnung zuordnen.
+        </p>
+        <div style={{ marginTop: 14 }}>
+          <AppButton variant="primaer" icon={Plus}>Mandat erfassen</AppButton>
+        </div>
+        {beendete.length > 0 && <div style={{ marginTop: 16 }}><MandatBeendete mandate={beendete} /></div>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {aktive.map(m => (
+        <MandatAktiv
+          key={m.id}
+          mandat={m}
+          patient={patient}
+          ueberschneidet={ueberschneidend.has(m.id)}
+          navigate={navigate}
+        />
+      ))}
+      <MandatFinanzierung kanton={patient.kanton} />
+      {beendete.length > 0 && <MandatBeendete mandate={beendete} />}
+    </div>
+  );
+}
+
+/* ── Karte 1: aktives Mandat, direkt bearbeitbar ───────────────────────────── */
+function MandatAktiv({ mandat, patient, ueberschneidet, navigate }: {
+  mandat: Mandat;
+  patient: Patient;
+  ueberschneidet: boolean;
+  navigate: (p: string) => void;
+}) {
+  const [bearbeitet, setBearbeitet] = useState(false);
+  const [entwurf, setEntwurf] = useState(mandat);
+  useEffect(() => { if (!bearbeitet) setEntwurf(mandat); }, [mandat, bearbeitet]);
+
+  const istVersichert = entwurf.mandatsart === "versichert";
+  const fehlend = m1FehlendeVersicherung(entwurf);
+  const angehoerigeOhneBezug = m3VerknuepfungFehlt(entwurf, verknuepftePatienten);
+
+  const speichern = () => {
+    const { id: _id, patientId: _p, ...felder } = entwurf;
+    aktualisiereMandat(mandat.id, felder);
+    setBearbeitet(false);
+  };
+  const verwerfen = () => { setEntwurf(mandat); setBearbeitet(false); };
+  const setzeFeld = <K extends keyof Mandat>(k: K, v: Mandat[K]) => setEntwurf(e => ({ ...e, [k]: v }));
+
+  const angehoerigerName = (id: string) => {
+    const a = getAngehoerige().find(x => x.id === id);
+    return a ? `${a.vorname} ${a.nachname}` : "";
+  };
+
+  return (
+    <PSectionCard
+      title={`Aktives Mandat · ${mandat.id}`}
+      icon={FileText}
+      editable
+      editing={bearbeitet}
+      onEdit={() => setBearbeitet(true)}
+      onCancel={verwerfen}
+      onSave={speichern}
+    >
+      {ueberschneidet && (
+        <div className="flex items-start" style={{ gap: 8, marginBottom: 14, padding: "10px 12px", borderRadius: 10, background: "var(--status-warning-bg)" }}>
+          <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
+          <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+            Ein weiteres aktives Mandat mit derselben Gesetzesgrundlage überschneidet
+            sich zeitlich mit diesem. Bitte prüfen — gesperrt wird nichts.
+          </span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <MandatFeld label="Patient" wert={`${patient.nachname}, ${patient.vorname}`} />
+        <MandatAuswahl label="Mandatsart" wert={entwurf.mandatsart} optionen={MANDATSART_OPTIONS}
+          anzeige={mandatsartLabel(entwurf.mandatsart)} bearbeitet={bearbeitet}
+          onChange={v => setzeFeld("mandatsart", v as Mandat["mandatsart"])} />
+        <MandatAuswahl label="Gesetzesgrundlage" wert={entwurf.gesetzesgrundlage} optionen={GESETZESGRUNDLAGE_OPTIONS}
+          anzeige={gesetzesgrundlageLabel(entwurf.gesetzesgrundlage)} bearbeitet={bearbeitet}
+          onChange={v => setzeFeld("gesetzesgrundlage", v as Mandat["gesetzesgrundlage"])} />
+        <MandatAuswahl label="Grund" wert={entwurf.grund} optionen={MANDATSGRUND_OPTIONS}
+          anzeige={mandatsgrundLabel(entwurf.grund)} bearbeitet={bearbeitet}
+          onChange={v => setzeFeld("grund", v as Mandat["grund"])} />
+
+        {istVersichert && (
+          <>
+            <MandatAuswahl label="Versicherer *" wert={entwurf.versicherer} optionen={KRANKENKASSEN_OPTIONS}
+              anzeige={getKrankenkasseLabel(entwurf.versicherer)} bearbeitet={bearbeitet}
+              fehler={fehlend.includes("versicherer") ? "Bei einer Versichertenleistung erforderlich." : undefined}
+              onChange={v => setzeFeld("versicherer", v)} />
+            <MandatText label="Policennummer *" wert={entwurf.policennummer} bearbeitet={bearbeitet}
+              fehler={fehlend.includes("policennummer") ? "Bei einer Versichertenleistung erforderlich." : undefined}
+              onChange={v => setzeFeld("policennummer", v)} />
+          </>
+        )}
+        <MandatText label="Fallnummer der Kasse" wert={entwurf.fallnummerKasse} bearbeitet={bearbeitet}
+          onChange={v => setzeFeld("fallnummerKasse", v)} />
+        <MandatText label="Beginn" wert={entwurf.beginn} bearbeitet={bearbeitet}
+          onChange={v => setzeFeld("beginn", v)} />
+        <MandatText label="Ende" wert={entwurf.ende} bearbeitet={bearbeitet}
+          onChange={v => setzeFeld("ende", v)} />
+        <MandatFeld label="Zuständige Person" wert={entwurf.zustaendigePerson} />
+        {/* Ohne abgerechnete Angehörige bleibt die Zeile leer — kein Platzhalter. */}
+        <MandatFeld label="Abgerechnete Angehörige" wert={angehoerigerName(entwurf.abgerechneteAngehoerige)} />
+      </div>
+
+      {angehoerigeOhneBezug && (
+        <div className="flex items-start" style={{ gap: 8, marginTop: 14, padding: "10px 12px", borderRadius: 10, background: "var(--status-warning-bg)" }}>
+          <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
+          <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+            Zwischen dieser angehörigen Person und dem Patienten besteht keine
+            Verknüpfung.{" "}
+            <button type="button" onClick={() => navigate(`/angehoerige/${entwurf.abgerechneteAngehoerige}`)}
+              className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "inherit", color: "inherit", textDecoration: "underline" }}>
+              Angehörigendossier öffnen
+            </button>
+          </span>
+        </div>
+      )}
+    </PSectionCard>
+  );
+}
+
+/* ── Feldbausteine der Mandatskarte ────────────────────────────────────────── */
+function MandatFeld({ label, wert }: { label: string; wert: string }) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>{label}</div>
+      <div className="text-[13px] text-foreground" style={{ fontWeight: 400, minHeight: 19 }}>{wert}</div>
+    </div>
+  );
+}
+
+function MandatText({ label, wert, bearbeitet, onChange, fehler }: {
+  label: string; wert: string; bearbeitet: boolean; onChange: (v: string) => void; fehler?: string;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>{label}</div>
+      {bearbeitet ? (
+        <input value={wert} onChange={e => onChange(e.target.value)}
+          className="w-full outline-none"
+          style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", background: "var(--bg-elevated)", border: `var(--border-thin) solid ${fehler ? "var(--status-danger)" : "var(--border-default)"}`, borderRadius: 8, padding: "6px 9px", fontFamily: "inherit" }} />
+      ) : (
+        <div className="text-[13px] text-foreground" style={{ fontWeight: 400, minHeight: 19 }}>{wert}</div>
+      )}
+      {fehler && <div style={{ fontSize: "var(--text-micro)", color: "var(--status-danger)", marginTop: 3 }}>{fehler}</div>}
+    </div>
+  );
+}
+
+function MandatAuswahl({ label, wert, anzeige, optionen, bearbeitet, onChange, fehler }: {
+  label: string; wert: string; anzeige: string;
+  optionen: { value: string; label: string }[];
+  bearbeitet: boolean; onChange: (v: string) => void; fehler?: string;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>{label}</div>
+      {bearbeitet ? (
+        <InlineSelect value={wert} onChange={onChange} options={optionen} />
+      ) : (
+        <div className="text-[13px] text-foreground" style={{ fontWeight: 400, minHeight: 19 }}>{anzeige}</div>
+      )}
+      {fehler && <div style={{ fontSize: "var(--text-micro)", color: "var(--status-danger)", marginTop: 3 }}>{fehler}</div>}
+    </div>
+  );
+}
+
+/* ── Karte 2: Finanzierung je Pflegestunde ─────────────────────────────────── */
+function MandatFinanzierung({ kanton }: { kanton: string }) {
+  const grundlage = tarifgrundlage(kanton);
+
+  if (!grundlage) {
+    return (
+      <PSectionCard title="Finanzierung je Pflegestunde" icon={Shield}>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", maxWidth: 560 }}>
+          Für den Kanton {kanton || "—"} sind keine Tarife hinterlegt. Die
+          Aufteilung wird deshalb nicht gezeigt — sie würde sonst Beträge eines
+          fremden Kantons ausweisen.
+        </p>
+      </PSectionCard>
+    );
+  }
+
+  const spalten = TARIF_KATEGORIEN.map(k => ({ ...k, b: grundlage.betraege[k.code] }));
+
+  return (
+    <PSectionCard title="Finanzierung je Pflegestunde" icon={Shield}>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
+          <thead>
+            <tr>
+              <th style={mandatKopf}>Zahler</th>
+              <th style={mandatKopf}>Grundlage</th>
+              {spalten.map(s => <th key={s.code} style={{ ...mandatKopf, textAlign: "right" }}>{s.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style={mandatZelle}>Krankenversicherer</td>
+              <td style={mandatGrundlage}>Art. 7a KLV</td>
+              {spalten.map(s => <td key={s.code} style={mandatZahl}>{chf(s.b.okp)}</td>)}
+            </tr>
+            <tr>
+              <td style={mandatZelle}>Kanton und Gemeinde</td>
+              <td style={mandatGrundlage}>Art. 25a Abs. 5 KVG</td>
+              {spalten.map(s => <td key={s.code} style={mandatZahl}>{chf(s.b.restfinanzierung)}</td>)}
+            </tr>
+            {/* Die Patientenbeteiligung ist EIN Tagesbetrag über alle Kategorien,
+                nicht drei kategorienabhängige Beträge — deshalb eine Zeile mit
+                einer Zahl statt drei Spaltenwerten. */}
+            <tr>
+              <td style={mandatZelle}>Patientin oder Patient</td>
+              <td style={mandatGrundlage}>Art. 25a Abs. 5 KVG</td>
+              <td style={{ ...mandatZahl, textAlign: "right" }} colSpan={spalten.length}>
+                {chf(grundlage.patientenbeteiligungProTag)} je Tag über alle Kategorien
+              </td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td style={{ ...mandatFuss, fontWeight: 500 }}>Normkosten</td>
+              <td style={mandatFuss} />
+              {spalten.map(s => (
+                <td key={s.code} style={{ ...mandatFuss, textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>
+                  {chf(normkosten(s.b))}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 10 }}>
+        Kanton {grundlage.kanton} · gültig ab {grundlage.gueltigAb} · Beträge in CHF je Pflegestunde
+      </div>
+    </PSectionCard>
+  );
+}
+
+const mandatKopf: React.CSSProperties = {
+  textAlign: "left", padding: "6px 10px", fontSize: "var(--text-micro)",
+  color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em",
+  fontWeight: 500, borderBottom: "var(--border-thin) solid var(--border-default)",
+};
+const mandatZelle: React.CSSProperties = { padding: "8px 10px", fontSize: "var(--text-small)", color: "var(--text-primary)" };
+const mandatGrundlage: React.CSSProperties = { padding: "8px 10px", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" };
+const mandatZahl: React.CSSProperties = { padding: "8px 10px", fontSize: "var(--text-small)", color: "var(--text-primary)", textAlign: "right", fontVariantNumeric: "tabular-nums" };
+const mandatFuss: React.CSSProperties = { padding: "8px 10px", fontSize: "var(--text-small)", color: "var(--text-primary)", borderTop: "var(--border-thin) solid var(--border-default)" };
+
+/* ── Karte 3: beendete Mandate ─────────────────────────────────────────────── */
+function MandatBeendete({ mandate }: { mandate: Mandat[] }) {
+  return (
+    <PSectionCard title="Beendete Mandate" icon={History}>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
+          <thead>
+            <tr>
+              {["Mandat", "Art", "Grundlage", "Grund", "Beginn", "Ende"].map(h => (
+                <th key={h} style={mandatKopf}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {mandate.map(m => (
+              <tr key={m.id}>
+                <td style={{ ...mandatZelle, fontVariantNumeric: "tabular-nums" }}>{m.id}</td>
+                <td style={mandatZelle}>{mandatsartLabel(m.mandatsart)}</td>
+                <td style={mandatZelle}>{gesetzesgrundlageLabel(m.gesetzesgrundlage)}</td>
+                <td style={mandatZelle}>{mandatsgrundLabel(m.grund)}</td>
+                <td style={mandatZelle}>{m.beginn}</td>
+                <td style={mandatZelle}>{m.ende}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </PSectionCard>
   );
 }
 
