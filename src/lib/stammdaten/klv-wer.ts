@@ -11,22 +11,34 @@
  *
  * Gespeichert wird der Code, nie die Beschriftung.
  *
+ * BEWUSSTE ABWEICHUNG VOM SPITEX-LEISTUNGSKATALOG
+ * -----------------------------------------------
+ * Der Katalog führt vier Werte: S Spitex, I Informelles Netz, A Andere
+ * Anbieter, V Verweigerung.
+ *
+ * Im Leistungsplanungsblatt stehen ausschliesslich abrechenbare Leistungen.
+ * `A` und `V` sind dort deshalb nicht möglich und entfallen aus der
+ * Werteliste. `I` bezeichnet in diesem Betriebsmodell die bei der Spitex
+ * ANGESTELLTE angehörige Person und heisst darum «Angehöriger».
+ *
+ * Die Codes `S` und `I` bleiben standardkonform — abgewichen wird nur bei der
+ * Beschriftung von `I` und beim Umfang der Liste. Ein späterer Abgleich mit
+ * dem Katalog bleibt damit über den Code möglich.
+ *
  * Dieser Lauf erfasst und zeigt die Angabe. Er wertet sie nicht aus:
  * Abrechenbarkeit, Mindestqualifikation und Leistungsbeschränkungen nach
  * Ziffer 1.2 des Administrativvertrags sind eigene Läufe.
  */
 import { type SdaWert } from "./sda-wert";
 
-export type KlvWerCode = "S" | "I" | "A" | "V";
+export type KlvWerCode = "S" | "I";
 
 /** Vorbelegung neuer Positionen laut Handbuch. */
 export const KLV_WER_STANDARD: KlvWerCode = "S";
 
 export const KLV_WER: SdaWert[] = [
   { code: "S", label: "Spitex" },
-  { code: "I", label: "Informelles Netz" },
-  { code: "A", label: "Andere Anbieter" },
-  { code: "V", label: "Verweigerung" },
+  { code: "I", label: "Angehöriger" },
 ];
 
 export const KLV_WER_OPTIONS = KLV_WER.map(w => ({ value: w.code, label: w.label }));

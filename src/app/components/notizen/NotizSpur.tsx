@@ -158,7 +158,7 @@ export function NotizSpur({ referenz, personName }: { referenz: NotizReferenz; p
   const sicht = useMemo(() => sichtbareNotizen(alle, referenz), [alle, referenz]);
 
   const [text, setText] = useState("");
-  const [inListe, setInListe] = useState(false);
+  const [angeheftet, setAngeheftet] = useState(false);
   const [eingeklappt, setEingeklappt] = useState(true);
   const [suche, setSuche] = useState("");
   const [geloescht, setGeloescht] = useState<string | null>(null);
@@ -169,13 +169,13 @@ export function NotizSpur({ referenz, personName }: { referenz: NotizReferenz; p
   useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
 
   const anzahl = sicht.length;
-  const maxLen = inListe ? NOTIZ_MAX_ANGEHEFTET : undefined;
+  const maxLen = angeheftet ? NOTIZ_MAX_ANGEHEFTET : undefined;
 
   const sichern = () => {
     const t = text.trim();
     if (!t) return;
-    notizErstellen(referenz, inListe ? t.slice(0, NOTIZ_MAX_ANGEHEFTET) : t, AKTUELLER_AUTOR, inListe);
-    setText(""); setInListe(false);
+    notizErstellen(referenz, angeheftet ? t.slice(0, NOTIZ_MAX_ANGEHEFTET) : t, AKTUELLER_AUTOR, angeheftet);
+    setText(""); setAngeheftet(false);
   };
 
   const loeschen = (id: string) => {
@@ -203,12 +203,10 @@ export function NotizSpur({ referenz, personName }: { referenz: NotizReferenz; p
           className="w-full outline-none" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: 8, padding: "7px 9px", resize: "vertical", fontFamily: "inherit" }} />
         <div className="flex items-center" style={{ gap: 6, marginTop: 5, flexWrap: "wrap" }}>
           <label className="inline-flex items-center cursor-pointer" style={{ gap: 5, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-            <input type="checkbox" checked={inListe} onChange={e => setInListe(e.target.checked)} style={{ width: 13, height: 13, accentColor: "var(--brand-primary)", cursor: "pointer" }} />
+            <input type="checkbox" checked={angeheftet} onChange={e => setAngeheftet(e.target.checked)} style={{ width: 13, height: 13, accentColor: "var(--brand-primary)", cursor: "pointer" }} />
             Anheften
           </label>
-          {/* Erläuterung, keine zweite Beschriftung: Sekundärfarbe, kleinere Schrift */}
-          <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>· erscheint in der Liste</span>
-          {inListe && text.length >= NOTIZ_ZAEHLER_AB && (
+          {angeheftet && text.length >= NOTIZ_ZAEHLER_AB && (
             <span style={{ fontSize: "var(--text-micro)", color: text.length >= NOTIZ_MAX_ANGEHEFTET ? "var(--status-warning-text)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{text.length}/{NOTIZ_MAX_ANGEHEFTET}</span>
           )}
           <button type="button" onClick={sichern} disabled={!text.trim()} className="ui-fokusring cursor-pointer" style={{ marginLeft: "auto", padding: "4px 12px", borderRadius: "var(--radius-pill)", background: text.trim() ? "var(--brand-primary)" : "var(--bg-secondary)", color: text.trim() ? "var(--text-on-dark)" : "var(--text-tertiary)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", border: "none", fontFamily: "inherit", cursor: text.trim() ? "pointer" : "default" }}>Sichern</button>

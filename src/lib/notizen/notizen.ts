@@ -36,7 +36,7 @@ export interface Notiz {
   autor: string;              // Kurzname aus den Mock-Benutzern (z. B. "M. Keller")
   erstelltAm: string;         // ISO-Zeitstempel
   geaendertAm: string | null; // leer, solange unverändert
-  angeheftet: boolean;        // "Anheften" (erscheint in der Liste)
+  angeheftet: boolean;        // "Anheften" — wirkt nur in der Notizspur der Person
   geloeschtAm: string | null; // gesetzt = gelöscht; Eintrag bleibt bestehen
 }
 
@@ -63,10 +63,9 @@ export function sichtbareNotizen(alle: Notiz[], ref: NotizReferenz): Notiz[] {
     });
 }
 
-/** Die angeheftete, sichtbare Notiz der Person — oder null. */
-export function angehefteteNotiz(alle: Notiz[], ref: NotizReferenz): Notiz | null {
-  return sichtbareNotizen(alle, ref).find(n => n.angeheftet) ?? null;
-}
+/* `angehefteteNotiz(alle, ref)` ist entfallen: die einzige Aufrufstelle war das
+   Kennzeichen in der Onboarding-Liste. Innerhalb der Notizspur wird die
+   angeheftete Notiz direkt aus der bereits gefilterten Sicht gelesen. */
 
 /** Neue Notiz voranstellen (unveränderte Eingabeliste). */
 export function mitNeuerNotiz(

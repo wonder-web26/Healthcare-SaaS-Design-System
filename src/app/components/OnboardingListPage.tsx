@@ -1,12 +1,10 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Plus, Search, AlertTriangle, X, ChevronDown, Check, Pin } from "lucide-react";
+import { Plus, Search, AlertTriangle, X, ChevronDown, Check } from "lucide-react";
 import { ANZAHL_SCHRITTE, schrittLabel, phaseFuerSchritt, phaseRang, PHASE_LABEL, type OnboardingPhase, ableitenKennzeichen, tageBisStart, istVertragUnterzeichnet } from "../../lib/onboarding/schritte";
 import { isoZuAnzeige } from "../../lib/datum";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
-import { type OnboardingFall as OnboardingCase, onboardingFaelle as cases, patientRef, angehoerigerRef } from "../../lib/onboarding/faelle";
-import { useAlleNotizen } from "../../lib/notizen/store";
-import { angehefteteNotiz } from "../../lib/notizen/notizen";
+import { type OnboardingFall as OnboardingCase, onboardingFaelle as cases } from "../../lib/onboarding/faelle";
 
 /* ── Bezugsdatum (Mock-Demo, entspricht der Vorgabe): alle Ableitungen laufen
    gegen diesen Stichtag statt gegen new Date(), damit die Liste deterministisch
@@ -134,12 +132,8 @@ function AuswahlDropdown({ label, optionen, ausgewaehlt, onToggle }: {
 
 export function OnboardingListPage() {
   const navigate = useNavigate();
-  const alleNotizen = useAlleNotizen();
-  // Kleines Symbol, wenn die Person eine angeheftete Notiz trägt. Zeilenhöhe
-  // bleibt unverändert (Inline-Icon 12px); Inhalt erscheint bei Auswahl der Zeile.
-  const notizPin = (ref: ReturnType<typeof patientRef>) => angehefteteNotiz(alleNotizen, ref)
-    ? <Pin role="img" aria-label="Angeheftete Notiz vorhanden" style={{ width: 12, height: 12, color: "var(--text-tertiary)", flexShrink: 0, marginLeft: 6, verticalAlign: "middle" }} />
-    : null;
+  // Angeheftete Notizen erzeugen hier bewusst kein Kennzeichen mehr: das
+  // Anheften wirkt nur noch innerhalb der Notizspur der Person.
   const [filter, setFilter] = useState<FilterZustand>(LEERER_FILTER);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "start", dir: "asc" });
   const toggleSort = (key: SortKey) => setSort(s => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
@@ -195,7 +189,7 @@ export function OnboardingListPage() {
 
   const onboardingKarteTitel = (c: OnboardingCase) => (
     <>
-      <span style={{ fontSize: "0.9375rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}{notizPin(patientRef(c))}</span>
+      <span style={{ fontSize: "0.9375rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span>
       {kennzeichenIcon(c)}
     </>
   );
@@ -203,9 +197,9 @@ export function OnboardingListPage() {
   const onboardingSpalten: SpalteDef<OnboardingCase>[] = [
     { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", ausKarte: true, render: kennzeichenIcon },
     { id: "patient", label: "Patient", anteil: 20, minCh: 22, align: "left", sortierbar: true, ausKarte: true,
-      render: c => <span style={{ fontSize: "0.8125rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}{notizPin(patientRef(c))}</span> },
+      render: c => <span style={{ fontSize: "0.8125rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span> },
     { id: "angehoeriger", label: "Angehörige/r", anteil: 17, minCh: 20, align: "left", zweitzeileUnter: "patient", ausKarte: true,
-      render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.angehoeriger}{notizPin(angehoerigerRef(c))}</span> },
+      render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.angehoeriger}</span> },
     { id: "phase", label: "Phase", anteil: 7, minCh: 11, align: "left", sortierbar: true, ausblendenUnter: "eng", ausKarte: true,
       render: c => <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{PHASE_LABEL[phaseFuerSchritt(c.currentStep)]}</span> },
     { id: "schritt", label: "Aktueller Schritt", anteil: 16, minCh: 24, align: "left",

@@ -647,8 +647,12 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
       {/* ZWEITE Reiterebene: Abschnitte der aktiven Phase (§B). KEINE Tönung (Containerfläche),
           Höhe 48, Schrift 12, KEIN Zustandssymbol, Abstand 16, aktiver Eintrag 1.5px unterstrichen.
           Die Ebenen-Haarlinie trägt die Phasenzeile; hier nur die untere Haarlinie zum Formular.
-          "Gespräch" rechts fixiert; die Abschnitte stehen in einer Zeile. */}
-      <div className="flex items-center" style={{ background: "transparent", padding: "0 20px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+          "Gespräch" rechts fixiert; die Abschnitte stehen in einer Zeile.
+          Bleibt beim Rollen stehen (sticky top 0 im Rollbereich der Seite) und sitzt
+          damit bündig unter der Phasenzeile. Die Fläche wird dafür deckend gesetzt —
+          `--bg-elevated` ist genau die Farbe, die vorher durchschien, also keine
+          zusätzliche Tönung. Nur die untere Haarlinie, keine zweite oben. */}
+      <div className="flex items-center" style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--bg-elevated)", padding: "0 20px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
         <div className="flex-1 min-w-0">
         <div
           role="tablist"
