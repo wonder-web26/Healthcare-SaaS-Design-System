@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router";
-import { Plus, X, AlertTriangle, Check, ArrowLeft, Send, Sparkles, Search, ChevronDown, ExternalLink } from "lucide-react";
+import { Plus, X, AlertTriangle, Check, ArrowLeft, Send, Sparkles, Search, ChevronDown, ExternalLink, Pencil } from "lucide-react";
 import { getUnifiedEntries, entryBetreff, entryPersonName, CURRENT_USER, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
 import { personLink, personArtLabel, type PersonenBezug } from "../../lib/mocks/personen-aufloesung";
 import { type Person } from "../../lib/mocks/workflow-tasks";
@@ -331,23 +331,13 @@ export function ServiceDeskPage() {
   const pushVerlauf = (id: string, eintrag: VerlaufEintrag) =>
     setVerlauf(prev => ({ ...prev, [id]: [...(prev[id] || []), eintrag] }));
 
-  // Ein Schreibpfad für alle Feldbearbeitungen: Overlay setzen + Verlauf koaleszieren.
-  // Ändert dieselbe Person (BEARBEITER) dasselbe Feld erneut, wird der bestehende
-  // Eintrag angepasst (ursprünglicher alt bleibt, neu + Zeitpunkt aktualisiert);
-  // kehrt der Wert auf den Ausgangswert zurück, entfällt der Eintrag.
+  // Ein Schreibpfad für jede Feldänderung: Overlay setzen + genau einen Verlaufseintrag.
+  // Keine Koaleszenz mehr — Modusfelder werden gesammelt gesichert (je Feld ein Eintrag),
+  // Status/Zuständigkeit sind Einzelhandlungen (je Wechsel ein Eintrag).
   const aendereFeld = (id: string, a: Aenderung, by = BEARBEITER) => {
     if (a.alt === a.neu) return;
     setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...a.patch } }));
-    setVerlauf(prev => {
-      const list = prev[id] || [];
-      const idx = list.findIndex(v => v.feld === a.feld && v.by === by);
-      if (idx >= 0) {
-        const e = list[idx];
-        if (a.neu === e.alt) return { ...prev, [id]: list.filter((_, i) => i !== idx) };
-        return { ...prev, [id]: list.map((v, i) => i === idx ? { ...v, neu: a.neu, at: BEARBEITET_AM } : v) };
-      }
-      return { ...prev, [id]: [...list, { typ: a.typ ?? "feld", by, at: BEARBEITET_AM, feld: a.feld, feldLabel: a.feldLabel, alt: a.alt, neu: a.neu, freitext: a.freitext }] };
-    });
+    pushVerlauf(id, { typ: a.typ ?? "feld", by, at: BEARBEITET_AM, feld: a.feld, feldLabel: a.feldLabel, alt: a.alt, neu: a.neu, freitext: a.freitext });
   };
 
   // Statuswechsel: Sonderfall (Signatur bleibt für Bulk/Demo erhalten).
@@ -396,7 +386,14 @@ export function ServiceDeskPage() {
     setBulkSelected(new Set());
   };
 
+  // Ungespeicherte Änderungen im Bearbeitungszustand: vor jedem Wechsel Rückfrage.
+  const [entwurfDirty, setEntwurfDirty] = useState(false);
+  const wechselErlaubt = () => !entwurfDirty || window.confirm("Es liegen ungespeicherte Änderungen vor. Verwerfen?");
+  const waehle = (id: string | null) => { if (!wechselErlaubt()) return; setEntwurfDirty(false); setParam({ id }); };
+
   const handleCardClick = (id: string) => {
+    if (!wechselErlaubt()) return;
+    setEntwurfDirty(false);
     if (id === selectedId) setParam({ id: null });
     else setParam({ id });
   };
@@ -668,17 +665,19 @@ export function ServiceDeskPage() {
         {selected && (
           <div className="hidden xl:flex shrink-0 flex-col min-h-0" style={{ width: 520, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
             <DetailPanel
+              key={selected.id}
               entry={selected}
               verlauf={verlauf[selected.id] || []}
               draftComment={draftComment}
               onDraftChange={setDraftComment}
               onAddComment={() => handleAddComment(selected.id)}
               onStatusChange={s => handleStatusChange(selected.id, s)}
-              onClose={() => setParam({ id: null })}
+              onClose={() => waehle(null)}
               onDemoAction={handleDemoAction}
               onPersonKlick={() => navigate(personLink(selected.personBezug))}
               onFeld={a => aendereFeld(selected.id, a)}
               onPerson={(bezug, neuName) => handlePersonChange(selected.id, bezug, neuName)}
+              onDirty={setEntwurfDirty}
             />
           </div>
         )}
@@ -688,24 +687,26 @@ export function ServiceDeskPage() {
       {selected && (
         <div className="fixed inset-0 z-50 xl:hidden flex flex-col" style={{ background: "var(--bg-elevated)" }}>
           <div className="shrink-0 flex items-center" style={{ padding: "12px var(--space-4)", borderBottom: "var(--border-thin) solid var(--border-default)", minHeight: 48 }}>
-            <button onClick={() => setParam({ id: null })} className="flex items-center cursor-pointer"
+            <button onClick={() => waehle(null)} className="flex items-center cursor-pointer"
               style={{ gap: "var(--space-2)", background: "transparent", border: "none", fontSize: "var(--text-body)", color: "var(--text-secondary)", minHeight: 44, padding: "0 8px" }}>
               <ArrowLeft style={{ width: 18, height: 18 }} /> Zurück
             </button>
           </div>
           <div className="flex-1 min-h-0">
             <DetailPanel
+              key={selected.id}
               entry={selected}
               verlauf={verlauf[selected.id] || []}
               draftComment={draftComment}
               onDraftChange={setDraftComment}
               onAddComment={() => handleAddComment(selected.id)}
               onStatusChange={s => handleStatusChange(selected.id, s)}
-              onClose={() => setParam({ id: null })}
+              onClose={() => waehle(null)}
               onDemoAction={handleDemoAction}
               onPersonKlick={() => navigate(personLink(selected.personBezug))}
               onFeld={a => aendereFeld(selected.id, a)}
               onPerson={(bezug, neuName) => handlePersonChange(selected.id, bezug, neuName)}
+              onDirty={setEntwurfDirty}
             />
           </div>
         </div>
@@ -752,40 +753,6 @@ const diplZuPerson = (id: string): Person | null => {
    Erkennbar an einer gestrichelten Unterstreichung (Form, nicht Farbe) + Titel-Hinweis. ── */
 const editierbarCue: React.CSSProperties = { borderBottom: "1px dashed var(--text-tertiary)", cursor: "pointer" };
 
-function InlineText({ value, onCommit, mehrzeilig, textStyle, placeholder }: {
-  value: string; onCommit: (v: string) => void; mehrzeilig?: boolean; textStyle?: React.CSSProperties; placeholder?: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
-  const start = () => { setDraft(value); setEditing(true); };
-  const commit = () => { setEditing(false); const t = draft.trim(); if (t !== value) onCommit(t); };
-  const cancel = () => { setEditing(false); setDraft(value); };
-  useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select?.(); } }, [editing]);
-  if (!editing) {
-    return (
-      <span role="button" tabIndex={0} onClick={start} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); start(); } }}
-        className="ui-fokusring" style={{ ...textStyle, ...editierbarCue }} title="Zum Bearbeiten klicken">
-        {value || <span style={{ color: "var(--text-tertiary)" }}>{placeholder || "—"}</span>}
-      </span>
-    );
-  }
-  const gemeinsam = {
-    ref,
-    value: draft,
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft(e.target.value),
-    onBlur: commit,
-    onKeyDown: (e: React.KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); cancel(); }
-      if (e.key === "Enter" && !mehrzeilig) { e.preventDefault(); commit(); }
-    },
-    style: { ...textStyle, width: "100%", fontFamily: "inherit", padding: "3px 8px", borderRadius: "var(--radius-input)", border: "var(--border-thin) solid var(--brand-primary)", background: "var(--bg-elevated)", color: "var(--text-primary)", outline: "none" } as React.CSSProperties,
-  };
-  return mehrzeilig
-    ? <textarea {...gemeinsam} rows={3} style={{ ...gemeinsam.style, resize: "vertical" }} />
-    : <input {...gemeinsam} />;
-}
-
 
 /** Personen-/Zuständigkeits-Auswahl über das geteilte PersonenAuswahl in einem Popover. */
 function AuswahlPopover({ ausloeser, personen, selectedId, onSelect, breite = 300 }: {
@@ -805,28 +772,6 @@ function AuswahlPopover({ ausloeser, personen, selectedId, onSelect, breite = 30
   );
 }
 
-/** Fälligkeit: Auslöser wie die übrigen Felder (Pille), die Datumskomponente im Popover. */
-function FaelligPicker({ entry, onFeld }: { entry: UnifiedEntry; onFeld: (a: Aenderung) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLButtonElement>(null);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverAnchor asChild>
-        <button ref={ref} type="button" onClick={() => setOpen(o => !o)} className="ui-fokusring inline-flex items-center cursor-pointer" title="Fälligkeit ändern"
-          style={{ gap: 6, padding: "7px 12px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-          {entry.faellig ? isoZuAnzeige(entry.faellig) : "Kein Datum"}
-          <ChevronDown style={{ width: 14, height: 14, opacity: 0.7 }} />
-        </button>
-      </PopoverAnchor>
-      <PopoverContent align="start" side="bottom" sideOffset={6} style={{ width: 280, padding: 12 }}
-        onEscapeKeyDown={() => setOpen(false)} onCloseAutoFocus={e => { e.preventDefault(); ref.current?.focus(); }}>
-        <DateField wertFormat="iso" bereich="any" value={entry.faellig}
-          onChange={v => { const neu = (v as string) || null; if (neu !== entry.faellig) onFeld({ feld: "faellig", feldLabel: "Fälligkeit", patch: { faellig: neu }, alt: entry.faellig ? isoZuAnzeige(entry.faellig) : "—", neu: neu ? isoZuAnzeige(neu) : "—" }); }} />
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 interface DetailPanelProps {
   entry: UnifiedEntry;
   verlauf: VerlaufEintrag[];
@@ -839,82 +784,147 @@ interface DetailPanelProps {
   onPersonKlick: () => void;
   onFeld: (a: Aenderung) => void;
   onPerson: (bezug: PersonenBezug, neuName: string) => void;
+  onDirty?: (dirty: boolean) => void;
 }
 
-function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment, onStatusChange, onClose, onPersonKlick, onFeld, onPerson }: DetailPanelProps) {
+function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment, onStatusChange, onClose, onFeld, onPerson, onDirty }: DetailPanelProps) {
   const sektionLabel = { fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, fontWeight: "var(--weight-medium)", marginBottom: "var(--space-2)" };
   const personName = entryPersonName(entry);
   const faellig = entry.faellig ? faelligDarstellung(entry.faellig, entry.status) : null;
   const faelligFarbe = faellig?.ton === "danger" ? "var(--status-danger)" : faellig?.ton === "warning" ? "var(--status-warning-text)" : "var(--text-tertiary)";
 
-  // Verlauf: Erstellung immer zuunterst (nie leer), danach die dynamischen Einträge;
-  // Anzeige neueste zuerst.
   const erstellEintrag: VerlaufEintrag = { typ: "erstellt", text: "Pendenz erstellt", by: entry.erstelltVon.name, at: formatDate(entry.erstellt) };
   const eintraege = [erstellEintrag, ...verlauf].reverse();
-  // Feldänderungen: Listenwerte zeigen alt → neu; Freitext nur die Tatsache.
   const verlaufText = (v: VerlaufEintrag): string =>
     v.feld ? `${v.feldLabel} ${v.freitext ? "bearbeitet" : `geändert · ${v.alt} → ${v.neu}`}` : (v.text || "");
+
+  // ── Bearbeitungszustand: Modusfelder werden im Entwurf gesammelt, erst "Sichern"
+  // übernimmt sie (je geändertem Feld ein Verlaufseintrag). Status/Zuständigkeit im
+  // Fuss bleiben davon unberührt und jederzeit direkt bedienbar. ──
+  const leseEntwurf = (e: UnifiedEntry) => ({ betreff: e.betreff, beschreibung: e.beschreibung, pendenzTyp: e.pendenzTyp, prioritaet: e.prioritaet, faellig: e.faellig, personBezug: e.personBezug });
+  const [bearbeiten, setBearbeiten] = useState(false);
+  const [entwurf, setEntwurf] = useState(() => leseEntwurf(entry));
+  const geaendert = bearbeiten && (
+    entwurf.betreff !== entry.betreff || entwurf.beschreibung !== entry.beschreibung ||
+    entwurf.pendenzTyp !== entry.pendenzTyp || entwurf.prioritaet !== entry.prioritaet ||
+    entwurf.faellig !== entry.faellig ||
+    entwurf.personBezug.art !== entry.personBezug.art || entwurf.personBezug.kennung !== entry.personBezug.kennung
+  );
+  useEffect(() => { onDirty?.(geaendert); }, [geaendert, onDirty]);
+  useEffect(() => () => onDirty?.(false), [onDirty]);
+  const start = () => { setEntwurf(leseEntwurf(entry)); setBearbeiten(true); };
+  const abbrechen = () => { if (geaendert && !window.confirm("Änderungen verwerfen?")) return; setEntwurf(leseEntwurf(entry)); setBearbeiten(false); };
+  useEffect(() => {
+    if (!bearbeiten) return;
+    const h = (ev: KeyboardEvent) => {
+      if (ev.key !== "Escape") return;
+      ev.preventDefault();
+      if (geaendert && !window.confirm("Änderungen verwerfen?")) return;
+      setEntwurf(leseEntwurf(entry)); setBearbeiten(false);
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bearbeiten, geaendert, entry]);
+  const sichern = () => {
+    const u = entwurf;
+    if (u.betreff !== entry.betreff) onFeld({ feld: "betreff", feldLabel: "Titel", patch: { betreff: u.betreff }, alt: entry.betreff, neu: u.betreff, freitext: true });
+    if (u.beschreibung !== entry.beschreibung) onFeld({ feld: "beschreibung", feldLabel: "Beschreibung", patch: { beschreibung: u.beschreibung }, alt: entry.beschreibung, neu: u.beschreibung, freitext: true });
+    if (u.pendenzTyp !== entry.pendenzTyp) onFeld({ feld: "pendenzTyp", feldLabel: "Kategorie", patch: { pendenzTyp: u.pendenzTyp }, alt: pendenzTypen[entry.pendenzTyp]?.label || entry.pendenzTyp, neu: pendenzTypen[u.pendenzTyp]?.label || u.pendenzTyp });
+    if (u.prioritaet !== entry.prioritaet) onFeld({ feld: "prioritaet", feldLabel: "Priorität", patch: { prioritaet: u.prioritaet }, alt: PRIO_CFG[entry.prioritaet]?.label || entry.prioritaet, neu: PRIO_CFG[u.prioritaet]?.label || u.prioritaet });
+    if (u.faellig !== entry.faellig) onFeld({ feld: "faellig", feldLabel: "Fälligkeit", patch: { faellig: u.faellig }, alt: entry.faellig ? isoZuAnzeige(entry.faellig) : "—", neu: u.faellig ? isoZuAnzeige(u.faellig) : "—" });
+    if (u.personBezug.art !== entry.personBezug.art || u.personBezug.kennung !== entry.personBezug.kennung) {
+      const t = ALLE_PERSONEN.find(p => p.bezug.art === u.personBezug.art && p.bezug.kennung === u.personBezug.kennung);
+      if (t) onPerson(t.bezug, t.name);
+    }
+    setBearbeiten(false);
+  };
+  const entwurfPersonName = ALLE_PERSONEN.find(p => p.bezug.art === entwurf.personBezug.art && p.bezug.kennung === entwurf.personBezug.kennung)?.name ?? personName;
+  const editFeld: React.CSSProperties = { width: "100%", fontFamily: "inherit", padding: "6px 10px", borderRadius: "var(--radius-input)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", outline: "none", fontSize: "var(--text-small)" };
 
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* ── KOPF (fest) ── */}
       <div className="shrink-0" style={{ padding: "16px 24px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
-        {/* Zeile 1: Kennung · Art + Schliessen */}
+        {/* Zeile 1: Kennung · Kategorie + Bearbeiten + Schliessen */}
         <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
           <div className="flex items-center" style={{ gap: 6, minWidth: 0 }}>
             <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{entry.id}</span>
             <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>·</span>
-            <AuswahlDropdown
-              einfach label={pendenzTypen[entry.pendenzTyp]?.label || entry.typLabel} wert={entry.pendenzTyp}
-              optionen={(Object.keys(pendenzTypen) as PendenzTyp[]).map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))}
-              onWaehle={v => onFeld({ feld: "pendenzTyp", feldLabel: "Kategorie", patch: { pendenzTyp: v as PendenzTyp }, alt: pendenzTypen[entry.pendenzTyp]?.label || entry.pendenzTyp, neu: pendenzTypen[v as PendenzTyp]?.label || v })}
-            />
+            {bearbeiten ? (
+              <AuswahlDropdown einfach label={pendenzTypen[entwurf.pendenzTyp]?.label || entwurf.pendenzTyp} wert={entwurf.pendenzTyp}
+                optionen={(Object.keys(pendenzTypen) as PendenzTyp[]).map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))}
+                onWaehle={v => setEntwurf(s => ({ ...s, pendenzTyp: v as PendenzTyp }))} />
+            ) : (
+              <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{pendenzTypen[entry.pendenzTyp]?.label || entry.typLabel}</span>
+            )}
           </div>
-          <button onClick={onClose} className="shrink-0 flex items-center justify-center cursor-pointer transition-colors"
-            style={{ width: 28, height: 28, borderRadius: "var(--radius-pill)", background: "transparent", border: "none" }}
-            onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
-            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-            <X style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
-          </button>
-        </div>
-        {/* Zeile 2: Titel (Freitext — Verlauf hält nur die Tatsache fest) */}
-        <div style={{ marginBottom: 8 }}>
-          <InlineText
-            value={entry.betreff}
-            onCommit={v => onFeld({ feld: "betreff", feldLabel: "Titel", patch: { betreff: v }, alt: entry.betreff, neu: v, freitext: true })}
-            textStyle={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
-            placeholder="Titel"
-          />
-        </div>
-        {/* Zeile 3: Person · Personenart | Fälligkeit · Priorität. Fälligkeit und
-            Priorität bleiben zusammen (Priorität nie auf eigener Zeile); wird es eng,
-            kürzt der Personenname und die Personenart weicht zuerst. */}
-        <div className="flex items-center flex-wrap" style={{ gap: 10, minWidth: 0 }}>
-          {/* Person — Auswahl aus Patienten und Angehörigen; Wechsel verlangt eine Rückfrage */}
-          <AuswahlPopover
-            personen={ALLE_PERSONEN.map(p => p.option)}
-            selectedId={ALLE_PERSONEN.find(p => p.bezug.art === entry.personBezug.art && p.bezug.kennung === entry.personBezug.kennung)?.option.id ?? null}
-            onSelect={id => { const t = ALLE_PERSONEN.find(p => p.option.id === id); if (t) onPerson(t.bezug, t.name); }}
-            ausloeser={(_offen, toggle, ref) => (
-              <button ref={ref} type="button" onClick={toggle} className="ui-fokusring inline-flex items-center cursor-pointer" title="Person ändern"
-                style={{ gap: 4, minWidth: 0, flex: "0 1 auto", overflow: "hidden", background: "transparent", border: "none", padding: 0, fontFamily: "inherit", ...editierbarCue }}>
-                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
-                <span style={{ flexShrink: 0, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>· {personArtLabel(entry.personBezug.art)}</span>
-                <ChevronDown style={{ width: 11, height: 11, opacity: 0.6, flexShrink: 0 }} />
+          <div className="flex items-center shrink-0" style={{ gap: 4 }}>
+            {!bearbeiten && (
+              <button onClick={start} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
+                style={{ gap: 5, padding: "5px 10px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <Pencil style={{ width: 12, height: 12 }} /> Bearbeiten
               </button>
             )}
-          />
-          {/* Fälligkeit — Auslöser wie die übrigen Felder, Datumskomponente im Popover */}
-          <span className="inline-flex items-center shrink-0" style={{ gap: 5 }}>
-            <FaelligPicker entry={entry} onFeld={onFeld} />
-            {faellig?.abw && <span style={{ fontSize: "var(--text-meta)", fontWeight: faellig.ton === "danger" ? "var(--weight-medium)" : "var(--weight-regular)", color: faelligFarbe }}>{faellig.abw}</span>}
-          </span>
-          {/* Priorität — immer bearbeitbar, Produkt-Auswahlbauteil */}
+            <button onClick={onClose} className="flex items-center justify-center cursor-pointer transition-colors"
+              style={{ width: 28, height: 28, borderRadius: "var(--radius-pill)", background: "transparent", border: "none" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <X style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
+            </button>
+          </div>
+        </div>
+        {/* Zeile 2: Titel */}
+        <div style={{ marginBottom: 8 }}>
+          {bearbeiten ? (
+            <input value={entwurf.betreff} onChange={e => setEntwurf(s => ({ ...s, betreff: e.target.value }))} placeholder="Titel"
+              style={{ ...editFeld, fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)" }} />
+          ) : (
+            <div style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{entry.betreff}</div>
+          )}
+        </div>
+        {/* Zeile 3: Person · Fälligkeit · Priorität */}
+        <div className="flex items-center flex-wrap" style={{ gap: 10, minWidth: 0 }}>
+          {bearbeiten ? (
+            <AuswahlPopover
+              personen={ALLE_PERSONEN.map(p => p.option)}
+              selectedId={ALLE_PERSONEN.find(p => p.bezug.art === entwurf.personBezug.art && p.bezug.kennung === entwurf.personBezug.kennung)?.option.id ?? null}
+              onSelect={id => { const t = ALLE_PERSONEN.find(p => p.option.id === id); if (t) setEntwurf(s => ({ ...s, personBezug: t.bezug })); }}
+              ausloeser={(_offen, toggle, ref) => (
+                <button ref={ref} type="button" onClick={toggle} className="ui-fokusring inline-flex items-center cursor-pointer"
+                  style={{ gap: 6, padding: "7px 12px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                  {entwurfPersonName} <ChevronDown style={{ width: 14, height: 14, opacity: 0.7 }} />
+                </button>
+              )}
+            />
+          ) : (
+            <span className="inline-flex items-center" style={{ gap: 4, minWidth: 0, flex: "0 1 auto", overflow: "hidden" }}>
+              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
+              <span style={{ flexShrink: 0, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>· {personArtLabel(entry.personBezug.art)}</span>
+            </span>
+          )}
+          {/* Fälligkeit — Lesezustand nur Text; Bearbeitung: Produkt-Datumsfeld (DateField) */}
+          {bearbeiten ? (
+            <span className="shrink-0" style={{ minWidth: 160 }}>
+              <DateField wertFormat="iso" bereich="any" value={entwurf.faellig} onChange={v => setEntwurf(s => ({ ...s, faellig: (v as string) || null }))} />
+            </span>
+          ) : (
+            <span className="inline-flex items-baseline shrink-0" style={{ gap: 5, whiteSpace: "nowrap" }}>
+              {faellig ? <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{faellig.datum}</span>
+                       : <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Kein Datum</span>}
+              {faellig?.abw && <span style={{ fontSize: "var(--text-meta)", fontWeight: faellig.ton === "danger" ? "var(--weight-medium)" : "var(--weight-regular)", color: faelligFarbe }}>{faellig.abw}</span>}
+            </span>
+          )}
+          {/* Priorität */}
           <span className="inline-flex items-center shrink-0" style={{ gap: 5 }}>
             <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Priorität</span>
-            <AuswahlDropdown einfach label={PRIO_CFG[entry.prioritaet]?.label || entry.prioritaet} wert={entry.prioritaet}
-              optionen={[{ value: "hoch", label: "Hoch" }, { value: "mittel", label: "Mittel" }, { value: "niedrig", label: "Niedrig" }]}
-              onWaehle={v => onFeld({ feld: "prioritaet", feldLabel: "Priorität", patch: { prioritaet: v as UnifiedEntry["prioritaet"] }, alt: PRIO_CFG[entry.prioritaet]?.label || entry.prioritaet, neu: PRIO_CFG[v]?.label || v })} />
+            {bearbeiten ? (
+              <AuswahlDropdown einfach label={PRIO_CFG[entwurf.prioritaet]?.label || entwurf.prioritaet} wert={entwurf.prioritaet}
+                optionen={[{ value: "hoch", label: "Hoch" }, { value: "mittel", label: "Mittel" }, { value: "niedrig", label: "Niedrig" }]}
+                onWaehle={v => setEntwurf(s => ({ ...s, prioritaet: v as UnifiedEntry["prioritaet"] }))} />
+            ) : (
+              <span style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)" }}>{PRIO_CFG[entry.prioritaet]?.label || entry.prioritaet}</span>
+            )}
           </span>
         </div>
       </div>
@@ -925,14 +935,28 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
             Komponente bleiben erhalten; zum Reaktivieren die folgende Zeile einkommentieren. */}
         {/* <AnnaPendenzVorschlag pendenz={entry} onActionExecuted={() => {}} onDemoAction={onDemoAction} /> */}
 
-        {/* Beschreibung — mehrzeiliger Freitext, trägt, was zu tun ist */}
-        <div style={{ marginBottom: "var(--space-6)" }}>
+        {/* Beschreibung — Lesezustand Text; Bearbeitung mehrzeiliges Feld */}
+        <div style={{ marginBottom: "var(--space-4)" }}>
           <div style={sektionLabel}>Beschreibung</div>
-          <InlineText value={entry.beschreibung} mehrzeilig
-            onCommit={v => onFeld({ feld: "beschreibung", feldLabel: "Beschreibung", patch: { beschreibung: v }, alt: entry.beschreibung, neu: v, freitext: true })}
-            textStyle={{ fontSize: "var(--text-body)", color: "var(--text-primary)", lineHeight: 1.5 }}
-            placeholder="Beschreibung hinzufügen…" />
+          {bearbeiten ? (
+            <textarea value={entwurf.beschreibung} onChange={e => setEntwurf(s => ({ ...s, beschreibung: e.target.value }))} rows={4} placeholder="Beschreibung hinzufügen…"
+              style={{ ...editFeld, resize: "vertical", fontSize: "var(--text-body)", lineHeight: 1.5 }} />
+          ) : (
+            <div style={{ fontSize: "var(--text-body)", color: entry.beschreibung ? "var(--text-primary)" : "var(--text-tertiary)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{entry.beschreibung || "Keine Beschreibung."}</div>
+          )}
         </div>
+
+        {/* Fuss des bearbeitbaren Bereichs: Abbrechen / Sichern */}
+        {bearbeiten && (
+          <div className="flex items-center justify-end" style={{ gap: 8, marginBottom: "var(--space-6)" }}>
+            <button onClick={abbrechen} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "7px 14px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", fontFamily: "inherit" }}>
+              <X style={{ width: 13, height: 13 }} /> Abbrechen
+            </button>
+            <button onClick={sichern} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", border: "none", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-on-dark)", fontFamily: "inherit" }}>
+              <Check style={{ width: 13, height: 13 }} /> Sichern
+            </button>
+          </div>
+        )}
 
         {/* Verlauf — ein Strang, neueste zuerst; Erstellung immer vorhanden. */}
         <div>
