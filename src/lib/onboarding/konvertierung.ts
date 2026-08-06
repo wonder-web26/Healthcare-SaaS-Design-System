@@ -14,7 +14,7 @@ import { getMessungenFuerPatient } from "../vitaldaten/store";
 import { konvertiereRhythmusSubjekt, generiereRhythmusTickets, getTicketsFuerSubjekt } from "../rhythmus/engine";
 import { protokolliereAufteilung } from "./aufteilung-log";
 import { erstelleNachweis } from "../schulung/nachweis-store";
-import { MOCK_KLV_VERORDNUNGEN } from "../mocks/klinische-artefakte-mock";
+import { getKlvVerordnungen } from "../klv/store";
 import { getPersonByOnboardingId, updatePersonZustand } from "../interrai/store";
 import { schliessePatientOnboardingAb } from "../patienten/store";
 import { schliesseAngehoerigenOnboardingAb } from "../angehoerige/store";
@@ -142,7 +142,7 @@ export function konvertiereOnboarding(
   });
 
   // Initialschulung: Nachweis erstellen wenn KLV-Positionen vorhanden
-  const klvVerordnung = [...artefakte.klvVerordnungen, ...MOCK_KLV_VERORDNUNGEN].find(
+  const klvVerordnung = [...artefakte.klvVerordnungen, ...getKlvVerordnungen()].find(
     k => k.onboardingId === onboardingId || k.patientId === patientId
   );
   if (klvVerordnung && klvVerordnung.leistungspositionen.length > 0 && angehoerigenDaten) {

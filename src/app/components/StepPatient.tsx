@@ -53,7 +53,10 @@ import { TabAnmeldungV2, TabPersonalienV2, TabSteuerV2, TabWohnenUmfeldV2, TabAn
 import { FORMULAR_MAX } from "./form/feldbreiten";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
-import { MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, MOCK_ARZT_DIAGNOSEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import { MOCK_PFLEGEPLANUNGEN, MOCK_ARZT_DIAGNOSEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import {
+  useKlvVerordnungen, positionHinzufuegen, positionAendern, positionEntfernen, positionenSetzen,
+} from "../../lib/klv/store";
 import { useRecording } from "../recording/RecordingContext";
 import { getPersonByOnboardingId, getOrCreatePersonForOnboarding, createAssessment } from "../../lib/interrai/store";
 import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
@@ -1780,7 +1783,8 @@ function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {
 
 function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   const navigate = useNavigate();
-  const klv = MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === onboardingId);
+  /* Der Bestand ist die Quelle — kein lokaler Abzug mehr. */
+  const klv = useKlvVerordnungen().find(k => k.onboardingId === onboardingId);
   const pp = MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === onboardingId);
   const verfuegbareDiagnosen = pp?.pflegediagnosen || [];
   // Krankenkasse: from patient (if konvertiert) or mock default
@@ -1792,8 +1796,11 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   const ppMassnahmen = pp?.massnahmen || [];
   const ppZiele = pp?.ziele || [];
 
-  // Local in-memory editor state
-  const [leistungen, setLeistungen] = useState<KLVLeistung[]>([]);
+  /* Positionen kommen aus dem Bestand; nur die Bedienzustände bleiben lokal. */
+  const leistungen = klv?.leistungspositionen ?? [];
+  const setLeistungen = (f: (prev: KLVLeistung[]) => KLVLeistung[]) => {
+    if (klv) positionenSetzen(klv.id, f(leistungen));
+  };
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [katalogOpen, setKatalogOpen] = useState(false);
   const [katalogSuche, setKatalogSuche] = useState("");
@@ -1803,7 +1810,6 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   // Initialize leistungen from KLV mock data
   useEffect(() => {
     if (klv) {
-      setLeistungen(klv.leistungspositionen.map(lp => ({ ...lp })));
       // Auto-expand niedrig confidence or unvalidated items
       const autoExpand = new Set<string>();
       for (const lp of klv.leistungspositionen) {
@@ -1829,7 +1835,7 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   };
 
   const validateLeistung = (id: string) => {
-    setLeistungen(prev => prev.map(l => l.id === id ? { ...l, validiert: true } : l));
+    if (klv) positionAendern(klv.id, id, { validiert: true });
     setExpandedIds(prev => {
       const next = new Set(prev);
       next.delete(id);
@@ -1838,11 +1844,11 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   };
 
   const updateLeistung = (id: string, patch: Partial<KLVLeistung>) => {
-    setLeistungen(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+    if (klv) positionAendern(klv.id, id, patch);
   };
 
   const removeLeistung = (id: string) => {
-    setLeistungen(prev => prev.filter(l => l.id !== id));
+    if (klv) positionEntfernen(klv.id, id);
     setExpandedIds(prev => {
       const next = new Set(prev);
       next.delete(id);
@@ -1905,7 +1911,7 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
       diagnoseIds: [],
       wzwBegruendung: null,
     };
-    setLeistungen(prev => [...prev, newLeistung]);
+    if (klv) positionHinzufuegen(klv.id, newLeistung);
     setExpandedIds(prev => new Set(prev).add(newId));
     setKatalogOpen(false);
     setKatalogSuche("");

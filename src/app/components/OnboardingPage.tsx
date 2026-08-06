@@ -53,7 +53,8 @@ import { naechsteFallKennung } from "../../lib/onboarding/faelle";
 import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
 import { erfassePatientImOnboarding, patientFuerOnboarding } from "../../lib/patienten/store";
 import { erfasseAngehoerigenImOnboarding, type AngehoerigenEingabe } from "../../lib/angehoerige/store";
-import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
+import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
+import { getKlvVerordnungen, getKlvFuerOnboarding } from "../../lib/klv/store";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
 import { formatFaelligkeit, isoZuDate } from "../../lib/datum";
 import { toast } from "sonner";
@@ -1132,7 +1133,7 @@ export function OnboardingPage() {
               // Fehlen nicht als Lücke gemeldet.
               if (sdaVerlangtInterrai(patientData.einschaetzungSituation) && (!ba || ba.status !== "abgeschlossen")) hints.push("Das InterRAI ist noch nicht abgeschlossen. Es wird mitkonvertiert und kann später vervollständigt werden.");
               if (!MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === wirksameFallKennung)) hints.push("Es wurde noch keine Pflegeplanung erstellt.");
-              const klv = MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === wirksameFallKennung);
+              const klv = getKlvFuerOnboarding(wirksameFallKennung);
               if (klv && klv.status !== "kostengutsprache-erhalten") hints.push(`Die KLV ist im Status "${klv.status}". Die Pipeline läuft am aktiven Patient weiter.`);
               if (hints.length === 0) return null;
               return hints.map((h, i) => (
@@ -1160,7 +1161,7 @@ export function OnboardingPage() {
                       setAbschlussAuditLog(auditNote);
                       console.info("[Audit] Abschluss mit Override:", auditNote);
                     }
-                    const ergebnis = konvertiereOnboarding(wirksameFallKennung, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: MOCK_KLV_VERORDNUNGEN, workflows: [] }, {
+                    const ergebnis = konvertiereOnboarding(wirksameFallKennung, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: getKlvVerordnungen(), workflows: [] }, {
                       name: `${angehoerigerData.vorname || ""} ${angehoerigerData.name || ""}`.trim(),
                       quellensteuerpflichtig: angehoerigerData.quellensteuer === "ja",
                       aufenthaltsstatus: angehoerigerData.aufenthaltsstatus,

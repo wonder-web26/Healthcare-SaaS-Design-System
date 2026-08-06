@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import {
   MOCK_ASSESSMENTS,
-  MOCK_KLV_VERORDNUNGEN,
 } from "../../lib/mocks/klinische-artefakte-mock";
+import { useKlvVerordnungen } from "../../lib/klv/store";
 import { ComplianceRisikoSection } from "./ComplianceRisikoSection";
 
 /* ── Derived data ────────────────────────── */

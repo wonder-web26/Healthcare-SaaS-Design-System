@@ -95,7 +95,8 @@ import { usePatienten, getPatient, aktualisierePatient, tageBisReAssessment } fr
 import { StatusModal } from "./StatusModal";
 import { TabDokumente } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
-import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import { useKlvVerordnungen, verordnungAnlegen, verordnungEntfernen } from "../../lib/klv/store";
 import { KLV_STATUS_PIPELINE, getArtefaktContainer, type KLVVerordnung } from "../../types/klinische-artefakte";
 import { hProWoche, berechneSummen, einheitLabel } from "../../lib/klv/berechnung";
 import { toast } from "sonner";
@@ -3389,8 +3390,7 @@ function TabPflegeplanung({ patientId, navigate }: { patientId: string; navigate
    ══════════════════════════════════════════ */
 function TabKLV({ patientId }: { patientId: string }) {
   const navigate = useNavigate();
-  const [, forceUpdate] = useState(0);
-  const klvs = MOCK_KLV_VERORDNUNGEN.filter(k => k.patientId === patientId);
+  const klvs = useKlvVerordnungen().filter(k => k.patientId === patientId);
   const current = klvs.find(k => k.status === "kostengutsprache-erhalten") || klvs[0];
   const daysUntil = current?.endDatum ? (() => { const [d, m, y] = current.endDatum!.split("."); return Math.round((new Date(+y, +m - 1, +d).getTime() - new Date("2026-03-03").getTime()) / 86400000); })() : null;
   const katBg = (k: string) => k === "a" ? "var(--status-info-bg)" : k === "b" ? "var(--status-warning-bg)" : "var(--status-success-bg)";
@@ -3429,8 +3429,8 @@ function TabKLV({ patientId }: { patientId: string }) {
 
   const deleteKLV = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const idx = MOCK_KLV_VERORDNUNGEN.findIndex(k => k.id === id);
-    if (idx >= 0) { MOCK_KLV_VERORDNUNGEN.splice(idx, 1); forceUpdate(n => n + 1); toast("KLV-Entwurf gelöscht"); }
+    verordnungEntfernen(id);
+    toast("KLV-Entwurf gelöscht");
   };
 
   const [showNeueKLV, setShowNeueKLV] = useState(false);
@@ -3468,7 +3468,7 @@ function TabKLV({ patientId }: { patientId: string }) {
     };
 
     // Push into the shared mock array so KLVArbeitsbereich can find it
-    MOCK_KLV_VERORDNUNGEN.push(neueKLV);
+    verordnungAnlegen(neueKLV);
 
     const leistungenText = neuVorlage && current ? ` — ${neueKLV.leistungspositionen.length} Leistungen übernommen` : "";
     toast(`Neue KLV erstellt${leistungenText}`);

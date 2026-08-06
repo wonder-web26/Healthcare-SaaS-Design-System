@@ -5,7 +5,11 @@
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { ArrowLeft, Check, ChevronDown, ChevronUp, Plus, Edit3, X, Mic, Send, FileText, AlertTriangle, Search, Calendar, Trash2, CheckCircle2 } from "lucide-react";
-import { MOCK_KLV_VERORDNUNGEN, MOCK_PFLEGEPLANUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
+import { MOCK_PFLEGEPLANUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
+import {
+  useKlvVerordnungen, positionHinzufuegen, positionAendern, positionEntfernen,
+  diagnosenSetzen, verordnungAendern, statusWechseln,
+} from "../../lib/klv/store";
 import { KLV_STATUS_PIPELINE, type KLVStatus, type KLVDiagnose, type KLVLeistung, type KLVEinheit } from "../../types/klinische-artefakte";
 import { SPITEX_LEISTUNGSKATALOG_2025, type LeistungskatalogPosition } from "../../lib/klv/spitex-leistungskatalog-2025";
 import { hProWoche, berechneSummen, kompaktParams, berechnungsText, einheitLabel, werLabel, istPeriodisch, einmaligeMin, getSimultanPartner } from "../../lib/klv/berechnung";
@@ -19,17 +23,23 @@ const KAT_COLORS = { a: { bg: "var(--status-info-bg)", color: "var(--status-info
 export function KLVArbeitsbereich() {
   const { klvId } = useParams();
   const navigate = useNavigate();
-  const klvData = MOCK_KLV_VERORDNUNGEN.find(k => k.id === klvId);
+  /* Der Bestand ist die Quelle — kein lokaler Abzug mehr, damit eine Änderung
+     hier sofort im Dossier und im Onboarding steht. */
+  const klvData = useKlvVerordnungen().find(k => k.id === klvId);
   if (!klvData) return <div style={{ padding: "64px 32px", textAlign: "center" }}><div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>KLV nicht gefunden</div><button onClick={() => navigate(-1)} className="inline-flex items-center cursor-pointer" style={{ marginTop: 16, gap: 8, padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", border: "none" }}><ArrowLeft style={{ width: 16, height: 16 }} /> Zurück</button></div>;
 
   const ppRef = klvData.pflegeplanungId ? MOCK_PFLEGEPLANUNGEN.find(p => p.id === klvData.pflegeplanungId) : null;
 
-  const [status, setStatus] = useState<KLVStatus>(klvData.status);
-  const [diagnosen, setDiagnosen] = useState<KLVDiagnose[]>(klvData.diagnosen.map(d => ({ ...d })));
-  const [positionen, setPositionen] = useState<KLVLeistung[]>(klvData.leistungspositionen.map(p => ({ ...p })));
-  const [ziele, setZiele] = useState<string[]>([...klvData.zielformulierungen]);
-  const [beginnDatum, setBeginnDatum] = useState(klvData.beginnDatum || "");
-  const [endDatum, setEndDatum] = useState(klvData.endDatum || "");
+  const status = klvData.status;
+  const diagnosen = klvData.diagnosen;
+  const positionen = klvData.leistungspositionen;
+  const ziele = klvData.zielformulierungen;
+  const beginnDatum = klvData.beginnDatum || "";
+  const endDatum = klvData.endDatum || "";
+  const setDiagnosen = (f: (prev: KLVDiagnose[]) => KLVDiagnose[]) => diagnosenSetzen(klvData.id, f(diagnosen));
+  const setZiele = (f: (prev: string[]) => string[]) => verordnungAendern(klvData.id, { zielformulierungen: f(ziele) });
+  const setBeginnDatum = (v: string) => verordnungAendern(klvData.id, { beginnDatum: v });
+  const setEndDatum = (v: string) => verordnungAendern(klvData.id, { endDatum: v });
   const [showDialog, setShowDialog] = useState<string | null>(null);
   const [showKatalog, setShowKatalog] = useState(false);
   const [editingDiagnose, setEditingDiagnose] = useState<string | null>(null);
@@ -44,7 +54,7 @@ export function KLVArbeitsbereich() {
   // Workflow actions
   const canFreigeben = diagnosen.length > 0 && positionen.length > 0 && beginnDatum;
 
-  const advanceStatus = (newStatus: KLVStatus) => { setStatus(newStatus); toast(`Status: ${KLV_STATUS_PIPELINE.find(s => s.status === newStatus)?.label || newStatus}`); setShowDialog(null); };
+  const advanceStatus = (newStatus: KLVStatus) => { statusWechseln(klvData.id, newStatus); toast(`Status: ${KLV_STATUS_PIPELINE.find(s => s.status === newStatus)?.label || newStatus}`); setShowDialog(null); };
 
   return (
     <div className="h-full flex flex-col" style={{ background: "var(--bg-primary)" }}>
@@ -219,7 +229,7 @@ export function KLVArbeitsbereich() {
                         const tage = l.einheit.startsWith("t") ? parseInt(l.einheit.slice(1)) : (l.einheit === "w" ? 1 : 7);
                         const tageDisabled = rhythmus !== "täglich";
                         const anzahlDisabled = rhythmus === "einmalig" || rhythmus === "nachBedarf";
-                        const upd = (patch: Partial<KLVLeistung>) => setPositionen(prev => prev.map(x => x.id === l.id ? { ...x, ...patch } : x));
+                        const upd = (patch: Partial<KLVLeistung>) => positionAendern(klvData.id, l.id, patch);
                         const setRhythmus = (r: string) => {
                           if (r === "einmalig") upd({ einheit: "e" as KLVEinheit, anzahl: 1 });
                           else if (r === "nachBedarf") upd({ einheit: "nB" as KLVEinheit, anzahl: 1 });
@@ -249,7 +259,7 @@ export function KLVArbeitsbereich() {
                             </div>
                             <div className="flex items-center" style={{ gap: 8 }}>
                               <button onClick={() => { upd({ validiert: true }); setExpandedPosId(null); }} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "5px 14px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}><Check style={{ width: 12, height: 12 }} /> Bestätigen</button>
-                              <button onClick={() => { setPositionen(prev => prev.filter(x => x.id !== l.id)); setExpandedPosId(null); }} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "5px 14px", borderRadius: "var(--radius-pill)", background: "none", color: "var(--status-danger)", fontSize: "var(--text-small)", border: "var(--border-thin) solid var(--status-danger)" }}><Trash2 style={{ width: 12, height: 12 }} /> Entfernen</button>
+                              <button onClick={() => { positionEntfernen(klvData.id, l.id); setExpandedPosId(null); }} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "5px 14px", borderRadius: "var(--radius-pill)", background: "none", color: "var(--status-danger)", fontSize: "var(--text-small)", border: "var(--border-thin) solid var(--status-danger)" }}><Trash2 style={{ width: 12, height: 12 }} /> Entfernen</button>
                             </div>
                           </div>
                         );
@@ -305,7 +315,7 @@ export function KLVArbeitsbereich() {
       {showDialog === "arzt-antwort" && <ErfassungsDialog title="Antwort vom Arzt" label="Datum der Anordnung" onConfirm={() => advanceStatus("vom-arzt-zurueck")} onClose={() => setShowDialog(null)} />}
       {showDialog === "kk" && <VersandDialog title="An Krankenkasse senden" options={MOCK_KASSEN} optionLabel="Krankenkasse" onConfirm={() => advanceStatus("bei-krankenkasse")} onClose={() => setShowDialog(null)} />}
       {showDialog === "kk-antwort" && <KKAntwortDialog onConfirm={(genehmigt) => advanceStatus(genehmigt ? "kostengutsprache-erhalten" : "abgelehnt")} onClose={() => setShowDialog(null)} />}
-      {showKatalog && <KatalogDialog onAdd={(pos) => { setPositionen(prev => [...prev, { ...pos, id: `LP-new-${Date.now()}` }]); setShowKatalog(false); }} onClose={() => setShowKatalog(false)} />}
+      {showKatalog && <KatalogDialog onAdd={(pos) => { positionHinzufuegen(klvData.id, { ...pos, id: `LP-new-${Date.now()}` }); setShowKatalog(false); }} onClose={() => setShowKatalog(false)} />}
     </div>
   );
 }
