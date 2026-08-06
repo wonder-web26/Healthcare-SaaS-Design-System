@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router";
+import React, { useState, useCallback, useRef, useLayoutEffect } from "react";
+import { useParams, useNavigate } from "react-router";
 import { AnnaPatientSummary } from "../anna/AnnaPatientSummary";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
 import { isoZuAnzeige, anzeigeZuIso, formatAnzeige, formatDatumZeit } from "../../lib/datum";
@@ -96,21 +96,228 @@ function bgZuVariante(bg: string): StatusMarkeVariante {
   return "neutral";
 }
 
-/* ── Tab definitions ─────────────────────── */
-const profileTabs = [
-  { id: "ueberblick", label: "Überblick", icon: LayoutDashboard },
-  { id: "anamnese", label: "Anamnese", icon: Stethoscope },
-  { id: "interrai", label: "InterRAI", icon: ClipboardList },
-  { id: "pflegeplanung", label: "Pflegeplanung", icon: ListChecks },
-  { id: "klv", label: "KLV", icon: FileText },
-  { id: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
-  { id: "atl", label: "Aktivitäten (ATL)", icon: ClipboardList },
-  { id: "workflow", label: "Betreuungsrhythmus", icon: ListChecks },
-  { id: "dokumente", label: "Dokumente", icon: FileText },
-  { id: "related", label: "Related Lists", icon: Table2 },
-  { id: "tickets", label: "Tickets", icon: Headphones },
-  { id: "historie", label: "Historie", icon: History },
+/* ══════════════════════════════════════════
+   ANSICHTSBAUM — die einzige Liste, die das Dossier beschreibt.
+
+   Jede Ansicht trägt einen Schlüssel, der zugleich das letzte Adressglied
+   ist. Die Schlüssel sind über alle Gruppen hinweg eindeutig; die aktive
+   Ansicht wird ausschliesslich daraus bestimmt, nie über einen Zahlenindex.
+   ══════════════════════════════════════════ */
+
+interface AnsichtDef {
+  /** Kleinbuchstaben, keine Umlaute — letztes Glied der Adresse. */
+  schluessel: string;
+  label: string;
+}
+
+interface GruppeDef {
+  /** null = ohne Gruppe; die Ansicht steht dann direkt unter der Kennung. */
+  schluessel: string | null;
+  label: string | null;
+  /** Trennlinie oberhalb dieser Gruppe. */
+  abgesetzt?: boolean;
+  ansichten: AnsichtDef[];
+}
+
+const PATIENT_NAV: GruppeDef[] = [
+  { schluessel: null, label: null, ansichten: [
+    { schluessel: "ueberblick", label: "Überblick" },
+  ] },
+  { schluessel: "patient", label: "Patient", ansichten: [
+    { schluessel: "stammdaten", label: "Stammdaten" },
+    { schluessel: "beziehungen", label: "Beziehungen" },
+    { schluessel: "vorgeschichte", label: "Vorgeschichte" },
+    { schluessel: "diagnosen", label: "Diagnosen" },
+  ] },
+  { schluessel: "abklaerung", label: "Abklärung", ansichten: [
+    { schluessel: "sda", label: "SDA" },
+    { schluessel: "interrai-hc", label: "interRAI HC" },
+    { schluessel: "caps", label: "CAPs" },
+    { schluessel: "atl", label: "ATL" },
+    { schluessel: "anamnese", label: "Anamnese" },
+  ] },
+  { schluessel: "pflege", label: "Pflege", ansichten: [
+    { schluessel: "pflegeplan", label: "Pflegeplan" },
+    { schluessel: "beobachtungen", label: "Beobachtungen" },
+    { schluessel: "vitalwerte", label: "Vitalwerte" },
+    { schluessel: "wunddokumentation", label: "Wunddokumentation" },
+    { schluessel: "betreuungsrhythmus", label: "Betreuungsrhythmus" },
+  ] },
+  { schluessel: "medikation", label: "Medikation", ansichten: [
+    { schluessel: "plan", label: "Plan" },
+    { schluessel: "unvertraeglichkeiten", label: "Unverträglichkeiten" },
+    { schluessel: "richten-und-bezug", label: "Richten und Bezug" },
+  ] },
+  { schluessel: "leistungen", label: "Leistungen", ansichten: [
+    { schluessel: "mandate", label: "Mandate" },
+    { schluessel: "leistungsplanungsblatt", label: "Leistungsplanungsblatt" },
+    { schluessel: "verordnung-und-kostengutsprache", label: "Verordnung und Kostengutsprache" },
+    { schluessel: "kassenregeln", label: "Kassenregeln" },
+  ] },
+  { schluessel: "einsaetze", label: "Einsätze", ansichten: [
+    { schluessel: "termine", label: "Termine" },
+    { schluessel: "stempelkontrolle", label: "Stempelkontrolle" },
+  ] },
+  { schluessel: "dossier", label: "Dossier", ansichten: [
+    { schluessel: "ordnerstruktur", label: "Ordnerstruktur" },
+    { schluessel: "dokumente", label: "Dokumente" },
+    { schluessel: "pflichtluecken", label: "Pflichtlücken" },
+  ] },
+  { schluessel: null, label: null, abgesetzt: true, ansichten: [
+    { schluessel: "pendenzen", label: "Pendenzen" },
+    { schluessel: "verlauf", label: "Verlauf" },
+    { schluessel: "controlling", label: "Controlling" },
+  ] },
 ];
+
+/** Alle Ansichten flach, je mit ihrer Gruppe — Grundlage für Adresse und Auflösung. */
+const ALLE_ANSICHTEN: { gruppe: GruppeDef; ansicht: AnsichtDef }[] =
+  PATIENT_NAV.flatMap(g => g.ansichten.map(a => ({ gruppe: g, ansicht: a })));
+
+/** Startansicht, wenn die Adresse keine nennt oder eine unbekannte nennt. */
+const START_ANSICHT = "ueberblick";
+
+/**
+ * Adresse einer Ansicht. Der Überblick liegt auf der blossen Patientenadresse,
+ * damit ein Verweis auf den Patienten dort landet.
+ */
+export function ansichtPfad(patientId: string, schluessel: string): string {
+  if (schluessel === START_ANSICHT) return `/patienten/${patientId}`;
+  const treffer = ALLE_ANSICHTEN.find(e => e.ansicht.schluessel === schluessel);
+  if (!treffer) return `/patienten/${patientId}`;
+  return treffer.gruppe.schluessel
+    ? `/patienten/${patientId}/${treffer.gruppe.schluessel}/${schluessel}`
+    : `/patienten/${patientId}/${schluessel}`;
+}
+
+/**
+ * Adresse → Ansicht. Zwei Formen sind gültig: mit Gruppe (zwei Glieder) und
+ * ohne (ein Glied). Was sich nicht auflösen lässt, fällt auf den Überblick
+ * zurück statt ins Leere zu greifen.
+ */
+function ansichtAusAdresse(gruppe: string | undefined, ansicht: string | undefined): string {
+  const gesucht = ansicht ?? gruppe;
+  if (!gesucht) return START_ANSICHT;
+  const treffer = ALLE_ANSICHTEN.find(e => e.ansicht.schluessel === gesucht);
+  if (!treffer) return START_ANSICHT;
+  // Bei zwei Gliedern muss die Gruppe zur Ansicht passen.
+  if (ansicht && treffer.gruppe.schluessel !== gruppe) return START_ANSICHT;
+  if (!ansicht && treffer.gruppe.schluessel !== null) return START_ANSICHT;
+  return gesucht;
+}
+
+/* ══════════════════════════════════════════
+   ERKLÄRTER ZUSTAND — kein leerer Bildschirm, kein Strich.
+
+   Zwei Ausprägungen: eine Ansicht, deren Definitionsdokument aussteht, und
+   eine, die bereits benannt ist und deren Umfang feststeht.
+   ══════════════════════════════════════════ */
+function NochNichtDefiniert({ titel }: { titel: string }) {
+  return (
+    <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-6)" }}>
+      <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{titel}</h3>
+      <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 6, maxWidth: 560 }}>
+        Diese Ansicht ist vorgesehen und wird als Nächstes definiert. Solange das
+        Definitionsdokument aussteht, steht hier bewusst nichts — es wird nichts
+        angezeigt, was nicht erhoben ist.
+      </p>
+    </div>
+  );
+}
+
+function NochNichtVerfuegbar({ titel, umfang }: { titel: string; umfang: string[] }) {
+  return (
+    <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-6)" }}>
+      <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{titel}</h3>
+      <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 6, maxWidth: 560 }}>
+        Noch nicht verfügbar. Vorgesehen ist:
+      </p>
+      <ul style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+        {umfang.map(z => (
+          <li key={z} className="flex items-start" style={{ gap: 8, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+            <span aria-hidden="true" style={{ width: 4, height: 4, borderRadius: "var(--radius-pill)", background: "var(--text-tertiary)", marginTop: 7, flexShrink: 0 }} />
+            {z}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   SEITENNAVIGATION — gruppiert, zuklappbar, 228 px.
+   Die Gruppe der aktiven Ansicht ist offen, die übrigen sind zu. Ein
+   Tiefenlink öffnet damit von selbst die richtige Gruppe.
+   ══════════════════════════════════════════ */
+function AnsichtNavigation({ patientId, aktiv, zustaende, obenPx }: {
+  patientId: string;
+  aktiv: string;
+  /** Zustandsmarke je Ansicht; fehlt sie, trägt die Ansicht keine. */
+  zustaende: Record<string, { text: string; dringend?: boolean }>;
+  obenPx: number;
+}) {
+  const navigate = useNavigate();
+  const gruppeVonAktiv = ALLE_ANSICHTEN.find(e => e.ansicht.schluessel === aktiv)?.gruppe.schluessel ?? null;
+  const [offen, setOffen] = useState<Record<string, boolean>>({});
+  const istOffen = (g: GruppeDef) =>
+    g.schluessel === null || (offen[g.schluessel] ?? g.schluessel === gruppeVonAktiv);
+
+  return (
+    <nav
+      aria-label="Ansichten"
+      className="shrink-0 hidden lg:block"
+      style={{ position: "sticky", top: obenPx, width: 228, alignSelf: "flex-start", maxHeight: `calc(100vh - ${obenPx}px)`, overflowY: "auto", paddingBottom: "var(--space-4)" }}
+    >
+      {PATIENT_NAV.map((g, i) => (
+        <div key={g.schluessel ?? `frei-${i}`} style={{ marginTop: g.abgesetzt ? 10 : 0, paddingTop: g.abgesetzt ? 10 : 0, borderTop: g.abgesetzt ? "var(--border-thin) solid var(--border-default)" : undefined }}>
+          {g.label && g.schluessel && (
+            <button
+              type="button"
+              onClick={() => setOffen(o => ({ ...o, [g.schluessel!]: !istOffen(g) }))}
+              aria-expanded={istOffen(g)}
+              className="ui-fokusring w-full flex items-center cursor-pointer"
+              style={{ gap: 6, padding: "7px 8px", background: "transparent", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}
+            >
+              <ChevronRight style={{ width: 12, height: 12, flexShrink: 0, transform: istOffen(g) ? "rotate(90deg)" : "none", transition: "transform 0.15s" }} />
+              <span style={{ textAlign: "left" }}>{g.label}</span>
+            </button>
+          )}
+          {istOffen(g) && g.ansichten.map(a => {
+            const ist = aktiv === a.schluessel;
+            const z = zustaende[a.schluessel];
+            return (
+              <button
+                key={a.schluessel}
+                type="button"
+                aria-current={ist ? "page" : undefined}
+                onClick={() => navigate(ansichtPfad(patientId, a.schluessel))}
+                className="ui-fokusring w-full flex items-center cursor-pointer transition-colors"
+                style={{
+                  gap: 8, padding: "7px 10px", marginLeft: g.schluessel ? 10 : 0,
+                  width: g.schluessel ? "calc(100% - 10px)" : "100%",
+                  borderRadius: 8, border: "none", fontFamily: "inherit", textAlign: "left",
+                  background: ist ? "var(--brand-primary-light)" : "transparent",
+                  color: ist ? "var(--brand-primary)" : "var(--text-secondary)",
+                  fontSize: "var(--text-small)", fontWeight: ist ? "var(--weight-medium)" : "var(--weight-regular)",
+                }}
+              >
+                <span className="flex-1 min-w-0" style={{ overflowWrap: "anywhere" }}>{a.label}</span>
+                {z && (
+                  <span style={{
+                    flexShrink: 0, padding: "1px 7px", borderRadius: "var(--radius-pill)",
+                    fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums",
+                    background: z.dringend ? "var(--status-danger-bg)" : "var(--bg-secondary)",
+                    color: z.dringend ? "var(--status-danger)" : "var(--text-tertiary)",
+                  }}>{z.text}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </nav>
+  );
+}
 
 /* ── Patient Prozess 1–15 ────────────────── */
 interface ProcessStep {
@@ -175,33 +382,6 @@ function getPatientProzess(patientStatus: string): ProcessStep[] {
   }));
 }
 
-function getAngehoerigerSchritte(): ProcessStep[] {
-  const steps = [
-    "Regelkontrolle", "Mikroschulung", "Fallbesprechung",
-    "Arbeitskontrolle", "Mikroschulung", "Kundenfeedback",
-    "SRK-Prüfung Anmeldung",
-  ];
-  const responsibles = [
-    "Sandra Weber", "Sandra Weber", "Team", "Sandra Weber",
-    "Sandra Weber", "Patient/Angehörige", "HR-Abteilung",
-  ];
-  const dueDates = [
-    "05.02.2026", "10.02.2026", "15.02.2026", "20.02.2026",
-    "25.02.2026", "28.02.2026", "05.03.2026",
-  ];
-  const dates = ["01.02.2026", "05.02.2026", "10.02.2026"];
-  return steps.map((label, i) => ({
-    nr: i + 1,
-    label,
-    status: i < 3 ? "done" : i === 3 ? "active" : "pending",
-    date: i < 3 ? dates[i] : undefined,
-    note: i === 3 ? "Fällig am 28.02.2026" : undefined,
-    responsible: responsibles[i],
-    dueDate: dueDates[i],
-    overdue: false,
-  }));
-}
-
 /* ── Tickets mock ────────────────────────── */
 interface Ticket {
   id: string;
@@ -221,18 +401,6 @@ function getTickets(_patientId: string): Ticket[] {
     { id: "SD-2026-0342", subject: "Schlüsselübergabe dokumentieren", status: "erledigt", priority: "niedrig", created: "10.02.2026", assignedTo: "K. Meier", category: "Administration" },
   ];
 }
-
-/* ── Related Lists mock data ─────────────── */
-interface StempelEntry { datum: string; eingang: string; ausgang: string; pause: string; total: string; status: "ok" | "warnung" | "fehlt"; } // kept for TS compat
-const stempelDaten: StempelEntry[] = [
-  { datum: "Mo, 24.02.", eingang: "07:30", ausgang: "16:00", pause: "0:30", total: "8:00", status: "ok" },
-  { datum: "Di, 25.02.", eingang: "07:45", ausgang: "16:15", pause: "0:30", total: "8:00", status: "ok" },
-  { datum: "Mi, 26.02.", eingang: "08:00", ausgang: "—", pause: "—", total: "—", status: "warnung" },
-  { datum: "Do, 20.02.", eingang: "—", ausgang: "—", pause: "—", total: "—", status: "fehlt" },
-  { datum: "Fr, 21.02.", eingang: "07:30", ausgang: "12:00", pause: "0:00", total: "4:30", status: "ok" },
-];
-
-
 
 /* ── Historie mock ───────────────────────── */
 interface HistoryEntry {
@@ -298,17 +466,26 @@ export function Patient360Page() {
 }
 
 function Patient360Inhalt() {
-  const { patientId } = useParams();
+  const { patientId, gruppe, ansicht } = useParams();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get("tab") || "ueberblick";
-  const setActiveTab = (tab: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (tab === "ueberblick") next.delete("tab");
-    else next.set("tab", tab);
-    setSearchParams(next, { replace: true });
-  };
+  /* Die Adresse ist die einzige Quelle der aktiven Ansicht — kein Zustand,
+     kein Suchparameter, kein Zahlenindex. */
+  const aktiveAnsicht = ansichtAusAdresse(gruppe, ansicht);
   const [statusModal, setStatusModal] = useState(false);
+
+  /* Der Kopf steht; die Navigation beginnt an seiner Unterkante. Die Höhe wird
+     gemessen statt geraten — sie ändert sich mit der Breite (Umbruch). */
+  const kopfRef = useRef<HTMLDivElement>(null);
+  const [kopfHoehe, setKopfHoehe] = useState(0);
+  useLayoutEffect(() => {
+    const el = kopfRef.current;
+    if (!el) return;
+    const messen = () => setKopfHoehe(el.getBoundingClientRect().height);
+    messen();
+    const ro = new ResizeObserver(messen);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Blättern läuft über den sichtbaren Bestand; das Dossier selbst ist auch für
   // einen Patienten im Onboarding erreichbar — er existiert bereits.
@@ -337,28 +514,37 @@ function Patient360Inhalt() {
     generiereRhythmusTickets("patient", patient.id, `${patient.nachname}, ${patient.vorname}`, isoAnker, patient.pflegefachkraft);
   }
 
-  const st = statusConfig[patient.status];
-  const ast = abrechnungsStatusConfig[patient.abrechnungsStatus];
-  const sg = patient.schweregrad ? schweregradConfig[patient.schweregrad] : null;
+  /* Unbekannte Zustandswerte fallen nicht ins Leere: jede Zuordnung hat einen
+     Rückfall, damit ein neuer Wert die Seite nicht abstürzen lässt. */
+  const st = statusConfig[patient.status] ?? statusConfig.aktiv;
+  const ast = abrechnungsStatusConfig[patient.abrechnungsStatus] ?? abrechnungsStatusConfig.in_vorbereitung;
+  const sg = patient.schweregrad ? schweregradConfig[patient.schweregrad] ?? null : null;
   const tickets = getTickets(patient.id);
+  const offenePendenzen = tickets.filter(t => t.status !== "erledigt").length;
 
-  // Status styles mapped to CSS variables
-  const stStyle = { bg: st.bg, text: st.text, dot: st.dot };
-  const astStyle = { bg: ast.bg, text: ast.text, dot: ast.dot };
+  /* Zustandsmarken der Navigation: eine Zahl, wo eine bekannt ist, rot bei
+     Handlungsbedarf; "bald" bei Ansichten, die noch keinen Inhalt tragen. */
+  const zustaende: Record<string, { text: string; dringend?: boolean }> = {
+    pendenzen: offenePendenzen > 0 ? { text: String(offenePendenzen), dringend: true } : { text: "0" },
+  };
+  for (const { ansicht: a } of ALLE_ANSICHTEN) {
+    if (!(a.schluessel in ANSICHT_HAT_INHALT)) zustaende[a.schluessel] = { text: "bald" };
+  }
 
   return (
     <>
-      {/* ── Patient-Kopfleiste (gleiche Anatomie wie Onboarding: keine Karte, kein Avatar).
-             Zeile 1: Rückweg (+ Blättern) als Teil der Leiste; Zeile 2: Titel + Marken | Aktionen. ── */}
-      <div style={{ padding: "var(--space-3) var(--space-6) 0" }}>
+      {/* ── Kopf: bleibt beim Rollen stehen ── */}
+      <div
+        ref={kopfRef}
+        style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--bg-elevated)", padding: "var(--space-3) var(--space-6) var(--space-3)", borderBottom: "var(--border-thin) solid var(--border-default)" }}
+      >
         <div style={{ marginBottom: 4 }}>
           <DetailNavigation
             backLabel="Patienten"
             backPath="/patienten"
             currentId={patientId!}
             allIds={allPatientIds}
-            buildPath={(id) => `/patienten/${id}`}
-            tabParam={activeTab !== "ueberblick" ? activeTab : undefined}
+            buildPath={(id) => ansichtPfad(id, aktiveAnsicht)}
           />
         </div>
         <div className="flex items-start justify-between" style={{ gap: 16 }}>
@@ -377,6 +563,8 @@ function Patient360Inhalt() {
               <span className="hidden md:inline">·</span>
               <span>Geb.: {patient.geburtsdatum}</span>
               <span className="hidden md:inline">·</span>
+              <span>{patient.adresse || "—"}</span>
+              <span className="hidden md:inline">·</span>
               {patient.pflegefachkraft !== "—" ? (
                 <BezugspersonFeld person={{ initialen: patient.pflegefachkraftInitialen, name: patient.pflegefachkraft }} />
               ) : (
@@ -384,6 +572,10 @@ function Patient360Inhalt() {
                   <AlertTriangle style={{ width: 12, height: 12 }} /> Nicht zugewiesen
                 </span>
               )}
+              <span className="hidden md:inline">·</span>
+              <span>Aufnahme: {patient.aufnahmeDatum || "—"}</span>
+              <span className="hidden md:inline">·</span>
+              <span>Letzter Besuch: {patient.letzterBesuch || "—"}</span>
             </div>
           </div>
 
@@ -396,66 +588,20 @@ function Patient360Inhalt() {
         </div>
       </div>
 
-      {/* ── Tabs ───────────────────────────── */}
-      <div style={{ padding: "0 var(--space-6)", marginTop: 20 }}>
-        <div style={{ borderBottom: "var(--border-thin) solid var(--border-default)" }}>
-          <div className="flex overflow-x-auto" style={{ gap: 0, marginBottom: -1 }}>
-            {profileTabs.map((t) => {
-              const Icon = t.icon;
-              const isActive = activeTab === t.id;
-              const ticketCount = t.id === "tickets" ? tickets.filter((tk) => tk.status !== "erledigt").length : 0;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setActiveTab(t.id)}
-                  className="relative flex items-center whitespace-nowrap cursor-pointer transition-colors"
-                  style={{
-                    gap: "var(--space-2)", padding: "12px 16px",
-                    fontSize: "var(--text-body)", fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",
-                    color: isActive ? "var(--brand-primary)" : "var(--text-secondary)",
-                    background: "transparent", border: "none",
-                  }}
-                >
-                  <Icon style={{ width: 16, height: 16 }} />
-                  {t.label}
-                  {t.id === "tickets" && ticketCount > 0 && (
-                    <span style={{ marginLeft: 4, padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-semibold)", background: "var(--status-danger-bg)", color: "var(--status-danger)" }}>
-                      {ticketCount}
-                    </span>
-                  )}
-                  {isActive && (
-                    <span className="absolute" style={{ bottom: -1, left: 8, right: 8, height: 2, background: "var(--brand-primary)", borderTopLeftRadius: "var(--radius-pill)", borderTopRightRadius: "var(--radius-pill)" }} />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+      {/* ── Navigation links, Arbeitsfläche rechts ── */}
+      <div className="flex items-start" style={{ gap: "var(--space-5)", padding: "var(--space-4) var(--space-6) 40px" }}>
+        <AnsichtNavigation patientId={patient.id} aktiv={aktiveAnsicht} zustaende={zustaende} obenPx={kopfHoehe} />
+        <div data-arbeitsflaeche className="flex-1 min-w-0">
+          <AnsichtInhalt
+            schluessel={aktiveAnsicht}
+            patient={patient}
+            tickets={tickets}
+            navigate={navigate}
+          />
         </div>
       </div>
 
-      {/* ── Tab Content ────────────────────── */}
-      <div style={{ padding: "20px var(--space-6) 40px" }}>
-        {activeTab === "ueberblick" && (
-          <>
-            {/* KI-Zusammenfassung gehört inhaltlich in den Überblick (nicht mehr über jeder Reiterleiste, §H) */}
-            <div style={{ marginBottom: 20 }}><AnnaPatientSummary patient={patient} /></div>
-            <TabUeberblick patient={patient} onNavigateTab={setActiveTab} />
-          </>
-        )}
-        {activeTab === "anamnese" && <TabAnamnese patient={patient} />}
-        {activeTab === "interrai" && <TabInterRAI patientId={patient.id} patientName={`${patient.nachname}, ${patient.vorname}`} navigate={navigate} />}
-        {activeTab === "pflegeplanung" && <TabPflegeplanung patientId={patient.id} navigate={navigate} />}
-        {activeTab === "klv" && <TabKLV patientId={patient.id} />}
-        {activeTab === "vitaldaten" && <VitaldatenTab patientId={patient.id} />}
-        {activeTab === "atl" && <TabATL patient={patient} />}
-        {activeTab === "workflow" && <TabWorkflow patient={patient} />}
-        {activeTab === "dokumente" && <TabDokumente patient={patient} />}
-        {activeTab === "related" && <TabRelatedLists />}
-        {activeTab === "tickets" && <TabTickets tickets={tickets} navigate={navigate} />}
-        {activeTab === "historie" && <TabHistorie patient={patient} />}
-      </div>
-
-      {/* ── Status Modal ───────────────────��─ */}
+      {/* ── Status Modal ────────────────────── */}
       <StatusModal
         open={statusModal}
         onClose={() => setStatusModal(false)}
@@ -463,6 +609,182 @@ function Patient360Inhalt() {
         patientName={`${patient.nachname}, ${patient.vorname} (${patient.id})`}
       />
     </>
+  );
+}
+
+/* ══════════════════════════════════════════
+   INHALTSZUORDNUNG
+
+   Genau eine Stelle sagt, welche Ansicht welchen Inhalt trägt. Was hier steht,
+   hat Inhalt; was fehlt, zeigt einen erklärten Zustand. Die Navigation liest
+   dieselbe Liste für ihre Marke "bald".
+   ══════════════════════════════════════════ */
+const ANSICHT_HAT_INHALT: Record<string, true> = {
+  ueberblick: true, beziehungen: true, "interrai-hc": true, atl: true, anamnese: true,
+  pflegeplan: true, vitalwerte: true, betreuungsrhythmus: true,
+  leistungsplanungsblatt: true, "verordnung-und-kostengutsprache": true,
+  stempelkontrolle: true, dokumente: true, pendenzen: true, verlauf: true,
+};
+
+/** Ansichten, deren Umfang schon feststeht — sie nennen ihn statt zu schweigen. */
+const ANSICHT_UMFANG: Record<string, string[]> = {
+  plan: [
+    "Wirkstoff, Dosierung und Einnahmezeitpunkt je Position",
+    "Verordnende Ärztin oder verordnender Arzt",
+    "Gültigkeit und Änderungsverlauf",
+  ],
+  unvertraeglichkeiten: [
+    "Wirkstoff-Unverträglichkeiten mit Schweregrad",
+    "Abgleich gegen den Medikationsplan",
+    "Quelle und Erfassungsdatum je Eintrag",
+  ],
+  "richten-und-bezug": [
+    "Richtprotokoll je Woche",
+    "Bezug aus der Apotheke mit Quittung",
+    "Abweichungen und ihre Begründung",
+  ],
+  termine: [
+    "Geplante Einsätze mit Zeitfenster",
+    "Zuständige Pflegefachkraft je Einsatz",
+    "Verschiebungen und Absagen mit Grund",
+  ],
+};
+
+function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
+  schluessel: string;
+  patient: Patient;
+  tickets: Ticket[];
+  navigate: (p: string) => void;
+}) {
+  const label = ALLE_ANSICHTEN.find(e => e.ansicht.schluessel === schluessel)?.ansicht.label ?? "Ansicht";
+
+  switch (schluessel) {
+    case "ueberblick":
+      return (
+        <>
+          {/* KI-Zusammenfassung gehört inhaltlich in den Überblick (§H) */}
+          <div style={{ marginBottom: 20 }}><AnnaPatientSummary patient={patient} /></div>
+          <TabUeberblick patient={patient} />
+        </>
+      );
+    case "beziehungen": return <AnsichtBeziehungen patient={patient} />;
+    case "interrai-hc": return <TabInterRAI patientId={patient.id} patientName={`${patient.nachname}, ${patient.vorname}`} navigate={navigate} />;
+    case "atl": return <TabATL patient={patient} />;
+    case "anamnese": return <TabAnamnese patient={patient} />;
+    case "pflegeplan": return <TabPflegeplanung patientId={patient.id} navigate={navigate} />;
+    case "vitalwerte": return <VitaldatenTab patientId={patient.id} />;
+    case "betreuungsrhythmus": return <TabWorkflow patient={patient} />;
+    case "leistungsplanungsblatt": return <TabKLV patientId={patient.id} />;
+    case "verordnung-und-kostengutsprache": return <AnsichtVerordnung />;
+    case "stempelkontrolle": return <AnsichtStempelkontrolle />;
+    case "dokumente": return <TabDokumente patient={patient} />;
+    case "pendenzen": return <TabTickets tickets={tickets} navigate={navigate} />;
+    case "verlauf": return <TabHistorie patient={patient} />;
+    default:
+      return ANSICHT_UMFANG[schluessel]
+        ? <NochNichtVerfuegbar titel={label} umfang={ANSICHT_UMFANG[schluessel]} />
+        : <NochNichtDefiniert titel={label} />;
+  }
+}
+
+/* ══════════════════════════════════════════
+   ANSICHT: Patient › Beziehungen
+
+   Übernimmt die Karte "Kontaktpersonen" aus dem früheren Überblick
+   unverändert — Angehörige/r und Notfallkontakt mit ihrem eigenen
+   Bearbeiten-Zweig, der weiterhin in den gemeinsamen Bestand schreibt.
+   ══════════════════════════════════════════ */
+function AnsichtBeziehungen({ patient }: { patient: Patient }) {
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+
+  const origAngehName = patient.angehoeriger.split(" (")[0];
+  const origAngehRelation = patient.angehoeriger.match(/\(([^)]+)\)/)?.[1] || "";
+  const [angehName, setAngehName] = useState(origAngehName);
+  const [angehRelation, setAngehRelation] = useState(origAngehRelation);
+  const [angehTelefon, setAngehTelefon] = useState(patient.angehoerigerTelefon);
+  const [notfallName, setNotfallName] = useState(patient.notfallkontaktName);
+  const [notfallRelation, setNotfallRelation] = useState(patient.notfallkontaktBeziehung);
+  const [notfallTelefon, setNotfallTelefon] = useState(patient.notfallkontaktTelefon);
+  const [snapshot, setSnapshot] = useState<Record<string, string>>({});
+
+  const startEdit = () => {
+    setSnapshot({ angehName, angehRelation, angehTelefon, notfallName, notfallRelation, notfallTelefon });
+    setEditingSection("kontakt");
+  };
+
+  const cancelEdit = () => {
+    setAngehName(snapshot.angehName ?? angehName);
+    setAngehRelation(snapshot.angehRelation ?? angehRelation);
+    setAngehTelefon(snapshot.angehTelefon ?? angehTelefon);
+    setNotfallName(snapshot.notfallName ?? notfallName);
+    setNotfallRelation(snapshot.notfallRelation ?? notfallRelation);
+    setNotfallTelefon(snapshot.notfallTelefon ?? notfallTelefon);
+    setEditingSection(null);
+  };
+
+  /**
+   * Der Angehörige wird wieder in die im Bestand übliche Form
+   * "Name (Beziehung)" gebracht; der Notfallkontakt bleibt davon getrennt und
+   * behält seine eigenen drei Felder.
+   */
+  const saveEdit = () => {
+    const angehoerigerText = angehRelation.trim()
+      ? `${angehName.trim()} (${angehRelation.trim()})`
+      : angehName.trim();
+    aktualisierePatient(patient.id, {
+      angehoeriger: angehoerigerText,
+      angehoerigerTelefon: angehTelefon,
+      notfallkontaktName: notfallName,
+      notfallkontaktBeziehung: notfallRelation,
+      notfallkontaktTelefon: notfallTelefon,
+    });
+    setEditingSection(null);
+  };
+
+  return (
+    <div className="space-y-4">
+    {/* Kontaktpersonen */}
+    <PSectionCard
+      title="Kontaktpersonen"
+      icon={Users}
+      editable
+      editing={editingSection === "kontakt"}
+      onEdit={startEdit}
+      onCancel={cancelEdit}
+      onSave={saveEdit}
+    >
+      <div className="space-y-3">
+        <ContactRow
+          icon={Heart}
+          iconBg="bg-primary/[0.06]"
+          iconColor="text-primary/50"
+          name={angehName}
+          subtitle={angehRelation}
+          telefon={angehTelefon}
+          editing={editingSection === "kontakt"}
+          onNameChange={setAngehName}
+          onSubtitleChange={setAngehRelation}
+          onTelefonChange={setAngehTelefon}
+        />
+
+        <div className="border-t border-border-light" />
+
+        <ContactRow
+          icon={Phone}
+          iconBg="bg-error/[0.06]"
+          iconColor="text-error/50"
+          name={notfallName}
+          subtitle={notfallRelation}
+          subtitleColor="text-error/60"
+          telefon={notfallTelefon}
+          editing={editingSection === "kontakt"}
+          onNameChange={setNotfallName}
+          onSubtitleChange={setNotfallRelation}
+          onTelefonChange={setNotfallTelefon}
+        />
+      </div>
+    </PSectionCard>
+    </div>
   );
 }
 
@@ -641,7 +963,8 @@ function ContactRow({
   );
 }
 
-function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigateTab: (tab: string) => void }) {
+function TabUeberblick({ patient }: { patient: Patient }) {
+  const navigate = useNavigate();
   const prozess = getPatientProzess(patient.status);
   const nextTask = prozess.find((s) => s.status === "active");
 
@@ -653,16 +976,6 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
   const [kanton, setKanton] = useState(patient.kanton);
   const [leistungsart, setLeistungsart] = useState(patient.leistungsart);
   const [letzterBesuch, setLetzterBesuch] = useState(patient.letzterBesuch);
-
-  /* ── Editable fields: Kontaktpersonen ── */
-  const origAngehName = patient.angehoeriger.split(" (")[0];
-  const origAngehRelation = patient.angehoeriger.match(/\(([^)]+)\)/)?.[1] || "";
-  const [angehName, setAngehName] = useState(origAngehName);
-  const [angehRelation, setAngehRelation] = useState(origAngehRelation);
-  const [angehTelefon, setAngehTelefon] = useState(patient.angehoerigerTelefon);
-  const [notfallName, setNotfallName] = useState(patient.notfallkontaktName);
-  const [notfallRelation, setNotfallRelation] = useState(patient.notfallkontaktBeziehung);
-  const [notfallTelefon, setNotfallTelefon] = useState(patient.notfallkontaktTelefon);
 
   /* ── Editable fields: Versicherung & Arzt — Werte kommen aus dem Patienten ── */
   const [kkName, setKkName] = useState(patient.krankenkasse);
@@ -678,8 +991,6 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
     // Snapshot current values for the section
     if (section === "adresse") {
       setSnapshot({ adresse, kanton, leistungsart, letzterBesuch });
-    } else if (section === "kontakt") {
-      setSnapshot({ angehName, angehRelation, angehTelefon, notfallName, notfallRelation, notfallTelefon });
     } else if (section === "versicherung") {
       setSnapshot({ kkName, kkNummer, arztName, arztFach, arztTel });
     }
@@ -693,13 +1004,6 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
       setKanton(snapshot.kanton ?? kanton);
       setLeistungsart(snapshot.leistungsart ?? leistungsart);
       setLetzterBesuch(snapshot.letzterBesuch ?? letzterBesuch);
-    } else if (section === "kontakt") {
-      setAngehName(snapshot.angehName ?? angehName);
-      setAngehRelation(snapshot.angehRelation ?? angehRelation);
-      setAngehTelefon(snapshot.angehTelefon ?? angehTelefon);
-      setNotfallName(snapshot.notfallName ?? notfallName);
-      setNotfallRelation(snapshot.notfallRelation ?? notfallRelation);
-      setNotfallTelefon(snapshot.notfallTelefon ?? notfallTelefon);
     } else if (section === "versicherung") {
       setKkName(snapshot.kkName ?? kkName);
       setKkNummer(snapshot.kkNummer ?? kkNummer);
@@ -720,17 +1024,6 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
     if (editingSection === "adresse") {
       aktualisierePatient(patient.id, {
         adresse, kanton, leistungsart, letzterBesuch,
-      });
-    } else if (editingSection === "kontakt") {
-      const angehoerigerText = angehRelation.trim()
-        ? `${angehName.trim()} (${angehRelation.trim()})`
-        : angehName.trim();
-      aktualisierePatient(patient.id, {
-        angehoeriger: angehoerigerText,
-        angehoerigerTelefon: angehTelefon,
-        notfallkontaktName: notfallName,
-        notfallkontaktBeziehung: notfallRelation,
-        notfallkontaktTelefon: notfallTelefon,
       });
     } else if (editingSection === "versicherung") {
       aktualisierePatient(patient.id, {
@@ -773,48 +1066,6 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
             {/* Quelle ist AA2 im Reiter Anmeldung — hier nur Anzeige, nicht bearbeitbar. */}
             <PEditableField label="Aufnahmedatum" value={patient.aufnahmeDatum} editing={false} onChange={() => {}} />
             <PEditableField label="Letzter Besuch" value={letzterBesuch} editing={editingSection === "adresse"} onChange={setLetzterBesuch} />
-          </div>
-        </PSectionCard>
-
-        {/* Kontaktpersonen */}
-        <PSectionCard
-          title="Kontaktpersonen"
-          icon={Users}
-          editable
-          editing={editingSection === "kontakt"}
-          onEdit={() => startEdit("kontakt")}
-          onCancel={() => cancelEdit("kontakt")}
-          onSave={saveEdit}
-        >
-          <div className="space-y-3">
-            <ContactRow
-              icon={Heart}
-              iconBg="bg-primary/[0.06]"
-              iconColor="text-primary/50"
-              name={angehName}
-              subtitle={angehRelation}
-              telefon={angehTelefon}
-              editing={editingSection === "kontakt"}
-              onNameChange={setAngehName}
-              onSubtitleChange={setAngehRelation}
-              onTelefonChange={setAngehTelefon}
-            />
-
-            <div className="border-t border-border-light" />
-
-            <ContactRow
-              icon={Phone}
-              iconBg="bg-error/[0.06]"
-              iconColor="text-error/50"
-              name={notfallName}
-              subtitle={notfallRelation}
-              subtitleColor="text-error/60"
-              telefon={notfallTelefon}
-              editing={editingSection === "kontakt"}
-              onNameChange={setNotfallName}
-              onSubtitleChange={setNotfallRelation}
-              onTelefonChange={setNotfallTelefon}
-            />
           </div>
         </PSectionCard>
 
@@ -904,11 +1155,11 @@ function TabUeberblick({ patient, onNavigateTab }: { patient: Patient; onNavigat
                 <PDataField label="Zugewiesen" value={nextTask.responsible || "—"} />
               </div>
               <button
-                onClick={() => onNavigateTab("workflow")}
+                onClick={() => navigate(ansichtPfad(patient.id, "betreuungsrhythmus"))}
                 className="mt-4 inline-flex items-center gap-1.5 text-[12px] text-primary hover:text-primary-hover transition-colors"
                 style={{ fontWeight: 500 }}
               >
-                Zum Workflow
+                Zum Betreuungsrhythmus
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </>
@@ -1654,6 +1905,14 @@ const atlStufeConfig: Record<ATLStufe, { label: string; bg: string; text: string
   volluebernahme: { label: "Vollübernahme", bg: "bg-error-light", text: "text-error-foreground", dot: "bg-error", value: 1 },
 };
 
+/**
+ * Auflösung einer ATL-Stufe. Ein unbekannter Wert fällt auf "selbstständig"
+ * zurück, statt zur Laufzeit ins Leere zu greifen.
+ */
+function atlStufe(wert: string) {
+  return atlStufeConfig[wert as ATLStufe] ?? atlStufeConfig.selbststaendig;
+}
+
 const stufeKeys: ATLStufe[] = ["selbststaendig", "anleitung", "teiluebernahme", "volluebernahme"];
 
 interface ATLAktivitaet { id: string; name: string; stufe: ATLStufe; bemerkung: string }
@@ -1770,7 +2029,7 @@ function TabATL({ patient }: { patient: Patient }) {
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {(Object.entries(stufeCounts) as [ATLStufe, number][]).map(([stufe, count]) => {
-            const cfg = atlStufeConfig[stufe];
+            const cfg = atlStufe(stufe);
             const pct = Math.round((count / total) * 100);
             return (
               <div key={stufe} className={`rounded-xl px-3.5 py-2.5 ${cfg.bg}`}>
@@ -1814,7 +2073,7 @@ function TabATL({ patient }: { patient: Patient }) {
             </div>
             <div className="p-5 space-y-2">
               {bereich.aktivitaeten.map((akt) => {
-                const cfg = atlStufeConfig[akt.stufe];
+                const cfg = atlStufe(akt.stufe);
                 return (
                   <div key={akt.id} className={`rounded-xl bg-background border border-border-light ${isEdit ? "px-3 py-3" : "px-3 py-2.5"}`}>
                     <div className="flex items-start gap-3">
@@ -1832,7 +2091,7 @@ function TabATL({ patient }: { patient: Patient }) {
                       ) : (
                         <div className="flex gap-1 shrink-0 flex-wrap justify-end">
                           {stufeKeys.map((key) => {
-                            const c = atlStufeConfig[key];
+                            const c = atlStufe(key);
                             const isActive = akt.stufe === key;
                             return (
                               <button
@@ -1914,85 +2173,11 @@ function TabWorkflow({ patient }: { patient: Patient }) {
 }
 
 /* ══════════════════════════════════════════
-   TAB: RELATED LISTS
+   ANSICHT: Leistungen › Verordnung und Kostengutsprache
+   Übernimmt die Abschnitte 1 und 2 der früheren Sammelliste unverändert:
+   aktive Bewilligung und Bewilligungs-Historie.
    ══════════════════════════════════════════ */
-function TabRelatedLists() {
-  const [activeList, setActiveList] = useState("stempel");
-  const lists = [
-    { id: "stempel", label: "Stempelkontrolle & Absenzen", icon: Stamp },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {lists.map((l) => {
-          const Icon = l.icon;
-          const isActive = activeList === l.id;
-          return (
-            <button
-              key={l.id}
-              onClick={() => setActiveList(l.id)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] border whitespace-nowrap transition-all ${
-                isActive ? "border-primary/20 bg-primary-light text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
-              }`}
-              style={{ fontWeight: isActive ? 500 : 400 }}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {l.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {activeList === "stempel" && <TableStempel />}
-    </div>
-  );
-}
-
-function TableStempel() {
-  const [hatAbsenzen, setHatAbsenzen] = useState(false);
-  const [absenzForm, setAbsenzForm] = useState({ zeitraum: "", tage: "", typ: "Krankheit", bemerkung: "" });
-
-  interface Absenz { id: number; zeitraum: string; tage: string; typ: string; bemerkung: string; }
-  const [absenzen, setAbsenzen] = useState<Absenz[]>([]);
-  const [nextId, setNextId] = useState(1);
-  const [editingId, setEditingId] = useState<number | null>(null);
-
-  const canSave = absenzForm.zeitraum.trim() !== "" && absenzForm.tage.trim() !== "";
-  const isEditing = editingId !== null;
-
-  const handleAddAbsenz = () => {
-    if (!canSave) return;
-    if (isEditing) {
-      setAbsenzen((prev) => prev.map((a) => a.id === editingId ? { ...absenzForm, id: editingId } : a));
-      setEditingId(null);
-    } else {
-      setAbsenzen((prev) => [...prev, { ...absenzForm, id: nextId }]);
-      setNextId((n) => n + 1);
-    }
-    setAbsenzForm({ zeitraum: "", tage: "", typ: "Krankheit", bemerkung: "" });
-  };
-
-  const handleEditAbsenz = (a: Absenz) => {
-    setEditingId(a.id);
-    setAbsenzForm({ zeitraum: a.zeitraum, tage: a.tage, typ: a.typ, bemerkung: a.bemerkung });
-    setHatAbsenzen(true);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setAbsenzForm({ zeitraum: "", tage: "", typ: "Krankheit", bemerkung: "" });
-  };
-
-  const handleDeleteAbsenz = (id: number) => {
-    setAbsenzen((prev) => {
-      const next = prev.filter((a) => a.id !== id);
-      if (next.length === 0) setHatAbsenzen(false);
-      return next;
-    });
-    if (editingId === id) handleCancelEdit();
-  };
-
+function AnsichtVerordnung() {
   /* ── Bewilligte Leistungen with versioning ── */
   interface Bewilligung {
     id: number;
@@ -2130,6 +2315,7 @@ function TableStempel() {
     setBewForm(emptyBewForm);
     setShowNewBewForm(false);
   };
+
 
   return (
     <div className="space-y-4">
@@ -2375,6 +2561,60 @@ function TableStempel() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   ANSICHT: Einsätze › Stempelkontrolle
+   Übernimmt Abschnitt 3 der früheren Sammelliste unverändert: die Absenzen.
+   ══════════════════════════════════════════ */
+function AnsichtStempelkontrolle() {
+  const [hatAbsenzen, setHatAbsenzen] = useState(false);
+  const [absenzForm, setAbsenzForm] = useState({ zeitraum: "", tage: "", typ: "Krankheit", bemerkung: "" });
+
+  interface Absenz { id: number; zeitraum: string; tage: string; typ: string; bemerkung: string; }
+  const [absenzen, setAbsenzen] = useState<Absenz[]>([]);
+  const [nextId, setNextId] = useState(1);
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  const canSave = absenzForm.zeitraum.trim() !== "" && absenzForm.tage.trim() !== "";
+  const isEditing = editingId !== null;
+
+  const handleAddAbsenz = () => {
+    if (!canSave) return;
+    if (isEditing) {
+      setAbsenzen((prev) => prev.map((a) => a.id === editingId ? { ...absenzForm, id: editingId } : a));
+      setEditingId(null);
+    } else {
+      setAbsenzen((prev) => [...prev, { ...absenzForm, id: nextId }]);
+      setNextId((n) => n + 1);
+    }
+    setAbsenzForm({ zeitraum: "", tage: "", typ: "Krankheit", bemerkung: "" });
+  };
+
+  const handleEditAbsenz = (a: Absenz) => {
+    setEditingId(a.id);
+    setAbsenzForm({ zeitraum: a.zeitraum, tage: a.tage, typ: a.typ, bemerkung: a.bemerkung });
+    setHatAbsenzen(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setAbsenzForm({ zeitraum: "", tage: "", typ: "Krankheit", bemerkung: "" });
+  };
+
+  const handleDeleteAbsenz = (id: number) => {
+    setAbsenzen((prev) => {
+      const next = prev.filter((a) => a.id !== id);
+      if (next.length === 0) setHatAbsenzen(false);
+      return next;
+    });
+    if (editingId === id) handleCancelEdit();
+  };
+
+  return (
+    <div className="space-y-4">
 
       {/* ═══ SECTION 3: Absenzen ═══ */}
       <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
@@ -2796,7 +3036,7 @@ function TabInterRAI({ patientId }: { patientId: string; patientName: string; na
   return (
     <AssessmentStatusView
       person={person}
-      returnTo={`/patienten/${patientId}?tab=interrai`}
+      returnTo={ansichtPfad(patientId!, "interrai-hc")}
     />
   );
 }

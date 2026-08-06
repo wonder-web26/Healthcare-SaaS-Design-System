@@ -31,7 +31,12 @@ export const router = createBrowserRouter([
       { path: "schulungsnachweis/:nachweisId", Component: SchulungsnachweisPage },
       { path: "arbeitskontrolle/:kontrolleId", Component: ArbeitskontrollePage },
       { path: "patienten", Component: PatientenPage },
+      /* Das Patientendossier hat je Ansicht eine eigene Adresse. Drei Formen:
+         ohne Glied (Überblick), ein Glied (Ansicht ohne Gruppe) und zwei
+         Glieder (Gruppe + Ansicht). Alles Weitere fällt auf den Überblick. */
       { path: "patienten/:patientId", Component: Patient360Page },
+      { path: "patienten/:patientId/:gruppe", Component: Patient360Page },
+      { path: "patienten/:patientId/:gruppe/:ansicht", Component: Patient360Page },
       { path: "angehoerige", Component: AngehoerigePage },
       { path: "angehoerige/:angehoerigerIdOrNew", Component: Angehoerige360Page },
       { path: "onboarding", Component: OnboardingListPage },
