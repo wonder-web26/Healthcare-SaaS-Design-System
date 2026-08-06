@@ -2046,10 +2046,11 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
                       <div className="flex items-center justify-between" style={{ gap: 8 }}>
                         <div className="flex items-center" style={{ gap: 6 }}>
                           {l.ausAnna && <div className="flex items-center" style={{ gap: 3 }}><Sparkles style={{ width: 12, height: 12, color: "var(--brand-primary)" }} /><span style={{ fontSize: 9, fontWeight: 500, color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" as const }}>Anna</span></div>}
-                          <span className="inline-flex items-center" style={{ gap: 3, padding: "1px 8px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: l.validiert ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: l.validiert ? "var(--status-success-text)" : "var(--status-warning-text)" }}>
+                          {l.ausAnna && (<span className="inline-flex items-center" style={{ gap: 3, padding: "1px 8px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: l.validiert ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: l.validiert ? "var(--status-success-text)" : "var(--status-warning-text)" }}>
                             {l.validiert ? <Check style={{ width: 10, height: 10 }} /> : <Clock style={{ width: 10, height: 10 }} />}
                             {l.validiert ? "Bestätigt" : "Vorschlag"}
                           </span>
+                          )}
                         </div>
                         <div className="flex items-center" style={{ gap: 8 }}>
                           <span className="hidden sm:inline" style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{l.zeitMin} min</span>
@@ -2061,7 +2062,13 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
                         </div>
                       </div>
 
-                      {/* Expanded edit body */}
+                      {/* Expanded edit body.
+                          Der Aufklappbereich liegt INNERHALB der Zeile, und die Zeile
+                          trägt den Auslöser (ItemRow onClick). Ohne diesen Riegel
+                          erreichte jeder Klick auf ein Feld den Auslöser und klappte
+                          die Position wieder zu — der Bereich war unbedienbar.
+                          Der Riegel sitzt hier, nicht in ItemRow: nur diese eine
+                          Verwendung übergibt einen Zeilen-Auslöser. */}
                       {isExpanded && (() => {
                         const rhythmus = l.einheit === "e" ? "einmalig" : l.einheit === "nB" ? "nachBedarf" : l.einheit === "m" ? "monatlich" : l.einheit === "w" ? "wöchentlich" : "täglich";
                         const tage = l.einheit.startsWith("t") ? parseInt(l.einheit.slice(1)) : (l.einheit === "w" ? 1 : 7);
@@ -2080,6 +2087,7 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
                         const ss = { width: "100%", padding: "8px 12px", fontSize: 14, borderRadius: 12, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "inherit" } as const;
                         const ssDis = { ...ss, opacity: 0.4, pointerEvents: "none" as const, background: "var(--bg-secondary)", color: "var(--text-tertiary)", cursor: "not-allowed" as const };
                         return (
+                          <div onClick={e => e.stopPropagation()}>
                           <div style={{ marginTop: 8, paddingTop: 10, borderTop: "0.5px solid var(--border-default)", borderLeft: `4px solid ${l.validiert ? "var(--status-success)" : "var(--status-warning)"}`, paddingLeft: 12 }}>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginBottom: 10 }}>
                               <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Wer</label><InlineSelect value={l.wer} onChange={v => updateLeistung(l.id, { wer: v as KLVLeistung["wer"] })} options={KLV_WER_OPTIONS} /></div>
@@ -2107,6 +2115,7 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
                                 <button onClick={e => { e.stopPropagation(); validateLeistung(l.id); }} className="inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "10px 22px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}><Check style={{ width: 14, height: 14 }} /> Bestätigen</button>
                               </div>
                             )}
+                          </div>
                           </div>
                         );
                       })()}
