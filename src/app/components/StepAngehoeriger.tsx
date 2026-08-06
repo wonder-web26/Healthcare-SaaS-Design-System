@@ -121,13 +121,10 @@ export interface AngehoerigerFormData {
   partnerAufenthaltsstatus: string;
   /** SP-06: Erwerbstaetig (Ja/Nein) */
   partnerErwerbstaetig: string;
-  /* Legacy-Felder (beibehalten fuer Datenkonsistenz) */
   partnerAhvNummer: string;
   partnerZemisNummer: string;
   partnerFbAusweisAngemeldet: string;
   partnerAnmeldungDatum: string;
-  partnerBerufstaetig: string;
-  partnerAhv: string;
   /* 4. Kinder & Zulagen */
   hatUnterhaltspflichtigeKinder: string;
   kinder: KindEntry[];
@@ -160,10 +157,27 @@ export interface AngehoerigerFormData {
   scans: Record<string, ScanFile | null>;
 }
 
+/**
+ * Zulagenart eines Kindes — Fachkürzel der CH-Familienzulagen:
+ * K = Kinderzulage, W = Ausbildungszulage. "" = noch nicht gewählt.
+ */
+export type Zulagenart = "" | "K" | "W";
+
+/** Einzige Quelle der Anzeigebezeichnung für zulagenart (K/W). */
+export const ZULAGENART_LABEL: Record<"K" | "W", string> = {
+  K: "Kinderzulage",
+  W: "Ausbildungszulage",
+};
+
+/** Anzeigebezeichnung für einen zulagenart-Wert; leer, solange nichts gewählt ist. */
+export function zulagenartLabel(v: Zulagenart): string {
+  return v === "" ? "" : ZULAGENART_LABEL[v];
+}
+
 export interface KindEntry {
   id: string;
   vorname: string;
-  name: string;
+  nachname: string;
   geburtsdatum: string;
   geschlecht: string;
   ahvNummer: string;
@@ -171,8 +185,8 @@ export interface KindEntry {
   inAusbildung: string;
   ausbildungsbeginn: string;
   ausbildungsstatus: string;
-  /** SP-09: Zulagentyp (kinderzulage / ausbildungszulage / keine_zulage) */
-  zulagenart: string;
+  /** SP-09: Zulagenart — K = Kinderzulage, W = Ausbildungszulage */
+  zulagenart: Zulagenart;
   /** SP-09: Quelle des Zulagentyps ("abgeleitet" / "manuell_ueberschrieben") */
   typQuelle: string;
   /** SP-09: Begründung bei manuellem Override (Pflichtfeld) */
@@ -185,7 +199,7 @@ export function createEmptyKind(): KindEntry {
   return {
     id: crypto.randomUUID(),
     vorname: "",
-    name: "",
+    nachname: "",
     geburtsdatum: "",
     geschlecht: "",
     ahvNummer: "",
@@ -201,7 +215,7 @@ export function createEmptyKind(): KindEntry {
 
 function isKindComplete(k: KindEntry): boolean {
   const base =
-    filled(k.name) &&
+    filled(k.nachname) &&
     filled(k.vorname) &&
     isValidDate(k.geburtsdatum) &&
     isValidAHV(k.ahvNummer) &&
@@ -216,7 +230,7 @@ function isKindComplete(k: KindEntry): boolean {
 
 function kindProgress(k: KindEntry): { done: number; total: number } {
   const checks: boolean[] = [
-    filled(k.name),
+    filled(k.nachname),
     filled(k.vorname),
     isValidDate(k.geburtsdatum),
     isValidAHV(k.ahvNummer),
@@ -286,8 +300,6 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   partnerZemisNummer: "",
   partnerFbAusweisAngemeldet: "nein",
   partnerAnmeldungDatum: "",
-  partnerBerufstaetig: "nein",
-  partnerAhv: "",
   hatUnterhaltspflichtigeKinder: "nein",
   kinder: [],
   kinderzulagenUeberSpitex: "nein",
@@ -502,7 +514,7 @@ function getSubStepStatus(
       // Stufe 2: Wenn Zulagen ueber Spitex → Detail-Block Pflicht
       if (data.kinderzulagenUeberSpitex === "ja") {
         if (data.kinder.length === 0) return "partial";
-        const allKidsComplete = data.kinder.every(k => filled(k.vorname) && filled(k.name) && filled(k.geburtsdatum));
+        const allKidsComplete = data.kinder.every(k => filled(k.vorname) && filled(k.nachname) && filled(k.geburtsdatum));
         return allKidsComplete ? "complete" : "partial";
       }
       // Frage 2 = Nein → nur Anzahl noetig, schon geprueft

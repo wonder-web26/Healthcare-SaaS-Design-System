@@ -4,6 +4,8 @@
  * ─────────────────────────────────────────
  */
 
+import type { Zulagenart } from "./StepAngehoeriger";
+
 export type Qualifikation = "ohne_srk" | "srk" | "fage_dipl";
 
 export type BillingReadiness =
@@ -139,9 +141,27 @@ export interface AngehoerigerKind {
   ahvNummer: string;
   inAusbildung: string;
   ausbildungsbeginn: string;
-  zulagenart: string;
+  /** Vereinheitlichtes Vokabular: K = Kinderzulage, W = Ausbildungszulage. */
+  zulagenart: Zulagenart;
   typQuelle: string;
   overrideBegruendung: string;
+}
+
+/**
+ * Leeres Kind des Bestands — genau ein Weg, eines zu erzeugen.
+ *
+ * Gegenstück zu `createEmptyKind()` des Onboardings, das den dortigen
+ * `KindEntry` liefert. Getrennt, weil die beiden Modelle verschiedene Felder
+ * tragen (`name` gegen `nachname`, Ausbildungsstatus und Doppelbezug nur im
+ * Onboarding). Vorbelegung der Zulagenart K wie im Onboarding.
+ */
+export function createEmptyAngehoerigerKind(): AngehoerigerKind {
+  return {
+    id: crypto.randomUUID(),
+    vorname: "", name: "", geburtsdatum: "", geschlecht: "", ahvNummer: "",
+    inAusbildung: "", ausbildungsbeginn: "",
+    zulagenart: "K", typQuelle: "", overrideBegruendung: "",
+  };
 }
 
 /** Leere Erhebung — jeder Wert "nicht erhoben". */
@@ -487,9 +507,9 @@ export const angehoerigeSeed: Angehoeriger[] = [
     kinderzulagenUeberSpitex: "ja",
     kinder: [
       { id: "K1", vorname: "Elira", name: "Rexhepi", geburtsdatum: "14.05.2012", geschlecht: "weiblich", ahvNummer: "756.4455.6677.12",
-        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "kinderzulage", typQuelle: "abgeleitet", overrideBegruendung: "" },
+        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "K", typQuelle: "abgeleitet", overrideBegruendung: "" },
       { id: "K2", vorname: "Dardan", name: "Rexhepi", geburtsdatum: "27.09.2016", geschlecht: "maennlich", ahvNummer: "756.5566.7788.23",
-        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "kinderzulage", typQuelle: "abgeleitet", overrideBegruendung: "" },
+        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "K", typQuelle: "abgeleitet", overrideBegruendung: "" },
     ],
     arbeitetExtern: "nein",
     externeFunktion: "",
@@ -582,7 +602,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     kinderzulagenUeberSpitex: "nein",
     kinder: [
       { id: "K1", vorname: "Deniz", name: "Kaya", geburtsdatum: "02.02.2012", geschlecht: "maennlich", ahvNummer: "756.6677.8899.34",
-        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "kinderzulage", typQuelle: "abgeleitet", overrideBegruendung: "" },
+        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "K", typQuelle: "abgeleitet", overrideBegruendung: "" },
     ],
     arbeitetExtern: "nein",
     externeFunktion: "",
@@ -854,9 +874,9 @@ export const angehoerigeSeed: Angehoeriger[] = [
     kinderzulagenUeberSpitex: "ja",
     kinder: [
       { id: "K1", vorname: "Nina", name: "Bösiger", geburtsdatum: "19.08.2011", geschlecht: "weiblich", ahvNummer: "756.7788.9900.45",
-        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "kinderzulage", typQuelle: "abgeleitet", overrideBegruendung: "" },
+        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "K", typQuelle: "abgeleitet", overrideBegruendung: "" },
       { id: "K2", vorname: "Timo", name: "Bösiger", geburtsdatum: "06.05.2015", geschlecht: "maennlich", ahvNummer: "756.8899.0011.56",
-        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "kinderzulage", typQuelle: "abgeleitet", overrideBegruendung: "" },
+        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "K", typQuelle: "abgeleitet", overrideBegruendung: "" },
     ],
     arbeitetExtern: "ja",
     externeFunktion: "Fachfrau Gesundheit, Alterszentrum Langenthal",
@@ -1127,7 +1147,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     kinderzulagenUeberSpitex: "ja",
     kinder: [
       { id: "K1", vorname: "Jonas", name: "Keller", geburtsdatum: "12.07.2013", geschlecht: "maennlich", ahvNummer: "756.9900.1122.67",
-        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "kinderzulage", typQuelle: "abgeleitet", overrideBegruendung: "" },
+        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "K", typQuelle: "abgeleitet", overrideBegruendung: "" },
     ],
     arbeitetExtern: "nein",
     externeFunktion: "",
@@ -1304,11 +1324,11 @@ export const angehoerigeSeed: Angehoeriger[] = [
     kinderzulagenUeberSpitex: "nein",
     kinder: [
       { id: "K1", vorname: "Mia", name: "Huber", geburtsdatum: "03.03.2012", geschlecht: "weiblich", ahvNummer: "756.2233.4455.78",
-        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "kinderzulage", typQuelle: "abgeleitet", overrideBegruendung: "" },
+        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "K", typQuelle: "abgeleitet", overrideBegruendung: "" },
       { id: "K2", vorname: "Luca", name: "Huber", geburtsdatum: "25.06.2015", geschlecht: "maennlich", ahvNummer: "756.3344.5566.89",
-        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "kinderzulage", typQuelle: "abgeleitet", overrideBegruendung: "" },
+        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "K", typQuelle: "abgeleitet", overrideBegruendung: "" },
       { id: "K3", vorname: "Elin", name: "Huber", geburtsdatum: "09.11.2019", geschlecht: "weiblich", ahvNummer: "756.4455.6677.90",
-        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "kinderzulage", typQuelle: "abgeleitet", overrideBegruendung: "" },
+        inAusbildung: "", ausbildungsbeginn: "", zulagenart: "K", typQuelle: "abgeleitet", overrideBegruendung: "" },
     ],
     arbeitetExtern: "nein",
     externeFunktion: "",

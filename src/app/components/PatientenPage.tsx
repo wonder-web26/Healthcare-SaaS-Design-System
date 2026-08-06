@@ -123,52 +123,54 @@ function filterPatienten(list: Patient[], f: FilterZustand, bezugIso: string, me
   });
 }
 
-/* ── Sortierung: Standard Name aufsteigend; klickbar in vier Spalten ── */
-type SortKey = "name" | "schweregrad" | "reassessment" | "tasks";
-const SORT_LABEL: Record<SortKey, string> = { name: "Name", schweregrad: "Schweregrad", reassessment: "Re-Assessment", tasks: "Tasks" };
-/** Leerer Schweregrad sortiert ans Ende, nicht an den Anfang. */
-const SCHWEREGRAD_RANK: Record<Schweregrad, number> = { leicht: 0, mittel: 1, schwer: 2, kritisch: 3 };
-
+/* ── Sortierung: jede Spalte; Status/Schweregrad nach Rangfolge, Datum chronologisch,
+   Zähler numerisch, sonst alphabetisch nach angezeigtem Wert; Leerwerte immer ans
+   Ende. Keine Vorsortierung (Standard unverändert). ── */
+type SortKey = "name" | "angehoeriger" | "status" | "schweregrad" | "pflegefachkraft" | "prozessstatus" | "reassessment" | "tasks" | "aktivitaet";
+const SCHWEREGRAD_RANK: Record<string, number> = { leicht: 0, mittel: 1, schwer: 2, kritisch: 3 };
+const PAT_STATUS_RANK: Record<string, number> = { aktiv: 0, nicht_abrechenbar: 1, gekuendigt: 2 };
+const SORT_LABEL: Record<SortKey, string> = {
+  name: "Name", angehoeriger: "Angehörigem", status: "Status", schweregrad: "Schweregrad",
+  pflegefachkraft: "Pflegefachkraft", prozessstatus: "Prozessstatus",
+  reassessment: "Re-Assessment", tasks: "Tasks", aktivitaet: "Aktivität",
+};
+function datumKey(d: string): string { const [dd, mm, yy] = d.split("."); return `${yy ?? ""}${mm ?? ""}${dd ?? ""}`; }
 /**
- * "Ohne Angabe" steht in BEIDEN Richtungen am Ende.
+ * Leere Werte stehen unabhängig von der Richtung am Ende.
  *
- * Ein Rangwert am oberen Ende der Skala würde beim Umkehren nach vorne
- * wandern — dann stünden die nicht erhobenen Werte zuoberst. Leere werden
- * deshalb vor dem Richtungsfaktor abgehandelt und nie mit ihm multipliziert.
- * Rückgabe null heisst "beide haben einen Wert, normal weitervergleichen".
+ * Ein Rangwert am oberen Ende der Skala würde beim Umkehren nach vorne wandern —
+ * dann stünden die nicht erhobenen Werte zuoberst. Leere werden deshalb VOR dem
+ * Richtungsfaktor abgehandelt und nie mit ihm multipliziert.
  */
-function ohneAngabeZuletzt(aLeer: boolean, bLeer: boolean): number | null {
-  if (aLeer && bLeer) return 0;
-  if (aLeer) return 1;
-  if (bLeer) return -1;
-  return null;
+function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): number {
+  if (la && lb) return 0;
+  if (la) return 1;
+  if (lb) return -1;
+  return f * cmp();
 }
-
 function sortPatients(list: Patient[], key: SortKey, dir: "asc" | "desc"): Patient[] {
   const f = dir === "asc" ? 1 : -1;
+  const angeh = (p: Patient) => p.angehoeriger.split(" (")[0];
   const nachName = (a: Patient, b: Patient) => a.nachname.localeCompare(b.nachname, "de");
   return [...list].sort((a, b) => {
     switch (key) {
-      case "schweregrad": {
-        const leer = ohneAngabeZuletzt(!a.schweregrad, !b.schweregrad);
-        if (leer !== null || !a.schweregrad || !b.schweregrad) return (leer ?? 0) || nachName(a, b);
-        return f * ((SCHWEREGRAD_RANK[a.schweregrad] - SCHWEREGRAD_RANK[b.schweregrad]) || nachName(a, b));
-      }
+      case "name": return f * (nachName(a, b) || a.vorname.localeCompare(b.vorname, "de"));
+      case "angehoeriger": return f * angeh(a).localeCompare(angeh(b), "de");
+      case "status": return f * ((PAT_STATUS_RANK[a.status] ?? 0) - (PAT_STATUS_RANK[b.status] ?? 0)) || nachName(a, b);
+      // Schweregrad, Re-Assessment und Tasks dürfen leer sein — "ohne Angabe"
+      // gehört in beiden Richtungen ans Ende, nicht auf Rang 0 bzw. an den Anfang.
+      case "schweregrad": return leerZuletzt(!a.schweregrad, !b.schweregrad, f, () => (SCHWEREGRAD_RANK[a.schweregrad] - SCHWEREGRAD_RANK[b.schweregrad]) || nachName(a, b));
+      case "pflegefachkraft": return leerZuletzt(a.pflegefachkraft === "—", b.pflegefachkraft === "—", f, () => a.pflegefachkraft.localeCompare(b.pflegefachkraft, "de"));
+      case "prozessstatus": return leerZuletzt(!a.prozessStatus, !b.prozessStatus, f, () => datumKey(a.prozessStatus!.faelligDatum).localeCompare(datumKey(b.prozessStatus!.faelligDatum)));
+      // Die Tageszahl ist eine Ableitung aus der Frist, kein gespeichertes Feld.
       case "reassessment": {
         const ta = tageBisReAssessment(a, BEZUGSDATUM_ISO);
         const tb = tageBisReAssessment(b, BEZUGSDATUM_ISO);
-        const leer = ohneAngabeZuletzt(ta === null, tb === null);
-        if (leer !== null || ta === null || tb === null) return (leer ?? 0) || nachName(a, b);
-        return f * ((ta - tb) || nachName(a, b));
+        return leerZuletzt(ta === null, tb === null, f, () => (ta! - tb!) || nachName(a, b));
       }
-      case "tasks": {
-        const ta = a.offeneActionTasks;
-        const tb = b.offeneActionTasks;
-        const leer = ohneAngabeZuletzt(ta === null, tb === null);
-        if (leer !== null || ta === null || tb === null) return (leer ?? 0) || nachName(a, b);
-        return f * ((ta - tb) || nachName(a, b));
-      }
-      case "name": default: return f * (nachName(a, b) || a.vorname.localeCompare(b.vorname, "de"));
+      case "tasks": return leerZuletzt(a.offeneActionTasks == null, b.offeneActionTasks == null, f, () => (a.offeneActionTasks! - b.offeneActionTasks!) || nachName(a, b));
+      case "aktivitaet": return f * datumKey(a.letzteAktivitaet).localeCompare(datumKey(b.letzteAktivitaet));
+      default: return 0;
     }
   });
 }
@@ -329,11 +331,11 @@ export function PatientenPage() {
       render: p => <span style={{ fontSize: "0.8125rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{nameText(p)}</span> },
     // Breite trägt den längsten Angehörigen-Namen einzeilig ("Beatrice
     // Hübscher-Wiederkehr") — ein Umbruch würde diese eine Zeile höher machen.
-    { id: "angehoeriger", label: "Angehöriger", anteil: 15, minCh: 20, align: "left", zweitzeileUnter: "name",
+    { id: "angehoeriger", label: "Angehöriger", anteil: 15, minCh: 20, align: "left", sortierbar: true, zweitzeileUnter: "name",
       render: p => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{p.angehoeriger.split(" (")[0]}</span> },
     // Breite trägt "Nicht abrechenbar" als Pille vollständig — sonst stösst ihre
     // Fläche an die Schweregrad-Zelle (Ferrari und Huber tragen beide).
-    { id: "status", label: "Status", anteil: 11, minCh: 16, align: "left",
+    { id: "status", label: "Status", anteil: 11, minCh: 16, align: "left", sortierbar: true,
       // Farbregel: Normalzustand "Aktiv" ist stiller Text ohne Fläche; nur die
       // Ausnahmen behalten die Pille. Der Klick auf den Status bleibt erhalten.
       render: p => {
@@ -355,14 +357,14 @@ export function PatientenPage() {
       render: p => !p.schweregrad ? null : p.schweregrad === "kritisch"
         ? <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: "transparent", border: "var(--border-thin) solid var(--status-danger)", color: "var(--status-danger)", whiteSpace: "nowrap" }}>{SCHWEREGRAD_LABEL[p.schweregrad]}</span>
         : <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{SCHWEREGRAD_LABEL[p.schweregrad]}</span> },
-    { id: "pflegefachkraft", label: "Pflegefachkraft", anteil: 9, minCh: 12, align: "left",
+    { id: "pflegefachkraft", label: "Pflegefachkraft", anteil: 9, minCh: 12, align: "left", sortierbar: true,
       render: p => istNichtZugewiesen(p)
         ? <button type="button" onClick={e => { e.stopPropagation(); setAssignSidebar({ open: true, patient: p }); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "0.75rem", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}><Plus style={{ width: 12, height: 12 }} /> Zuweisen</button>
         : <button type="button" onClick={e => { e.stopPropagation(); setAssignSidebar({ open: true, patient: p }); }} className="ui-fokusring flex items-center cursor-pointer" style={{ gap: 6, padding: 0, background: "transparent", border: "none", fontFamily: "inherit" }}>
             <span className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}><span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{p.pflegefachkraftInitialen}</span></span>
             <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{kurzname(p.pflegefachkraft)}</span>
           </button> },
-    { id: "prozessstatus", label: "Prozessstatus", anteil: 15, minCh: 20, align: "left", ausblendenUnter: "eng",
+    { id: "prozessstatus", label: "Prozessstatus", anteil: 15, minCh: 20, align: "left", sortierbar: true, ausblendenUnter: "eng",
       // Farbe nur bei Überfälligkeit; "Aktuell" ist stiller Text. Die Zelle hält
       // immer die Höhe zweier Zeilen, damit alle Zeilen gleich hoch bleiben —
       // sonst wären Zeilen ohne offene Aufgabe niedriger als die übrigen.
@@ -406,7 +408,7 @@ export function PatientenPage() {
       // Tabellarische Zahl auf fester Linie; 0 = stiller Leerwert.
       render: p => p.offeneActionTasks === null ? null
         : <span style={{ fontFamily: "monospace", fontVariantNumeric: "tabular-nums", fontSize: "0.8125rem", color: p.offeneActionTasks === 0 ? "var(--text-tertiary)" : "var(--text-primary)" }}>{p.offeneActionTasks === 0 ? "–" : p.offeneActionTasks}</span> },
-    { id: "aktivitaet", label: "Aktivität", anteil: 7, minCh: 8, align: "left",
+    { id: "aktivitaet", label: "Aktivität", anteil: 7, minCh: 8, align: "left", sortierbar: true,
       render: p => <span style={{ fontSize: "0.75rem", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{p.letzteAktivitaet}</span> },
   ];
 

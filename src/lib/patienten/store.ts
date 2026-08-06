@@ -235,6 +235,7 @@ export function erfassePatientImOnboarding(
     leistungsart: "",
     letzterBesuch: "",
     hausarztFachgebiet: "",
+    bagNr: "",
     abrechnungsStatus: abrechnungsStatusZu("im_onboarding"),
     reAssessmentFrist: null,
     offeneActionTasks: null,

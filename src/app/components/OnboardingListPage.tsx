@@ -71,15 +71,36 @@ const RESPONSIBLE: Record<string, { initialen: string; kurz: string }> = {
   ott: { initialen: "RO", kurz: "R. Ott" },
 };
 
-/* ── Sortierung: Standard geplanter Start aufsteigend; klickbar in vier Spalten ── */
-type SortKey = "patient" | "phase" | "pendenzen" | "start";
+/* ── Sortierung: jede Spalte; Kennzeichen/Phase nach Rangfolge, Start chronologisch,
+   Schritt/Pflichtdok/Pendenzen numerisch, sonst alphabetisch; Leerwerte immer ans
+   Ende. Standard bleibt geplanter Start aufsteigend. ── */
+type SortKey = "kennzeichen" | "patient" | "angehoeriger" | "schritt" | "phase" | "pflichtdok" | "pendenzen" | "start" | "verantwortlich";
+const OKENN_RANK: Record<string, number> = { rot: 0, gelb: 1 }; // kein Kennzeichen = 2
+function oKennRang(c: OnboardingCase): number {
+  const t = ableitenKennzeichen({ currentStep: c.currentStep, validFrom: c.validFrom, pendenzenUeberfaellig: c.pendenzenUeberfaellig }, BEZUGSDATUM).typ;
+  return t ? OKENN_RANK[t] : 2;
+}
+function pflichtAnteil(c: OnboardingCase): number { return c.pflichtdokGefordert ? c.pflichtdokErledigt / c.pflichtdokGefordert : 1; }
+/** Leere Werte stehen unabhängig von der Richtung am Ende. */
+function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): number {
+  if (la && lb) return 0;
+  if (la) return 1;
+  if (lb) return -1;
+  return f * cmp();
+}
 function sortCases(list: OnboardingCase[], key: SortKey, dir: "asc" | "desc"): OnboardingCase[] {
   const f = dir === "asc" ? 1 : -1;
+  const verantw = (c: OnboardingCase) => c.responsibleUserId ? (RESPONSIBLE[c.responsibleUserId]?.kurz ?? "") : "";
   return [...list].sort((a, b) => {
     switch (key) {
+      case "kennzeichen": return f * (oKennRang(a) - oKennRang(b)) || a.validFrom.localeCompare(b.validFrom);
       case "patient": return f * (a.patientNachname.localeCompare(b.patientNachname, "de") || a.patientVorname.localeCompare(b.patientVorname, "de"));
+      case "angehoeriger": return f * a.angehoeriger.localeCompare(b.angehoeriger, "de");
+      case "schritt": return f * ((a.currentStep - b.currentStep) || a.validFrom.localeCompare(b.validFrom));
       case "phase": return f * ((phaseRang(phaseFuerSchritt(a.currentStep)) - phaseRang(phaseFuerSchritt(b.currentStep))) || a.validFrom.localeCompare(b.validFrom));
+      case "pflichtdok": return f * ((pflichtAnteil(a) - pflichtAnteil(b)) || a.validFrom.localeCompare(b.validFrom));
       case "pendenzen": return f * ((a.pendenzenOffen - b.pendenzenOffen) || a.validFrom.localeCompare(b.validFrom));
+      case "verantwortlich": return leerZuletzt(!a.responsibleUserId, !b.responsibleUserId, f, () => verantw(a).localeCompare(verantw(b), "de"));
       case "start": default: return f * a.validFrom.localeCompare(b.validFrom);
     }
   });
@@ -165,7 +186,7 @@ export function OnboardingListPage() {
     return t;
   }, [filter]);
 
-  const SORT_LABEL: Record<SortKey, string> = { patient: "Patient", phase: "Phase", pendenzen: "Pendenzen", start: "geplantem Start" };
+  const SORT_LABEL: Record<SortKey, string> = { kennzeichen: "Kennzeichen", patient: "Patient", angehoeriger: "Angehörige/r", schritt: "aktuellem Schritt", phase: "Phase", pflichtdok: "Pflichtdokumenten", pendenzen: "Pendenzen", start: "geplantem Start", verantwortlich: "Verantwortlicher" };
 
 
   /* ── Spaltenbeschreibung für die geteilte DataTable (Anteile/Mindestbreiten/
@@ -195,16 +216,16 @@ export function OnboardingListPage() {
   );
 
   const onboardingSpalten: SpalteDef<OnboardingCase>[] = [
-    { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", ausKarte: true, render: kennzeichenIcon },
+    { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", sortierbar: true, ausKarte: true, render: kennzeichenIcon },
     { id: "patient", label: "Patient", anteil: 20, minCh: 22, align: "left", sortierbar: true, ausKarte: true,
       render: c => <span style={{ fontSize: "0.8125rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span> },
-    { id: "angehoeriger", label: "Angehörige/r", anteil: 17, minCh: 20, align: "left", zweitzeileUnter: "patient", ausKarte: true,
+    { id: "angehoeriger", label: "Angehörige/r", anteil: 17, minCh: 20, align: "left", sortierbar: true, zweitzeileUnter: "patient", ausKarte: true,
       render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.angehoeriger}</span> },
     { id: "phase", label: "Phase", anteil: 7, minCh: 11, align: "left", sortierbar: true, ausblendenUnter: "eng", ausKarte: true,
       render: c => <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{PHASE_LABEL[phaseFuerSchritt(c.currentStep)]}</span> },
-    { id: "schritt", label: "Aktueller Schritt", anteil: 16, minCh: 24, align: "left",
+    { id: "schritt", label: "Aktueller Schritt", anteil: 16, minCh: 24, align: "left", sortierbar: true,
       render: c => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}><span style={{ fontFamily: "monospace", color: "var(--text-tertiary)", marginRight: 6 }}>{c.currentStep}/{ANZAHL_SCHRITTE}</span>{schrittLabel(c.currentStep)}</span> },
-    { id: "pflichtdok", label: "Pflichtdok.", anteil: 7, minCh: 11, align: "left",
+    { id: "pflichtdok", label: "Pflichtdok.", anteil: 7, minCh: 11, align: "left", sortierbar: true,
       // Korrektur #5: Balken entfällt — bei 40px war 7/8 vs 8/8 nicht auf einen Blick
       // unterscheidbar; der Bruch ist das eindeutige Signal, vollständig zusätzlich farblich.
       render: c => { const voll = c.pflichtdokErledigt === c.pflichtdokGefordert; return <span style={{ fontFamily: "monospace", fontSize: "0.8125rem", color: voll ? "var(--status-success-text)" : "var(--text-primary)", fontWeight: voll ? "var(--weight-medium)" : "var(--weight-regular)" }}>{c.pflichtdokErledigt}/{c.pflichtdokGefordert}</span>; } },
@@ -222,7 +243,7 @@ export function OnboardingListPage() {
       // Korrektur C: Abweichungsangabe einzeilig, ohne Umbruch — +N Tage bei Überschreitung,
       // in N Tagen bei bevorstehendem Start. Die Zelle bricht nie (whiteSpace nowrap).
       render: c => { const t = tageBisStart(c.validFrom, BEZUGSDATUM); const ueber = t < 0 && !istVertragUnterzeichnet(c.currentStep); const bevor = kz(c).typ === "gelb" && kz(c).spalte === "start"; return <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{isoZuAnzeige(c.validFrom)}{ueber && <span style={{ marginLeft: 8, color: "var(--status-danger)", fontWeight: 500, fontSize: "0.75rem" }}>+{Math.abs(t)} {Math.abs(t) === 1 ? "Tag" : "Tage"}</span>}{!ueber && bevor && <span style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500, fontSize: "0.75rem" }}>{t === 0 ? "heute" : `in ${t} ${t === 1 ? "Tag" : "Tagen"}`}</span>}</span>; } },
-    { id: "verantwortlich", label: "Verantw.", anteil: 12, minCh: 12, align: "left",
+    { id: "verantwortlich", label: "Verantw.", anteil: 12, minCh: 12, align: "left", sortierbar: true,
       render: c => { const resp = c.responsibleUserId ? RESPONSIBLE[c.responsibleUserId] : null; return resp
         ? <div className="flex items-center" style={{ gap: 6 }}><span className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}><span style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{resp.initialen}</span></span><span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{resp.kurz}</span></div>
         : <button type="button" onClick={e => { e.stopPropagation(); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "0.75rem", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit" }}><Plus style={{ width: 12, height: 12 }} /> Zuweisen</button>; } },

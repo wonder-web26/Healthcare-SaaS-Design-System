@@ -211,7 +211,7 @@ export function SteuerFormV2({
           zivilstand: data.zivilstand,
           hatKinder,
           anzahlKinder,
-          partnerErwerbstaetig: data.partnerErwerbstaetig || data.partnerBerufstaetig,
+          partnerErwerbstaetig: data.partnerErwerbstaetig,
           konfession: data.konfession,
         });
         // Auto-Update wenn abgeleitet

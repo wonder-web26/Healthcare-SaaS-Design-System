@@ -1,6 +1,8 @@
 import React, { useState, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { AnnaPatientSummary } from "../anna/AnnaPatientSummary";
+import { DataTable, type SpalteDef } from "./ui/DataTable";
+import { isoZuAnzeige, anzeigeZuIso, formatAnzeige, formatDatumZeit } from "../../lib/datum";
 import {
   ArrowLeft,
   Phone,
@@ -1028,7 +1030,7 @@ function getInitials(name: string): string {
 /** Now formatted for display */
 function nowTimestamp(): string {
   const d = new Date();
-  return `${d.toLocaleDateString("de-CH")}, ${d.toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" })}`;
+  return formatDatumZeit(d);
 }
 
 /* ── Reusable Workflow Section — uses TabHeader (8.11) + ItemRow (8.13) ──── */
@@ -2044,6 +2046,57 @@ function TableStempel() {
   const aktive = bewilligungen.find((b) => b.status === "aktiv");
   const historie = bewilligungen.filter((b) => b.status === "abgelaufen").sort((a, b) => b.id - a.id);
 
+  // Bewilligungs-Historie als geteilte DataTable (Datum über die Datumsschicht; Leerwerte ans Ende).
+  const bewLeer = (s: string) => !s || s === "–" || !s.includes(".");
+  const bewDatum = (s: string) => bewLeer(s) ? "–" : isoZuAnzeige(anzeigeZuIso(s));
+  const bewDatumSort = (a: string, b: string, f: number) => {
+    const la = bewLeer(a), lb = bewLeer(b);
+    if (la && lb) return 0; if (la) return 1; if (lb) return -1;
+    return f * anzeigeZuIso(a).localeCompare(anzeigeZuIso(b));
+  };
+  const sortBewilligung = (list: Bewilligung[], key: string, dir: "asc" | "desc") => {
+    const f = dir === "asc" ? 1 : -1;
+    return [...list].sort((a, b) => {
+      switch (key) {
+        case "version": return f * (a.id - b.id);
+        case "gueltigab": return bewDatumSort(a.gueltigAb, b.gueltigAb, f);
+        case "gueltigbis": return bewDatumSort(a.gueltigBis, b.gueltigBis, f);
+        case "mintag": return f * (a.taeglicheMin - b.taeglicheMin);
+        case "aleist": return f * (a.minutenA - b.minutenA);
+        case "bleist": return f * (a.minutenB - b.minutenB);
+        case "gesamt": return f * (a.taeglicheMin * a.tageProWoche - b.taeglicheMin * b.tageProWoche);
+        default: return 0;
+      }
+    });
+  };
+  const [histSort, setHistSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
+  const histToggle = (key: string) => setHistSort(s => s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+  const histSortiert = histSort ? sortBewilligung(historie, histSort.key, histSort.dir) : historie;
+  const bewSpalten: SpalteDef<Bewilligung>[] = [
+    { id: "version", label: "Version", minCh: 7, maxSpur: "8ch", align: "left", sortierbar: true, ausKarte: true,
+      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>V{b.id}</span> },
+    { id: "gueltigab", label: "Gültig ab", minCh: 10, maxSpur: "11ch", align: "left", sortierbar: true, ausKarte: true,
+      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{bewDatum(b.gueltigAb)}</span> },
+    { id: "gueltigbis", label: "Gültig bis", minCh: 10, maxSpur: "11ch", align: "left", sortierbar: true,
+      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{bewDatum(b.gueltigBis)}</span> },
+    { id: "mintag", label: "Min / Tag", minCh: 9, maxSpur: "9ch", align: "right", sortierbar: true, abwerfRang: 4,
+      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{b.taeglicheMin}</span> },
+    { id: "aleist", label: "A-Leist.", minCh: 8, maxSpur: "8ch", align: "right", sortierbar: true, abwerfRang: 1,
+      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontVariantNumeric: "tabular-nums" }}>{b.minutenA}</span> },
+    { id: "bleist", label: "B-Leist.", minCh: 8, maxSpur: "8ch", align: "right", sortierbar: true, abwerfRang: 2,
+      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--status-success)", fontVariantNumeric: "tabular-nums" }}>{b.minutenB}</span> },
+    { id: "gesamt", label: "Gesamt / Wo.", minCh: 12, maxSpur: "12ch", align: "right", sortierbar: true, abwerfRang: 3,
+      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{b.taeglicheMin * b.tageProWoche}</span> },
+    { id: "status", label: "Status", minCh: 10, maxSpur: "13ch", align: "left", sortierbar: true,
+      render: () => <span style={{ display: "inline-flex", alignItems: "center", padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: "var(--bg-secondary)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Abgelaufen</span> },
+  ];
+  const bewKarteTitel = (b: Bewilligung) => (
+    <div className="flex items-center justify-between" style={{ gap: 8, width: "100%", minWidth: 0 }}>
+      <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)" }}>V{b.id}</span>
+      <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{bewDatum(b.gueltigAb)} – {bewDatum(b.gueltigBis)}</span>
+    </div>
+  );
+
   const canSaveBew = bewForm.taeglicheMin !== "" && bewForm.tageProWoche !== "" && bewForm.minutenA !== "" && bewForm.minutenB !== "" && bewForm.gueltigAb.trim() !== "";
 
   const handleSaveBew = () => {
@@ -2301,50 +2354,18 @@ function TableStempel() {
               {historie.length} {historie.length === 1 ? "Version" : "Versionen"}
             </span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-muted/30">
-                  {["Version", "Gültig ab", "Gültig bis", "Min / Tag", "A-Leist.", "B-Leist.", "Gesamt / Wo.", "Status"].map((col) => (
-                    <th key={col} className="px-4 py-2.5 text-left">
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>{col}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {historie.map((b) => (
-                  <tr key={b.id} className="border-t border-border-light">
-                    <td className="px-4 py-3">
-                      <span className="text-[12px] text-muted-foreground" style={{ fontWeight: 500 }}>V{b.id}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[12px] text-foreground">{b.gueltigAb}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[12px] text-foreground">{b.gueltigBis}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[12px] text-foreground" style={{ fontWeight: 500 }}>{b.taeglicheMin}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[12px] text-primary">{b.minutenA}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[12px] text-success">{b.minutenB}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[12px] text-foreground" style={{ fontWeight: 500 }}>{b.taeglicheMin * b.tageProWoche}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-1.5 py-[1px] rounded text-[10px] bg-muted text-muted-foreground border border-border" style={{ fontWeight: 500 }}>
-                        Abgelaufen
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="px-3 pb-3">
+            <DataTable<Bewilligung>
+              spalten={bewSpalten}
+              zeilen={histSortiert}
+              zeilenKey={b => String(b.id)}
+              sort={histSort ?? undefined}
+              onSort={histToggle}
+              karteTitel={bewKarteTitel}
+              containerHaltepunkte
+              karteAbPx={560}
+              leerText="Keine abgelaufenen Bewilligungen."
+            />
           </div>
           <div className="px-5 py-3 border-t border-border-light">
             <div className="flex items-center gap-2 text-[11px] text-muted-foreground/70">
@@ -2568,17 +2589,70 @@ function TableStempel() {
 /* ══════════════════════════════════════════
    TAB: TICKETS
    ══════════════════════════════════════════ */
+// Zugewiesen: Kürzel aus dem Namen (wie die Initialen-Spalten der vier Listen), voller Name im title.
+function ticketKuerzel(name: string): string {
+  const teile = name.trim().split(/\s+/).filter(Boolean);
+  if (teile.length === 0) return "–";
+  if (teile.length === 1) return teile[0].slice(0, 2).toUpperCase();
+  return (teile[0][0] + teile[teile.length - 1][0]).toUpperCase();
+}
+const TICKET_STATUS_RANK: Record<string, number> = { offen: 0, in_bearbeitung: 1, erledigt: 2 };
+const TICKET_PRIO_RANK: Record<string, number> = { hoch: 0, mittel: 1, niedrig: 2 };
+function sortTickets(list: Ticket[], key: string, dir: "asc" | "desc"): Ticket[] {
+  const f = dir === "asc" ? 1 : -1;
+  return [...list].sort((a, b) => {
+    switch (key) {
+      case "id": return f * a.id.localeCompare(b.id, "de");
+      case "subject": return f * a.subject.localeCompare(b.subject, "de");
+      case "category": return f * a.category.localeCompare(b.category, "de");
+      case "priority": return f * ((TICKET_PRIO_RANK[a.priority] ?? 0) - (TICKET_PRIO_RANK[b.priority] ?? 0));
+      case "status": return f * ((TICKET_STATUS_RANK[a.status] ?? 0) - (TICKET_STATUS_RANK[b.status] ?? 0));
+      case "created": return f * anzeigeZuIso(a.created).localeCompare(anzeigeZuIso(b.created));
+      case "assignedTo": return f * a.assignedTo.localeCompare(b.assignedTo, "de");
+      default: return 0;
+    }
+  });
+}
+
 function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path: string) => void }) {
-  const ticketStatusConfig = {
-    offen: { label: "Offen", bg: "bg-error-light", text: "text-error-foreground", dot: "bg-error" },
-    in_bearbeitung: { label: "In Bearbeitung", bg: "bg-warning-light", text: "text-warning-foreground", dot: "bg-warning" },
-    erledigt: { label: "Erledigt", bg: "bg-success-light", text: "text-success-foreground", dot: "bg-success" },
+  // Nur die Abweichung trägt Farbe/Fläche; Regelzustände sind stiller Text (wie in den vier Listen).
+  const STATUS_CFG: Record<Ticket["status"], { label: string; dot: string; color: string; weight: string }> = {
+    offen: { label: "Offen", dot: "var(--text-tertiary)", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
+    in_bearbeitung: { label: "In Bearbeitung", dot: "var(--status-warning)", color: "var(--status-warning-text)", weight: "var(--weight-medium)" },
+    erledigt: { label: "Erledigt", dot: "var(--status-success)", color: "var(--text-tertiary)", weight: "var(--weight-regular)" },
   };
-  const priorityConfig = {
-    hoch: { label: "Hoch", bg: "bg-error-light", text: "text-error-foreground" },
-    mittel: { label: "Mittel", bg: "bg-warning-light", text: "text-warning-foreground" },
-    niedrig: { label: "Niedrig", bg: "bg-muted", text: "text-muted-foreground" },
+  const PRIO_CFG: Record<Ticket["priority"], { label: string; color: string; weight: string }> = {
+    hoch: { label: "Hoch", color: "var(--status-danger)", weight: "var(--weight-medium)" },
+    mittel: { label: "Mittel", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
+    niedrig: { label: "Niedrig", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
   };
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
+  const toggleSort = (key: string) => setSort(s => s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+  const sorted = sort ? sortTickets(tickets, sort.key, sort.dir) : tickets;
+
+  // Spalten am längsten realen Wert bemessen (kein Detailbereich → kein Ellipsis, §148).
+  const spalten: SpalteDef<Ticket>[] = [
+    { id: "id", label: "Ticket-ID", minCh: 13, maxSpur: "14ch", align: "left", sortierbar: true, ausKarte: true,
+      render: t => <span className="font-mono" style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>{t.id}</span> },
+    { id: "subject", label: "Betreff", minCh: 24, maxSpur: "50ch", align: "left", sortierbar: true, ausKarte: true,
+      render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)" }}>{t.subject}</span> },
+    { id: "category", label: "Kategorie", minCh: 14, maxSpur: "17ch", align: "left", sortierbar: true, abwerfRang: 1,
+      render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{t.category}</span> },
+    { id: "priority", label: "Priorität", minCh: 11, maxSpur: "11ch", align: "left", sortierbar: true,
+      render: t => { const p = PRIO_CFG[t.priority]; return <span style={{ fontSize: "var(--text-small)", color: p.color, fontWeight: p.weight, whiteSpace: "nowrap" }}>{p.label}</span>; } },
+    { id: "status", label: "Status", minCh: 15, maxSpur: "18ch", align: "left", sortierbar: true,
+      render: t => { const s = STATUS_CFG[t.status]; return <span className="inline-flex items-center" style={{ gap: 6, minWidth: 0 }}><span style={{ width: 6, height: 6, borderRadius: "var(--radius-pill)", background: s.dot, flexShrink: 0 }} /><span style={{ fontSize: "var(--text-small)", color: s.color, fontWeight: s.weight, whiteSpace: "nowrap" }}>{s.label}</span></span>; } },
+    { id: "created", label: "Erstellt", minCh: 12, maxSpur: "12ch", align: "left", sortierbar: true, abwerfRang: 3,
+      render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{isoZuAnzeige(anzeigeZuIso(t.created))}</span> },
+    { id: "assignedTo", label: "Zugewiesen", minCh: 10, maxSpur: "10ch", align: "left", sortierbar: true, abwerfRang: 2,
+      render: t => <span title={t.assignedTo} style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>{ticketKuerzel(t.assignedTo)}</span> },
+  ];
+  const karteTitel = (t: Ticket) => (
+    <div className="flex items-center" style={{ gap: 8, width: "100%", minWidth: 0 }}>
+      <span className="font-mono" style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)", flexShrink: 0 }}>{t.id}</span>
+      <span className="truncate" style={{ flex: 1, minWidth: 0, fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)" }}>{t.subject}</span>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -2588,65 +2662,39 @@ function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path:
           <h5 className="text-foreground">Tickets für diesen Patienten</h5>
           <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground" style={{ fontWeight: 500 }}>{tickets.length}</span>
         </div>
-        <button
-          onClick={() => navigate("/servicedesk")}
-          className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors"
-          style={{ fontWeight: 500 }}
-        >
-          <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-          Pendenzenliste öffnen
-        </button>
-      </div>
-
-      <div className="rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-muted/30">
-                {["Ticket-ID", "Betreff", "Kategorie", "Priorität", "Status", "Erstellt", "Zugewiesen"].map((col) => (
-                  <th key={col} className="px-4 py-2.5 text-left"><span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>{col}</span></th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {tickets.map((ticket) => {
-                const tst = ticketStatusConfig[ticket.status];
-                const tpr = priorityConfig[ticket.priority];
-                return (
-                  <tr key={ticket.id} onClick={() => navigate("/servicedesk")} className="border-t border-border-light hover:bg-primary/[0.02] transition-colors cursor-pointer group">
-                    <td className="px-4 py-3"><span className="text-[12px] text-primary font-mono group-hover:underline" style={{ fontWeight: 500 }}>{ticket.id}</span></td>
-                    <td className="px-4 py-3"><span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{ticket.subject}</span></td>
-                    <td className="px-4 py-3"><span className="text-[11px] px-2 py-[2px] rounded-md bg-muted text-foreground" style={{ fontWeight: 500 }}>{ticket.category}</span></td>
-                    <td className="px-4 py-3"><span className={`text-[11px] px-2 py-[2px] rounded-md ${tpr.bg} ${tpr.text}`} style={{ fontWeight: 500 }}>{tpr.label}</span></td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-[2px] rounded-full text-[11px] ${tst.bg} ${tst.text}`} style={{ fontWeight: 500 }}>
-                        <span className={`w-[5px] h-[5px] rounded-full ${tst.dot}`} />
-                        {tst.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[12px] text-muted-foreground">{ticket.created}</td>
-                    <td className="px-4 py-3 text-[12px] text-muted-foreground">{ticket.assignedTo}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/servicedesk")}
+            className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors"
+            style={{ fontWeight: 500 }}
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Neue Pendenz
+          </button>
+          <button
+            onClick={() => navigate("/servicedesk")}
+            className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors"
+            style={{ fontWeight: 500 }}
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+            Pendenzenliste öffnen
+          </button>
         </div>
       </div>
 
-      <div className="bg-card rounded-2xl border border-dashed border-primary/30 p-5 text-center">
-        <Plus className="w-6 h-6 text-primary mx-auto mb-2" />
-        <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>Neues Ticket erstellen</p>
-        <p className="text-[12px] text-muted-foreground mt-0.5">Erstellen Sie ein neues Service-Desk-Ticket für diesen Patienten</p>
-        <button
-          onClick={() => navigate("/servicedesk")}
-          className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors text-[13px]"
-          style={{ fontWeight: 500 }}
-        >
-          <Headphones className="w-4 h-4" />
-          Zur Pendenzenliste
-        </button>
-      </div>
+      <DataTable<Ticket>
+        spalten={spalten}
+        zeilen={sorted}
+        zeilenKey={t => t.id}
+        onZeileKlick={() => navigate("/servicedesk")}
+        sort={sort ?? undefined}
+        onSort={toggleSort}
+        karteTitel={karteTitel}
+        containerHaltepunkte
+        karteAbPx={640}
+        fusszeile={tickets.length > 0 ? <span>{tickets.length} {tickets.length === 1 ? "Ticket" : "Tickets"}</span> : undefined}
+        leerText="Für diesen Patienten sind keine Pendenzen erfasst."
+      />
     </div>
   );
 }
@@ -2823,6 +2871,37 @@ function TabKLV({ patientId }: { patientId: string }) {
   const daysUntil = current?.endDatum ? (() => { const [d, m, y] = current.endDatum!.split("."); return Math.round((new Date(+y, +m - 1, +d).getTime() - new Date("2026-03-03").getTime()) / 86400000); })() : null;
   const katBg = (k: string) => k === "a" ? "var(--status-info-bg)" : k === "b" ? "var(--status-warning-bg)" : "var(--status-success-bg)";
   const katColor = (k: string) => k === "a" ? "var(--status-info)" : k === "b" ? "var(--status-warning-text)" : "var(--status-success-text)";
+  type KlvPos = NonNullable<typeof current>["leistungspositionen"][number];
+  const [klvSort, setKlvSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
+  const klvToggle = (key: string) => setKlvSort(s => s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+  const sortKlv = (list: KlvPos[], key: string, dir: "asc" | "desc") => {
+    const f = dir === "asc" ? 1 : -1;
+    return [...list].sort((a, b) => {
+      switch (key) {
+        case "kat": return f * a.kategorie.localeCompare(b.kategorie, "de");
+        case "nr": return f * a.klvNummer.localeCompare(b.klvNummer, "de");
+        case "bezeichnung": return f * a.bezeichnung.localeCompare(b.bezeichnung, "de");
+        case "min": return f * (a.zeitMin - b.zeitMin);
+        case "haeufigkeit": return f * (a.anzahl - b.anzahl);
+        case "hwo": return f * (hProWoche(a) - hProWoche(b));
+        default: return 0;
+      }
+    });
+  };
+  const klvSpalten: SpalteDef<KlvPos>[] = [
+    { id: "kat", label: "Kat.", minCh: 4, maxSpur: "5ch", align: "left", sortierbar: true, ausKarte: true,
+      render: lp => <span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: katBg(lp.kategorie), color: katColor(lp.kategorie) }}>{lp.kategorie}</span> },
+    { id: "nr", label: "Nr.", minCh: 5, maxSpur: "8ch", align: "left", sortierbar: true,
+      render: lp => <span style={{ fontFamily: "monospace", fontSize: "var(--text-small)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{lp.klvNummer}</span> },
+    { id: "bezeichnung", label: "Bezeichnung", minCh: 12, maxSpur: "56ch", align: "left", sortierbar: true, ausKarte: true,
+      render: lp => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{lp.bezeichnung}</span> },
+    { id: "min", label: "Min.", minCh: 5, maxSpur: "6ch", align: "right", sortierbar: true, abwerfRang: 2,
+      render: lp => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{lp.zeitMin}′</span> },
+    { id: "haeufigkeit", label: "Häufigkeit", minCh: 10, maxSpur: "14ch", align: "left", sortierbar: true, abwerfRang: 1,
+      render: lp => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{lp.anzahl}× {einheitLabel(lp.einheit)}</span> },
+    { id: "hwo", label: "h/Wo.", minCh: 5, maxSpur: "6ch", align: "right", sortierbar: true,
+      render: lp => <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{hProWoche(lp).toFixed(2)}</span> },
+  ];
 
   const deleteKLV = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -2838,7 +2917,7 @@ function TabKLV({ patientId }: { patientId: string }) {
   const handleCreateKLV = () => {
     const newId = `KLV-${Date.now()}`;
     const patientName = current?.patientName || klvs[0]?.patientName || "Patient";
-    const heute = new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const heute = formatAnzeige(new Date());
 
     // Format dates from ISO to dd.mm.yyyy for display
     const formatDate = (iso: string) => { if (!iso) return null; const [y, m, d] = iso.split("-"); return `${d}.${m}.${y}`; };
@@ -2936,31 +3015,26 @@ function TabKLV({ patientId }: { patientId: string }) {
             <span style={{ padding: "6px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius-card)" }}>Beginn: <b>{current.beginnDatum}</b></span>
             {current.endDatum && <span style={{ padding: "6px 12px", background: daysUntil !== null && daysUntil < 30 ? "var(--status-warning-bg)" : "var(--bg-secondary)", borderRadius: "var(--radius-card)", color: daysUntil !== null && daysUntil < 30 ? "var(--status-warning-text)" : "var(--text-primary)" }}>Ende: <b>{current.endDatum}</b>{daysUntil !== null && daysUntil < 30 && ` (${daysUntil < 0 ? "abgelaufen" : `${daysUntil}d`})`}</span>}
           </div>}
-          {current.leistungspositionen.length > 0 && <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden", marginBottom: 16 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead><tr style={{ background: "var(--bg-secondary)" }}>
-                <th style={{ padding: "6px 10px", textAlign: "left", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Kat.</th>
-                <th style={{ padding: "6px 10px", textAlign: "left", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Nr.</th>
-                <th style={{ padding: "6px 10px", textAlign: "left", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Bezeichnung</th>
-                <th className="hidden sm:table-cell" style={{ padding: "6px 10px", textAlign: "right", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Min.</th>
-                <th className="hidden sm:table-cell" style={{ padding: "6px 10px", textAlign: "left", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Häufigkeit</th>
-                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>h/Wo.</th>
-              </tr></thead>
-              <tbody>{current.leistungspositionen.map(lp => (
-                <tr key={lp.id} style={{ borderTop: "var(--border-thin) solid var(--border-default)" }}>
-                  <td style={{ padding: "8px 10px", fontSize: "var(--text-small)" }}><span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: katBg(lp.kategorie), color: katColor(lp.kategorie) }}>{lp.kategorie}</span></td>
-                  <td style={{ padding: "8px 10px", fontSize: "var(--text-small)", color: "var(--text-tertiary)", fontFamily: "monospace" }}>{lp.klvNummer}</td>
-                  <td style={{ padding: "8px 10px", fontSize: "var(--text-small)" }}>{lp.bezeichnung}</td>
-                  <td className="hidden sm:table-cell" style={{ padding: "8px 10px", fontSize: "var(--text-small)", textAlign: "right", color: "var(--text-secondary)" }}>{lp.zeitMin}′</td>
-                  <td className="hidden sm:table-cell" style={{ padding: "8px 10px", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{lp.anzahl}× {einheitLabel(lp.einheit)}</td>
-                  <td style={{ padding: "8px 10px", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", textAlign: "right" }}>{hProWoche(lp).toFixed(2)}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-            <div className="flex items-center justify-between flex-wrap" style={{ padding: "8px 10px", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-              <div className="flex flex-wrap" style={{ gap: 10 }}>{(["a", "b", "c"] as const).map(k => { const sum = current.leistungspositionen.filter(l => l.kategorie === k).reduce((s, l) => s + hProWoche(l), 0); return sum > 0 ? <span key={k}><span style={{ padding: "1px 5px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: katBg(k), color: katColor(k), marginRight: 3 }}>{k}</span>{sum.toFixed(2)}h</span> : null; })}</div>
-              <span style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Total: {berechneSummen(current.leistungspositionen).total.toFixed(2)} h/Wo.</span>
-            </div>
+          {current.leistungspositionen.length > 0 && <div style={{ marginBottom: 16 }}>
+            <DataTable<KlvPos>
+              spalten={klvSpalten}
+              zeilen={klvSort ? sortKlv(current.leistungspositionen, klvSort.key, klvSort.dir) : current.leistungspositionen}
+              zeilenKey={lp => lp.id}
+              sort={klvSort ?? undefined}
+              onSort={klvToggle}
+              containerHaltepunkte
+              karteAbPx={520}
+              karteTitel={lp => (
+                <span className="flex items-center" style={{ gap: 8, minWidth: 0 }}>
+                  <span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: katBg(lp.kategorie), color: katColor(lp.kategorie), flexShrink: 0 }}>{lp.kategorie}</span>
+                  <span style={{ minWidth: 0, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{lp.bezeichnung}</span>
+                </span>
+              )}
+              fusszeile={<div className="flex items-center justify-between flex-wrap" style={{ gap: 10, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+                <div className="flex flex-wrap" style={{ gap: 10 }}>{(["a", "b", "c"] as const).map(k => { const sum = current.leistungspositionen.filter(l => l.kategorie === k).reduce((s, l) => s + hProWoche(l), 0); return sum > 0 ? <span key={k}><span style={{ padding: "1px 5px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: katBg(k), color: katColor(k), marginRight: 3 }}>{k}</span>{sum.toFixed(2)}h</span> : null; })}</div>
+                <span style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Total: {berechneSummen(current.leistungspositionen).total.toFixed(2)} h/Wo.</span>
+              </div>}
+            />
           </div>}
         </>
       ) : (

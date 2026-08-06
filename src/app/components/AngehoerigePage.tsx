@@ -66,19 +66,37 @@ function filterAngehoerige(list: Angehoeriger[], f: FilterZustand, _bezug: Date)
   });
 }
 
-/* ── Sortierung (über die Komponente, ohne Vorsortierung) ── */
-type SortKey = "name" | "qualifikation" | "pflegefachkraft" | "monatsschritt" | "mutation";
-const SORT_LABEL: Record<SortKey, string> = { name: "Name", qualifikation: "Qualifikation", pflegefachkraft: "Pflegefachkraft", monatsschritt: "Monatsschritt", mutation: "letzter Mutation" };
+/* ── Sortierung: jede Spalte; inhaltliche Rangfolge (Kennzeichen, Qualifikation),
+   Datum chronologisch, Zähler numerisch, sonst alphabetisch; Leerwerte immer ans
+   Ende. Keine Vorsortierung (Standard unverändert). ── */
+type SortKey = "kennzeichen" | "name" | "patienten" | "pflegefachkraft" | "qualifikation" | "srk" | "monatsschritt" | "mutation";
+const SORT_LABEL: Record<SortKey, string> = { kennzeichen: "Kennzeichen", name: "Name", patienten: "zugeordneten Patienten", pflegefachkraft: "Pflegefachkraft", qualifikation: "Qualifikation", srk: "SRK-Kurs", monatsschritt: "Monatsschritt", mutation: "letzter Mutation" };
 const QUAL_RANK: Record<string, number> = { ohne_srk: 0, srk: 1, fage_dipl: 2 };
+const AKENN_RANK: Record<string, number> = { rot: 0, gelb: 1 }; // kein Kennzeichen = 2
+function aKennRang(a: Angehoeriger): number { const t = ableitenKennzeichen(a).typ; return t ? AKENN_RANK[t] : 2; }
 function msProgress(a: Angehoeriger): number { const ms = a.monatsSchritt; return ms.abgeschlossen ? 1 : ms.total ? (ms.aktuell - 1) / ms.total : 0; }
 function mutKey(d: string): string { const [dd, mm, yy] = d.split("."); return `${yy ?? ""}${mm ?? ""}${dd ?? ""}`; }
+/** Rang der SRK-Spalte: "Vorhanden" vor "Ausstehend" — genau die zwei angezeigten Werte. */
+function srkRang(a: Angehoeriger): number { return a.srkZertifikatVorhanden === "ja" ? 0 : 1; }
+/** Leere Werte stehen unabhängig von der Richtung am Ende. */
+function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): number {
+  if (la && lb) return 0;
+  if (la) return 1;
+  if (lb) return -1;
+  return f * cmp();
+}
 function sortAngehoerige(list: Angehoeriger[], key: SortKey, dir: "asc" | "desc"): Angehoeriger[] {
   const f = dir === "asc" ? 1 : -1;
   return [...list].sort((a, b) => {
     switch (key) {
+      case "kennzeichen": return f * (aKennRang(a) - aKennRang(b)) || a.nachname.localeCompare(b.nachname, "de");
       case "name": return f * (a.nachname.localeCompare(b.nachname, "de") || a.vorname.localeCompare(b.vorname, "de"));
+      case "patienten": return leerZuletzt(a.zugeordnetePatientenList.length === 0, b.zugeordnetePatientenList.length === 0, f, () => a.zugeordnetePatientenList[0].name.localeCompare(b.zugeordnetePatientenList[0].name, "de"));
+      case "pflegefachkraft": return leerZuletzt(nichtZugewiesen(a), nichtZugewiesen(b), f, () => a.pflegefachkraft.localeCompare(b.pflegefachkraft, "de"));
       case "qualifikation": return f * ((QUAL_RANK[a.qualifikation] ?? 0) - (QUAL_RANK[b.qualifikation] ?? 0));
-      case "pflegefachkraft": return f * a.pflegefachkraft.localeCompare(b.pflegefachkraft, "de");
+      // Sortiert nach dem angezeigten Wert: das Kursdatum ist mit Entscheid 2
+      // des Katalogs entfallen, gezeigt wird nur noch "Vorhanden"/"Ausstehend".
+      case "srk": return f * (srkRang(a) - srkRang(b)) || a.nachname.localeCompare(b.nachname, "de");
       case "monatsschritt": return f * (msProgress(a) - msProgress(b));
       case "mutation": return f * mutKey(a.letzteMutationDatum).localeCompare(mutKey(b.letzteMutationDatum));
       default: return 0;
@@ -187,9 +205,9 @@ export function AngehoerigePage() {
   /* ── Spalten: Kennzeichen (fest) + die unveränderten 7 Fachspalten. Farbe nur
      für Abweichungen; Normalzustand stiller Text; keine Avatare. ── */
   const angehoerigeSpalten: SpalteDef<Angehoeriger>[] = [
-    { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", ausKarte: true, render: kennzeichenIcon },
+    { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", sortierbar: true, ausKarte: true, render: kennzeichenIcon },
     { id: "name", label: "Name", anteil: 16, minCh: 24, align: "left", sortierbar: true, ausKarte: true, render: nameZelle },
-    { id: "patienten", label: "Zugeordnete Patienten", anteil: 18, minCh: 24, align: "left", zweitzeileUnter: "name",
+    { id: "patienten", label: "Zugeordnete Patienten", anteil: 18, minCh: 24, align: "left", sortierbar: true, zweitzeileUnter: "name",
       // Einzeilig: erster Name ausgeschrieben (verlinkt), weitere als "+N".
       // Die vollständige Liste steht in der Detailansicht.
       render: a => a.zugeordnetePatientenList.length === 0 ? (
@@ -220,7 +238,7 @@ export function AngehoerigePage() {
       render: a => a.qualifikation === "ohne_srk"
         ? <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)", whiteSpace: "nowrap" }}>ohne SRK</span>
         : <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{QUAL_LABEL[a.qualifikation]}</span> },
-    { id: "srk", label: "SRK Kurs", anteil: 11, minCh: 13, align: "left",
+    { id: "srk", label: "SRK Kurs", anteil: 11, minCh: 13, align: "left", sortierbar: true,
       // Entscheid 2 des Katalogs: kein Kursdatum mehr, nur noch ob das
       // Zertifikat vorliegt. Der Nachweis ist das Dokument srk_zertifikat.
       render: a => a.srkZertifikatVorhanden === "ja" ? (

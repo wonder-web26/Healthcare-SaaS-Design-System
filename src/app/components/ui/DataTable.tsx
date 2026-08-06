@@ -47,6 +47,13 @@ export interface SpalteDef<T> {
   ausblendenUnter?: keyof typeof TABELLE_LAYOUT["haltepunktePx"];
   /** Von der Kartendarstellung ausnehmen (z. B. Spalten, die schon im Kartenkopf stehen). */
   ausKarte?: boolean;
+  /** Abwerf-Rang für den Spaltenfall: reicht die Breite nicht für alle Mindestbreiten,
+   *  entfallen Spalten mit gesetztem Rang (kleinster zuerst), bis die Summe passt —
+   *  statt am rechten Rand zu klippen. Spalten ohne Rang bleiben immer. */
+  abwerfRang?: number;
+  /** Obere Spur der Spalte (max-Seite von minmax, z. B. "21ch"). Fehlt sie, gilt
+   *  `${anteil}fr`. Der Browser verteilt zwischen Mindestbreite und dieser Obergrenze. */
+  maxSpur?: string;
   render: (row: T) => React.ReactNode;
 }
 
@@ -79,6 +86,9 @@ export interface DataTableProps<T> {
    *  Für eingebettete, schmalere Spalten (z. B. Listenspalte neben einem Detailbereich).
    *  Standard aus — bestehende Listen messen weiter die Fensterbreite. */
   containerHaltepunkte?: boolean;
+  /** Instanz-Override der Kartenschwelle in px. Fehlt sie, gilt der geteilte
+   *  Wert TABELLE_LAYOUT.haltepunktePx.karte — bestehende Listen bleiben unberührt. */
+  karteAbPx?: number;
 }
 
 /** Fensterbreite, reaktiv. SSR-sicher: startet gross, damit initial alle Spalten erscheinen. */
@@ -113,6 +123,25 @@ function useContainerBreite(ref: React.RefObject<HTMLElement>, aktiv: boolean): 
   return breite;
 }
 
+/** Gemessene Masse für den Spaltenfall: Breite eines "0" (1ch) an der Schrift des
+ *  Rahmens und die Wurzel-Schriftgrösse (für rem-basierte Innenabstände). Inaktiv
+ *  (Fallbacks), solange keine abwerfbaren Spalten existieren. */
+function useTabellenMasse(ref: React.RefObject<HTMLElement>, aktiv: boolean): { chPx: number; remPx: number } {
+  const [masse, setMasse] = React.useState({ chPx: 7, remPx: 14 });
+  React.useEffect(() => {
+    if (!aktiv || typeof document === "undefined" || !ref.current) return;
+    const cs = window.getComputedStyle(ref.current);
+    const remPx = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 14;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.font = `${cs.fontSize} ${cs.fontFamily}`;
+    const w = ctx.measureText("0").width;
+    setMasse({ chPx: w > 0 ? w : 7, remPx });
+  }, [aktiv, ref]);
+  return masse;
+}
+
 /** Selbstständiges Kontrollkästchen (icon-frei, damit die DataTable keine Icon-Abhängigkeit bekommt).
  *  Stoppt den Klick, damit ein Zeilenklick (Detail öffnen) nicht mitfeuert. */
 function Kontrollkaestchen({ gewaehlt, onToggle, label }: { gewaehlt: boolean; onToggle: () => void; label?: string }) {
@@ -140,14 +169,16 @@ function Kontrollkaestchen({ gewaehlt, onToggle, label }: { gewaehlt: boolean; o
 export function DataTable<T>({
   spalten, zeilen, zeilenKey, onZeileKlick, zeilenHintergrund, zeilenAkzent,
   sort, onSort, fusszeile, karteTitel, leerText = "Keine Ergebnisse.",
-  auswahl, containerHaltepunkte = false,
+  auswahl, containerHaltepunkte = false, karteAbPx,
 }: DataTableProps<T>) {
   const rahmenRef = React.useRef<HTMLDivElement>(null);
   const fensterBreite = useFensterBreite();
   const containerBreite = useContainerBreite(rahmenRef, containerHaltepunkte);
   const breite = containerHaltepunkte ? containerBreite : fensterBreite;
+  const hatAbwurf = spalten.some(s => s.abwerfRang != null);
+  const { chPx, remPx } = useTabellenMasse(rahmenRef, hatAbwurf);
   const bp = TABELLE_LAYOUT.haltepunktePx;
-  const istKarte = breite < bp.karte;
+  const istKarte = breite < (karteAbPx ?? bp.karte);
   const zweizeilig = breite < bp.zweizeilig;
 
   // Sichtbare Spalten: "eng"-Spalten entfallen unter ihrem Haltepunkt; Zweitzeile-Spalten
@@ -200,7 +231,7 @@ export function DataTable<T>({
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.5rem 1rem" }}>
                 {koerper.map(s => (
                   <div key={s.id} style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)", fontWeight: 600 }}>{s.label}</div>
+                    <div style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)", fontWeight: "var(--weight-medium)" }}>{s.label}</div>
                     <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{s.render(row)}</div>
                   </div>
                 ))}
@@ -214,13 +245,33 @@ export function DataTable<T>({
     );
   }
 
-  /* ── Tabellendarstellung: CSS-Grid, minmax(ch, fr) = Mindestbreite + Anteil ── */
+  /* ── Spaltenfall: reicht die Breite nicht für alle Mindestbreiten, entfallen
+     Spalten nach abwerfRang (kleinster zuerst), bis die Summe passt — nie klippen. ── */
+  const auswahlPx = auswahl ? 40 : 0;
+  // Footprint einer Spalte = Textbreite (ch→px) PLUS die tatsächlichen Innenabstände
+  // der Zelle (beide Seiten), nicht nur die ch-Umrechnung.
+  const zellInnenPx = parseFloat(TABELLE_LAYOUT.zeilePadX) * remPx * 2;
+  const SICHERHEIT_PX = 24; // deckt Rahmenlinien, Rundung und einen möglichen senkrechten Bildlaufbalken
+  const minPx = (s: SpalteDef<T>) => s.festBreitePx != null ? s.festBreitePx : (s.minCh ?? 8) * chPx + zellInnenPx;
+  let anzeige = sichtbare;
+  if (hatAbwurf) {
+    const weg = new Set<string>();
+    const summe = () => auswahlPx + sichtbare.filter(s => !weg.has(s.id)).reduce((n, s) => n + minPx(s), 0);
+    const abwerfbar = sichtbare.filter(s => s.abwerfRang != null).sort((a, b) => a.abwerfRang! - b.abwerfRang!);
+    // Sicherheitsabstand: eine Spalte bleibt nur, wenn die Summe den Container um
+    // mindestens SICHERHEIT_PX unterschreitet; bei Gleichstand fällt die niederrangigste.
+    for (const s of abwerfbar) { if (summe() <= breite - SICHERHEIT_PX) break; weg.add(s.id); }
+    anzeige = sichtbare.filter(s => !weg.has(s.id));
+  }
+
+  /* ── Spurbreiten: keine eigene Pixelrechnung. Je Spalte minmax(Mindestbreite,
+     Obergrenze) in ch (bzw. fr, wenn keine Obergrenze gesetzt ist) — der Browser
+     verteilt zwischen den Grenzen und überschreitet den Container nicht, solange die
+     Summe der Mindestbreiten (via Abwurf oben gesichert) hineinpasst. ── */
   const auswahlSpur = auswahl ? ["40px"] : [];
   const gridCols = [
     ...auswahlSpur,
-    ...sichtbare.map(s =>
-      s.festBreitePx != null ? `${s.festBreitePx}px` : `minmax(${s.minCh ?? 8}ch, ${s.anteil ?? 1}fr)`,
-    ),
+    ...anzeige.map(s => s.festBreitePx != null ? `${s.festBreitePx}px` : `minmax(${s.minCh ?? 8}ch, ${s.maxSpur ?? `${s.anteil ?? 1}fr`})`),
   ].join(" ");
   const zellPad = `${TABELLE_LAYOUT.zeilePadY} ${TABELLE_LAYOUT.zeilePadX}`;
 
@@ -231,15 +282,17 @@ export function DataTable<T>({
           {/* Kopfzeile */}
           <div role="row" style={{ display: "grid", gridTemplateColumns: gridCols, alignItems: "center", background: "var(--bg-secondary)" }}>
             {auswahl && <div role="columnheader" aria-label="Auswahl" style={{ padding: zellPad }} />}
-            {sichtbare.map(s => {
+            {anzeige.map(s => {
               const aktiv = s.sortierbar && sort?.key === s.id;
               const klick = s.sortierbar && onSort ? () => onSort(s.id) : undefined;
               return (
                 <div key={s.id} role="columnheader"
                   aria-sort={aktiv ? (sort!.dir === "asc" ? "ascending" : "descending") : undefined}
                   onClick={klick}
+                  title={typeof s.label === "string" ? s.label : undefined}
                   style={{ padding: zellPad, textAlign: s.align ?? "left", cursor: klick ? "pointer" : "default", userSelect: "none", minWidth: 0 }}>
-                  <span style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600, color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                  {/* Kopf wird nie gekürzt (§148); die Mindestbreite trägt ihn (minCh = max(Datenwert, Kopf)). */}
+                  <span style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: "var(--weight-medium)", color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", whiteSpace: "nowrap" }}>
                     {s.label}
                     {aktiv && <span aria-hidden="true" style={{ marginLeft: "0.25rem" }}>{sort!.dir === "asc" ? "↑" : "↓"}</span>}
                   </span>
@@ -263,7 +316,7 @@ export function DataTable<T>({
                   <Kontrollkaestchen gewaehlt={auswahl.istGewaehlt(row)} onToggle={() => auswahl.onToggle(row)} label={auswahl.zeilenLabel?.(row)} />
                 </div>
               )}
-              {sichtbare.map(s => {
+              {anzeige.map(s => {
                 const tucked = zweitzeilen.get(s.id);
                 return (
                   <div key={s.id} role="cell" style={{ padding: zellPad, textAlign: s.align ?? "left", minWidth: 0, overflowWrap: "anywhere" }}>

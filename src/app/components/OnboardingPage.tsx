@@ -234,8 +234,10 @@ function angehoerigenEingabe(d: AngehoerigerFormData): AngehoerigenEingabe {
     partnerAufenthaltsstatus: d.partnerAufenthaltsstatus, partnerErwerbstaetig: d.partnerErwerbstaetig,
     hatUnterhaltspflichtigeKinder: d.hatUnterhaltspflichtigeKinder, anzahlKinder: d.anzahlKinder,
     kinderzulagenUeberSpitex: d.kinderzulagenUeberSpitex,
+    // Onboarding-Modell (KindEntry) → Bestandsmodell (AngehoerigerKind):
+    // dort heisst das Feld nachname, hier name. Sonst deckungsgleich.
     kinder: d.kinder.map(k => ({
-      id: k.id, vorname: k.vorname, name: k.name, geburtsdatum: k.geburtsdatum,
+      id: k.id, vorname: k.vorname, name: k.nachname, geburtsdatum: k.geburtsdatum,
       geschlecht: k.geschlecht, ahvNummer: k.ahvNummer, inAusbildung: k.inAusbildung,
       ausbildungsbeginn: k.ausbildungsbeginn, zulagenart: k.zulagenart,
       typQuelle: k.typQuelle, overrideBegruendung: k.overrideBegruendung,
