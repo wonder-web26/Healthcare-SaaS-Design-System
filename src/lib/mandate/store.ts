@@ -68,8 +68,7 @@ function abgerechneteAngehoerigeZu(patientId: string, angehoerigerText: string):
 
 /**
  * Ein beendetes Privatmandat für Anna Bösiger — damit die dritte Karte einen
- * Fall hat. (Die Vorgabe nennt „Anna Müller"; in der Patientenliste heisst die
- * einzige Anna Bösiger, und es wird keine Person erfunden.)
+ * Fall hat. Sie ist die einzige Anna der Patientenliste.
  */
 const beendetesPrivatmandat: Mandat = {
   id: "MAN-2025-0912",

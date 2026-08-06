@@ -186,7 +186,7 @@ function initDemo() {
     onboardingId: "OB-2026-105",
   });
 
-  // Anna Müller — active patient, already converted
+  // Steiner, Hans-Rudolf — active patient, already converted
   persons.set("PERS-002", {
     id: "PERS-002",
     vorname: "Anna",
@@ -224,7 +224,7 @@ function initDemo() {
     abgeschlossenVon: null,
   });
 
-  // Anna Müller: Erstabklärung — no suggestions (both states in demo)
+  // Steiner, Hans-Rudolf: Erstabklärung — no suggestions (both states in demo)
   assessments.set("NEU-ASS-002", {
     id: "NEU-ASS-002",
     personId: "PERS-002",

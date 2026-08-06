@@ -95,7 +95,7 @@ import { usePatienten, getPatient, aktualisierePatient, tageBisReAssessment } fr
 import { StatusModal } from "./StatusModal";
 import { TabDokumente } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
-import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
 import { KLV_STATUS_PIPELINE, getArtefaktContainer, type KLVVerordnung } from "../../types/klinische-artefakte";
 import { hProWoche, berechneSummen, einheitLabel } from "../../lib/klv/berechnung";
 import { toast } from "sonner";

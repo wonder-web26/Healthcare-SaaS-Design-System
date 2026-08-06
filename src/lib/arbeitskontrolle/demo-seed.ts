@@ -5,8 +5,8 @@ import { erstelleKontrolle } from "./store";
 
 export const DEMO_KONTROLLE = erstelleKontrolle(
   "A-2026-0101",
-  "Müller, Sarah",
+  "Steiner, Vera",
   "Sandra Weber",
   "P-2026-0041",
-  "Müller, Anna",
+  "Steiner, Hans-Rudolf",
 );

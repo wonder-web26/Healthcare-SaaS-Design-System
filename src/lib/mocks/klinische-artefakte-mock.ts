@@ -1,7 +1,7 @@
 /**
  * Mock data for klinische Artefakte — Lead-Konvertierungs-Modell.
  *
- * Drei Szenarien: konvertiert (Anna Müller, über patientId), laufendes
+ * Drei Szenarien: konvertiert (Steiner, Alt-Fall, über patientId), laufendes
  * Onboarding (Fritz Huber, OB-2026-105) und der vollständige Demo-Fall
  * (Hans-Rudolf Steiner, OB-2026-101).
  *
@@ -105,13 +105,13 @@ export const DEMO_SCALES: OutcomeScale[] = [
   { id: "PAIN", name: "Schmerzskala", abkuerzung: "PAIN", wert: 1, maxWert: 3, interpretation: "Gelegentlich", richtung: "hoeher-schlechter" },
 ];
 
-const ANNA_DIAGNOSEN: Pflegediagnose[] = [
+const STEINER_ALT_DIAGNOSEN: Pflegediagnose[] = [
   { id: "PD1", nandaCode: "00155", titel: "Sturzgefahr", bezugCap: "CAP-FALLS", begruendung: "Sturz in letzten 30 Tagen, eingeschränkte Mobilität, Umgebungsrisiken Bad.", status: "akzeptiert", icdIds: ["AD-A1"] },
   { id: "PD2", nandaCode: "00095", titel: "Schlafstörung", bezugCap: "CAP-MOOD", begruendung: "Einschlafprobleme bei mittelgradiger Depression.", status: "akzeptiert", icdIds: ["AD-A3"] },
   { id: "PD3", nandaCode: "00241", titel: "Beeinträchtigte Stimmungsregulation", bezugCap: "CAP-MOOD", begruendung: "Anhaltende Traurigkeit, Interessenverlust, Rückzug.", status: "akzeptiert", icdIds: ["AD-A3"] },
 ];
 
-const ANNA_MASSNAHMEN: Massnahme[] = [
+const STEINER_ALT_MASSNAHMEN: Massnahme[] = [
   { id: "MA1", titel: "Sturzprophylaxe-Beratung", bezugDiagnoseId: "PD1", beschreibung: "Sturzrisiken besprechen, Haltegriffe empfehlen.", haeufigkeit: "bei Bedarf", status: "akzeptiert" },
   { id: "MA2", titel: "Wohnraum-Anpassung prüfen", bezugDiagnoseId: "PD1", beschreibung: "Ergotherapeutische Abklärung.", haeufigkeit: "einmalig", status: "akzeptiert" },
   { id: "MA3", titel: "Schlafhygiene-Beratung", bezugDiagnoseId: "PD2", beschreibung: "Schlafrituale, Grübel-Strategien.", haeufigkeit: "wöchentlich", status: "akzeptiert" },
@@ -119,42 +119,42 @@ const ANNA_MASSNAHMEN: Massnahme[] = [
   { id: "MA5", titel: "Blutdruck-Monitoring", bezugDiagnoseId: "PD3", beschreibung: "Regelmässig messen, dokumentieren.", haeufigkeit: "täglich", status: "akzeptiert" },
 ];
 
-const ANNA_ZIELE: Pflegeziel[] = [
+const STEINER_ALT_ZIELE: Pflegeziel[] = [
   { id: "Z1", titel: "Sturzfreiheit 3 Monate", bezugDiagnoseId: "PD1", zeithorizont: "3 Monate", messbar: "Kein Sturz bis Re-Assessment", status: "akzeptiert" },
   { id: "Z2", titel: "Schlafqualität verbessern", bezugDiagnoseId: "PD2", zeithorizont: "6 Wochen", messbar: "Einschlafdauer < 30 Min.", status: "akzeptiert" },
   { id: "Z3", titel: "Soziale Teilhabe", bezugDiagnoseId: "PD3", zeithorizont: "2 Monate", messbar: "1x/Woche soziale Aktivität", status: "akzeptiert" },
 ];
 
 /* ══════════════════════════════════════════
-   SZENARIO 1: Anna Müller (konvertiert)
+   SZENARIO 1: Steiner, Hans-Rudolf (konvertiert, Alt-Fall ONB-ALT-001)
    ══════════════════════════════════════════ */
 
-const ANNA_BA: InterRAIAssessment = {
+const STEINER_ALT_BA: InterRAIAssessment = {
   id: "BA-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041",
-  patientName: "Müller, Anna", typ: "erstassessment", status: "abgeschlossen",
+  patientName: "Steiner, Hans-Rudolf", typ: "erstassessment", status: "abgeschlossen",
   durchgefuehrtVon: "Sandra Weber", startDatum: "15.08.2025", abschlussDatum: "15.08.2025",
   erfassungsgrad: 100, items: DEMO_ITEMS, getriggerteCaps: DEMO_CAPS, outcomeScales: DEMO_SCALES,
 };
 
-const ANNA_RE: InterRAIAssessment = {
+const STEINER_ALT_RE: InterRAIAssessment = {
   id: "BA-2026-010", onboardingId: null, patientId: "P-2026-0041",
-  patientName: "Müller, Anna", typ: "re-assessment", status: "in-bearbeitung",
+  patientName: "Steiner, Hans-Rudolf", typ: "re-assessment", status: "in-bearbeitung",
   durchgefuehrtVon: "Sandra Weber", startDatum: "01.03.2026", abschlussDatum: null,
   erfassungsgrad: 42, items: DEMO_ITEMS.slice(0, 13).map(i => ({ ...i, id: `item-${i.code}-BA-2026-010`, assessmentId: "BA-2026-010", validiert: false, status: "teilweise" as const })),
   getriggerteCaps: [], outcomeScales: [],
 };
 
-const ANNA_PP: Pflegeplanung = {
+const STEINER_ALT_PP: Pflegeplanung = {
   id: "PP-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041",
-  patientName: "Müller, Anna", interRAIAssessmentId: "BA-2025-001",
+  patientName: "Steiner, Hans-Rudolf", interRAIAssessmentId: "BA-2025-001",
   status: "abgeschlossen", erstelltVon: "Sandra Weber",
   erstellDatum: "16.08.2025", abschlussDatum: "16.08.2025",
-  pflegediagnosen: ANNA_DIAGNOSEN, massnahmen: ANNA_MASSNAHMEN, ziele: ANNA_ZIELE,
+  pflegediagnosen: STEINER_ALT_DIAGNOSEN, massnahmen: STEINER_ALT_MASSNAHMEN, ziele: STEINER_ALT_ZIELE,
 };
 
-const ANNA_KLV: KLVVerordnung = {
+const STEINER_ALT_KLV: KLVVerordnung = {
   id: "KLV-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041",
-  patientName: "Müller, Anna", pflegeplanungId: "PP-2025-001",
+  patientName: "Steiner, Hans-Rudolf", pflegeplanungId: "PP-2025-001",
   status: "kostengutsprache-erhalten", erstelltVon: "Sandra Weber",
   erstellDatum: "17.08.2025", beginnDatum: "01.09.2025", endDatum: "28.02.2026",
   diagnosen: [
@@ -310,9 +310,9 @@ function buildSchritte(doneCount: number): WorkflowSchritt[] {
   });
 }
 
-const ANNA_WORKFLOW: WorkflowPlan = {
+const STEINER_ALT_WORKFLOW: WorkflowPlan = {
   id: "WF-2025-001", typ: "patient-prozess", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", angehoerigerId: null,
-  bezeichnung: "Patient Prozess — Müller, Anna",
+  bezeichnung: "Patient Prozess — Steiner, Hans-Rudolf",
   schritte: buildSchritte(12),
 };
 
@@ -336,13 +336,13 @@ function buildAngehSchritte(doneCount: number): WorkflowSchritt[] {
   });
 }
 
-const ANNA_ANGEH_WORKFLOW: WorkflowPlan = {
+const STEINER_ALT_ANGEH_WORKFLOW: WorkflowPlan = {
   id: "WF-A-2025-001", typ: "angehoeriger-monate", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", angehoerigerId: null,
-  bezeichnung: "Angehöriger Monatsschritte — Müller, Anna",
+  bezeichnung: "Angehöriger Monatsschritte — Steiner, Hans-Rudolf",
   schritte: buildAngehSchritte(3),
 };
 
-// Angehörigen-eigene Workflows (z.B. für Tochter von Anna Müller)
+// Angehörigen-eigene Workflows (z.B. für die Angehörige von Steiner)
 const ANGEH_OB_SCHRITTE = [
   "Vertrag & Personalien erfasst", "Steuer & Sozialversicherung geprüft", "Partnerdaten erfasst",
   "Kinderzulagen geklärt", "Anstellungskonditionen definiert", "ID / Ausweis hochgeladen",
@@ -368,13 +368,13 @@ function buildAngehOBSchritte(doneCount: number): WorkflowSchritt[] {
 }
 
 const TOCHTER_OB_WORKFLOW: WorkflowPlan = {
-  id: "WF-ANG-OB-001", typ: "angehoeriger-onboarding", onboardingId: null, patientId: null, angehoerigerId: "A-2026-0041",
+  id: "WF-ANG-OB-001", typ: "angehoeriger-onboarding", onboardingId: null, patientId: null, angehoerigerId: "A-2026-0101",
   bezeichnung: "Onboarding Prozess",
   schritte: buildAngehOBSchritte(8),
 };
 
 const TOCHTER_MONAT_WORKFLOW: WorkflowPlan = {
-  id: "WF-ANG-M-001", typ: "angehoeriger-monatsschritte", onboardingId: null, patientId: null, angehoerigerId: "A-2026-0041",
+  id: "WF-ANG-M-001", typ: "angehoeriger-monatsschritte", onboardingId: null, patientId: null, angehoerigerId: "A-2026-0101",
   bezeichnung: "Monatliche Schritte",
   schritte: buildAngehSchritte(3),
 };
@@ -383,8 +383,8 @@ const TOCHTER_MONAT_WORKFLOW: WorkflowPlan = {
    ÄRZTLICHE DIAGNOSEN (eigenes Artefakt)
    ══════════════════════════════════════════ */
 
-/** Anna Müller: konvertiert, Diagnosen vom Arzt bereits bestätigt */
-const ANNA_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [
+/** Steiner, Alt-Fall: konvertiert, Diagnosen vom Arzt bereits bestätigt */
+const STEINER_ALT_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [
   { id: "AD-A1", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", icdCode: "I10", bezeichnung: "Arterielle Hypertonie", quelle: "Arzt-Antwort Dr. M. Huber, 18.08.2025", status: "bestaetigt" },
   { id: "AD-A2", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", icdCode: "E11", bezeichnung: "Diabetes mellitus Typ 2", quelle: "Arzt-Antwort Dr. M. Huber, 18.08.2025", status: "bestaetigt" },
   { id: "AD-A3", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", icdCode: "F32.1", bezeichnung: "Mittelgradige depressive Episode", quelle: "Arzt-Antwort Dr. M. Huber, 18.08.2025", status: "bestaetigt" },
@@ -476,10 +476,10 @@ const STEINER_KLV: KLVVerordnung = {
    COLLECTED EXPORTS
    ══════════════════════════════════════════ */
 
-export const MOCK_ASSESSMENTS: InterRAIAssessment[] = [ANNA_BA, ANNA_RE, HUBER_BA, STEINER_BA];
-export const MOCK_PFLEGEPLANUNGEN: Pflegeplanung[] = [ANNA_PP, HUBER_PP, STEINER_PP];
-export const MOCK_KLV_VERORDNUNGEN: KLVVerordnung[] = [ANNA_KLV, HUBER_KLV, STEINER_KLV];
-export const MOCK_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [...ANNA_ARZT_DIAGNOSEN, ...HUBER_ARZT_DIAGNOSEN, ...STEINER_ARZT_DIAGNOSEN];
+export const MOCK_ASSESSMENTS: InterRAIAssessment[] = [STEINER_ALT_BA, STEINER_ALT_RE, HUBER_BA, STEINER_BA];
+export const MOCK_PFLEGEPLANUNGEN: Pflegeplanung[] = [STEINER_ALT_PP, HUBER_PP, STEINER_PP];
+export const MOCK_KLV_VERORDNUNGEN: KLVVerordnung[] = [STEINER_ALT_KLV, HUBER_KLV, STEINER_KLV];
+export const MOCK_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [...STEINER_ALT_ARZT_DIAGNOSEN, ...HUBER_ARZT_DIAGNOSEN, ...STEINER_ARZT_DIAGNOSEN];
 /** @deprecated Ersetzt durch Rhythmus-Engine (src/lib/rhythmus/). Nur noch für Typ-Referenz behalten. */
 export const MOCK_WORKFLOWS: WorkflowPlan[] = [];
-export { ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE };
+export { STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE };
