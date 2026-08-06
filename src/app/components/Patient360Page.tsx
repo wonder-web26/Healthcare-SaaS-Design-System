@@ -17,6 +17,16 @@ import {
   useMandate, aktualisiereMandat, verknuepftePatienten, MANDAT_STICHTAG,
 } from "../../lib/mandate/store";
 import { getAngehoerige } from "../../lib/angehoerige/store";
+import { entscheidLabel } from "../../lib/stammdaten/entscheid";
+import {
+  verordnungZustand, verordnungsartLabel, entscheidAnzeige, tageSeitEinreichung,
+  tageBisAblauf, kgsDecktAm, v3GrundFehlt, lueckenBerechnen, offeneLuecke,
+  ausAnzeigedatum, alsAnzeigedatum,
+  type Verordnung, type Kostengutsprache, type Luecke,
+} from "../../lib/mandate/verordnungen";
+import {
+  useVerordnungen, useKostengutsprachen, aktualisiereVerordnung, aktualisiereKostengutsprache,
+} from "../../lib/mandate/verordnungen-store";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
 import { isoZuAnzeige, anzeigeZuIso, formatAnzeige, formatDatumZeit } from "../../lib/datum";
 import {
@@ -692,7 +702,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "vitalwerte": return <VitaldatenTab patientId={patient.id} />;
     case "betreuungsrhythmus": return <TabWorkflow patient={patient} />;
     case "leistungsplanungsblatt": return <TabKLV patientId={patient.id} />;
-    case "verordnung-und-kostengutsprache": return <AnsichtVerordnung />;
+    case "verordnung-und-kostengutsprache": return <AnsichtVerordnung patient={patient} />;
     case "stempelkontrolle": return <AnsichtStempelkontrolle />;
     case "dokumente": return <TabDokumente patient={patient} />;
     case "pendenzen": return <TabTickets tickets={tickets} navigate={navigate} />;
@@ -2496,392 +2506,344 @@ function MandatBeendete({ mandate }: { mandate: Mandat[] }) {
 
 /* ══════════════════════════════════════════
    ANSICHT: Leistungen › Verordnung und Kostengutsprache
-   Übernimmt die Abschnitte 1 und 2 der früheren Sammelliste unverändert:
-   aktive Bewilligung und Bewilligungs-Historie.
+
+   Zwei datierte Ketten am Mandat: ärztliche Verordnungen und Kostengutsprachen
+   der Kasse. Eine Zeit ohne gültige Gutsprache steht als eigene rote Zeile an
+   ihrer chronologischen Stelle — nicht als Randnotiz, denn sie ist bei einer
+   Kontrolle die erste Frage.
    ══════════════════════════════════════════ */
-function AnsichtVerordnung() {
-  /* ── Bewilligte Leistungen with versioning ── */
-  interface Bewilligung {
-    id: number;
-    taeglicheMin: number;
-    tageProWoche: number;
-    minutenA: number;
-    minutenB: number;
-    gueltigAb: string;
-    gueltigBis: string;
-    status: "aktiv" | "abgelaufen";
+function AnsichtVerordnung({ patient }: { patient: Patient }) {
+  const navigate = useNavigate();
+  const mandate = useMandate().filter(m => m.patientId === patient.id);
+  const aktivesMandat = mandate.find(m => istAktiv(m, MANDAT_STICHTAG)) ?? null;
+  const alleVo = useVerordnungen();
+  const alleKgs = useKostengutsprachen();
+
+  if (!aktivesMandat) {
+    return (
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-6)" }}>
+        <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Verordnung und Kostengutsprache</h3>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 6, maxWidth: 560 }}>
+          Beides hängt am Mandat. Ohne aktive Abrechnungsbeziehung gibt es
+          nichts zu verordnen und nichts zuzusichern.
+        </p>
+        <div style={{ marginTop: 14 }}>
+          <AppButton variant="sekundaer" onClick={() => navigate(ansichtPfad(patient.id, "mandate"))}>Zu den Mandaten</AppButton>
+        </div>
+      </div>
+    );
   }
 
-  const [bewilligungen, setBewilligungen] = useState<Bewilligung[]>([
-    {
-      id: 3,
-      taeglicheMin: 120,
-      tageProWoche: 5,
-      minutenA: 90,
-      minutenB: 30,
-      gueltigAb: "01.01.2026",
-      gueltigBis: "–",
-      status: "aktiv",
-    },
-    {
-      id: 2,
-      taeglicheMin: 90,
-      tageProWoche: 5,
-      minutenA: 60,
-      minutenB: 30,
-      gueltigAb: "01.07.2025",
-      gueltigBis: "31.12.2025",
-      status: "abgelaufen",
-    },
-    {
-      id: 1,
-      taeglicheMin: 60,
-      tageProWoche: 3,
-      minutenA: 40,
-      minutenB: 20,
-      gueltigAb: "15.01.2025",
-      gueltigBis: "30.06.2025",
-      status: "abgelaufen",
-    },
-  ]);
-
-  const [showNewBewForm, setShowNewBewForm] = useState(false);
-  const [bewNextId, setBewNextId] = useState(4);
-  const emptyBewForm = { taeglicheMin: "", tageProWoche: "", minutenA: "", minutenB: "", gueltigAb: "", gueltigBis: "" };
-  const [bewForm, setBewForm] = useState(emptyBewForm);
-
-  const aktive = bewilligungen.find((b) => b.status === "aktiv");
-  const historie = bewilligungen.filter((b) => b.status === "abgelaufen").sort((a, b) => b.id - a.id);
-
-  // Bewilligungs-Historie als geteilte DataTable (Datum über die Datumsschicht; Leerwerte ans Ende).
-  const bewLeer = (s: string) => !s || s === "–" || !s.includes(".");
-  const bewDatum = (s: string) => bewLeer(s) ? "–" : isoZuAnzeige(anzeigeZuIso(s));
-  const bewDatumSort = (a: string, b: string, f: number) => {
-    const la = bewLeer(a), lb = bewLeer(b);
-    if (la && lb) return 0; if (la) return 1; if (lb) return -1;
-    return f * anzeigeZuIso(a).localeCompare(anzeigeZuIso(b));
-  };
-  const sortBewilligung = (list: Bewilligung[], key: string, dir: "asc" | "desc") => {
-    const f = dir === "asc" ? 1 : -1;
-    return [...list].sort((a, b) => {
-      switch (key) {
-        case "version": return f * (a.id - b.id);
-        case "gueltigab": return bewDatumSort(a.gueltigAb, b.gueltigAb, f);
-        case "gueltigbis": return bewDatumSort(a.gueltigBis, b.gueltigBis, f);
-        case "mintag": return f * (a.taeglicheMin - b.taeglicheMin);
-        case "aleist": return f * (a.minutenA - b.minutenA);
-        case "bleist": return f * (a.minutenB - b.minutenB);
-        case "gesamt": return f * (a.taeglicheMin * a.tageProWoche - b.taeglicheMin * b.tageProWoche);
-        default: return 0;
-      }
-    });
-  };
-  const [histSort, setHistSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
-  const histToggle = (key: string) => setHistSort(s => s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
-  const histSortiert = histSort ? sortBewilligung(historie, histSort.key, histSort.dir) : historie;
-  const bewSpalten: SpalteDef<Bewilligung>[] = [
-    { id: "version", label: "Version", minCh: 7, maxSpur: "8ch", align: "left", sortierbar: true, ausKarte: true,
-      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>V{b.id}</span> },
-    { id: "gueltigab", label: "Gültig ab", minCh: 10, maxSpur: "11ch", align: "left", sortierbar: true, ausKarte: true,
-      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{bewDatum(b.gueltigAb)}</span> },
-    { id: "gueltigbis", label: "Gültig bis", minCh: 10, maxSpur: "11ch", align: "left", sortierbar: true,
-      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{bewDatum(b.gueltigBis)}</span> },
-    { id: "mintag", label: "Min / Tag", minCh: 9, maxSpur: "9ch", align: "right", sortierbar: true, abwerfRang: 4,
-      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{b.taeglicheMin}</span> },
-    { id: "aleist", label: "A-Leist.", minCh: 8, maxSpur: "8ch", align: "right", sortierbar: true, abwerfRang: 1,
-      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontVariantNumeric: "tabular-nums" }}>{b.minutenA}</span> },
-    { id: "bleist", label: "B-Leist.", minCh: 8, maxSpur: "8ch", align: "right", sortierbar: true, abwerfRang: 2,
-      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--status-success)", fontVariantNumeric: "tabular-nums" }}>{b.minutenB}</span> },
-    { id: "gesamt", label: "Gesamt / Wo.", minCh: 12, maxSpur: "12ch", align: "right", sortierbar: true, abwerfRang: 3,
-      render: b => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{b.taeglicheMin * b.tageProWoche}</span> },
-    { id: "status", label: "Status", minCh: 10, maxSpur: "13ch", align: "left", sortierbar: true,
-      render: () => <span style={{ display: "inline-flex", alignItems: "center", padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: "var(--bg-secondary)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Abgelaufen</span> },
-  ];
-  const bewKarteTitel = (b: Bewilligung) => (
-    <div className="flex items-center justify-between" style={{ gap: 8, width: "100%", minWidth: 0 }}>
-      <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)" }}>V{b.id}</span>
-      <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{bewDatum(b.gueltigAb)} – {bewDatum(b.gueltigBis)}</span>
-    </div>
-  );
-
-  const canSaveBew = bewForm.taeglicheMin !== "" && bewForm.tageProWoche !== "" && bewForm.minutenA !== "" && bewForm.minutenB !== "" && bewForm.gueltigAb.trim() !== "";
-
-  const handleSaveBew = () => {
-    if (!canSaveBew) return;
-    const closedDate = bewForm.gueltigAb.trim();
-    setBewilligungen((prev) =>
-      [
-        {
-          id: bewNextId,
-          taeglicheMin: Number(bewForm.taeglicheMin),
-          tageProWoche: Number(bewForm.tageProWoche),
-          minutenA: Number(bewForm.minutenA),
-          minutenB: Number(bewForm.minutenB),
-          gueltigAb: closedDate,
-          gueltigBis: bewForm.gueltigBis.trim() || "–",
-          status: "aktiv" as const,
-        },
-        ...prev.map((b) =>
-          b.status === "aktiv"
-            ? { ...b, status: "abgelaufen" as const, gueltigBis: `bis ${closedDate}` }
-            : b
-        ),
-      ]
-    );
-    setBewNextId((n) => n + 1);
-    setBewForm(emptyBewForm);
-    setShowNewBewForm(false);
-  };
-
-  const handleCancelBew = () => {
-    setBewForm(emptyBewForm);
-    setShowNewBewForm(false);
-  };
-
+  const vo = alleVo.filter(v => v.mandatId === aktivesMandat.id);
+  const kgs = alleKgs.filter(k => k.mandatId === aktivesMandat.id);
+  const luecke = offeneLuecke(kgs, MANDAT_STICHTAG);
 
   return (
     <div className="space-y-4">
+      {luecke && <LueckenWarnband luecke={luecke} />}
+      <KgsZeitachse kgs={kgs} mandat={aktivesMandat} hatVerordnung={vo.length > 0} />
+      <VoZeitachse verordnungen={vo} />
+    </div>
+  );
+}
 
-      {/* ═══ SECTION 1: Aktive Bewilligung ═══ */}
-      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-        <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Stamp className="w-4 h-4 text-primary" />
-            <h5 className="text-foreground">Aktive Bewilligung</h5>
-          </div>
-          {aktive && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-success/10 text-success border border-success/15" style={{ fontWeight: 600 }}>
-              <span className="w-1.5 h-1.5 rounded-full bg-success" />
-              Aktiv
-            </span>
-          )}
+/* ── Abschnitt 1: Warnband, nur bei offener Lücke ──────────────────────────── */
+function LueckenWarnband({ luecke }: { luecke: Luecke }) {
+  return (
+    <div className="flex items-start" style={{ gap: 10, padding: "12px 14px", borderRadius: "var(--radius-card)", background: "var(--status-danger-bg)", border: "var(--border-thin) solid var(--status-danger)" }}>
+      <AlertTriangle style={{ width: 16, height: 16, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
+      <div className="flex-1 min-w-0">
+        <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--status-danger)" }}>
+          Seit {luecke.tage} Tagen ohne gültige Kostengutsprache
         </div>
+        <div style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)", marginTop: 3 }}>
+          In dieser Zeit erbrachte Leistungen kann die Kasse bis zu fünf Jahre
+          rückwirkend zurückfordern — auch bei gültiger Verordnung.
+        </div>
+      </div>
+      <AppButton variant="sekundaer" icon={Plus}>Kostengutsprache einreichen</AppButton>
+    </div>
+  );
+}
 
-        {aktive ? (
-          <div className="p-5 space-y-5">
-            {/* Validity row */}
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                <Calendar className="w-3.5 h-3.5" />
-                <span style={{ fontWeight: 450 }}>Gültig ab:</span>
-                <span className="text-foreground" style={{ fontWeight: 500 }}>{aktive.gueltigAb}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                <ArrowRight className="w-3.5 h-3.5" />
-                <span style={{ fontWeight: 450 }}>Gültig bis:</span>
-                <span className="text-foreground" style={{ fontWeight: 500 }}>{aktive.gueltigBis}</span>
-              </div>
-              <span className="text-[11px] text-muted-foreground/60">Version {aktive.id}</span>
-            </div>
+/* ── Abschnitt 2: Kostengutsprachen als Zeitachse ──────────────────────────── */
 
-            {/* 2×2 Metric Grid */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-border bg-secondary/30 p-4">
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>Tägliche Minuten</div>
-                <div className="text-[28px] text-foreground tracking-tight" style={{ fontWeight: 600, lineHeight: 1.1 }}>{aktive.taeglicheMin}</div>
-                <div className="text-[11px] text-muted-foreground mt-1">Minuten / Tag</div>
-              </div>
-              <div className="rounded-xl border border-border bg-secondary/30 p-4">
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>Einsatztage</div>
-                <div className="text-[28px] text-foreground tracking-tight" style={{ fontWeight: 600, lineHeight: 1.1 }}>{aktive.tageProWoche}</div>
-                <div className="text-[11px] text-muted-foreground mt-1">Tage / Woche</div>
-              </div>
-              <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-4">
-                <div className="text-[11px] text-primary/70 uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>A-Leistungen</div>
-                <div className="text-[28px] text-primary tracking-tight" style={{ fontWeight: 600, lineHeight: 1.1 }}>{aktive.minutenA}</div>
-                <div className="text-[11px] text-primary/60 mt-1">Minuten / Tag</div>
-              </div>
-              <div className="rounded-xl border border-success/15 bg-success/[0.04] p-4">
-                <div className="text-[11px] text-success/70 uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>B-Leistungen</div>
-                <div className="text-[28px] text-success tracking-tight" style={{ fontWeight: 600, lineHeight: 1.1 }}>{aktive.minutenB}</div>
-                <div className="text-[11px] text-success/60 mt-1">Minuten / Tag</div>
-              </div>
-            </div>
+/** Ein Eintrag der Zeitachse: entweder eine Gutsprache oder eine Lücke. */
+type KgsEintrag =
+  | { art: "kgs"; k: Kostengutsprache; version: number; sortAb: Date }
+  | { art: "luecke"; l: Luecke; sortAb: Date };
 
-            {/* Weekly total row */}
-            <div className="rounded-xl border border-primary/20 bg-primary/[0.03] px-5 py-4 flex items-center justify-between">
-              <div>
-                <div className="text-[11px] text-primary/70 uppercase tracking-wider" style={{ fontWeight: 500 }}>Wöchentliche Gesamtminuten</div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">{aktive.taeglicheMin} Min × {aktive.tageProWoche} Tage</div>
-              </div>
-              <div className="text-[32px] text-primary tracking-tight" style={{ fontWeight: 700, lineHeight: 1 }}>{aktive.taeglicheMin * aktive.tageProWoche}</div>
-            </div>
+function KgsZeitachse({ kgs, mandat, hatVerordnung }: {
+  kgs: Kostengutsprache[];
+  mandat: Mandat;
+  hatVerordnung: boolean;
+}) {
+  if (kgs.length === 0) {
+    return (
+      <PSectionCard title="Kostengutsprachen" icon={Shield}>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", maxWidth: 560 }}>
+          {hatVerordnung
+            ? "Für dieses Mandat wurde noch keine Kostengutsprache eingereicht. Ohne Zusicherung der Kasse bleibt jede erbrachte Leistung rückforderbar."
+            : "Noch keine Kostengutsprache eingereicht."}
+        </p>
+        <div style={{ marginTop: 14 }}>
+          <AppButton variant="primaer" icon={Plus}>Kostengutsprache einreichen</AppButton>
+        </div>
+      </PSectionCard>
+    );
+  }
 
-            {/* Note + Button row */}
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground/70">
-                <Info className="w-3.5 h-3.5 shrink-0" />
-                Basierend auf ärztlicher Verordnung
-              </div>
-              {!showNewBewForm && (
-                <button
-                  onClick={() => setShowNewBewForm(true)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] text-primary-foreground bg-primary hover:bg-primary-hover transition-colors cursor-pointer"
-                  style={{ fontWeight: 500 }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Neue Bewilligung erfassen
-                </button>
-              )}
-            </div>
+  /* Version aus der zeitlichen Reihenfolge — kein gespeicherter Zähler. */
+  const chronologisch = [...kgs].sort((a, b) => {
+    const aa = ausAnzeigedatum(a.gueltigAb), bb = ausAnzeigedatum(b.gueltigAb);
+    return (aa?.getTime() ?? 0) - (bb?.getTime() ?? 0);
+  });
+  const version = new Map(chronologisch.map((k, i) => [k.id, i + 1]));
 
-            {/* ── New version form ── */}
-            {showNewBewForm && (
-              <div className="border-t border-border-light pt-5 space-y-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <FileClock className="w-4 h-4 text-primary" />
-                  <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>Neue Version erstellen</p>
-                </div>
-                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-warning/[0.06] border border-warning/15">
-                  <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
-                  <span className="text-[12px] text-warning/90" style={{ fontWeight: 450 }}>
-                    Die aktuelle Bewilligung (Version {aktive.id}) wird automatisch geschlossen. Bestehende Versionen bleiben in der Historie erhalten.
-                  </span>
-                </div>
+  const eintraege: KgsEintrag[] = [
+    ...chronologisch.map(k => ({
+      art: "kgs" as const, k, version: version.get(k.id)!,
+      sortAb: ausAnzeigedatum(k.gueltigAb) ?? new Date(0),
+    })),
+    ...lueckenBerechnen(kgs, MANDAT_STICHTAG).map(l => ({ art: "luecke" as const, l, sortAb: l.von })),
+  ].sort((a, b) => b.sortAb.getTime() - a.sortAb.getTime()); // neueste zuerst
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>Gültig ab *</label>
-                    <input
-                      type="text"
-                      placeholder="z.B. 01.04.2026"
-                      value={bewForm.gueltigAb}
-                      onChange={(e) => setBewForm((p) => ({ ...p, gueltigAb: e.target.value }))}
-                      className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>Gültig bis</label>
-                    <input
-                      type="text"
-                      placeholder="Offen lassen = unbefristet"
-                      value={bewForm.gueltigBis}
-                      onChange={(e) => setBewForm((p) => ({ ...p, gueltigBis: e.target.value }))}
-                      className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>Tägliche Minuten *</label>
-                    <input
-                      type="number"
-                      min={1}
-                      placeholder="z.B. 120"
-                      value={bewForm.taeglicheMin}
-                      onChange={(e) => setBewForm((p) => ({ ...p, taeglicheMin: e.target.value }))}
-                      className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>Einsatztage / Woche *</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={7}
-                      placeholder="z.B. 5"
-                      value={bewForm.tageProWoche}
-                      onChange={(e) => setBewForm((p) => ({ ...p, tageProWoche: e.target.value }))}
-                      className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-primary/70 uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>A-Leistungen (Min/Tag) *</label>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="z.B. 90"
-                      value={bewForm.minutenA}
-                      onChange={(e) => setBewForm((p) => ({ ...p, minutenA: e.target.value }))}
-                      className="w-full text-[13px] text-foreground bg-primary/[0.03] border border-primary/20 rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-success/70 uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>B-Leistungen (Min/Tag) *</label>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="z.B. 30"
-                      value={bewForm.minutenB}
-                      onChange={(e) => setBewForm((p) => ({ ...p, minutenB: e.target.value }))}
-                      className="w-full text-[13px] text-foreground bg-success/[0.03] border border-success/20 rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50"
-                    />
-                  </div>
-                </div>
+  return (
+    <PSectionCard title="Kostengutsprachen" icon={Shield}>
+      <div className="flex flex-col" style={{ gap: 8 }}>
+        {eintraege.map(e => e.art === "luecke"
+          ? <LueckenZeile key={`l-${e.l.von.getTime()}`} luecke={e.l} />
+          : <KgsZeile key={e.k.id} k={e.k} version={e.version} mandat={mandat} />)}
+      </div>
+    </PSectionCard>
+  );
+}
 
-                <div className="flex justify-end gap-2 pt-1">
-                  <button
-                    onClick={handleCancelBew}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] border border-border bg-card hover:bg-secondary/60 text-foreground transition-colors cursor-pointer"
-                    style={{ fontWeight: 500 }}
-                  >
-                    Abbrechen
-                  </button>
-                  <button
-                    onClick={handleSaveBew}
-                    disabled={!canSaveBew}
-                    className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] transition-colors ${
-                      canSaveBew
-                        ? "text-primary-foreground bg-primary hover:bg-primary-hover cursor-pointer"
-                        : "text-muted-foreground bg-muted cursor-not-allowed"
-                    }`}
-                    style={{ fontWeight: 500 }}
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    Version erstellen
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="p-5">
-            <div className="text-center py-8">
-              <Stamp className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-[13px] text-muted-foreground" style={{ fontWeight: 450 }}>Noch keine Bewilligung erfasst</p>
-              <button
-                onClick={() => setShowNewBewForm(true)}
-                className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] text-primary-foreground bg-primary hover:bg-primary-hover transition-colors cursor-pointer"
-                style={{ fontWeight: 500 }}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Erste Bewilligung erfassen
-              </button>
-            </div>
-          </div>
+function LueckenZeile({ luecke }: { luecke: Luecke }) {
+  return (
+    <div style={{ padding: "10px 12px", borderRadius: 10, background: "var(--status-danger-bg)", border: "var(--border-thin) solid var(--status-danger)" }}>
+      <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
+        <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-danger)", flexShrink: 0 }} />
+        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--status-danger)" }}>
+          Lücke · {luecke.tage} {luecke.tage === 1 ? "Tag" : "Tage"}
+        </span>
+        <span style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)", fontVariantNumeric: "tabular-nums" }}>
+          {alsAnzeigedatum(luecke.von)} – {luecke.offen ? "offen" : alsAnzeigedatum(luecke.bis)}
+        </span>
+      </div>
+      <div style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)", marginTop: 3, marginLeft: 21 }}>
+        Ohne gültige Kostengutsprache sind erbrachte Leistungen rückforderbar.
+      </div>
+    </div>
+  );
+}
+
+function KgsZeile({ k, version, mandat }: { k: Kostengutsprache; version: number; mandat: Mandat }) {
+  const [bearbeitet, setBearbeitet] = useState(false);
+  const [entwurf, setEntwurf] = useState(k);
+  useEffect(() => { if (!bearbeitet) setEntwurf(k); }, [k, bearbeitet]);
+
+  const angezeigt = entscheidAnzeige(k, MANDAT_STICHTAG);
+  const aktiv = kgsDecktAm(k, MANDAT_STICHTAG, MANDAT_STICHTAG);
+  const seitEinreichung = tageSeitEinreichung(k, MANDAT_STICHTAG);
+  const bisAblauf = tageBisAblauf(k, MANDAT_STICHTAG);
+  const grundFehlt = v3GrundFehlt(entwurf);
+
+  const speichern = () => {
+    const { id: _i, mandatId: _m, ...felder } = entwurf;
+    aktualisiereKostengutsprache(k.id, felder);
+    setBearbeitet(false);
+  };
+  const setzeFeld = <K extends keyof Kostengutsprache>(f: K, v: Kostengutsprache[K]) =>
+    setEntwurf(e => ({ ...e, [f]: v }));
+
+  const marke = ENTSCHEID_MARKE[angezeigt] ?? ENTSCHEID_MARKE.ausstehend;
+
+  return (
+    <div style={{
+      padding: "12px 14px", borderRadius: 10,
+      background: aktiv ? "var(--bg-elevated)" : "transparent",
+      border: `var(--border-thin) solid ${aktiv ? "var(--brand-primary)" : "var(--border-default)"}`,
+    }}>
+      <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+          Version {version}
+        </span>
+        <span style={{ padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: marke.bg, color: marke.text }}>
+          {entscheidLabel(angezeigt)}
+        </span>
+        {aktiv && (
+          <span style={{ padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-success-bg)", color: "var(--status-success-text)" }}>
+            Gültig
+          </span>
         )}
+        {bisAblauf !== null && (
+          <span className="inline-flex items-center" style={{ gap: 4, padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}>
+            <Clock style={{ width: 11, height: 11 }} /> Läuft ab in {bisAblauf} {bisAblauf === 1 ? "Tag" : "Tagen"}
+          </span>
+        )}
+        <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+          {k.gueltigAb} – {k.gueltigBis || "offen"}
+        </span>
+        <button type="button" onClick={() => (bearbeitet ? speichern() : setBearbeitet(true))}
+          className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
+          {bearbeitet ? "Sichern" : "Bearbeiten"}
+        </button>
       </div>
 
-      {/* ═══ SECTION 2: Bewilligungs-Historie ═══ */}
-      {historie.length > 0 && (
-        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-          <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <History className="w-4 h-4 text-muted-foreground" />
-              <h5 className="text-foreground">Bewilligungs-Historie</h5>
-            </div>
-            <span className="text-[11px] text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full" style={{ fontWeight: 500 }}>
-              {historie.length} {historie.length === 1 ? "Version" : "Versionen"}
-            </span>
-          </div>
-          <div className="px-3 pb-3">
-            <DataTable<Bewilligung>
-              spalten={bewSpalten}
-              zeilen={histSortiert}
-              zeilenKey={b => String(b.id)}
-              sort={histSort ?? undefined}
-              onSort={histToggle}
-              karteTitel={bewKarteTitel}
-              containerHaltepunkte
-              karteAbPx={560}
-              leerText="Keine abgelaufenen Bewilligungen."
-            />
-          </div>
-          <div className="px-5 py-3 border-t border-border-light">
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground/70">
-              <Info className="w-3.5 h-3.5 shrink-0" />
-              Vergangene Bewilligungen sind schreibgeschützt und können nicht gelöscht oder überschrieben werden.
-            </div>
-          </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" style={{ gap: 12 }}>
+        <MandatFeld label="Versicherer" wert={getKrankenkasseLabel(mandat.versicherer)} />
+        <VoFeld label="Eingereicht am" wert={entwurf.eingereichtAm} bearbeitet={bearbeitet} onChange={v => setzeFeld("eingereichtAm", v)} />
+        <VoFeld label="Entscheid am" wert={entwurf.entscheidAm} bearbeitet={bearbeitet} onChange={v => setzeFeld("entscheidAm", v)} />
+        <VoFeld label="Gültig ab" wert={entwurf.gueltigAb} bearbeitet={bearbeitet} onChange={v => setzeFeld("gueltigAb", v)} />
+        <VoFeld label="Gültig bis" wert={entwurf.gueltigBis} bearbeitet={bearbeitet} onChange={v => setzeFeld("gueltigBis", v)} />
+        <VoFeld label="Minuten je Woche" wert={entwurf.bewilligteMinutenProWoche} bearbeitet={bearbeitet} onChange={v => setzeFeld("bewilligteMinutenProWoche", v)} />
+        <VoFeld label="Minuten je Tag" wert={entwurf.bewilligteMinutenProTag} bearbeitet={bearbeitet} onChange={v => setzeFeld("bewilligteMinutenProTag", v)} />
+        <VoFeld label="Einsatztage" wert={entwurf.bewilligteEinsatztage} bearbeitet={bearbeitet} onChange={v => setzeFeld("bewilligteEinsatztage", v)} />
+      </div>
+
+      {angezeigt === "ausstehend" && seitEinreichung !== null && (
+        <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 8 }}>
+          Seit {seitEinreichung} {seitEinreichung === 1 ? "Tag" : "Tagen"} eingereicht, noch kein Entscheid.
         </div>
+      )}
+      {angezeigt === "stillschweigend_angenommen" && seitEinreichung !== null && (
+        <div style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 8 }}>
+          Seit {seitEinreichung} Tagen eingereicht, ohne Antwort der Kasse. Nach
+          vierzehn Tagen gilt das Blatt als angenommen — das Rückforderungsrisiko
+          bleibt bestehen, nur eine offizielle Kostengutsprache schliesst es.
+        </div>
+      )}
+      {(entwurf.kuerzungsgrund || grundFehlt) && (
+        <div style={{ marginTop: 8 }}>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>
+            Kürzungsgrund{grundFehlt ? " *" : ""}
+          </div>
+          {bearbeitet ? (
+            <textarea value={entwurf.kuerzungsgrund} onChange={e => setzeFeld("kuerzungsgrund", e.target.value)} rows={2}
+              className="w-full outline-none"
+              style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", background: "var(--bg-elevated)", border: `var(--border-thin) solid ${grundFehlt ? "var(--status-danger)" : "var(--border-default)"}`, borderRadius: 8, padding: "6px 9px", fontFamily: "inherit", resize: "vertical" }} />
+          ) : (
+            <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", lineHeight: 1.45 }}>{entwurf.kuerzungsgrund}</div>
+          )}
+          {grundFehlt && (
+            <div style={{ fontSize: "var(--text-micro)", color: "var(--status-danger)", marginTop: 3 }}>
+              Bei Kürzung und Ablehnung ist der Grund erforderlich.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Farbe der Entscheidmarke. Unbekannte Werte fallen auf „ausstehend". */
+const ENTSCHEID_MARKE: Record<string, { bg: string; text: string }> = {
+  ausstehend: { bg: "var(--bg-secondary)", text: "var(--text-secondary)" },
+  stillschweigend_angenommen: { bg: "var(--status-warning-bg)", text: "var(--status-warning-text)" },
+  bewilligt: { bg: "var(--status-success-bg)", text: "var(--status-success-text)" },
+  gekuerzt: { bg: "var(--status-warning-bg)", text: "var(--status-warning-text)" },
+  abgelehnt: { bg: "var(--status-danger-bg)", text: "var(--status-danger)" },
+};
+
+/* ── Abschnitt 3: ärztliche Verordnungen ───────────────────────────────────── */
+function VoZeitachse({ verordnungen }: { verordnungen: Verordnung[] }) {
+  if (verordnungen.length === 0) {
+    return (
+      <PSectionCard title="Ärztliche Verordnungen" icon={FileText}>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", maxWidth: 560 }}>
+          Für dieses Mandat liegt keine ärztliche Verordnung vor. Ohne
+          Verordnung darf nicht abgerechnet werden.
+        </p>
+        <div style={{ marginTop: 14 }}>
+          <AppButton variant="primaer" icon={Plus}>Verordnung erfassen</AppButton>
+        </div>
+      </PSectionCard>
+    );
+  }
+
+  const neuesteZuerst = [...verordnungen].sort((a, b) =>
+    (ausAnzeigedatum(b.gueltigAb)?.getTime() ?? 0) - (ausAnzeigedatum(a.gueltigAb)?.getTime() ?? 0));
+
+  return (
+    <PSectionCard title="Ärztliche Verordnungen" icon={FileText}>
+      <div className="flex flex-col" style={{ gap: 8 }}>
+        {neuesteZuerst.map(v => (
+          <VoZeile key={v.id} v={v} alleDesMandats={verordnungen} />
+        ))}
+      </div>
+    </PSectionCard>
+  );
+}
+
+const VO_MARKE: Record<string, { bg: string; text: string; label: string }> = {
+  aktiv: { bg: "var(--status-success-bg)", text: "var(--status-success-text)", label: "Aktiv" },
+  ersetzt: { bg: "var(--bg-secondary)", text: "var(--text-secondary)", label: "Ersetzt" },
+  abgelaufen: { bg: "var(--bg-secondary)", text: "var(--text-tertiary)", label: "Abgelaufen" },
+};
+
+function VoZeile({ v, alleDesMandats }: { v: Verordnung; alleDesMandats: Verordnung[] }) {
+  const [bearbeitet, setBearbeitet] = useState(false);
+  const [entwurf, setEntwurf] = useState(v);
+  useEffect(() => { if (!bearbeitet) setEntwurf(v); }, [v, bearbeitet]);
+
+  const zustand = verordnungZustand(v, alleDesMandats, MANDAT_STICHTAG);
+  const marke = VO_MARKE[zustand] ?? VO_MARKE.abgelaufen;
+  const aktiv = zustand === "aktiv";
+
+  const speichern = () => {
+    const { id: _i, mandatId: _m, ...felder } = entwurf;
+    aktualisiereVerordnung(v.id, felder);
+    setBearbeitet(false);
+  };
+  const setzeFeld = <K extends keyof Verordnung>(f: K, w: Verordnung[K]) =>
+    setEntwurf(e => ({ ...e, [f]: w }));
+
+  return (
+    <div style={{
+      padding: "12px 14px", borderRadius: 10,
+      background: aktiv ? "var(--bg-elevated)" : "transparent",
+      border: `var(--border-thin) solid ${aktiv ? "var(--brand-primary)" : "var(--border-default)"}`,
+    }}>
+      <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+          {verordnungsartLabel(v.art)}
+        </span>
+        <span style={{ padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: marke.bg, color: marke.text }}>
+          {marke.label}
+        </span>
+        <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+          {v.gueltigAb} – {v.gueltigBis || "unbefristet"}
+        </span>
+        <button type="button" onClick={() => (bearbeitet ? speichern() : setBearbeitet(true))}
+          className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
+          {bearbeitet ? "Sichern" : "Bearbeiten"}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" style={{ gap: 12 }}>
+        <VoFeld label="Verordnende Ärztin" wert={entwurf.verordnendeAerztin} bearbeitet={bearbeitet} onChange={w => setzeFeld("verordnendeAerztin", w)} />
+        <VoFeld label="Ausstellungsdatum" wert={entwurf.ausstellungsdatum} bearbeitet={bearbeitet} onChange={w => setzeFeld("ausstellungsdatum", w)} />
+        <VoFeld label="Gültig ab" wert={entwurf.gueltigAb} bearbeitet={bearbeitet} onChange={w => setzeFeld("gueltigAb", w)} />
+        <VoFeld label="Gültig bis" wert={entwurf.gueltigBis} bearbeitet={bearbeitet} onChange={w => setzeFeld("gueltigBis", w)} />
+        <VoFeld label="Unterzeichnet am" wert={entwurf.unterzeichnetAm} bearbeitet={bearbeitet} onChange={w => setzeFeld("unterzeichnetAm", w)} />
+        <VoFeld label="Bemerkung" wert={entwurf.bemerkung} bearbeitet={bearbeitet} onChange={w => setzeFeld("bemerkung", w)} />
+      </div>
+    </div>
+  );
+}
+
+/** Kleines Feld der beiden Zeitachsen — lesen oder bearbeiten. */
+function VoFeld({ label, wert, bearbeitet, onChange }: {
+  label: string; wert: string; bearbeitet: boolean; onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>{label}</div>
+      {bearbeitet ? (
+        <input value={wert} onChange={e => onChange(e.target.value)} className="w-full outline-none"
+          style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: 8, padding: "5px 8px", fontFamily: "inherit" }} />
+      ) : (
+        <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", minHeight: 19 }}>{wert}</div>
       )}
     </div>
   );
