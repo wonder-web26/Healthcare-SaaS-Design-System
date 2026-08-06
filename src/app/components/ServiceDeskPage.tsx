@@ -2,10 +2,17 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { Plus, X, AlertTriangle, Check, ArrowLeft, Send, Sparkles, Search, ChevronDown, ExternalLink } from "lucide-react";
 import { getUnifiedEntries, entryBetreff, entryPersonName, CURRENT_USER, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
-import { personLink, personArtLabel } from "../../lib/mocks/personen-aufloesung";
+import { personLink, personArtLabel, type PersonenBezug } from "../../lib/mocks/personen-aufloesung";
+import { type Person } from "../../lib/mocks/workflow-tasks";
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
 import { isoZuAnzeige, formatTagMonat, isoZuDate } from "../../lib/datum";
+import { PersonenAuswahl, type PersonOption } from "./ui/PersonenAuswahl";
+import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
+import { DateField } from "./form/DateField";
+import { getDiplomierte } from "../../lib/betreuung/diplomierte";
+import { patientenSeed } from "./patientData";
+import { angehoerigeSeed } from "./angehoerigeData";
 import { useCurrentRole } from "../auth";
 import { AnnaPendenzVorschlag } from "../anna/AnnaPendenzVorschlag";
 import { AnnaDemoMockModal } from "../anna/AnnaDemoMockModal";
@@ -76,8 +83,12 @@ function zuErledigenSatz(art: PendenzTyp): string {
 const PRIO_REGELFALL = "mittel";
 
 /* ── Verlauf: ein Strang (Erstellung, Statuswechsel, Kommentare). ── */
-type VerlaufTyp = "erstellt" | "status" | "zuweisung" | "kommentar";
+type VerlaufTyp = "erstellt" | "status" | "zuweisung" | "kommentar" | "feld";
 interface VerlaufEintrag { typ: VerlaufTyp; text: string; by: string; at: string; }
+
+// Autorin und Zeitpunkt jeder Bearbeitung (Prototyp: fest, im Mock-Präsens).
+const BEARBEITER = "M. Keller";
+const BEARBEITET_AM = "03.03.2026, 14:45";
 
 const PRIO_CFG: Record<string, { label: string; color: string }> = {
   hoch: { label: "Hoch", color: "var(--status-danger)" },
@@ -240,7 +251,7 @@ export function ServiceDeskPage() {
 
   const [filter, setFilter] = useState<FilterZustand>(LEERER_FILTER);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "faellig", dir: "asc" });
-  const [localStatus, setLocalStatus] = useState<Record<string, string>>({});
+  const [localEdits, setLocalEdits] = useState<Record<string, Partial<UnifiedEntry>>>({});
   const [verlauf, setVerlauf] = useState<Record<string, VerlaufEintrag[]>>({});
   const [draftComment, setDraftComment] = useState("");
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
@@ -269,9 +280,11 @@ export function ServiceDeskPage() {
   const isBulkMode = role === "backoffice" || role === "management";
 
   const allEntries = useMemo(() => getUnifiedEntries(), []);
+  // Bearbeitete Felder liegen als lokale Overlays je Pendenz über den Quelldaten
+  // (derselbe Weg wie bisher der Status — nur jetzt für alle bearbeitbaren Felder).
   const entries = useMemo(
-    () => allEntries.map(e => ({ ...e, status: (localStatus[e.id] || e.status) as UnifiedEntry["status"] })),
-    [allEntries, localStatus],
+    () => allEntries.map(e => ({ ...e, ...(localEdits[e.id] || {}) })),
+    [allEntries, localEdits],
   );
 
   const segmentBasis = useMemo(() => entries.filter(e => imSegment(e, filter.segment)), [entries, filter.segment]);
@@ -281,7 +294,14 @@ export function ServiceDeskPage() {
     return r;
   }, [segmentBasis]);
 
-  const filtered = useMemo(() => filterEntries(entries, filter), [entries, filter]);
+  const gefiltert = useMemo(() => filterEntries(entries, filter), [entries, filter]);
+  // Die geöffnete Pendenz bleibt sichtbar, auch wenn sie durch eine Bearbeitung aus
+  // dem aktiven Filter fällt — bis der Detailbereich geschlossen wird.
+  const filtered = useMemo(() => {
+    if (!selectedId || gefiltert.some(e => e.id === selectedId)) return gefiltert;
+    const sel = entries.find(e => e.id === selectedId);
+    return sel ? [...gefiltert, sel] : gefiltert;
+  }, [gefiltert, selectedId, entries]);
   const sorted = useMemo(() => sortEntries(filtered, sort.key, sort.dir), [filtered, sort]);
 
   const alleArten = useMemo(() => {
@@ -318,10 +338,32 @@ export function ServiceDeskPage() {
   const pushVerlauf = (id: string, eintrag: VerlaufEintrag) =>
     setVerlauf(prev => ({ ...prev, [id]: [...(prev[id] || []), eintrag] }));
 
-  // Statuswechsel an genau einer Stelle; jeder Wechsel wird im Verlauf festgehalten.
-  const handleStatusChange = (id: string, newStatus: string, by = "Maria Keller") => {
-    setLocalStatus(prev => ({ ...prev, [id]: newStatus }));
-    pushVerlauf(id, { typ: "status", text: `Status: ${STATUS_LABEL[newStatus] || newStatus}`, by, at: "03.03.2026, 14:40" });
+  // Ein Schreibpfad für alle Feldbearbeitungen: Overlay setzen + Verlaufseintrag.
+  const updateFeld = (id: string, patch: Partial<UnifiedEntry>, verlaufText: string, typ: VerlaufTyp = "feld") => {
+    setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
+    pushVerlauf(id, { typ, text: verlaufText, by: BEARBEITER, at: BEARBEITET_AM });
+  };
+
+  // Statuswechsel: Sonderfall von updateFeld (Signatur bleibt für Bulk/Demo erhalten).
+  const handleStatusChange = (id: string, newStatus: string, by = BEARBEITER) => {
+    const alt = entries.find(e => e.id === id)?.status ?? "offen";
+    setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), status: newStatus as UnifiedEntry["status"] } }));
+    pushVerlauf(id, { typ: "status", text: `Status geändert · ${STATUS_LABEL[alt] || alt} → ${STATUS_LABEL[newStatus] || newStatus}`, by, at: BEARBEITET_AM });
+  };
+
+  // Zuständigkeit ändern (alt → neu im Verlauf).
+  const handleZustaendigChange = (id: string, person: Person) => {
+    const alt = entries.find(e => e.id === id)?.verantwortlich.name ?? "Nicht zugewiesen";
+    if (alt === person.name) return;
+    updateFeld(id, { verantwortlich: person }, `Zuständigkeit geändert · ${alt} → ${person.name}`, "zuweisung");
+  };
+
+  // Personenwechsel: verschiebt die Pendenz ins Dossier einer anderen Person → Rückfrage.
+  const handlePersonChange = (id: string, bezug: PersonenBezug, neuName: string) => {
+    const altName = entryPersonName(entries.find(e => e.id === id)!);
+    if (altName === neuName) return;
+    if (!window.confirm(`Pendenz zu «${neuName}» verschieben? Sie erscheint danach in einem anderen Dossier und verschwindet aus dem aktuellen.`)) return;
+    updateFeld(id, { personBezug: bezug }, `Person geändert · ${altName} → ${neuName}`);
   };
 
   const handleAddComment = (id: string) => {
@@ -637,6 +679,9 @@ export function ServiceDeskPage() {
               onClose={() => setParam({ id: null })}
               onDemoAction={handleDemoAction}
               onPersonKlick={() => navigate(personLink(selected.personBezug))}
+              onFeld={(patch, txt) => updateFeld(selected.id, patch, txt)}
+              onPerson={(bezug, neuName) => handlePersonChange(selected.id, bezug, neuName)}
+              onZustaendig={p => handleZustaendigChange(selected.id, p)}
             />
           </div>
         )}
@@ -662,6 +707,9 @@ export function ServiceDeskPage() {
               onClose={() => setParam({ id: null })}
               onDemoAction={handleDemoAction}
               onPersonKlick={() => navigate(personLink(selected.personBezug))}
+              onFeld={(patch, txt) => updateFeld(selected.id, patch, txt)}
+              onPerson={(bezug, neuName) => handlePersonChange(selected.id, bezug, neuName)}
+              onZustaendig={p => handleZustaendigChange(selected.id, p)}
             />
           </div>
         </div>
@@ -685,6 +733,95 @@ export function ServiceDeskPage() {
    DETAIL PANEL
    ══════════════════════════════════════════ */
 
+/* ── Quellen für die Auswahlfelder ── */
+// Person: alle Patienten + Angehörigen (zentrale Mockdaten), je mit typisiertem Bezug.
+const ALLE_PERSONEN: { option: PersonOption; bezug: PersonenBezug; name: string }[] = [
+  ...patientenSeed.map(p => ({
+    option: { id: `p-${p.id}`, initialen: `${p.vorname[0] ?? ""}${p.nachname[0] ?? ""}`, nachname: p.nachname, vorname: p.vorname, rolle: "Patient/in" },
+    bezug: { art: "patient" as const, kennung: p.id }, name: `${p.vorname} ${p.nachname}`,
+  })),
+  ...angehoerigeSeed.map(a => ({
+    option: { id: `a-${a.id}`, initialen: `${a.vorname[0] ?? ""}${a.nachname[0] ?? ""}`, nachname: a.nachname, vorname: a.vorname, rolle: "Angehörige/r" },
+    bezug: { art: "angehoeriger" as const, kennung: a.id }, name: `${a.vorname} ${a.nachname}`,
+  })),
+];
+// Zuständigkeit: zentrale Diplomierten-Liste (lib/betreuung).
+const DIPL_OPTIONEN: PersonOption[] = getDiplomierte().map(d => ({ id: d.id, initialen: d.initialen, nachname: d.name, vorname: d.vorname, rolle: d.funktion }));
+const diplZuPerson = (id: string): Person | null => {
+  const d = getDiplomierte().find(x => x.id === id);
+  return d ? { name: `${d.vorname} ${d.name}`, initialen: d.initialen } : null;
+};
+
+/* ── Inline-Bearbeitung: Wert anklicken → Feld; Verlassen übernimmt, Escape verwirft.
+   Erkennbar an einer gestrichelten Unterstreichung (Form, nicht Farbe) + Titel-Hinweis. ── */
+const editierbarCue: React.CSSProperties = { borderBottom: "1px dashed var(--text-tertiary)", cursor: "pointer" };
+
+function InlineText({ value, onCommit, mehrzeilig, textStyle, placeholder }: {
+  value: string; onCommit: (v: string) => void; mehrzeilig?: boolean; textStyle?: React.CSSProperties; placeholder?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+  const start = () => { setDraft(value); setEditing(true); };
+  const commit = () => { setEditing(false); const t = draft.trim(); if (t !== value) onCommit(t); };
+  const cancel = () => { setEditing(false); setDraft(value); };
+  useEffect(() => { if (editing && ref.current) { ref.current.focus(); ref.current.select?.(); } }, [editing]);
+  if (!editing) {
+    return (
+      <span role="button" tabIndex={0} onClick={start} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); start(); } }}
+        className="ui-fokusring" style={{ ...textStyle, ...editierbarCue }} title="Zum Bearbeiten klicken">
+        {value || <span style={{ color: "var(--text-tertiary)" }}>{placeholder || "—"}</span>}
+      </span>
+    );
+  }
+  const gemeinsam = {
+    ref,
+    value: draft,
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft(e.target.value),
+    onBlur: commit,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); cancel(); }
+      if (e.key === "Enter" && !mehrzeilig) { e.preventDefault(); commit(); }
+    },
+    style: { ...textStyle, width: "100%", fontFamily: "inherit", padding: "3px 8px", borderRadius: "var(--radius-input)", border: "var(--border-thin) solid var(--brand-primary)", background: "var(--bg-elevated)", color: "var(--text-primary)", outline: "none" } as React.CSSProperties,
+  };
+  return mehrzeilig
+    ? <textarea {...gemeinsam} rows={3} style={{ ...gemeinsam.style, resize: "vertical" }} />
+    : <input {...gemeinsam} />;
+}
+
+function InlineSelect({ value, optionen, onCommit, textStyle }: {
+  value: string; optionen: { value: string; label: string }[]; onCommit: (v: string) => void; textStyle?: React.CSSProperties;
+}) {
+  return (
+    <span className="inline-flex items-center" style={{ ...editierbarCue, position: "relative" }} title="Zum Ändern klicken">
+      <select value={value} onChange={e => { if (e.target.value !== value) onCommit(e.target.value); }} aria-label="Auswahl ändern"
+        style={{ ...textStyle, appearance: "none", WebkitAppearance: "none", background: "transparent", border: "none", fontFamily: "inherit", cursor: "pointer", padding: "0 15px 0 0", outline: "none", color: "inherit" }}>
+        {optionen.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      <ChevronDown style={{ width: 11, height: 11, position: "absolute", right: 0, pointerEvents: "none", color: "var(--text-tertiary)" }} />
+    </span>
+  );
+}
+
+/** Personen-/Zuständigkeits-Auswahl über das geteilte PersonenAuswahl in einem Popover. */
+function AuswahlPopover({ ausloeser, personen, selectedId, onSelect, breite = 300 }: {
+  ausloeser: (offen: boolean, toggle: () => void, ref: React.Ref<HTMLButtonElement>) => React.ReactNode;
+  personen: PersonOption[]; selectedId: string | null; onSelect: (id: string) => void; breite?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLButtonElement>(null);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild><span className="inline-flex">{ausloeser(open, () => setOpen(o => !o), ref)}</span></PopoverAnchor>
+      <PopoverContent align="start" side="bottom" sideOffset={6} style={{ width: breite, padding: 6 }}
+        onEscapeKeyDown={() => setOpen(false)} onCloseAutoFocus={e => { e.preventDefault(); ref.current?.focus(); }}>
+        <PersonenAuswahl personen={personen} selectedId={selectedId} onSelect={id => { onSelect(id); setOpen(false); }} suchePlaceholder="Person suchen" leerText="Keine Person gefunden." />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 interface DetailPanelProps {
   entry: UnifiedEntry;
   verlauf: VerlaufEintrag[];
@@ -695,12 +832,14 @@ interface DetailPanelProps {
   onClose: () => void;
   onDemoAction?: (mockType: string) => void;
   onPersonKlick: () => void;
+  onFeld: (patch: Partial<UnifiedEntry>, verlaufText: string) => void;
+  onPerson: (bezug: PersonenBezug, neuName: string) => void;
+  onZustaendig: (person: Person) => void;
 }
 
-function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment, onStatusChange, onClose, onPersonKlick }: DetailPanelProps) {
+function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment, onStatusChange, onClose, onPersonKlick, onFeld, onPerson, onZustaendig }: DetailPanelProps) {
   const sektionLabel = { fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, fontWeight: "var(--weight-medium)", marginBottom: "var(--space-2)" };
   const personName = entryPersonName(entry);
-  const prio = entry.prioritaet !== PRIO_REGELFALL ? PRIO_CFG[entry.prioritaet] : null;
   const faellig = entry.faellig ? faelligDarstellung(entry.faellig, entry.status) : null;
   const faelligFarbe = faellig?.ton === "danger" ? "var(--status-danger)" : faellig?.ton === "warning" ? "var(--status-warning-text)" : "var(--text-tertiary)";
 
@@ -718,7 +857,12 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
           <div className="flex items-center" style={{ gap: 6, minWidth: 0 }}>
             <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{entry.id}</span>
             <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>·</span>
-            <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{pendenzTypen[entry.pendenzTyp]?.label || entry.typLabel}</span>
+            <InlineSelect
+              value={entry.pendenzTyp}
+              optionen={(Object.keys(pendenzTypen) as PendenzTyp[]).map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))}
+              onCommit={v => onFeld({ pendenzTyp: v as PendenzTyp }, `Art geändert · ${pendenzTypen[entry.pendenzTyp]?.label || entry.pendenzTyp} → ${pendenzTypen[v as PendenzTyp]?.label || v}`)}
+              textStyle={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}
+            />
           </div>
           <button onClick={onClose} className="shrink-0 flex items-center justify-center cursor-pointer transition-colors"
             style={{ width: 28, height: 28, borderRadius: "var(--radius-pill)", background: "transparent", border: "none" }}
@@ -727,32 +871,47 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
             <X style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
           </button>
         </div>
-        {/* Zeile 2: Betreff */}
-        <div style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>
-          {entry.betreff}
+        {/* Zeile 2: Betreff (Freitext — Verlauf hält nur die Tatsache fest) */}
+        <div style={{ marginBottom: 8 }}>
+          <InlineText
+            value={entry.betreff}
+            onCommit={v => onFeld({ betreff: v }, "Betreff bearbeitet")}
+            textStyle={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
+            placeholder="Betreff"
+          />
         </div>
         {/* Zeile 3: Person · Personenart | Fälligkeit · Priorität. Fälligkeit und
             Priorität bleiben zusammen (Priorität nie auf eigener Zeile); wird es eng,
             kürzt der Personenname und die Personenart weicht zuerst. */}
-        <div className="flex items-center" style={{ gap: 10, minWidth: 0 }}>
-          <button type="button" onClick={onPersonKlick} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, minWidth: 0, flex: "0 1 auto", overflow: "hidden", background: "transparent", border: "none", padding: 0, fontFamily: "inherit" }}>
-            <ExternalLink style={{ width: 11, height: 11, opacity: 0.6, flexShrink: 0 }} />
-            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
-            <span style={{ flexShrink: 0, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>· {personArtLabel(entry.personBezug.art)}</span>
-          </button>
-          {(faellig || prio) && (
-            <span className="inline-flex items-baseline shrink-0" style={{ gap: 5, whiteSpace: "nowrap" }}>
-              {faellig && <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{faellig.datum}</span>}
-              {faellig?.abw && <span style={{ fontSize: "var(--text-meta)", fontWeight: faellig.ton === "danger" ? "var(--weight-medium)" : "var(--weight-regular)", color: faelligFarbe }}>{faellig.abw}</span>}
-              {faellig && prio && <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>·</span>}
-              {prio && (
-                <span className="inline-flex items-center" style={{ gap: 5 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "var(--radius-pill)", background: prio.color }} />
-                  <span style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)" }}>Priorität {prio.label.toLowerCase()}</span>
-                </span>
-              )}
-            </span>
-          )}
+        <div className="flex items-center flex-wrap" style={{ gap: 10, minWidth: 0 }}>
+          {/* Person — Auswahl aus Patienten und Angehörigen; Wechsel verlangt eine Rückfrage */}
+          <AuswahlPopover
+            personen={ALLE_PERSONEN.map(p => p.option)}
+            selectedId={ALLE_PERSONEN.find(p => p.bezug.art === entry.personBezug.art && p.bezug.kennung === entry.personBezug.kennung)?.option.id ?? null}
+            onSelect={id => { const t = ALLE_PERSONEN.find(p => p.option.id === id); if (t) onPerson(t.bezug, t.name); }}
+            ausloeser={(_offen, toggle, ref) => (
+              <button ref={ref} type="button" onClick={toggle} className="ui-fokusring inline-flex items-center cursor-pointer" title="Person ändern"
+                style={{ gap: 4, minWidth: 0, flex: "0 1 auto", overflow: "hidden", background: "transparent", border: "none", padding: 0, fontFamily: "inherit", ...editierbarCue }}>
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
+                <span style={{ flexShrink: 0, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>· {personArtLabel(entry.personBezug.art)}</span>
+                <ChevronDown style={{ width: 11, height: 11, opacity: 0.6, flexShrink: 0 }} />
+              </button>
+            )}
+          />
+          {/* Fälligkeit — bestehende Datumskomponente */}
+          <span className="inline-flex items-center shrink-0" style={{ gap: 5 }}>
+            <DateField wertFormat="iso" bereich="any" value={entry.faellig}
+              onChange={v => { const neu = (v as string) || null; if (neu !== entry.faellig) onFeld({ faellig: neu }, `Fälligkeit geändert · ${entry.faellig ? isoZuAnzeige(entry.faellig) : "—"} → ${neu ? isoZuAnzeige(neu) : "—"}`); }} />
+            {faellig?.abw && <span style={{ fontSize: "var(--text-meta)", fontWeight: faellig.ton === "danger" ? "var(--weight-medium)" : "var(--weight-regular)", color: faelligFarbe }}>{faellig.abw}</span>}
+          </span>
+          {/* Priorität — immer bearbeitbar (auch im Regelfall) */}
+          <span className="inline-flex items-center shrink-0" style={{ gap: 5 }}>
+            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Priorität</span>
+            <InlineSelect value={entry.prioritaet}
+              optionen={[{ value: "hoch", label: "Hoch" }, { value: "mittel", label: "Mittel" }, { value: "niedrig", label: "Niedrig" }]}
+              onCommit={v => onFeld({ prioritaet: v as UnifiedEntry["prioritaet"] }, `Priorität geändert · ${PRIO_CFG[entry.prioritaet]?.label || entry.prioritaet} → ${PRIO_CFG[v]?.label || v}`)}
+              textStyle={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)" }} />
+          </span>
         </div>
       </div>
 
@@ -768,12 +927,13 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
           <div style={{ fontSize: "var(--text-body)", color: "var(--text-primary)", lineHeight: 1.5 }}>
             {zuErledigenSatz(entry.pendenzTyp)}
           </div>
-          {entry.kontext && (
-            <div style={{ marginTop: "var(--space-3)" }}>
-              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 2 }}>Details</div>
-              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{entry.kontext}</div>
-            </div>
-          )}
+          <div style={{ marginTop: "var(--space-3)" }}>
+            <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 2 }}>Details</div>
+            <InlineText value={entry.kontext} mehrzeilig
+              onCommit={v => onFeld({ kontext: v }, "Beschreibung bearbeitet")}
+              textStyle={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}
+              placeholder="Beschreibung hinzufügen…" />
+          </div>
         </div>
 
         {/* Verlauf — ein Strang, neueste zuerst; Erstellung immer vorhanden. */}
@@ -834,16 +994,23 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
             );
           })}
         </div>
-        {istNichtZugewiesen(entry) ? (
-          <button type="button" className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-            <Plus style={{ width: 13, height: 13 }} /> Zuweisen
-          </button>
-        ) : (
-          <div className="flex items-center" style={{ gap: 6 }}>
-            <MiniAvatar person={entry.verantwortlich} size={22} />
-            <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{entry.verantwortlich.name}</span>
-          </div>
-        )}
+        <AuswahlPopover
+          personen={DIPL_OPTIONEN}
+          selectedId={DIPL_OPTIONEN.find(o => `${o.vorname} ${o.nachname}` === entry.verantwortlich.name)?.id ?? null}
+          onSelect={id => { const p = diplZuPerson(id); if (p) onZustaendig(p); }}
+          ausloeser={(_offen, toggle, ref) => istNichtZugewiesen(entry) ? (
+            <button ref={ref} type="button" onClick={toggle} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+              <Plus style={{ width: 13, height: 13 }} /> Zuweisen
+            </button>
+          ) : (
+            <button ref={ref} type="button" onClick={toggle} className="ui-fokusring inline-flex items-center cursor-pointer" title="Zuständigkeit ändern"
+              style={{ gap: 6, background: "transparent", border: "none", padding: 0, fontFamily: "inherit", ...editierbarCue }}>
+              <MiniAvatar person={entry.verantwortlich} size={22} />
+              <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{entry.verantwortlich.name}</span>
+              <ChevronDown style={{ width: 11, height: 11, opacity: 0.6, color: "var(--text-tertiary)" }} />
+            </button>
+          )}
+        />
       </div>
     </div>
   );
