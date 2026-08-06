@@ -3,7 +3,9 @@
  * Matches styleguide.md 8.2 (12px radius, 0.5px border, correct states).
  * Unlike the full Select component, no FormField wrapper — just the control.
  */
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { berechneAufklappLage, useLageNachfuehren, type AufklappLage } from "./aufklappliste";
 import { ChevronDown, Check } from "lucide-react";
 
 interface Option { value: string; label: string }
@@ -18,12 +20,34 @@ interface InlineSelectProps {
 
 export function InlineSelect({ value, onChange, options, disabled, style }: InlineSelectProps) {
   const [open, setOpen] = useState(false);
+  const [lage, setLage] = useState<AufklappLage | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const ausloeserRef = useRef<HTMLButtonElement>(null);
   const selectedLabel = options.find(o => o.value === value)?.label || value;
+
+  /* Höhe eines Eintrags: 8px oben + 8px unten + 21px Zeile. */
+  const EINTRAG_HOEHE = 37;
+
+  const lageBerechnen = useCallback(() => {
+    const feld = ausloeserRef.current?.getBoundingClientRect();
+    if (feld) setLage(berechneAufklappLage(feld, options.length, EINTRAG_HOEHE));
+  }, [options.length]);
+
+  const oeffnen = () => {
+    lageBerechnen();
+    setOpen(true);
+  };
+
+  useLageNachfuehren(open, lageBerechnen);
 
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const h = (e: MouseEvent) => {
+      const ziel = e.target as Node;
+      // Die Liste liegt im Portal, also ausserhalb von ref — sie zählt trotzdem als innen.
+      const inListe = ziel instanceof Element && ziel.closest("[data-aufklappliste]") !== null;
+      if (ref.current && !ref.current.contains(ziel) && !inListe) setOpen(false);
+    };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
@@ -52,7 +76,8 @@ export function InlineSelect({ value, onChange, options, disabled, style }: Inli
     <div ref={ref} style={{ position: "relative", ...style }}>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        ref={ausloeserRef}
+        onClick={() => (open ? setOpen(false) : oeffnen())}
         className="flex items-center justify-between cursor-pointer"
         style={{
           width: "100%",
@@ -70,19 +95,18 @@ export function InlineSelect({ value, onChange, options, disabled, style }: Inli
         <ChevronDown style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
       </button>
 
-      {open && (
-        <div style={{
-          position: "absolute",
-          top: "100%",
-          left: 0,
-          right: 0,
-          marginTop: 4,
+      {open && lage && createPortal(
+        <div data-aufklappliste style={{
+          position: "fixed",
+          top: lage.top,
+          left: lage.left,
+          width: lage.width,
           background: "var(--bg-elevated)",
           border: "0.5px solid var(--border-default)",
           borderRadius: 12,
           boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-          zIndex: 50,
-          maxHeight: 200,
+          zIndex: 1000,
+          maxHeight: lage.maxHeight,
           overflowY: "auto",
           padding: "4px 0",
         }}>
@@ -114,7 +138,8 @@ export function InlineSelect({ value, onChange, options, disabled, style }: Inli
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

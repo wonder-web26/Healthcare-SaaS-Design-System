@@ -1,4 +1,6 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { berechneAufklappLage, useLageNachfuehren, type AufklappLage } from "../ui/aufklappliste";
 import { ChevronDown, Check, Search } from "lucide-react";
 import { FormField } from "./FormField";
 
@@ -27,10 +29,34 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
   const [focusIdx, setFocusIdx] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const ausloeserRef = useRef<HTMLButtonElement>(null);
+  const [lage, setLage] = useState<AufklappLage | null>(null);
+
+  /* Höhe eines Eintrags plus der Suchzeile darüber. Im Browser gemessen:
+     39.5 px je Eintrag; aufgerundet, damit acht ganz hineinpassen. */
+  const EINTRAG_HOEHE = 40;
+  const SUCHZEILE = 42;
+
+  const lageBerechnen = useCallback(() => {
+    const feld = ausloeserRef.current?.getBoundingClientRect();
+    if (feld) setLage(berechneAufklappLage(feld, options.length, EINTRAG_HOEHE, SUCHZEILE + 9));
+  }, [options.length]);
+
+  const oeffnen = () => {
+    lageBerechnen();
+    setOpen(true);
+  };
+
+  useLageNachfuehren(open, lageBerechnen);
 
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(""); } };
+    const h = (e: MouseEvent) => {
+      const ziel = e.target as Node;
+      // Die Liste liegt im Portal, also ausserhalb von ref — sie zählt trotzdem als innen.
+      const inListe = ziel instanceof Element && ziel.closest("[data-aufklappliste]") !== null;
+      if (ref.current && !ref.current.contains(ziel) && !inListe) { setOpen(false); setSearch(""); }
+    };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
@@ -73,7 +99,8 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
         <button
           type="button"
           disabled={disabled}
-          onClick={() => { if (!disabled) setOpen(o => !o); }}
+          ref={ausloeserRef}
+          onClick={() => { if (!disabled) { open ? setOpen(false) : oeffnen(); } }}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           className="w-full text-left outline-none transition-all flex items-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -91,11 +118,13 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
           <ChevronDown style={{ position: "absolute", right: 16, top: "50%", transform: `translateY(-50%) ${open ? "rotate(180deg)" : "rotate(0)"}`, width: 14, height: 14, color: "var(--text-tertiary)", transition: "transform 0.15s" }} />
         </button>
 
-        {open && (
+        {open && lage && createPortal(
           <div
+            data-aufklappliste
             onKeyDown={handleKeyDown}
             style={{
-              position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 50,
+              position: "fixed", top: lage.top, left: lage.left, width: lage.width, zIndex: 1000,
+              display: "flex", flexDirection: "column", maxHeight: lage.maxHeight,
               background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
               borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", overflow: "hidden",
             }}
@@ -115,7 +144,7 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
             </div>
 
             {/* Options */}
-            <div style={{ maxHeight: 280, overflowY: "auto", padding: 4 }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 4 }}>
               {flatFiltered.length === 0 ? (
                 <div style={{ padding: "var(--space-5)", textAlign: "center", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
                   Keine Ergebnisse
@@ -156,7 +185,8 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
                 ))
               )}
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
     </FormField>
