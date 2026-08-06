@@ -14,13 +14,13 @@ import {
 /* ── Seed-Mock ──────────────────────────────────────────────────────────────
    Vera Steiner (Angehörige, A-2026-0101): 12 Notizen — eine angeheftet, eine
    bearbeitet, eine über drei Zeilen lang, über drei Monate verteilt.
-   Hans-Rudolf Steiner (Patient, P-2026-0101): 2 Notizen, keine angeheftet.
-   Anna Bösiger (Patient, P-2026-0107): eine angeheftete Notiz.
+   Hans-Rudolf Steiner (Patient, P-2026-0041): 2 Notizen, keine angeheftet.
+   Anna Bösiger (Patient, P-2026-0047): eine angeheftete Notiz.
    Erika Huber (Angehörige, A-2026-0105): keine.
    Autorennamen aus den bestehenden Mock-Benutzern (M. Keller, S. Weber, R. Ott). */
 const VERA: NotizReferenz = { art: "angehoeriger", kennung: "A-2026-0101" };
-const HANSRUDOLF: NotizReferenz = { art: "patient", kennung: "P-2026-0101" };
-const BOESIGER: NotizReferenz = { art: "patient", kennung: "P-2026-0107" };
+const HANSRUDOLF: NotizReferenz = { art: "patient", kennung: "P-2026-0041" };
+const BOESIGER: NotizReferenz = { art: "patient", kennung: "P-2026-0047" };
 
 const SEED: Notiz[] = [
   // ── Vera Steiner ──

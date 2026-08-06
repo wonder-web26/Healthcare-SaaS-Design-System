@@ -208,7 +208,7 @@ export const statusExplanations: Record<
 export const patientenSeed: Patient[] = [
   {
     id: "P-2026-0041",
-    onboardingId: null,
+    onboardingId: "OB-2026-101",
     vorname: "Hans-Rudolf",
     nachname: "Steiner",
     angehoeriger: "Vera Steiner (Ehefrau)",
@@ -250,7 +250,7 @@ export const patientenSeed: Patient[] = [
   },
   {
     id: "P-2026-0042",
-    onboardingId: null,
+    onboardingId: "OB-2026-102",
     vorname: "Marie-Louise",
     nachname: "Hübscher-Wiederkehr",
     angehoeriger: "Beatrice Hübscher-Wiederkehr (Tochter)",
@@ -292,7 +292,7 @@ export const patientenSeed: Patient[] = [
   },
   {
     id: "P-2026-0043",
-    onboardingId: null,
+    onboardingId: "OB-2026-103",
     vorname: "Fatmire",
     nachname: "Rexhepi",
     angehoeriger: "Arben Rexhepi (Sohn)",
@@ -334,7 +334,7 @@ export const patientenSeed: Patient[] = [
   },
   {
     id: "P-2026-0044",
-    onboardingId: null,
+    onboardingId: "OB-2026-104",
     vorname: "Emine",
     nachname: "Kaya",
     angehoeriger: "Yusuf Kaya (Ehemann)",
@@ -372,7 +372,7 @@ export const patientenSeed: Patient[] = [
   },
   {
     id: "P-2026-0045",
-    onboardingId: null,
+    onboardingId: "OB-2026-105",
     vorname: "Fritz",
     nachname: "Huber",
     angehoeriger: "Erika Huber (Schwester)",
@@ -414,7 +414,7 @@ export const patientenSeed: Patient[] = [
   },
   {
     id: "P-2026-0046",
-    onboardingId: null,
+    onboardingId: "OB-2026-106",
     vorname: "Joaquim",
     nachname: "Da Silva",
     angehoeriger: "Marta Da Silva (Tochter)",
@@ -456,7 +456,7 @@ export const patientenSeed: Patient[] = [
   },
   {
     id: "P-2026-0047",
-    onboardingId: null,
+    onboardingId: "OB-2026-107",
     vorname: "Anna",
     nachname: "Bösiger",
     angehoeriger: "Heidi Bösiger (Tochter)",
@@ -498,7 +498,7 @@ export const patientenSeed: Patient[] = [
   },
   {
     id: "P-2026-0048",
-    onboardingId: null,
+    onboardingId: "OB-2026-108",
     vorname: "Gino",
     nachname: "Ferrari",
     angehoeriger: "Lucia Ferrari (Ehefrau)",

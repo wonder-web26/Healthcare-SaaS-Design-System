@@ -12,13 +12,18 @@
  * nach einer Namensänderung veralten.
  *
  * ── Kennungsformat (einzige dokumentierte Stelle) ──────────────────────────────
- * Onboarding-Listenfall OB-2026-1NN trägt zwei feste, im Mock vergebene Kennungen:
- *   • Patient:    patientId       = "P-2026-01NN"   (art "patient")
+ * Es gibt je Objektart GENAU EINEN Kennungsraum. Ein zweiter, paralleler Raum
+ * lief hier bereits auseinander: Onboarding-Fälle verwiesen auf P-2026-01NN,
+ * während der Bestand P-2026-004x führte — die Verweise zeigten ins Leere.
+ *
+ *   • Patient:    patientId       = "P-2026-00NN"   (art "patient")
+ *                 führend ist der Bestand in app/components/patientData.ts
  *   • Angehörige: angehoerigerId  = "A-2026-01NN"   (art "angehoeriger")
- * Beide werden fest im Mock vergeben, nie zur Laufzeit erzeugt und nie aus dem
- * Namen abgeleitet. Spätere Mockdaten führen dieses Schema fort. Das 01NN-Universum
- * der Onboarding-Liste ist in sich geschlossen und unabhängig vom Alt-Bestand in
- * angehoerigeData.ts (dort OB-2026-04x / A-2026-01xx als andere Personen).
+ *                 führend ist der Bestand in app/components/angehoerigeData.ts
+ *
+ * Der Onboarding-Fall verweist auf die Kennung des Bestands; der Bestandspatient
+ * trägt umgekehrt die `onboardingId` seines Falls. Beide Richtungen treffen.
+ * Kennungen werden fest im Mock vergeben, nie aus dem Namen abgeleitet.
  */
 
 export type PersonArt = "patient" | "angehoeriger";
