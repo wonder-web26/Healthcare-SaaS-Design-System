@@ -60,31 +60,19 @@ const STATUS_ZELL_CFG: Record<string, { dot: string; color: string; weight: stri
   erledigt: { dot: "var(--status-success)", color: "var(--text-tertiary)", weight: "var(--weight-regular)" },
 };
 
-/* ── "Zu erledigen": je Pendenzart ein hinterlegter Satz, was zu tun ist — kein
-   Fliesstext über den Datensatz. ── */
-const ZU_ERLEDIGEN_SATZ: Partial<Record<PendenzTyp, string>> = {
-  "srk-anmeldung": "Die angehörige Person zum SRK-Pflegekurs anmelden.",
-  "quellensteuer": "Die Quellensteuer beim kantonalen Steueramt anmelden.",
-  "ausweis-b-migrationsamt": "Die Person innerhalb der Meldefrist beim Migrationsamt anmelden.",
-  "kinderzulagen": "Den Kinderzulagen-Antrag bei der Familienausgleichskasse einreichen.",
-  "lohn-anpassung": "Den Stundenlohn nach bestandenem SRK-Kurs anpassen.",
-  "re-assessment": "Das Re-Assessment durchführen und die Pflegestufe überprüfen.",
-  "schluessel": "Die Schlüsselausgabe beziehungsweise -rückgabe organisieren.",
-  "anfrage": "Die Anfrage prüfen und die nötigen Schritte einleiten.",
-  "problem": "Das gemeldete Problem prüfen und beheben.",
-  "meldung": "Die Meldung sichten und die Folgeaktion auslösen.",
-  "betreuungs-rhythmus": "Den fälligen Betreuungsschritt durchführen und protokollieren.",
-};
-function zuErledigenSatz(art: PendenzTyp): string {
-  return ZU_ERLEDIGEN_SATZ[art] || pendenzTypen[art]?.description || "Die Pendenz bearbeiten.";
-}
-
 /* ── Priorität: Regelfall wird nicht angezeigt, nur Abweichungen. ── */
 const PRIO_REGELFALL = "mittel";
 
 /* ── Verlauf: ein Strang (Erstellung, Statuswechsel, Kommentare). ── */
 type VerlaufTyp = "erstellt" | "status" | "zuweisung" | "kommentar" | "feld";
-interface VerlaufEintrag { typ: VerlaufTyp; text: string; by: string; at: string; }
+interface VerlaufEintrag {
+  typ: VerlaufTyp; by: string; at: string;
+  text?: string;                     // erstellt / kommentar
+  feld?: string; feldLabel?: string; // Feldänderung — Koaleszenz-Schlüssel (feld + by)
+  alt?: string; neu?: string; freitext?: boolean;
+}
+/** Eine Feldänderung, wie DetailPanel sie meldet (Rohwert im patch, Anzeige in alt/neu). */
+interface Aenderung { feld: string; feldLabel: string; patch: Partial<UnifiedEntry>; alt: string; neu: string; freitext?: boolean; typ?: VerlaufTyp; }
 
 // Autorin und Zeitpunkt jeder Bearbeitung (Prototyp: fest, im Mock-Präsens).
 const BEARBEITER = "M. Keller";
@@ -166,7 +154,7 @@ function filterEntries(list: UnifiedEntry[], f: FilterZustand): UnifiedEntry[] {
    ans Ende. Standard bleibt Fälligkeit aufsteigend (überfällig zuerst, ohne Termin
    zuletzt). ── */
 type SortKey = "kennzeichen" | "art" | "betreff" | "status" | "person" | "beschreibung" | "faellig" | "zustaendig";
-const SORT_LABEL: Record<SortKey, string> = { kennzeichen: "Kennzeichen", art: "Art", betreff: "Betreff", status: "Status", person: "Person", beschreibung: "Beschreibung", faellig: "Fälligkeit", zustaendig: "Zuständig" };
+const SORT_LABEL: Record<SortKey, string> = { kennzeichen: "Kennzeichen", art: "Kategorie", betreff: "Titel", status: "Status", person: "Person", beschreibung: "Beschreibung", faellig: "Fälligkeit", zustaendig: "Zuständig" };
 const KENN_RANK: Record<string, number> = { rot: 0, gelb: 1 }; // kein Kennzeichen = 2
 const STATUS_RANK: Record<string, number> = { offen: 0, in_bearbeitung: 1, erledigt: 2 };
 function kennRang(e: UnifiedEntry): number { const t = ableitenKennzeichen(e).typ; return t ? KENN_RANK[t] : 2; }
@@ -196,11 +184,15 @@ function sortEntries(list: UnifiedEntry[], key: SortKey, dir: "asc" | "desc"): U
 }
 
 /* ── Mehrfachauswahl-Dropdown (lokal; kein neues Shared-/shadcn-Bauteil) ── */
-function AuswahlDropdown({ label, optionen, ausgewaehlt, onToggle }: {
+function AuswahlDropdown({ label, optionen, ausgewaehlt, onToggle, einfach, wert, onWaehle }: {
   label: string;
   optionen: { value: string; label: string }[];
-  ausgewaehlt: Set<string>;
-  onToggle: (value: string) => void;
+  ausgewaehlt?: Set<string>;
+  onToggle?: (value: string) => void;
+  // Einfachauswahl (Feldbearbeitung): ein Wert, Klick übernimmt und schliesst.
+  einfach?: boolean;
+  wert?: string;
+  onWaehle?: (value: string) => void;
 }) {
   const [offen, setOffen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -210,20 +202,21 @@ function AuswahlDropdown({ label, optionen, ausgewaehlt, onToggle }: {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [offen]);
-  const anzahl = ausgewaehlt.size;
+  const anzahl = ausgewaehlt?.size ?? 0;
+  const hervor = !einfach && anzahl > 0;
   return (
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOffen(o => !o)} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
-        style={{ gap: 6, padding: "7px 12px", borderRadius: "var(--radius-pill)", background: anzahl > 0 ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: anzahl > 0 ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: anzahl > 0 ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-        {label}{anzahl > 0 && <span style={{ fontVariantNumeric: "tabular-nums" }}>· {anzahl}</span>}
+        style={{ gap: 6, padding: "7px 12px", borderRadius: "var(--radius-pill)", background: hervor ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: hervor ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: hervor ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+        {label}{hervor && <span style={{ fontVariantNumeric: "tabular-nums" }}>· {anzahl}</span>}
         <ChevronDown style={{ width: 14, height: 14, opacity: 0.7 }} />
       </button>
       {offen && (
         <div className="absolute z-50" style={{ top: "calc(100% + 6px)", left: 0, minWidth: 220, maxHeight: 320, overflowY: "auto", padding: 6, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)" }}>
           {optionen.map(opt => {
-            const aktiv = ausgewaehlt.has(opt.value);
+            const aktiv = einfach ? wert === opt.value : (ausgewaehlt?.has(opt.value) ?? false);
             return (
-              <button key={opt.value} type="button" onClick={() => onToggle(opt.value)} className="w-full inline-flex items-center cursor-pointer transition-colors"
+              <button key={opt.value} type="button" onClick={() => { if (einfach) { onWaehle?.(opt.value); setOffen(false); } else { onToggle?.(opt.value); } }} className="w-full inline-flex items-center cursor-pointer transition-colors"
                 style={{ gap: 8, padding: "7px 8px", borderRadius: 6, background: "transparent", border: "none", fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit", textAlign: "left" }}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <span className="inline-flex items-center justify-center shrink-0" style={{ width: 16, height: 16, borderRadius: 4, border: aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: aktiv ? "var(--brand-primary)" : "transparent" }}>
@@ -329,7 +322,7 @@ export function ServiceDeskPage() {
   const filterTags = useMemo(() => {
     const t: { key: string; label: string; entfernen: () => void }[] = [];
     STATUS_CHIPS.forEach(chip => { if (filter.statusChips.has(chip.id)) t.push({ key: `s-${chip.id}`, label: chip.label, entfernen: () => toggleChip(chip.id) }); });
-    filter.arten.forEach(art => t.push({ key: `a-${art}`, label: `Art: ${pendenzTypen[art]?.label || art}`, entfernen: () => toggleArt(art) }));
+    filter.arten.forEach(art => t.push({ key: `a-${art}`, label: `Kategorie: ${pendenzTypen[art]?.label || art}`, entfernen: () => toggleArt(art) }));
     filter.zustaendige.forEach(n => t.push({ key: `z-${n}`, label: `Zuständig: ${n}`, entfernen: () => toggleZustaendig(n) }));
     return t;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -338,24 +331,29 @@ export function ServiceDeskPage() {
   const pushVerlauf = (id: string, eintrag: VerlaufEintrag) =>
     setVerlauf(prev => ({ ...prev, [id]: [...(prev[id] || []), eintrag] }));
 
-  // Ein Schreibpfad für alle Feldbearbeitungen: Overlay setzen + Verlaufseintrag.
-  const updateFeld = (id: string, patch: Partial<UnifiedEntry>, verlaufText: string, typ: VerlaufTyp = "feld") => {
-    setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
-    pushVerlauf(id, { typ, text: verlaufText, by: BEARBEITER, at: BEARBEITET_AM });
+  // Ein Schreibpfad für alle Feldbearbeitungen: Overlay setzen + Verlauf koaleszieren.
+  // Ändert dieselbe Person (BEARBEITER) dasselbe Feld erneut, wird der bestehende
+  // Eintrag angepasst (ursprünglicher alt bleibt, neu + Zeitpunkt aktualisiert);
+  // kehrt der Wert auf den Ausgangswert zurück, entfällt der Eintrag.
+  const aendereFeld = (id: string, a: Aenderung, by = BEARBEITER) => {
+    if (a.alt === a.neu) return;
+    setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...a.patch } }));
+    setVerlauf(prev => {
+      const list = prev[id] || [];
+      const idx = list.findIndex(v => v.feld === a.feld && v.by === by);
+      if (idx >= 0) {
+        const e = list[idx];
+        if (a.neu === e.alt) return { ...prev, [id]: list.filter((_, i) => i !== idx) };
+        return { ...prev, [id]: list.map((v, i) => i === idx ? { ...v, neu: a.neu, at: BEARBEITET_AM } : v) };
+      }
+      return { ...prev, [id]: [...list, { typ: a.typ ?? "feld", by, at: BEARBEITET_AM, feld: a.feld, feldLabel: a.feldLabel, alt: a.alt, neu: a.neu, freitext: a.freitext }] };
+    });
   };
 
-  // Statuswechsel: Sonderfall von updateFeld (Signatur bleibt für Bulk/Demo erhalten).
+  // Statuswechsel: Sonderfall (Signatur bleibt für Bulk/Demo erhalten).
   const handleStatusChange = (id: string, newStatus: string, by = BEARBEITER) => {
     const alt = entries.find(e => e.id === id)?.status ?? "offen";
-    setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), status: newStatus as UnifiedEntry["status"] } }));
-    pushVerlauf(id, { typ: "status", text: `Status geändert · ${STATUS_LABEL[alt] || alt} → ${STATUS_LABEL[newStatus] || newStatus}`, by, at: BEARBEITET_AM });
-  };
-
-  // Zuständigkeit ändern (alt → neu im Verlauf).
-  const handleZustaendigChange = (id: string, person: Person) => {
-    const alt = entries.find(e => e.id === id)?.verantwortlich.name ?? "Nicht zugewiesen";
-    if (alt === person.name) return;
-    updateFeld(id, { verantwortlich: person }, `Zuständigkeit geändert · ${alt} → ${person.name}`, "zuweisung");
+    aendereFeld(id, { feld: "status", feldLabel: "Status", patch: { status: newStatus as UnifiedEntry["status"] }, alt: STATUS_LABEL[alt] || alt, neu: STATUS_LABEL[newStatus] || newStatus, typ: "status" }, by);
   };
 
   // Personenwechsel: verschiebt die Pendenz ins Dossier einer anderen Person → Rückfrage.
@@ -363,7 +361,7 @@ export function ServiceDeskPage() {
     const altName = entryPersonName(entries.find(e => e.id === id)!);
     if (altName === neuName) return;
     if (!window.confirm(`Pendenz zu «${neuName}» verschieben? Sie erscheint danach in einem anderen Dossier und verschwindet aus dem aktuellen.`)) return;
-    updateFeld(id, { personBezug: bezug }, `Person geändert · ${altName} → ${neuName}`);
+    aendereFeld(id, { feld: "personBezug", feldLabel: "Person", patch: { personBezug: bezug }, alt: altName, neu: neuName });
   };
 
   const handleAddComment = (id: string) => {
@@ -488,8 +486,8 @@ export function ServiceDeskPage() {
   // Spaltenfall (abwerfRang, kleinster zuerst): Beschreibung, dann Art, dann Zuständig.
   const spalten: SpalteDef<UnifiedEntry>[] = [
     { id: "kennzeichen", label: "", festBreitePx: 24, align: "center", sortierbar: true, ausKarte: true, render: kennzeichenIcon },
-    { id: "art", label: "Art", minCh: 14, maxSpur: "21ch", abwerfRang: 2, align: "left", sortierbar: true, render: artZelle },
-    { id: "betreff", label: "Betreff", minCh: 20, maxSpur: "40ch", align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
+    { id: "art", label: "Kategorie", minCh: 14, maxSpur: "21ch", abwerfRang: 2, align: "left", sortierbar: true, render: artZelle },
+    { id: "betreff", label: "Titel", minCh: 20, maxSpur: "40ch", align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
     { id: "status", label: "Status", minCh: 16, maxSpur: "16ch", align: "left", sortierbar: true, render: statusZelle },
     { id: "person", label: "Person", minCh: 18, maxSpur: "34ch", align: "left", sortierbar: true, render: personZelle },
     { id: "beschreibung", label: "Beschreibung", minCh: 13, maxSpur: "34ch", abwerfRang: 1, align: "left", sortierbar: true, render: beschreibungZelle },
@@ -554,7 +552,7 @@ export function ServiceDeskPage() {
               })}
             </div>
 
-            <AuswahlDropdown label="Art" optionen={alleArten.map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))} ausgewaehlt={filter.arten as Set<string>} onToggle={v => toggleArt(v as PendenzTyp)} />
+            <AuswahlDropdown label="Kategorie" optionen={alleArten.map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))} ausgewaehlt={filter.arten as Set<string>} onToggle={v => toggleArt(v as PendenzTyp)} />
             <AuswahlDropdown label="Zuständig" optionen={alleZustaendige.map(n => ({ value: n, label: n }))} ausgewaehlt={filter.zustaendige} onToggle={toggleZustaendig} />
           </div>
 
@@ -679,9 +677,8 @@ export function ServiceDeskPage() {
               onClose={() => setParam({ id: null })}
               onDemoAction={handleDemoAction}
               onPersonKlick={() => navigate(personLink(selected.personBezug))}
-              onFeld={(patch, txt) => updateFeld(selected.id, patch, txt)}
+              onFeld={a => aendereFeld(selected.id, a)}
               onPerson={(bezug, neuName) => handlePersonChange(selected.id, bezug, neuName)}
-              onZustaendig={p => handleZustaendigChange(selected.id, p)}
             />
           </div>
         )}
@@ -707,9 +704,8 @@ export function ServiceDeskPage() {
               onClose={() => setParam({ id: null })}
               onDemoAction={handleDemoAction}
               onPersonKlick={() => navigate(personLink(selected.personBezug))}
-              onFeld={(patch, txt) => updateFeld(selected.id, patch, txt)}
+              onFeld={a => aendereFeld(selected.id, a)}
               onPerson={(bezug, neuName) => handlePersonChange(selected.id, bezug, neuName)}
-              onZustaendig={p => handleZustaendigChange(selected.id, p)}
             />
           </div>
         </div>
@@ -790,19 +786,6 @@ function InlineText({ value, onCommit, mehrzeilig, textStyle, placeholder }: {
     : <input {...gemeinsam} />;
 }
 
-function InlineSelect({ value, optionen, onCommit, textStyle }: {
-  value: string; optionen: { value: string; label: string }[]; onCommit: (v: string) => void; textStyle?: React.CSSProperties;
-}) {
-  return (
-    <span className="inline-flex items-center" style={{ ...editierbarCue, position: "relative" }} title="Zum Ändern klicken">
-      <select value={value} onChange={e => { if (e.target.value !== value) onCommit(e.target.value); }} aria-label="Auswahl ändern"
-        style={{ ...textStyle, appearance: "none", WebkitAppearance: "none", background: "transparent", border: "none", fontFamily: "inherit", cursor: "pointer", padding: "0 15px 0 0", outline: "none", color: "inherit" }}>
-        {optionen.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-      <ChevronDown style={{ width: 11, height: 11, position: "absolute", right: 0, pointerEvents: "none", color: "var(--text-tertiary)" }} />
-    </span>
-  );
-}
 
 /** Personen-/Zuständigkeits-Auswahl über das geteilte PersonenAuswahl in einem Popover. */
 function AuswahlPopover({ ausloeser, personen, selectedId, onSelect, breite = 300 }: {
@@ -822,6 +805,28 @@ function AuswahlPopover({ ausloeser, personen, selectedId, onSelect, breite = 30
   );
 }
 
+/** Fälligkeit: Auslöser wie die übrigen Felder (Pille), die Datumskomponente im Popover. */
+function FaelligPicker({ entry, onFeld }: { entry: UnifiedEntry; onFeld: (a: Aenderung) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLButtonElement>(null);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <button ref={ref} type="button" onClick={() => setOpen(o => !o)} className="ui-fokusring inline-flex items-center cursor-pointer" title="Fälligkeit ändern"
+          style={{ gap: 6, padding: "7px 12px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+          {entry.faellig ? isoZuAnzeige(entry.faellig) : "Kein Datum"}
+          <ChevronDown style={{ width: 14, height: 14, opacity: 0.7 }} />
+        </button>
+      </PopoverAnchor>
+      <PopoverContent align="start" side="bottom" sideOffset={6} style={{ width: 280, padding: 12 }}
+        onEscapeKeyDown={() => setOpen(false)} onCloseAutoFocus={e => { e.preventDefault(); ref.current?.focus(); }}>
+        <DateField wertFormat="iso" bereich="any" value={entry.faellig}
+          onChange={v => { const neu = (v as string) || null; if (neu !== entry.faellig) onFeld({ feld: "faellig", feldLabel: "Fälligkeit", patch: { faellig: neu }, alt: entry.faellig ? isoZuAnzeige(entry.faellig) : "—", neu: neu ? isoZuAnzeige(neu) : "—" }); }} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 interface DetailPanelProps {
   entry: UnifiedEntry;
   verlauf: VerlaufEintrag[];
@@ -832,12 +837,11 @@ interface DetailPanelProps {
   onClose: () => void;
   onDemoAction?: (mockType: string) => void;
   onPersonKlick: () => void;
-  onFeld: (patch: Partial<UnifiedEntry>, verlaufText: string) => void;
+  onFeld: (a: Aenderung) => void;
   onPerson: (bezug: PersonenBezug, neuName: string) => void;
-  onZustaendig: (person: Person) => void;
 }
 
-function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment, onStatusChange, onClose, onPersonKlick, onFeld, onPerson, onZustaendig }: DetailPanelProps) {
+function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment, onStatusChange, onClose, onPersonKlick, onFeld, onPerson }: DetailPanelProps) {
   const sektionLabel = { fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, fontWeight: "var(--weight-medium)", marginBottom: "var(--space-2)" };
   const personName = entryPersonName(entry);
   const faellig = entry.faellig ? faelligDarstellung(entry.faellig, entry.status) : null;
@@ -847,6 +851,9 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
   // Anzeige neueste zuerst.
   const erstellEintrag: VerlaufEintrag = { typ: "erstellt", text: "Pendenz erstellt", by: entry.erstelltVon.name, at: formatDate(entry.erstellt) };
   const eintraege = [erstellEintrag, ...verlauf].reverse();
+  // Feldänderungen: Listenwerte zeigen alt → neu; Freitext nur die Tatsache.
+  const verlaufText = (v: VerlaufEintrag): string =>
+    v.feld ? `${v.feldLabel} ${v.freitext ? "bearbeitet" : `geändert · ${v.alt} → ${v.neu}`}` : (v.text || "");
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -857,11 +864,10 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
           <div className="flex items-center" style={{ gap: 6, minWidth: 0 }}>
             <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{entry.id}</span>
             <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>·</span>
-            <InlineSelect
-              value={entry.pendenzTyp}
+            <AuswahlDropdown
+              einfach label={pendenzTypen[entry.pendenzTyp]?.label || entry.typLabel} wert={entry.pendenzTyp}
               optionen={(Object.keys(pendenzTypen) as PendenzTyp[]).map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))}
-              onCommit={v => onFeld({ pendenzTyp: v as PendenzTyp }, `Art geändert · ${pendenzTypen[entry.pendenzTyp]?.label || entry.pendenzTyp} → ${pendenzTypen[v as PendenzTyp]?.label || v}`)}
-              textStyle={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}
+              onWaehle={v => onFeld({ feld: "pendenzTyp", feldLabel: "Kategorie", patch: { pendenzTyp: v as PendenzTyp }, alt: pendenzTypen[entry.pendenzTyp]?.label || entry.pendenzTyp, neu: pendenzTypen[v as PendenzTyp]?.label || v })}
             />
           </div>
           <button onClick={onClose} className="shrink-0 flex items-center justify-center cursor-pointer transition-colors"
@@ -871,13 +877,13 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
             <X style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
           </button>
         </div>
-        {/* Zeile 2: Betreff (Freitext — Verlauf hält nur die Tatsache fest) */}
+        {/* Zeile 2: Titel (Freitext — Verlauf hält nur die Tatsache fest) */}
         <div style={{ marginBottom: 8 }}>
           <InlineText
             value={entry.betreff}
-            onCommit={v => onFeld({ betreff: v }, "Betreff bearbeitet")}
+            onCommit={v => onFeld({ feld: "betreff", feldLabel: "Titel", patch: { betreff: v }, alt: entry.betreff, neu: v, freitext: true })}
             textStyle={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
-            placeholder="Betreff"
+            placeholder="Titel"
           />
         </div>
         {/* Zeile 3: Person · Personenart | Fälligkeit · Priorität. Fälligkeit und
@@ -898,19 +904,17 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
               </button>
             )}
           />
-          {/* Fälligkeit — bestehende Datumskomponente */}
+          {/* Fälligkeit — Auslöser wie die übrigen Felder, Datumskomponente im Popover */}
           <span className="inline-flex items-center shrink-0" style={{ gap: 5 }}>
-            <DateField wertFormat="iso" bereich="any" value={entry.faellig}
-              onChange={v => { const neu = (v as string) || null; if (neu !== entry.faellig) onFeld({ faellig: neu }, `Fälligkeit geändert · ${entry.faellig ? isoZuAnzeige(entry.faellig) : "—"} → ${neu ? isoZuAnzeige(neu) : "—"}`); }} />
+            <FaelligPicker entry={entry} onFeld={onFeld} />
             {faellig?.abw && <span style={{ fontSize: "var(--text-meta)", fontWeight: faellig.ton === "danger" ? "var(--weight-medium)" : "var(--weight-regular)", color: faelligFarbe }}>{faellig.abw}</span>}
           </span>
-          {/* Priorität — immer bearbeitbar (auch im Regelfall) */}
+          {/* Priorität — immer bearbeitbar, Produkt-Auswahlbauteil */}
           <span className="inline-flex items-center shrink-0" style={{ gap: 5 }}>
             <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Priorität</span>
-            <InlineSelect value={entry.prioritaet}
+            <AuswahlDropdown einfach label={PRIO_CFG[entry.prioritaet]?.label || entry.prioritaet} wert={entry.prioritaet}
               optionen={[{ value: "hoch", label: "Hoch" }, { value: "mittel", label: "Mittel" }, { value: "niedrig", label: "Niedrig" }]}
-              onCommit={v => onFeld({ prioritaet: v as UnifiedEntry["prioritaet"] }, `Priorität geändert · ${PRIO_CFG[entry.prioritaet]?.label || entry.prioritaet} → ${PRIO_CFG[v]?.label || v}`)}
-              textStyle={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)" }} />
+              onWaehle={v => onFeld({ feld: "prioritaet", feldLabel: "Priorität", patch: { prioritaet: v as UnifiedEntry["prioritaet"] }, alt: PRIO_CFG[entry.prioritaet]?.label || entry.prioritaet, neu: PRIO_CFG[v]?.label || v })} />
           </span>
         </div>
       </div>
@@ -921,19 +925,13 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
             Komponente bleiben erhalten; zum Reaktivieren die folgende Zeile einkommentieren. */}
         {/* <AnnaPendenzVorschlag pendenz={entry} onActionExecuted={() => {}} onDemoAction={onDemoAction} /> */}
 
-        {/* Zu erledigen — ein Satz je Art, darunter die kontext-Zeile als "Details". */}
+        {/* Beschreibung — mehrzeiliger Freitext, trägt, was zu tun ist */}
         <div style={{ marginBottom: "var(--space-6)" }}>
-          <div style={sektionLabel}>Zu erledigen</div>
-          <div style={{ fontSize: "var(--text-body)", color: "var(--text-primary)", lineHeight: 1.5 }}>
-            {zuErledigenSatz(entry.pendenzTyp)}
-          </div>
-          <div style={{ marginTop: "var(--space-3)" }}>
-            <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" as const, marginBottom: 2 }}>Details</div>
-            <InlineText value={entry.kontext} mehrzeilig
-              onCommit={v => onFeld({ kontext: v }, "Beschreibung bearbeitet")}
-              textStyle={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}
-              placeholder="Beschreibung hinzufügen…" />
-          </div>
+          <div style={sektionLabel}>Beschreibung</div>
+          <InlineText value={entry.beschreibung} mehrzeilig
+            onCommit={v => onFeld({ feld: "beschreibung", feldLabel: "Beschreibung", patch: { beschreibung: v }, alt: entry.beschreibung, neu: v, freitext: true })}
+            textStyle={{ fontSize: "var(--text-body)", color: "var(--text-primary)", lineHeight: 1.5 }}
+            placeholder="Beschreibung hinzufügen…" />
         </div>
 
         {/* Verlauf — ein Strang, neueste zuerst; Erstellung immer vorhanden. */}
@@ -955,7 +953,7 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
               <div key={i} className="flex" style={{ gap: "var(--space-2)" }}>
                 <span className="shrink-0" style={{ width: 6, height: 6, marginTop: 7, borderRadius: "var(--radius-pill)", background: "var(--text-tertiary)" }} />
                 <div className="flex-1 min-w-0">
-                  <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{v.text}</span>
+                  <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{verlaufText(v)}</span>
                   <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginLeft: 6 }}>{v.by} · {v.at}</span>
                 </div>
               </div>
@@ -997,7 +995,7 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
         <AuswahlPopover
           personen={DIPL_OPTIONEN}
           selectedId={DIPL_OPTIONEN.find(o => `${o.vorname} ${o.nachname}` === entry.verantwortlich.name)?.id ?? null}
-          onSelect={id => { const p = diplZuPerson(id); if (p) onZustaendig(p); }}
+          onSelect={id => { const p = diplZuPerson(id); if (p) onFeld({ feld: "verantwortlich", feldLabel: "Zuständigkeit", patch: { verantwortlich: p }, alt: entry.verantwortlich.name, neu: p.name, typ: "zuweisung" }); }}
           ausloeser={(_offen, toggle, ref) => istNichtZugewiesen(entry) ? (
             <button ref={ref} type="button" onClick={toggle} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
               <Plus style={{ width: 13, height: 13 }} /> Zuweisen
