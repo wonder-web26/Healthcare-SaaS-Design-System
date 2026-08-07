@@ -2927,6 +2927,7 @@ function tagesFarbe(t: Monatstag): { bg: string; text: string; rand: string } {
 }
 
 function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
+  const nav = useNavigate();
   const alleEinsaetze = useEinsaetze().filter(e => e.patientId === patient.id);
   const alleLeistungen = useErbrachteLeistungen();
   const klvs = useKlvVerordnungen().filter(k => k.patientId === patient.id);
@@ -3106,6 +3107,7 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
       <Abrechnungsleiste
         abrechnung={abrechnung} tage={tage} monat={zeitraum.monat}
         verordnung={gueltigeVerordnung} hatMeldung={gemeldet !== null} muster={muster}
+        onVerordnung={() => nav(ansichtPfad(patient.id, "verordnung"))}
       />
 
       {meldung && (
@@ -3168,25 +3170,37 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
    Leistungsart, mindestens zehn je Einsatz. Verglichen wird gegen die
    Bedarfsmeldung, die Minuten je Leistungsart und Monat nennt.
 
-   „Zu wenig erbracht" steht hier bewusst nicht mehr: ein Tag mit weniger
-   Pflege ist eine Frage der Pflegequalität. Sie gehört in den Kalender und in
+   „Zu wenig erbracht" steht hier bewusst nicht: ein Tag mit weniger Pflege
+   ist eine Frage der Pflegequalität. Sie gehört in den Kalender und in
    „Zu prüfen", nicht in eine Leiste über die Abrechnung.
+
+   Drei Felder nebeneinander statt untereinander. Was Höhe kostete, ohne eine
+   Frage zu beantworten, ist weg: der Balken (bei 99.7 % sieht er voll aus und
+   sagt weniger als die Zahl daneben), die Zeile für eine Kategorie, die es
+   beim Patienten nicht gibt, und der Erklärabsatz.
    ══════════════════════════════════════════ */
 
-function Abrechnungsleiste({ abrechnung, tage, monat, verordnung, hatMeldung, muster }: {
+/** Volle Fassung des Ableitungshinweises — sichtbar gekürzt, hier im Wortlaut. */
+const ABLEITUNG_HINWEIS =
+  "Die Zeit je Leistungsart ist abgeleitet: die gestempelte Gesamtzeit wird im Verhältnis "
+  + "der verordneten Zeiten auf die erbrachten Positionen verteilt. Das ist eine Setzung, "
+  + "keine Erfassung — gestempelt wird eine Gesamtzeit je Einsatz.";
+
+function Abrechnungsleiste({ abrechnung, tage, monat, verordnung, hatMeldung, muster, onVerordnung }: {
   abrechnung: Monatsabrechnung;
   tage: Monatstag[];
   monat: number;
   verordnung: Verordnung | null;
   hatMeldung: boolean;
   muster: { tage: Monatstag[]; wochentag: number | null };
+  onVerordnung: () => void;
 }) {
-  const rahmen = { background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "14px 18px" } as const;
+  const rahmen = { background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" } as const;
   const min = (n: number) => `${Math.round(n)} Min.`;
 
   if (abrechnung.anzahlEinsaetze === 0) {
     return (
-      <div style={rahmen}>
+      <div style={{ ...rahmen, padding: "12px 18px" }}>
         <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch" }}>
           In diesem Monat ist kein Einsatz erfasst. Ohne erbrachte Leistung gibt es nichts abzurechnen.
         </p>
@@ -3194,149 +3208,160 @@ function Abrechnungsleiste({ abrechnung, tage, monat, verordnung, hatMeldung, mu
     );
   }
 
-  /* Ohne Bedarfsmeldung wird nicht verglichen — und schon gar nicht gegen
-     null. Der Versicherer vergütet dann nichts, unabhängig davon, was
-     erbracht wurde; ein leerer Balken würde das als „noch nichts erreicht"
-     lesbar machen statt als „es gibt keine Grundlage". */
-  if (!hatMeldung) {
-    const bis = verordnung?.gueltigBis?.trim();
-    return (
-      <div style={rahmen}>
-        <div className="flex items-start" style={{ gap: 9 }}>
-          <AlertTriangle style={{ width: 15, height: 15, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 2 }} />
-          <div>
-            <p style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
-              Für diesen Monat liegt keine gültige Bedarfsmeldung vor. Ohne sie vergütet der Versicherer
-              nichts — unabhängig davon, was erbracht wurde. Ein Vergleich ist deshalb nicht möglich.
-            </p>
-            <p style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 7, marginBottom: 0 }}>
-              {verordnung
-                ? bis
-                  ? `Letzte Verordnung ${verordnung.id} gültig bis ${bis}, ohne gemeldete Minuten je Leistungsart.`
-                  : `Verordnung ${verordnung.id} unbefristet, ohne gemeldete Minuten je Leistungsart.`
-                : "Keine Verordnung deckt diesen Monat."}
-              {" "}{abrechnung.anzahlEinsaetze} {abrechnung.anzahlEinsaetze === 1 ? "Einsatz" : "Einsätze"} erfasst,
-              {" "}{min(abrechnung.gestempelt)} gestempelt.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const gemeldetTotal = abrechnung.jeArt.a.gemeldet + abrechnung.jeArt.b.gemeldet + abrechnung.jeArt.c.gemeldet;
-  const anteil = abrechnung.anteil ?? 0;
-  /* Der Balken endet nicht bei der gemeldeten Menge, sonst wäre eine
-     Überschreitung unsichtbar. Die Meldung ist eine Marke darin. */
-  const skala = Math.max(gemeldetTotal, abrechnung.abrechenbar) * 1.06;
-  const breite = (n: number) => `${Math.min(100, (n / skala) * 100)}%`;
-  const ueber = abrechnung.abrechenbar > gemeldetTotal;
+  /* Nur Kategorien, die es bei diesem Patienten gibt. Eine Zeile „0 gemeldet,
+     0 abrechenbar, ±0" bestätigt bloss, dass die Kategorie nicht vorkommt. */
+  const arten = TARIF_KATEGORIEN.filter(k =>
+    abrechnung.jeArt[k.code].gemeldet > 0 || abrechnung.jeArt[k.code].abrechenbar > 0);
 
   const mitBericht = tage.filter(t => t.hatBericht).length;
   const mitEinsatz = tage.filter(t => t.einsaetze.length > 0).length;
   const alleEinsaetze = tage.flatMap(t => t.einsaetze);
   const geprueft = alleEinsaetze.filter(e => e.pruefzustand === "geprueft").length;
+  const trenner = { borderLeft: "var(--border-thin) solid var(--border-default)", paddingLeft: 18 } as const;
 
   return (
     <div style={rahmen}>
-      {/* ── Kopf ── */}
-      <div className="flex items-start flex-wrap" style={{ gap: 12 }}>
-        <div>
-          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Abrechenbar im Monat</div>
-          <div className="flex items-baseline" style={{ gap: 9 }}>
-            <span style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", lineHeight: 1.15 }}>
-              {Math.round(abrechnung.abrechenbar)}
+      <div className="flex flex-col lg:flex-row" style={{ padding: "11px 18px", gap: 18 }}>
+        {/* ── Feld 1: die Zahl, um die es geht ── */}
+        <div style={{ width: 300, flexShrink: 0 }}>
+          <LeisteTitel text="Abrechenbar im Monat" />
+          <div className="flex items-baseline" style={{ gap: 7 }}>
+            <span style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", lineHeight: 1.25 }}>
+              {Math.round(abrechnung.abrechenbar)} Min.
             </span>
-            <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Min.</span>
-            <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums",
-              color: ueber ? "var(--status-warning-text)" : "var(--text-secondary)" }}>
-              {anteil.toFixed(0)} % der Meldung
-            </span>
+            {hatMeldung && (
+              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+                von {Math.round(gemeldetTotal)} gemeldet
+              </span>
+            )}
           </div>
-          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", lineHeight: 1.35, whiteSpace: "nowrap" }}>
             {min(abrechnung.gestempelt)} gestempelt · + {min(abrechnung.ausRundung)} aus dem {TAKT_MINUTEN}-Minuten-Takt
           </div>
         </div>
-        <div style={{ marginLeft: "auto", textAlign: "right" }}>
-          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Gemeldet</div>
-          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{min(gemeldetTotal)}</div>
-          {verordnung && <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{verordnung.id}</div>}
+
+        {/* ── Feld 2: je Leistungsart. Ohne Meldung entfällt es ganz — ohne
+               Bedarfsmeldung vergütet der Versicherer nichts, und ein
+               Vergleich gegen null wäre keiner. ── */}
+        {hatMeldung ? (
+          <div style={{ flex: 1, minWidth: 0, ...trenner }}>
+            {/* Gekürzt, weil im Produkt kein Hinweis-Baustein am Fragezeichen
+                besteht; der volle Wortlaut hängt am title-Attribut. Er steht
+                an dieser Überschrift und nicht bei der Rundung, weil er genau
+                diese Zahlen betrifft — und weil er dort keine Zeile kostet. */}
+            <div className="flex items-baseline" style={{ gap: 7 }}>
+              <LeisteTitel text="Je Leistungsart" />
+              <span title={ABLEITUNG_HINWEIS}
+                style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", cursor: "help" }}>
+                abgeleitet, nicht erfasst
+              </span>
+            </div>
+            <div className="flex flex-col" style={{ gap: 1 }}>
+              {arten.map(k => {
+                const b = abrechnung.jeArt[k.code];
+                const drueber = b.differenz > 0;
+                return (
+                  <div key={k.code} className="flex items-baseline" style={{ gap: 8, whiteSpace: "nowrap", lineHeight: 1.35 }}>
+                    <span style={{ width: 15, flexShrink: 0, fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)",
+                      textAlign: "center", borderRadius: 3, background: "var(--bg-secondary)", color: "var(--text-secondary)", textTransform: "uppercase" }}>
+                      {k.code}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
+                      fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                      {k.label.replace(/^KLV [abc] — /, "")}
+                    </span>
+                    <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>
+                      {Math.round(b.abrechenbar)}
+                    </span>
+                    <span style={{ width: 54, textAlign: "right", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                      von {Math.round(b.gemeldet)}
+                    </span>
+                    <span style={{ width: 40, textAlign: "right", fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums",
+                      fontWeight: drueber ? 500 : 400,
+                      color: drueber ? "var(--status-warning-text)" : b.differenz < 0 ? "var(--text-tertiary)" : "var(--text-secondary)" }}>
+                      {b.differenz > 0 ? "+" : b.differenz < 0 ? "−" : "±"}{Math.abs(Math.round(b.differenz))}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div style={{ flex: 1, minWidth: 0, ...trenner }}>
+            <LeisteTitel text="Kein Vergleich möglich" />
+            <div style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", maxWidth: "74ch" }}>
+              Keine gültige Bedarfsmeldung — ohne sie vergütet der Versicherer nichts.
+            </div>
+            <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+              {verordnung
+                ? verordnung.gueltigBis.trim()
+                  ? `Verordnung ${verordnung.id} gültig bis ${verordnung.gueltigBis}, ohne gemeldete Minuten je Leistungsart.`
+                  : `Verordnung ${verordnung.id} unbefristet, ohne gemeldete Minuten je Leistungsart.`
+                : "Keine Verordnung deckt diesen Monat."}
+            </div>
+          </div>
+        )}
+
+        {/* ── Feld 3: was den Monat sonst kennzeichnet ── */}
+        <div style={{ width: 268, flexShrink: 0, ...trenner }}>
+          <LeisteTitel text="Im Monat" />
+          <div className="flex flex-col" style={{ gap: 1 }}>
+            <LeisteZeile marke="Tage ohne Einsatz" text={
+              muster.tage.length === 0 ? "keine"
+                : `${muster.tage.length}${muster.wochentag !== null ? ` · alle am ${WOCHENTAGE_LANG[muster.wochentag]}` : ""}`} />
+            <LeisteZeile marke="Pflegeberichte" text={`${mitBericht} von ${mitEinsatz} Tagen`} />
+            <LeisteZeile marke="Geprüft" text={`${geprueft} von ${alleEinsaetze.length} Einsätzen`} />
+          </div>
         </div>
       </div>
 
-      {/* ── Balken mit der Meldung als Marke ── */}
-      <div style={{ position: "relative", height: 10, borderRadius: 5, background: "var(--bg-secondary)", marginTop: 12, marginBottom: 4 }}
-        role="img" aria-label={`${Math.round(abrechnung.abrechenbar)} von ${Math.round(gemeldetTotal)} gemeldeten Minuten, ${anteil.toFixed(0)} Prozent`}>
-        <div style={{ position: "absolute", inset: 0, width: breite(abrechnung.abrechenbar), borderRadius: 5,
-          background: ueber ? "var(--status-warning-text)" : "var(--brand-primary)" }} />
-        <div style={{ position: "absolute", top: -3, bottom: -3, left: breite(gemeldetTotal), width: 2, background: "var(--text-primary)", borderRadius: 1 }} />
-      </div>
-      <div className="flex" style={{ justifyContent: "space-between", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-        <span>0</span>
-        <span>Marke: gemeldete Menge</span>
-      </div>
+      {/* ── Befundstreifen. Nur bei Überschreitung — ohne sie gibt es nichts
+             zu melden, und eine Zeile „alles gedeckt" wäre Höhe für nichts. ── */}
+      {abrechnung.nichtGedeckt > 0 && (
+        <div className="flex items-center flex-wrap" style={{ gap: 10, padding: "8px 18px",
+          borderTop: "var(--border-thin) solid var(--border-default)", background: "var(--status-warning-bg)" }}>
+          <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning-text)", flexShrink: 0 }} />
+          <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+            <strong style={{ fontWeight: "var(--weight-medium)" }}>{min(abrechnung.nichtGedeckt)} nicht gedeckt</strong>
+            {" — über der Meldung in "}
+            {abrechnung.betroffene.length === 1 ? "Leistungsart" : "den Leistungsarten"}
+            {" "}{abrechnung.betroffene.map(c => c.toUpperCase()).join(" und ")}.
+            {" "}Eine Unterschreitung anderswo gleicht das nicht aus.
+          </span>
+          <button type="button" onClick={onVerordnung} className="ui-fokusring cursor-pointer"
+            style={{ marginLeft: "auto", background: "none", border: "none", padding: 0, fontFamily: "inherit",
+              fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--status-warning-text)", whiteSpace: "nowrap" }}>
+            Bedarfsmeldung prüfen
+          </button>
+        </div>
+      )}
 
-      {/* ── Je Leistungsart. Sie gleichen sich nicht aus: eine Unterschreitung
-             bei c macht eine Überschreitung bei b nicht ungeschehen. ── */}
-      <div className="flex flex-col" style={{ gap: 3, marginTop: 12, paddingTop: 10, borderTop: "var(--border-thin) solid var(--border-default)" }}>
-        {TARIF_KATEGORIEN.map(k => {
-          const b = abrechnung.jeArt[k.code];
-          const drueber = b.differenz > 0;
-          return (
-            <div key={k.code} className="flex items-baseline" style={{ gap: 8 }}>
-              <span style={{ width: 16, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", textTransform: "uppercase" }}>{k.code}</span>
-              <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-                {k.label.replace(/^KLV [abc] — /, "")}
-              </span>
-              <span style={{ width: 78, textAlign: "right", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
-                {Math.round(b.gemeldet)} gemeldet
-              </span>
-              <span style={{ width: 96, textAlign: "right", fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums" }}>
-                {Math.round(b.abrechenbar)} abrechenbar
-              </span>
-              <span style={{ width: 62, textAlign: "right", fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", fontWeight: drueber ? 500 : 400,
-                color: drueber ? "var(--status-warning-text)" : b.differenz < 0 ? "var(--text-tertiary)" : "var(--text-secondary)" }}>
-                {b.differenz > 0 ? "+" : b.differenz < 0 ? "−" : "±"}{Math.abs(Math.round(b.differenz))}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ── Zeilen darunter ── */}
-      <div className="flex flex-col" style={{ gap: 5, marginTop: 12, paddingTop: 10, borderTop: "var(--border-thin) solid var(--border-default)" }}>
-        {abrechnung.nichtGedeckt > 0 && (
-          <LeisteZeile marke="Nicht gedeckt" warnung
-            text={`${min(abrechnung.nichtGedeckt)} über der Meldung in ${abrechnung.betroffene.length === 1 ? "Leistungsart" : "den Leistungsarten"} ${abrechnung.betroffene.map(c => c.toUpperCase()).join(" und ")}. Eine Unterschreitung anderswo deckt das nicht.`} />
-        )}
-        <LeisteZeile marke="Tage ohne Einsatz"
-          text={muster.tage.length === 0 ? "keine" : (
-            `${muster.tage.length} · ${tageBenennen(muster.tage, monat)}`
-            + (muster.wochentag !== null ? ` · alle an einem ${WOCHENTAGE_LANG[muster.wochentag]}` : "")
-          )} />
-        <LeisteZeile marke="Pflegeberichte" text={`${mitBericht} von ${mitEinsatz} Tagen mit Einsatz`} />
-        <LeisteZeile marke="Geprüft" text={`${geprueft} von ${alleEinsaetze.length} Einsätzen`} />
-        {abrechnung.unterMindestwert > 0 && (
-          <LeisteZeile marke="Unter Mindestwert" warnung
-            text={`${abrechnung.unterMindestwert} ${abrechnung.unterMindestwert === 1 ? "Einsatz liegt" : "Einsätze liegen"} nach der Rundung unter ${MINDESTWERT_EINSATZ} Minuten. Welcher Leistungsart die Aufstockung zugeschlagen wird, ist offen.`} />
-        )}
-      </div>
-
-      <p style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 10, marginBottom: 0, maxWidth: "74ch" }}>
-        Die Zeit je Leistungsart ist abgeleitet: die gestempelte Gesamtzeit wird im Verhältnis der
-        verordneten Zeiten auf die erbrachten Positionen verteilt. Das ist eine Setzung, keine
-        Erfassung — gestempelt wird eine Gesamtzeit je Einsatz.
-      </p>
+      {abrechnung.unterMindestwert > 0 && (
+        <div className="flex items-center" style={{ gap: 10, padding: "8px 18px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+          <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+            {abrechnung.unterMindestwert} {abrechnung.unterMindestwert === 1 ? "Einsatz liegt" : "Einsätze liegen"} nach der
+            Rundung unter {MINDESTWERT_EINSATZ} Minuten. Welcher Leistungsart die Aufstockung zugeschlagen wird, ist offen.
+          </span>
+        </div>
+      )}
     </div>
   );
 }
 
-/** Eine Zeile unter den Kategorien: Marke links, Aussage rechts. */
-function LeisteZeile({ marke, text, warnung }: { marke: string; text: string; warnung?: boolean }) {
+/** Überschrift eines Leistenfelds — dieselbe Gestaltung wie in den übrigen Leisten. */
+function LeisteTitel({ text }: { text: string }) {
   return (
-    <div className="flex items-baseline" style={{ gap: 10 }}>
-      <span style={{ width: 128, flexShrink: 0, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{marke}</span>
-      <span style={{ fontSize: "var(--text-meta)", color: warnung ? "var(--status-warning-text)" : "var(--text-secondary)", maxWidth: "74ch" }}>{text}</span>
+    <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 1 }}>{text}</div>
+  );
+}
+
+/** Eine Zeile im Feld „Im Monat": Marke links, Aussage rechts. */
+function LeisteZeile({ marke, text }: { marke: string; text: string }) {
+  return (
+    <div className="flex items-baseline" style={{ gap: 8, whiteSpace: "nowrap", lineHeight: 1.35 }}>
+      <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{marke}</span>
+      <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{text}</span>
     </div>
   );
 }
