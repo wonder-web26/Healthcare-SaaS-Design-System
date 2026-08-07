@@ -208,15 +208,27 @@ export interface Pflegeplanung {
    KLV-VERORDNUNG
    ══════════════════════════════════════════ */
 
+/**
+ * Zustand des Leistungsplanungsblatts. Die Werteliste liegt in
+ * lib/stammdaten/lpb-status.ts — hier nur der Typ, damit die Artefakt-Typen
+ * nicht auf die Stammdaten zeigen muessen.
+ */
 export type KLVStatus =
   | "entwurf"
   | "kontrolliert"
-  | "beim-arzt"
-  | "vom-arzt-zurueck"
-  | "bei-krankenkasse"
-  | "kostengutsprache-erhalten"
-  | "abgelehnt"
-  | "abgelaufen";
+  | "an_arzt"
+  | "unterzeichnet"
+  | "an_kasse"
+  | "entscheid_erhalten"
+  | "ersetzt";
+
+/** Ein Statuswechsel, wie er am Blatt protokolliert wird. */
+export interface KLVStatusEintrag {
+  status: KLVStatus;
+  person: string;
+  /** TT.MM.JJJJ HH:MM */
+  zeitpunkt: string;
+}
 
 export interface KLVDiagnose {
   id: string;
@@ -269,6 +281,11 @@ export interface KLVVerordnung {
   patientName: string;
   pflegeplanungId: string | null;
   status: KLVStatus;
+  /** Fortlaufend je Patient, aufsteigend. */
+  version: number;
+  art: "erst" | "folge";
+  /** Jeder Statuswechsel mit Person und Zeitpunkt; aelteste zuerst. */
+  statusProtokoll: KLVStatusEintrag[];
   erstelltVon: string;
   erstellDatum: string;
   beginnDatum: string | null;
@@ -312,11 +329,6 @@ export interface WorkflowPlan {
    KLV STATUS PIPELINE
    ══════════════════════════════════════════ */
 
-export const KLV_STATUS_PIPELINE: { status: KLVStatus; label: string }[] = [
-  { status: "entwurf", label: "Entwurf" },
-  { status: "kontrolliert", label: "Kontrolliert" },
-  { status: "beim-arzt", label: "Beim Arzt" },
-  { status: "vom-arzt-zurueck", label: "Vom Arzt zurück" },
-  { status: "bei-krankenkasse", label: "Bei Krankenkasse" },
-  { status: "kostengutsprache-erhalten", label: "Kostengutsprache" },
-];
+/* KLV_STATUS_PIPELINE ist entfallen: die Kette steht als LPB_ABLAUF in
+   lib/stammdaten/lpb-status.ts, zusammen mit Beschriftung und der Angabe,
+   wer am Zug ist. Zwei Listen fuer dieselbe Kette waeren zwei Wahrheiten. */

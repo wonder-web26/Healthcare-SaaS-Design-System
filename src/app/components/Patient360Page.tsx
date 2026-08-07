@@ -28,7 +28,7 @@ import {
   useVerordnungen, useKostengutsprachen, aktualisiereVerordnung, aktualisiereKostengutsprache,
 } from "../../lib/mandate/verordnungen-store";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
-import { isoZuAnzeige, anzeigeZuIso, formatAnzeige, formatDatumZeit } from "../../lib/datum";
+import { isoZuAnzeige, anzeigeZuIso, formatAnzeige, formatDatumZeit, jetztAnzeige } from "../../lib/datum";
 import {
   ArrowLeft,
   Phone,
@@ -96,8 +96,12 @@ import { StatusModal } from "./StatusModal";
 import { TabDokumente } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
-import { useKlvVerordnungen, verordnungAnlegen, verordnungEntfernen } from "../../lib/klv/store";
-import { KLV_STATUS_PIPELINE, getArtefaktContainer, type KLVVerordnung } from "../../types/klinische-artefakte";
+import {
+  useKlvVerordnungen, verordnungAnlegen, verordnungEntfernen,
+  statusWechseln, neueVersionErstellen, istGesperrt, sperrGrund,
+} from "../../lib/klv/store";
+import { getArtefaktContainer, type KLVVerordnung, type KLVStatus } from "../../types/klinische-artefakte";
+import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
 import { hProWoche, berechneSummen, einheitLabel } from "../../lib/klv/berechnung";
 import { toast } from "sonner";
 import { useRecording } from "../recording/RecordingContext";
@@ -3388,10 +3392,125 @@ function TabPflegeplanung({ patientId, navigate }: { patientId: string; navigate
 /* ══════════════════════════════════════════
    TAB: KLV-VERORDNUNG
    ══════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════
+   Kopf des Leistungsplanungsblatts — Zustandskette, Wartezeit, Sperre.
+
+   Zwei der Zustände warten auf jemanden ausserhalb des Hauses. Wie lange
+   schon, steht im Protokoll: der Zeitpunkt des Wechsels IN diesen Zustand.
+   ══════════════════════════════════════════ */
+
+/**
+ * Tage seit dem Wechsel in den aktuellen Zustand; null ohne lesbaren Eintrag.
+ *
+ * Bezug ist der echte heutige Tag, nicht das Bezugsdatum der Mock-Listen: die
+ * Protokolleinträge werden beim Wechsel mit der echten Uhr gestempelt. Ein
+ * eingefrorenes Bezugsdatum gegen einen lebenden Zeitstempel zu rechnen würde
+ * für jeden neuen Wechsel eine negative Wartezeit ergeben.
+ */
+function wartetSeitTagen(v: KLVVerordnung, stichtag: Date): number | null {
+  const letzter = [...v.statusProtokoll].reverse().find(e => e.status === v.status);
+  if (!letzter) return null;
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(letzter.zeitpunkt);
+  if (!m) return null;
+  const seit = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  const tage = Math.floor((Date.UTC(stichtag.getFullYear(), stichtag.getMonth(), stichtag.getDate())
+    - Date.UTC(seit.getFullYear(), seit.getMonth(), seit.getDate())) / 86400000);
+  return tage >= 0 ? tage : null;
+}
+
+const WARTET_AUF: Record<string, string> = { arzt: "der Ärztin", kasse: "der Kasse" };
+
+function LpbKopf({ v, onNeueVersion }: { v: KLVVerordnung; onNeueVersion: () => void }) {
+  const gesperrt = istGesperrt(v);
+  const naechster = lpbNaechster(v.status);
+  const amZug = lpbAmZug(v.status);
+  const tage = wartetSeitTagen(v, new Date());
+  const [meldung, setMeldung] = useState("");
+
+  const weiter = () => {
+    if (!naechster) return;
+    const grund = statusWechseln(v.id, naechster, "Maria Keller", jetztAnzeige());
+    setMeldung(grund);
+    if (!grund) toast(`Zustand: ${lpbStatusLabel(naechster)}`);
+  };
+
+  return (
+    <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "14px 18px", marginBottom: 16 }}>
+      <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+          Version {v.version}
+        </span>
+        <span style={{ padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--bg-secondary)", color: "var(--text-secondary)" }}>
+          {v.art === "erst" ? "Erstabklärung" : "Folgeabklärung"}
+        </span>
+        <span style={{ padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--brand-primary-light)", color: "var(--brand-primary)" }}>
+          {lpbStatusLabel(v.status)}
+        </span>
+        {(amZug === "arzt" || amZug === "kasse") && tage !== null && (
+          <span className="inline-flex items-center" style={{ gap: 4, padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}>
+            <Clock style={{ width: 11, height: 11 }} />
+            Seit {tage} {tage === 1 ? "Tag" : "Tagen"} bei {WARTET_AUF[amZug]}
+          </span>
+        )}
+        <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+          {v.beginnDatum || "—"} – {v.endDatum || "offen"}
+        </span>
+      </div>
+
+      {/* Zustandskette */}
+      <div className="flex items-center overflow-x-auto" style={{ gap: 0, marginBottom: gesperrt || naechster ? 12 : 0 }}>
+        {LPB_ABLAUF.map((step, i) => {
+          const ist = v.status === step.code;
+          const vorbei = lpbRang(v.status) > i;
+          return (
+            <div key={step.code} className="flex items-center shrink-0">
+              {i > 0 && <div style={{ width: 16, height: 2, background: vorbei ? "var(--brand-primary)" : "var(--border-default)" }} />}
+              <div className="flex flex-col items-center" style={{ gap: 3, minWidth: 64 }}>
+                <div style={{ width: 18, height: 18, borderRadius: "var(--radius-pill)", background: vorbei || ist ? "var(--brand-primary)" : "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {(vorbei || ist) && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}
+                </div>
+                <span style={{ fontSize: 9, color: ist ? "var(--brand-primary)" : "var(--text-tertiary)", fontWeight: ist ? "var(--weight-medium)" : "var(--weight-regular)", textAlign: "center" }}>{step.label}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {gesperrt ? (
+        <div className="flex items-start" style={{ gap: 8, padding: "10px 12px", borderRadius: 10, background: "var(--status-warning-bg)" }}>
+          <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
+          <span className="flex-1" style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>{sperrGrund(v)}</span>
+          <AppButton variant="sekundaer" icon={Plus} onClick={onNeueVersion}>Neue Version erstellen</AppButton>
+        </div>
+      ) : naechster ? (
+        <div className="flex items-center flex-wrap" style={{ gap: 10 }}>
+          <AppButton variant="sekundaer" onClick={weiter}>Weiter zu „{lpbStatusLabel(naechster)}“</AppButton>
+          {meldung && <span style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)" }}>{meldung}</span>}
+        </div>
+      ) : null}
+
+      {v.statusProtokoll.length > 0 && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>Protokoll</div>
+          <div className="flex flex-col" style={{ gap: 3 }}>
+            {v.statusProtokoll.map((e, i) => (
+              <div key={i} style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                {lpbStatusLabel(e.status)} · {e.person} · {e.zeitpunkt}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TabKLV({ patientId }: { patientId: string }) {
   const navigate = useNavigate();
   const klvs = useKlvVerordnungen().filter(k => k.patientId === patientId);
-  const current = klvs.find(k => k.status === "kostengutsprache-erhalten") || klvs[0];
+  /* Aktiv ist die nicht ersetzte Fassung mit der höchsten Version. */
+  const current = [...klvs].filter(k => k.status !== "ersetzt").sort((a, b) => b.version - a.version)[0] || klvs[0];
   const daysUntil = current?.endDatum ? (() => { const [d, m, y] = current.endDatum!.split("."); return Math.round((new Date(+y, +m - 1, +d).getTime() - new Date("2026-03-03").getTime()) / 86400000); })() : null;
   const katBg = (k: string) => k === "a" ? "var(--status-info-bg)" : k === "b" ? "var(--status-warning-bg)" : "var(--status-success-bg)";
   const katColor = (k: string) => k === "a" ? "var(--status-info)" : k === "b" ? "var(--status-warning-text)" : "var(--status-success-text)";
@@ -3453,6 +3572,9 @@ function TabKLV({ patientId }: { patientId: string }) {
       patientName,
       pflegeplanungId: current?.pflegeplanungId || null,
       status: "entwurf",
+      version: klvs.reduce((m, k) => Math.max(m, k.version), 0) + 1,
+      art: klvs.length === 0 ? "erst" : "folge",
+      statusProtokoll: [{ status: "entwurf", person: "Maria Keller", zeitpunkt: jetztAnzeige() }],
       erstelltVon: "Maria Keller",
       erstellDatum: heute,
       beginnDatum: neuBeginn ? formatDate(neuBeginn) : null,
@@ -3521,20 +3643,10 @@ function TabKLV({ patientId }: { patientId: string }) {
               </div>
             </div>
           )}
-          {/* Status tracker */}
-          <div style={{ padding: "14px 18px", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", marginBottom: 16 }}>
-            <div className="flex items-center overflow-x-auto" style={{ gap: 0 }}>
-              {KLV_STATUS_PIPELINE.map((step, i) => {
-                const isCurrent = current.status === step.status;
-                const isPast = KLV_STATUS_PIPELINE.findIndex(s => s.status === current.status) > i;
-                return (<div key={step.status} className="flex items-center shrink-0">{i > 0 && <div style={{ width: 16, height: 2, background: isPast ? "var(--brand-primary)" : "var(--border-default)" }} />}
-                  <div className="flex flex-col items-center" style={{ gap: 3, minWidth: 56 }}>
-                    <div style={{ width: 18, height: 18, borderRadius: "var(--radius-pill)", background: isPast || isCurrent ? "var(--brand-primary)" : "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>{(isPast || isCurrent) && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}</div>
-                    <span style={{ fontSize: 9, color: isCurrent ? "var(--brand-primary)" : "var(--text-tertiary)", fontWeight: isCurrent ? "var(--weight-medium)" : "var(--weight-regular)", textAlign: "center", whiteSpace: "nowrap" }}>{step.label}</span>
-                  </div></div>);
-              })}
-            </div>
-          </div>
+          <LpbKopf v={current} onNeueVersion={() => {
+            const neu = neueVersionErstellen(current.id, "Maria Keller", jetztAnzeige());
+            if (neu) toast(`Version ${neu.version} als Entwurf erstellt`);
+          }} />
           {current.beginnDatum && <div className="flex flex-wrap" style={{ gap: 8, marginBottom: 12, fontSize: "var(--text-small)" }}>
             <span style={{ padding: "6px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius-card)" }}>Beginn: <b>{current.beginnDatum}</b></span>
             {current.endDatum && <span style={{ padding: "6px 12px", background: daysUntil !== null && daysUntil < 30 ? "var(--status-warning-bg)" : "var(--bg-secondary)", borderRadius: "var(--radius-card)", color: daysUntil !== null && daysUntil < 30 ? "var(--status-warning-text)" : "var(--text-primary)" }}>Ende: <b>{current.endDatum}</b>{daysUntil !== null && daysUntil < 30 && ` (${daysUntil < 0 ? "abgelaufen" : `${daysUntil}d`})`}</span>}
@@ -3591,11 +3703,11 @@ function TabKLV({ patientId }: { patientId: string }) {
         <div key={k.id} onClick={() => navigate(`/klv/${k.id}`)} className="flex items-center cursor-pointer transition-colors" style={{ padding: "10px 14px", borderRadius: "var(--radius-card)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", marginBottom: 6 }} onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
           <div className="flex-1 flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
             <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)" }}>{k.beginnDatum || k.erstellDatum}</span>
-            <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: k.status === "kostengutsprache-erhalten" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: k.status === "kostengutsprache-erhalten" ? "var(--status-success-text)" : "var(--status-warning-text)" }}>{k.status}</span>
+            <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: k.status === "entscheid_erhalten" ? "var(--status-success-bg)" : k.status === "ersetzt" ? "var(--bg-secondary)" : "var(--status-warning-bg)", color: k.status === "entscheid_erhalten" ? "var(--status-success-text)" : k.status === "ersetzt" ? "var(--text-tertiary)" : "var(--status-warning-text)" }}>V{k.version} · {lpbStatusLabel(k.status)}</span>
             {k.onboardingId && <span style={{ fontSize: "var(--text-micro)", color: "var(--status-info)" }}>aus Onboarding</span>}
             <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{berechneSummen(k.leistungspositionen).total.toFixed(2)} h/Wo.</span>
           </div>
-          {k.status !== "kostengutsprache-erhalten" && (
+          {k.status === "entwurf" && (
             <button onClick={e => deleteKLV(k.id, e)} className="cursor-pointer" title="Entwurf löschen" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 4, marginRight: 4 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 14, height: 14 }} /></button>
           )}
         </div>

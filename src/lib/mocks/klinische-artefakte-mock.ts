@@ -155,7 +155,10 @@ const STEINER_ALT_PP: Pflegeplanung = {
 const STEINER_ALT_KLV: KLVVerordnung = {
   id: "KLV-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041",
   patientName: "Steiner, Hans-Rudolf", pflegeplanungId: "PP-2025-001",
-  status: "kostengutsprache-erhalten", erstelltVon: "Sandra Weber",
+  status: "ersetzt",
+  version: 1, art: "erst",
+  statusProtokoll: [{ status: "ersetzt", person: "Sandra Weber", zeitpunkt: "17.08.2025 09:00" }],
+  erstelltVon: "Sandra Weber",
   erstellDatum: "17.08.2025", beginnDatum: "01.09.2025", endDatum: "28.02.2026",
   diagnosen: [
     { id: "KD1", icdCode: "I10", titel: "Arterielle Hypertonie", beschreibung: "Langjährig, medikamentös." },
@@ -237,7 +240,10 @@ const HUBER_PP: Pflegeplanung = {
 const HUBER_KLV: KLVVerordnung = {
   id: "KLV-2026-020", onboardingId: "OB-2026-105", patientId: null,
   patientName: "Huber, Fritz", pflegeplanungId: null,
-  status: "entwurf", erstelltVon: "Maria Keller",
+  status: "entwurf",
+  version: 1, art: "erst",
+  statusProtokoll: [{ status: "entwurf", person: "Maria Keller", zeitpunkt: "25.02.2026 10:30" }],
+  erstelltVon: "Maria Keller",
   erstellDatum: "25.02.2026", beginnDatum: null, endDatum: null,
   diagnosen: [
     { id: "KD-H1", icdCode: "I10", titel: "Arterielle Hypertonie", beschreibung: "Seit mehreren Jahren bekannt." },
@@ -451,7 +457,10 @@ const STEINER_PP: Pflegeplanung = {
 const STEINER_KLV: KLVVerordnung = {
   id: "KLV-2026-101", onboardingId: "OB-2026-101", patientId: null,
   patientName: "Steiner, Hans-Rudolf", pflegeplanungId: "PP-2026-101",
-  status: "kostengutsprache-erhalten", erstelltVon: "Maria Keller",
+  status: "entscheid_erhalten",
+  version: 2, art: "folge",
+  statusProtokoll: [{ status: "entscheid_erhalten", person: "Maria Keller", zeitpunkt: "24.02.2026 14:15" }],
+  erstelltVon: "Maria Keller",
   erstellDatum: "24.02.2026", beginnDatum: "01.03.2026", endDatum: "31.08.2026",
   diagnosen: [
     { id: "KD-S1", icdCode: "I10", titel: "Arterielle Hypertonie", beschreibung: "Langjährig, medikamentös." },

@@ -53,6 +53,7 @@ import { TabAnmeldungV2, TabPersonalienV2, TabSteuerV2, TabWohnenUmfeldV2, TabAn
 import { FORMULAR_MAX } from "./form/feldbreiten";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
+import { jetztAnzeige } from "../../lib/datum";
 import { MOCK_PFLEGEPLANUNGEN, MOCK_ARZT_DIAGNOSEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
 import {
   useKlvVerordnungen, positionHinzufuegen, positionAendern, positionEntfernen, positionenSetzen,
@@ -386,13 +387,6 @@ function formatAHV(v: string): string {
   if (digits.length > 7) parts.push(digits.slice(7, 11));
   if (digits.length > 11) parts.push(digits.slice(11, 13));
   return parts.join(".");
-}
-
-/** Zeitpunkt für das Protokoll — TT.MM.JJJJ, HH:MM. */
-function jetztAnzeige(): string {
-  const d = new Date();
-  const zz = (n: number) => String(n).padStart(2, "0");
-  return `${zz(d.getDate())}.${zz(d.getMonth() + 1)}.${d.getFullYear()}, ${zz(d.getHours())}:${zz(d.getMinutes())}`;
 }
 
 /* ── Tab completion logic ──────────────── */

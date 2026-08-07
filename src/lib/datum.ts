@@ -162,3 +162,15 @@ export function isoZuDate(iso: string): Date | null {
 export function dateZuIso(d: Date | null | undefined): string {
   return istGueltig(d) ? format(d, ISO) : "";
 }
+
+/**
+ * Zeitpunkt für Protokolle — TT.MM.JJJJ, HH:MM.
+ *
+ * Lag zuvor lokal in StepPatient; Datums- und Zeitausgaben gehören
+ * ausschliesslich in diese Schicht.
+ */
+export function jetztAnzeige(): string {
+  const d = new Date();
+  const zz = (n: number) => String(n).padStart(2, "0");
+  return `${zz(d.getDate())}.${zz(d.getMonth() + 1)}.${d.getFullYear()}, ${zz(d.getHours())}:${zz(d.getMinutes())}`;
+}

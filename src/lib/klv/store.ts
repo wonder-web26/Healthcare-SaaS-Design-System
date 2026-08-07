@@ -17,6 +17,7 @@ import { useSyncExternalStore } from "react";
 import { MOCK_KLV_VERORDNUNGEN } from "../mocks/klinische-artefakte-mock";
 import { onboardingFaelle } from "../onboarding/faelle";
 import type { KLVVerordnung, KLVLeistung, KLVStatus, KLVDiagnose } from "../../types/klinische-artefakte";
+import { lpbGesperrt, lpbNaechster, lpbStatusLabel } from "../stammdaten/lpb-status";
 
 /* ── Patientenkennung auflösen ─────────────────────────────────────────────── */
 
@@ -56,14 +57,25 @@ function schnappschuss(): KLVVerordnung[] {
  * Gesperrte Verordnungen werden nicht mehr geändert; wer etwas ändern will,
  * legt eine neue Version an.
  *
- * Heute ist keine gesperrt. Der Zustand, der die Sperre auslöst, entsteht erst
- * mit dem Statusverlauf des Leistungsplanungsblatts (ab „an Kasse"). Die
- * Prüfung steht trotzdem schon hier und in JEDEM Schreibweg — sie an einer
- * Stelle einzuschalten ist dann eine Zeile, sie nachträglich in fünf Aufrufe
- * einzuflechten wäre die Gelegenheit, eine zu vergessen.
+ * Ab „an Kasse übermittelt" ist das Blatt aus der Hand — es liegt bei der
+ * Kasse, und eine stille Änderung würde bedeuten, dass eingereicht und
+ * gespeichert auseinanderlaufen. Ersetzte Fassungen sind ohnehin Geschichte.
+ *
+ * Die Prüfung steht in JEDEM Schreibweg. Damit greift die Sperre in allen drei
+ * Oberflächen — auch in denen, die nichts von ihr wissen.
  */
-export function istGesperrt(_v: KLVVerordnung): boolean {
-  return false;
+export function istGesperrt(v: KLVVerordnung): boolean {
+  return lpbGesperrt(v.status);
+}
+
+/** Warum eine Verordnung gesperrt ist — für die Anzeige. */
+export function sperrGrund(v: KLVVerordnung): string {
+  if (!istGesperrt(v)) return "";
+  if (v.status === "ersetzt") return "Diese Fassung wurde durch eine neue Version ersetzt.";
+  if (v.status === "an_kasse") {
+    return "Das Blatt liegt bei der Kasse. Eine stille Änderung würde bedeuten, dass eingereicht und gespeichert auseinanderlaufen — Änderungen erzeugen eine neue Version.";
+  }
+  return `Zu diesem Blatt liegt ein Entscheid vor. Es wird nicht mehr geändert; Änderungen erzeugen eine neue Version.`;
 }
 
 /** Verordnung samt Sperrprüfung holen; null heisst „nicht schreiben". */
@@ -150,11 +162,55 @@ export function verordnungAendern(
   setzeBestand(bestand.map(k => (k.id === klvId ? { ...k, ...felder } : k)));
 }
 
-/** Statuswechsel. */
-export function statusWechseln(klvId: string, status: KLVStatus): void {
+/**
+ * Statuswechsel — nur vorwärts entlang der Kette, und nur um einen Schritt.
+ *
+ * `ersetzt` wird hier nie gesetzt: es entsteht ausschliesslich beim Erstellen
+ * einer neuen Version. Der Wechsel auf `kontrolliert` verlangt mindestens eine
+ * Position — ein leeres Blatt ist kein Blatt.
+ *
+ * Rückgabe: der Grund einer Ablehnung, sonst leer.
+ */
+export function statusWechseln(klvId: string, status: KLVStatus, person: string, jetzt: string): string {
   const v = schreibbar(klvId);
-  if (!v) return;
-  setzeBestand(bestand.map(k => (k.id === klvId ? { ...k, status } : k)));
+  if (!v) return "Das Blatt ist gesperrt.";
+  if (status === "ersetzt") return "„Ersetzt“ entsteht nur beim Erstellen einer neuen Version.";
+  if (lpbNaechster(v.status) !== status) return "Es wird nur vorwärts gewechselt, und nur um einen Schritt.";
+  if (status === "kontrolliert" && v.leistungspositionen.length === 0) {
+    return "Ohne Leistungsposition lässt sich nichts kontrollieren.";
+  }
+  setzeBestand(bestand.map(k => k.id === klvId
+    ? { ...k, status, statusProtokoll: [...k.statusProtokoll, { status, person, zeitpunkt: jetzt }] }
+    : k));
+  return "";
+}
+
+/**
+ * Neue Version: übernimmt Positionen und Diagnosen der Vorversion, beginnt bei
+ * `entwurf`; die Vorversion wird `ersetzt`. Die Versionszahl läuft je Patient
+ * über die höchste bereits vergebene weiter.
+ */
+export function neueVersionErstellen(klvId: string, person: string, jetzt: string): KLVVerordnung | null {
+  const alt = bestand.find(k => k.id === klvId);
+  if (!alt) return null;
+  const hoechste = bestand
+    .filter(k => k.patientId === alt.patientId)
+    .reduce((m, k) => Math.max(m, k.version), 0);
+  const neu: KLVVerordnung = {
+    ...alt,
+    id: `${alt.id}-V${hoechste + 1}`,
+    version: hoechste + 1,
+    art: "folge",
+    status: "entwurf",
+    statusProtokoll: [{ status: "entwurf", person, zeitpunkt: jetzt }],
+    erstelltVon: person,
+    erstellDatum: jetzt.split(" ")[0],
+    leistungspositionen: alt.leistungspositionen.map(p => ({ ...p })),
+    diagnosen: alt.diagnosen.map(d => ({ ...d })),
+    zielformulierungen: [...alt.zielformulierungen],
+  };
+  setzeBestand([...bestand.map(k => (k.id === klvId ? { ...k, status: "ersetzt" as KLVStatus } : k)), neu]);
+  return neu;
 }
 
 /** Neue Verordnung anlegen. */
