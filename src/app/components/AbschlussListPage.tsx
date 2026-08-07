@@ -33,6 +33,7 @@ import { MONATE } from "../../lib/einsaetze/einsaetze";
 import { monatsKennzahlen, quartalMinuten, type MonatsKennzahlen } from "../../lib/einsaetze/kontrolle";
 import { abschlussLage, BLOCKADE_TEXT, QUARTALSSCHWELLE_STUNDEN, type AbschlussLage, type Monatsabschluss } from "../../lib/abschluss/abschluss";
 import { TAKT_MINUTEN, MINDESTWERT_EINSATZ } from "../../lib/abrechnung/leistungsarten";
+import { TARIF_KATEGORIEN, type TarifKategorie } from "../../lib/stammdaten/pflegetarife";
 import { useAbschluesse, getAbschluss, getOeffnungen, monatAbschliessen, monatWiederOeffnen } from "../../lib/abschluss/store";
 import { jetztAnzeige } from "../../lib/datum";
 import { AppButton } from "./ui/AppButton";
@@ -163,6 +164,10 @@ export function AbschlussListPage() {
           return d !== 0 ? (sort.dir === "desc" ? d : -d) : a.name.localeCompare(b.name, "de");
         }
         case "verrechenbar": return f * (a.k.abrechnung.abrechenbar - b.k.abrechnung.abrechenbar);
+        case "art_a": case "art_b": case "art_c": {
+          const code = sort.key.slice(4) as TarifKategorie;
+          return f * (a.k.abrechnung.jeArt[code].abrechenbar - b.k.abrechnung.jeArt[code].abrechenbar);
+        }
         case "gearbeitet": return f * (a.k.abrechnung.gestempelt - b.k.abrechnung.gestempelt);
         case "meldung": return leerZuletzt(a.k.gemeldet === null, b.k.gemeldet === null, f,
           () => a.k.abrechnung.nichtGedeckt - b.k.abrechnung.nichtGedeckt);
@@ -181,6 +186,12 @@ export function AbschlussListPage() {
     const d = new Date(z.jahr, z.monat + schritt, 1);
     return { jahr: d.getFullYear(), monat: d.getMonth() };
   });
+
+  /* Nur Leistungsarten, die im Monat überhaupt vorkommen. Eine Spalte, in der
+     bei jedem Patienten ein Strich steht, sagt nur, dass es die Kategorie
+     hier nicht gibt — und kostet Breite, die den übrigen fehlt. */
+  const arten = TARIF_KATEGORIEN.filter(k => zeilen.some(z => z.k.abrechnung.jeArt[k.code].abrechenbar > 0));
+  const summeJeArt = (code: TarifKategorie) => zeilen.reduce((s, z) => s + z.k.abrechnung.jeArt[code].abrechenbar, 0);
 
   const bereite = zeilen.filter(z => !z.abschluss && z.lage.bereit);
 
@@ -212,8 +223,27 @@ export function AbschlussListPage() {
     /* Verrechenbar, gearbeitet und ihre Differenz stehen nebeneinander und
        werden nie zusammengefasst: das eine geht an die Kasse, das andere in
        den Lohn, und die Differenz erklärt, warum sie auseinandergehen. */
-    { id: "verrechenbar", label: "Verrechenbar", anteil: 13, minCh: 13, align: "right", sortierbar: true,
-      render: z => zahl(Math.round(z.k.abrechnung.abrechenbar)) },
+    /* Je Leistungsart eine Spalte: die Rechnung an den Versicherer geht je
+       Art, mit eigenen Tarifen, und die Bedarfsmeldung nennt Minuten je Art
+       pro Monat. Eine Gesamtsumme allein sagt nicht, was abgerechnet wird. */
+    ...arten.map(k => ({
+      id: `art_${k.code}`,
+      label: k.code.toUpperCase(),
+      anteil: 7, minCh: 7, align: "right" as const, sortierbar: true,
+      render: (z: Zeile) => {
+        const m = z.k.abrechnung.jeArt[k.code].abrechenbar;
+        /* Strich, nicht null: der Patient trägt diese Leistungsart nicht —
+           das ist etwas anderes als „null Minuten erbracht". */
+        if (m === 0) return <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>—</span>;
+        return zahl(Math.round(m));
+      },
+    })),
+    { id: "verrechenbar", label: "Total", anteil: 9, minCh: 9, align: "right", sortierbar: true,
+      render: z => (
+        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", color: "var(--text-primary)" }}>
+          {Math.round(z.k.abrechnung.abrechenbar)}
+        </span>
+      ) },
     { id: "gearbeitet", label: "Gearbeitet", anteil: 13, minCh: 12, align: "right", sortierbar: true,
       render: z => zahl(Math.round(z.k.abrechnung.gestempelt), "var(--text-secondary)") },
     { id: "differenz", label: "Differenz", anteil: 11, minCh: 11, align: "right", sortierbar: true,
@@ -356,12 +386,18 @@ export function AbschlussListPage() {
                 nebeneinander, durch senkrechte Linien getrennt. */}
             <div className="flex flex-col sm:flex-row" style={{ padding: "11px 18px", gap: 18, marginBottom: "var(--space-3)",
               background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-              <div style={{ minWidth: 150 }}>
+              {/* Das Total gross, darunter die Leistungsarten einzeln —
+                  abgerechnet wird je Art, mit eigenen Tarifen. */}
+              <div style={{ minWidth: 190 }}>
                 <KopfTitel text="Verrechenbar" />
                 <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", lineHeight: 1.25 }}>
                   {Math.round(summeVerrechenbar)} Min.
                 </div>
-                <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>an den Versicherer</div>
+                <div className="flex items-baseline" style={{ gap: 10, fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                  {arten.map(k => (
+                    <span key={k.code}>{k.code.toUpperCase()} {Math.round(summeJeArt(k.code))}</span>
+                  ))}
+                </div>
               </div>
               <div style={{ minWidth: 140, ...trenner }}>
                 <KopfTitel text="Gearbeitet" />
@@ -394,6 +430,7 @@ export function AbschlussListPage() {
 
             <DataTable
               spalten={spalten}
+              gruppen={[{ label: "Verrechenbar", spalten: [...arten.map(k => `art_${k.code}`), "verrechenbar"] }]}
               zeilen={sortiert}
               zeilenKey={z => z.id}
               karteTitel={z => z.name}
