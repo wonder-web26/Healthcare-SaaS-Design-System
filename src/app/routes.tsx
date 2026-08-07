@@ -14,6 +14,7 @@ import { FormShowcase } from "./components/FormShowcase";
 import { InterRAIListPage } from "./components/interrai/InterRAIListPage";
 import { PflegeplanungArbeitsbereich } from "./components/PflegeplanungArbeitsbereich";
 import { KLVArbeitsbereich } from "./components/KLVArbeitsbereich";
+import { KlvListPage } from "./components/KlvListPage";
 import { SchulungsnachweisPage } from "./components/schulung/SchulungsnachweisPage";
 import { ArbeitskontrollePage } from "./components/arbeitskontrolle/ArbeitskontrollePage";
 import { InterraiNeuPage } from "./components/interrai-neu/InterraiNeuPage";
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
       { path: "dashboard", Component: StrategicDashboard },
       { path: "interrai", Component: InterRAIListPage },
       { path: "pflegeplanung/:planungId", Component: PflegeplanungArbeitsbereich },
+      { path: "klv", Component: KlvListPage },
       { path: "klv/:klvId", Component: KLVArbeitsbereich },
       { path: "schulungsnachweis/:nachweisId", Component: SchulungsnachweisPage },
       { path: "arbeitskontrolle/:kontrolleId", Component: ArbeitskontrollePage },

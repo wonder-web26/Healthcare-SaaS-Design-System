@@ -8,7 +8,8 @@
  * Fallkennungen stammen aus lib/onboarding/faelle.ts. Artefakte an Kennungen
  * ausserhalb dieses Verzeichnisses wären über die Oberfläche nicht erreichbar.
  */
-import type { InterRAIAssessment, InterRAIItem, AnnaKonfidenz, CapResult, OutcomeScale, Pflegeplanung, Pflegediagnose, Massnahme, Pflegeziel, KLVVerordnung, WorkflowPlan, WorkflowSchritt, AerztlicheDiagnose } from "../../types/klinische-artefakte";
+import type { InterRAIAssessment, InterRAIItem, AnnaKonfidenz, CapResult, OutcomeScale, Pflegeplanung, Pflegediagnose, Massnahme, Pflegeziel, KLVVerordnung, KLVLeistung, KLVEinheit, WorkflowPlan, WorkflowSchritt, AerztlicheDiagnose } from "../../types/klinische-artefakte";
+import type { KlvWerCode } from "../stammdaten/klv-wer";
 
 /* ══════════════════════════════════════════
    DEMO ITEMS (30 items, A–S)
@@ -153,7 +154,7 @@ const STEINER_ALT_PP: Pflegeplanung = {
 };
 
 const STEINER_ALT_KLV: KLVVerordnung = {
-  id: "KLV-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041",
+  id: "KLV-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", mandatId: null,
   patientName: "Steiner, Hans-Rudolf", pflegeplanungId: "PP-2025-001",
   status: "ersetzt",
   version: 1, art: "erst",
@@ -238,7 +239,7 @@ const HUBER_PP: Pflegeplanung = {
 };
 
 const HUBER_KLV: KLVVerordnung = {
-  id: "KLV-2026-020", onboardingId: "OB-2026-105", patientId: null,
+  id: "KLV-2026-020", onboardingId: "OB-2026-105", patientId: null, mandatId: null,
   patientName: "Huber, Fritz", pflegeplanungId: null,
   status: "an_arzt",
   version: 1, art: "erst",
@@ -459,7 +460,7 @@ const STEINER_PP: Pflegeplanung = {
 };
 
 const STEINER_KLV: KLVVerordnung = {
-  id: "KLV-2026-101", onboardingId: "OB-2026-101", patientId: null,
+  id: "KLV-2026-101", onboardingId: "OB-2026-101", patientId: null, mandatId: null,
   patientName: "Steiner, Hans-Rudolf", pflegeplanungId: "PP-2026-101",
   status: "an_kasse",
   version: 2, art: "folge",
@@ -497,7 +498,115 @@ const STEINER_KLV: KLVVerordnung = {
 
 export const MOCK_ASSESSMENTS: InterRAIAssessment[] = [STEINER_ALT_BA, STEINER_ALT_RE, HUBER_BA, STEINER_BA];
 export const MOCK_PFLEGEPLANUNGEN: Pflegeplanung[] = [STEINER_ALT_PP, HUBER_PP, STEINER_PP];
-export const MOCK_KLV_VERORDNUNGEN: KLVVerordnung[] = [STEINER_ALT_KLV, HUBER_KLV, STEINER_KLV];
+
+/* ══════════════════════════════════════════
+   Weitere Leistungsplanungsblätter — je einer der Lagen, die die KLV-Liste
+   zeigen muss. Sie hängen an bestehenden Mandaten bestehender Patienten;
+   Positionen stammen aus dem Leistungskatalog 2025.
+   ══════════════════════════════════════════ */
+
+/** Wenige Positionen genügen; die Werte sind die des Katalogs. */
+function katalogPosition(
+  id: string, nr: string, bezeichnung: string, kategorie: "a" | "b" | "c",
+  zeitMin: number, anzahl: number, einheit: KLVEinheit, wer: KlvWerCode = "S",
+): KLVLeistung {
+  return {
+    id, klvNummer: nr, bezeichnung, kategorie, wer, training: "N",
+    anzahl, einheit, zeitMin, ausAnna: false, annaKonfidenz: null, validiert: true,
+    simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null,
+  };
+}
+
+/** Entwurf — Rexhepi, Mandat mit gültiger Kostengutsprache. */
+const REXHEPI_KLV: KLVVerordnung = {
+  id: "KLV-2026-030", onboardingId: null, patientId: "P-2026-0043", mandatId: null,
+  patientName: "Rexhepi, Fatmire", pflegeplanungId: null,
+  status: "entwurf",
+  version: 1, art: "erst",
+  statusProtokoll: [{ status: "entwurf", person: "Laura Brunner", zeitpunkt: "28.07.2026 08:40" }],
+  erstelltVon: "Laura Brunner",
+  erstellDatum: "28.07.2026", beginnDatum: "01.09.2026", endDatum: null,
+  diagnosen: [],
+  leistungspositionen: [
+    katalogPosition("LP-R1", "10901", "Erstassessment", "a", 60, 1, "e"),
+    katalogPosition("LP-R2", "10104", "Teilwäsche am Lavabo (inkl. Intimpflege)", "c", 26, 1, "t7", "I"),
+  ],
+  zielformulierungen: ["Selbstständigkeit in der Körperpflege erhalten"],
+  arztAngeordnetAm: null, krankenkasseGutspracheAm: null, ablehnungsgrund: null,
+};
+
+/** Bei der Kasse — Ferrari, Mandat OHNE Kostengutsprache. */
+const FERRARI_KLV: KLVVerordnung = {
+  id: "KLV-2026-031", onboardingId: null, patientId: "P-2026-0048", mandatId: null,
+  patientName: "Ferrari, Gino", pflegeplanungId: null,
+  status: "an_kasse",
+  version: 1, art: "erst",
+  statusProtokoll: [
+    { status: "entwurf", person: "Laura Brunner", zeitpunkt: "02.06.2026 09:00" },
+    { status: "kontrolliert", person: "Laura Brunner", zeitpunkt: "04.06.2026 14:20" },
+    { status: "an_arzt", person: "Laura Brunner", zeitpunkt: "05.06.2026 08:15" },
+    { status: "unterzeichnet", person: "Dr. med. Peter Frei", zeitpunkt: "10.06.2026 11:05" },
+    { status: "an_kasse", person: "Laura Brunner", zeitpunkt: "12.06.2026 16:30" },
+  ],
+  erstelltVon: "Laura Brunner",
+  erstellDatum: "02.06.2026", beginnDatum: "01.07.2026", endDatum: "30.06.2027",
+  diagnosen: [],
+  leistungspositionen: [
+    katalogPosition("LP-F1", "10114", "Hilfe An-/Auskleiden", "c", 15, 2, "t7", "I"),
+    katalogPosition("LP-F2", "10505", "Hilfe beim Gehen", "c", 8, 3, "t7", "I"),
+  ],
+  zielformulierungen: [],
+  arztAngeordnetAm: "10.06.2026", krankenkasseGutspracheAm: null, ablehnungsgrund: null,
+};
+
+/** Bei der Ärztin — Da Silva, zweite Zeile für die Sortierung. */
+const DASILVA_KLV: KLVVerordnung = {
+  id: "KLV-2026-032", onboardingId: null, patientId: "P-2026-0046", mandatId: null,
+  patientName: "Da Silva, Joaquim", pflegeplanungId: null,
+  status: "an_arzt",
+  version: 1, art: "erst",
+  statusProtokoll: [
+    { status: "entwurf", person: "Maria Keller", zeitpunkt: "10.07.2026 10:00" },
+    { status: "kontrolliert", person: "Maria Keller", zeitpunkt: "12.07.2026 09:30" },
+    { status: "an_arzt", person: "Maria Keller", zeitpunkt: "20.07.2026 15:45" },
+  ],
+  erstelltVon: "Maria Keller",
+  erstellDatum: "10.07.2026", beginnDatum: "01.08.2026", endDatum: null,
+  diagnosen: [],
+  leistungspositionen: [
+    katalogPosition("LP-D1", "10901", "Erstassessment", "a", 60, 1, "e"),
+  ],
+  zielformulierungen: [],
+  arztAngeordnetAm: null, krankenkasseGutspracheAm: null, ablehnungsgrund: null,
+};
+
+/** Ohne Wartezeit — Zimmermann, Blatt liegt wieder bei der Spitex. */
+const ZIMMERMANN_KLV: KLVVerordnung = {
+  id: "KLV-2026-033", onboardingId: null, patientId: "P-2026-0049", mandatId: null,
+  patientName: "Zimmermann, Gertrud", pflegeplanungId: null,
+  status: "unterzeichnet",
+  version: 1, art: "erst",
+  statusProtokoll: [
+    { status: "entwurf", person: "Sandra Weber", zeitpunkt: "15.06.2026 11:00" },
+    { status: "kontrolliert", person: "Sandra Weber", zeitpunkt: "17.06.2026 08:20" },
+    { status: "an_arzt", person: "Sandra Weber", zeitpunkt: "18.06.2026 09:10" },
+    { status: "unterzeichnet", person: "Dr. med. Marc Wyss", zeitpunkt: "24.06.2026 14:00" },
+  ],
+  erstelltVon: "Sandra Weber",
+  erstellDatum: "15.06.2026", beginnDatum: "01.07.2026", endDatum: "30.06.2027",
+  diagnosen: [],
+  leistungspositionen: [
+    katalogPosition("LP-Z1", "10104", "Teilwäsche am Lavabo (inkl. Intimpflege)", "c", 26, 1, "t3"),
+    katalogPosition("LP-Z2", "10505", "Hilfe beim Gehen", "c", 8, 2, "t7"),
+  ],
+  zielformulierungen: [],
+  arztAngeordnetAm: "24.06.2026", krankenkasseGutspracheAm: null, ablehnungsgrund: null,
+};
+
+export const MOCK_KLV_VERORDNUNGEN: KLVVerordnung[] = [
+  STEINER_ALT_KLV, HUBER_KLV, STEINER_KLV,
+  REXHEPI_KLV, FERRARI_KLV, DASILVA_KLV, ZIMMERMANN_KLV,
+];
 export const MOCK_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [...STEINER_ALT_ARZT_DIAGNOSEN, ...HUBER_ARZT_DIAGNOSEN, ...STEINER_ARZT_DIAGNOSEN];
 /** @deprecated Ersetzt durch Rhythmus-Engine (src/lib/rhythmus/). Nur noch für Typ-Referenz behalten. */
 export const MOCK_WORKFLOWS: WorkflowPlan[] = [];

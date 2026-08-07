@@ -278,6 +278,13 @@ export interface KLVVerordnung {
   id: string;
   onboardingId: string | null;
   patientId: string | null;
+  /**
+   * Abrechnungsbeziehung, zu der das Blatt gehört. Ein Patient kann mehrere
+   * Mandate tragen — dann gehören seine Blätter zu verschiedenen Zahlern mit
+   * verschiedenen Tarifen. `patientId` bleibt daneben bestehen; die Liste
+   * filtert danach.
+   */
+  mandatId: string | null;
   patientName: string;
   pflegeplanungId: string | null;
   status: KLVStatus;

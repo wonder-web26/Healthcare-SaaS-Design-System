@@ -39,6 +39,7 @@ export function AppShell() {
     if (location.pathname.startsWith("/patienten")) return "patienten";
     if (location.pathname.startsWith("/angehoerige")) return "angehoerige";
     if (location.pathname.startsWith("/onboarding")) return "onboarding";
+    if (location.pathname.startsWith("/klv")) return "klv";
     if (location.pathname.startsWith("/zuteilung")) return "zuteilung";
     if (location.pathname.startsWith("/servicedesk")) return "servicedesk";
     return "dashboard";
@@ -52,6 +53,7 @@ export function AppShell() {
       onboarding: "/onboarding",
       patienten: "/patienten",
       angehoerige: "/angehoerige",
+      klv: "/klv",
       zuteilung: "/zuteilung",
       servicedesk: "/servicedesk",
     };

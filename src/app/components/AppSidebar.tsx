@@ -22,6 +22,9 @@ const navItems = [
   { id: "onboarding", label: "Onboarding", icon: UserPlus, badge: 3 },
   { id: "patienten", label: "Patienten", icon: Users },
   { id: "angehoerige", label: "Angehörige", icon: HeartHandshake },
+  /* Kurzform statt „Leistungsplanungsblatt" — für die Zielgruppe eindeutig.
+     Die Ansicht im Dossier behält den vollen Namen. */
+  { id: "klv", label: "KLV", icon: ClipboardList },
   { id: "zuteilung", label: "Zuteilung", icon: GitBranch },
   { id: "servicedesk", label: "Pendenzen", icon: Headphones, badge: myOpenCount },
 ];

@@ -16,6 +16,8 @@
 import { useSyncExternalStore } from "react";
 import { MOCK_KLV_VERORDNUNGEN } from "../mocks/klinische-artefakte-mock";
 import { onboardingFaelle } from "../onboarding/faelle";
+import { getMandate, MANDAT_STICHTAG } from "../mandate/store";
+import { istAktiv } from "../mandate/mandate";
 import type { KLVVerordnung, KLVLeistung, KLVStatus, KLVDiagnose } from "../../types/klinische-artefakte";
 import { lpbGesperrt, lpbNaechster, lpbStatusLabel } from "../stammdaten/lpb-status";
 
@@ -32,9 +34,21 @@ function mitPatientKennung(v: KLVVerordnung): KLVVerordnung {
   return fall ? { ...v, patientId: fall.patientId } : v;
 }
 
+/**
+ * Mandat des Blattes. Fehlt es, wird das aktive Mandat des Patienten
+ * eingesetzt — heute trägt jeder Patient genau eines. Gibt es keines oder
+ * mehrere, bleibt das Feld leer statt geraten; ein Blatt am falschen Mandat
+ * hinge am falschen Zahler und am falschen Tarif.
+ */
+function mitMandatKennung(v: KLVVerordnung): KLVVerordnung {
+  if (v.mandatId || !v.patientId) return v;
+  const aktive = getMandate(v.patientId).filter(m => istAktiv(m, MANDAT_STICHTAG));
+  return aktive.length === 1 ? { ...v, mandatId: aktive[0].id } : v;
+}
+
 /* ── Bestand ───────────────────────────────────────────────────────────────── */
 
-let bestand: KLVVerordnung[] = MOCK_KLV_VERORDNUNGEN.map(mitPatientKennung);
+let bestand: KLVVerordnung[] = MOCK_KLV_VERORDNUNGEN.map(mitPatientKennung).map(mitMandatKennung);
 const hoerer = new Set<() => void>();
 
 function setzeBestand(neu: KLVVerordnung[]): void {
@@ -220,7 +234,7 @@ export function neueVersionErstellen(klvId: string, person: string, jetzt: strin
 
 /** Neue Verordnung anlegen. */
 export function verordnungAnlegen(v: KLVVerordnung): void {
-  setzeBestand([...bestand, mitPatientKennung(v)]);
+  setzeBestand([...bestand, mitMandatKennung(mitPatientKennung(v))]);
 }
 
 /** Verordnung entfernen — im Bestand nur für Entwürfe vorgesehen. */

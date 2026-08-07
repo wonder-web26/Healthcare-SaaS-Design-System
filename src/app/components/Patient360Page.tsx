@@ -3554,6 +3554,8 @@ function TabKLV({ patientId }: { patientId: string }) {
       id: newId,
       onboardingId: null,
       patientId,
+      // Der Bestand setzt das aktive Mandat des Patienten ein.
+      mandatId: null,
       patientName,
       pflegeplanungId: current?.pflegeplanungId || null,
       status: "entwurf",
