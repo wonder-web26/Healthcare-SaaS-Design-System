@@ -41,6 +41,12 @@ export interface ListenFilterMarke {
 
 interface ListenGeruestProps {
   titel: string;
+  /**
+   * Zeitraumwechsel direkt neben dem Titel — für Listen, die einen Monat oder
+   * eine Woche zeigen. Steht links neben der Primäraktion, weil er den Inhalt
+   * der Liste bestimmt und keine Handlung an ihr ist.
+   */
+  zeitraum?: ReactNode;
   /** Primäraktion rechts neben dem Titel; höchstens eine. */
   aktion?: ReactNode;
   suche: string;
@@ -60,7 +66,7 @@ interface ListenGeruestProps {
 }
 
 export function ListenGeruest({
-  titel, aktion, suche, onSuche, suchePlatzhalter, segment, auswahlfelder,
+  titel, zeitraum, aktion, suche, onSuche, suchePlatzhalter, segment, auswahlfelder,
   chips, sichtText, filterMarken, onFilterZuruecksetzen, children,
 }: ListenGeruestProps) {
   return (
@@ -70,7 +76,10 @@ export function ListenGeruest({
           die Zeile 5px flacher und alles darunter verschöbe sich — eine Liste
           ohne Hauptaktion soll gleich hoch beginnen wie die übrigen. */}
       <div className="flex items-center justify-between" style={{ minHeight: 41, marginBottom: "var(--space-3)" }}>
-        <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>{titel}</h1>
+        <div className="flex items-center" style={{ gap: 16 }}>
+          <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>{titel}</h1>
+          {zeitraum}
+        </div>
         {aktion}
       </div>
 

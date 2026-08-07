@@ -8,6 +8,7 @@ import {
   Headphones,
   Settings,
   HelpCircle,
+  CalendarCheck,
   HeartHandshake,
   LayoutDashboard,
 } from "lucide-react";
@@ -25,6 +26,9 @@ const navItems = [
   /* Kurzform statt „Leistungsplanungsblatt" — für die Zielgruppe eindeutig.
      Die Ansicht im Dossier behält den vollen Namen. */
   { id: "klv", label: "KLV", icon: ClipboardList },
+  /* Die Prüfung der erfassten Einsätze über alle Patienten — der Bildschirm
+     über der Pflegekontrolle im Dossier. */
+  { id: "kontrolle", label: "Kontrolle", icon: CalendarCheck },
   { id: "zuteilung", label: "Zuteilung", icon: GitBranch },
   { id: "servicedesk", label: "Pendenzen", icon: Headphones, badge: myOpenCount },
 ];

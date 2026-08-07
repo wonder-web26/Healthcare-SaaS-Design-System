@@ -103,7 +103,7 @@ import {
 import { wartetSeitTagen } from "../../lib/klv/warten";
 import { abgleichen, stunden } from "../../lib/klv/abgleich";
 import {
-  monatAufteilen, abweichungNachRichtung, fehlendeTageMuster, einsatzDauer,
+  abweichungNachRichtung,
   aktuelleFassung, fruehereFassungen,
   hatAbweichung, WOCHENTAGE, WOCHENTAGE_LANG, MONATE,
   type Einsatz, type EinsatzUrheber, type ErbrachteLeistung, type Monatstag,
@@ -114,16 +114,14 @@ import {
   EINSATZ_BEZUGSMONAT,
 } from "../../lib/einsaetze/store";
 import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung } from "../../types/klinische-artefakte";
-import {
-  einsatzAbrechnen, monatAbrechnen, TAKT_MINUTEN, MINDESTWERT_EINSATZ,
-  type MinutenJeArt, type Monatsabrechnung,
-} from "../../lib/abrechnung/leistungsarten";
+import { TAKT_MINUTEN, MINDESTWERT_EINSATZ, type Monatsabrechnung } from "../../lib/abrechnung/leistungsarten";
+import { monatsKennzahlen } from "../../lib/einsaetze/kontrolle";
 import type { TarifKategorie } from "../../lib/stammdaten/pflegetarife";
 import { pruefzustandLabel } from "../../lib/stammdaten/einsatz";
 import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
 import {
   hProWoche, berechneSummen, einheitLabel,
-  istTaeglich, tagessollMinuten, haeufigkeitText,
+  istTaeglich, haeufigkeitText,
 } from "../../lib/klv/berechnung";
 import { toast } from "sonner";
 import { useRecording } from "../recording/RecordingContext";
@@ -2928,7 +2926,7 @@ function tagesFarbe(t: Monatstag): { bg: string; text: string; rand: string } {
 
 function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   const nav = useNavigate();
-  const alleEinsaetze = useEinsaetze().filter(e => e.patientId === patient.id);
+  const alleEinsaetze = useEinsaetze();
   const alleLeistungen = useErbrachteLeistungen();
   const klvs = useKlvVerordnungen().filter(k => k.patientId === patient.id);
   const alleMandate = useMandate();
@@ -2938,8 +2936,16 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   /* Zeitraum als Jahr/Monat, nicht als Datum: die Schaltung bewegt sich in
      Monatsschritten, ein Tag im Zustand liesse Zwischenstände zu, die es nicht
      gibt. Startwert ist der Monat der Bezugswoche. */
-  const [zeitraum, setZeitraum] = useState({
-    jahr: EINSATZ_BEZUGSMONAT.getFullYear(), monat: EINSATZ_BEZUGSMONAT.getMonth(),
+  /* Kommt der Aufruf aus der Kontrollliste, trägt die Adresse den dort
+     gewählten Monat (?monat=JJJJ-MM). Ohne ihn zeigte diese Ansicht ihren
+     eigenen Startmonat und damit andere Zahlen als die Zeile, die hierher
+     verwiesen hat. Einmalig gelesen — danach schaltet der Benutzer. */
+  const [zeitraum, setZeitraum] = useState(() => {
+    const p = new URLSearchParams(window.location.search).get("monat");
+    const m = p && /^(\d{4})-(\d{2})$/.exec(p);
+    return m
+      ? { jahr: Number(m[1]), monat: Number(m[2]) - 1 }
+      : { jahr: EINSATZ_BEZUGSMONAT.getFullYear(), monat: EINSATZ_BEZUGSMONAT.getMonth() };
   });
   const [gewaehlterTag, setGewaehlterTag] = useState<string | null>(null);
   /* Der Zeitpunkt der Einordnung wird einmal genommen und bleibt stehen, bis
@@ -2950,58 +2956,19 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   const positionVon = (positionId: string) =>
     blatt?.leistungspositionen.find(p => p.id === positionId) ?? null;
 
-  /* Das Tagessoll sind die täglich verordneten Positionen — nicht die
-     Wochensumme durch sieben. Eine Position mit 3×/Woche steht an keinem
-     bestimmten Tag im Plan; sie in ein Tagesmittel zu rechnen, machte aus
-     einer Unbekannten eine Zahl. */
+  /* Eine Rechnung für zwei Orte: dieselbe Funktion speist die Liste unter
+     /kontrolle. Zwei Rechnungen liefen auseinander, und dann stünde dort eine
+     andere Zahl als hier. */
+  const k = monatsKennzahlen(patient.id, zeitraum.jahr, zeitraum.monat, {
+    einsaetze: alleEinsaetze, leistungen: alleLeistungen,
+    klvs, mandate: alleMandate, verordnungen: alleVerordnungen,
+  });
+  const { tage, muster, abrechnung, gemeldet, verordnung: gueltigeVerordnung, sollProTag } = k;
+  const bilanz = abweichungNachRichtung(tage);
+
   const positionen = blatt?.leistungspositionen ?? [];
-  const sollProTag = tagessollMinuten(positionen);
   const taeglicheIds = new Set(positionen.filter(istTaeglich).map(p => p.id));
   const istTaeglichePosition = (id: string) => taeglicheIds.has(id);
-  /* Verordnete Zeit je Position — aus dem Blatt gelesen, nicht am Einsatz
-     erfasst. Die angehörige Person stempelt eine Gesamtzeit. */
-  const verordneteZeit = (id: string) => {
-    const p = positionen.find(x => x.id === id);
-    return p ? p.anzahl * p.zeitMin : 0;
-  };
-
-  const tage = monatAufteilen(alleEinsaetze, leistungenVon, zeitraum.jahr, zeitraum.monat,
-    sollProTag, istTaeglichePosition, verordneteZeit);
-  const bilanz = abweichungNachRichtung(tage);
-  const muster = fehlendeTageMuster(tage);
-
-  /* ── Abrechnung ───────────────────────────────────────────────────────────
-     Verglichen wird gegen die Bedarfsmeldung der Verordnung, die den Monat
-     deckt — nicht gegen das Tagessoll. Die Kasse prüft Monate je
-     Leistungsart; Tage plant nur das Blatt. */
-  const monatsAnfang = new Date(zeitraum.jahr, zeitraum.monat, 1);
-  const monatsEnde = new Date(zeitraum.jahr, zeitraum.monat + 1, 0);
-  const patientMandate = alleMandate.filter(m => m.patientId === patient.id).map(m => m.id);
-  const gueltigeVerordnung = alleVerordnungen.find(v => {
-    if (!patientMandate.includes(v.mandatId)) return false;
-    const ab = ausAnzeigedatum(v.gueltigAb);
-    const bis = ausAnzeigedatum(v.gueltigBis);
-    return (!ab || ab <= monatsEnde) && (!bis || bis >= monatsAnfang);
-  }) ?? null;
-  const gemeldet: MinutenJeArt | null =
-    gueltigeVerordnung && hatBedarfsmeldung(gueltigeVerordnung)
-      ? {
-          a: Number(gueltigeVerordnung.gemeldeteMinuten.a || 0),
-          b: Number(gueltigeVerordnung.gemeldeteMinuten.b || 0),
-          c: Number(gueltigeVerordnung.gemeldeteMinuten.c || 0),
-        }
-      : null;
-
-  const abrechnungen = tage
-    .flatMap(t => t.einsaetze)
-    .filter(e => e.zustand === "erbracht")
-    .map(e => einsatzAbrechnen(einsatzDauer(e), leistungenVon(e.id)
-      .filter(l => l.erbracht)
-      .map(l => {
-        const pos = positionVon(l.positionId);
-        return { kategorie: (pos?.kategorie ?? "c") as TarifKategorie, verordnet: pos ? pos.anzahl * pos.zeitMin : 0 };
-      })));
-  const abrechnung = monatAbrechnen(abrechnungen, gemeldet);
 
   const tagVon = (datum: string) => tage.find(t => t.datum === datum) ?? null;
   const gewaehlt = gewaehlterTag ? tagVon(gewaehlterTag) : null;
