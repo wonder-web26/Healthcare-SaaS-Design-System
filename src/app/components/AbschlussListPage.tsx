@@ -187,10 +187,14 @@ export function AbschlussListPage() {
     return { jahr: d.getFullYear(), monat: d.getMonth() };
   });
 
-  /* Nur Leistungsarten, die im Monat überhaupt vorkommen. Eine Spalte, in der
-     bei jedem Patienten ein Strich steht, sagt nur, dass es die Kategorie
-     hier nicht gibt — und kostet Breite, die den übrigen fehlt. */
-  const arten = TARIF_KATEGORIEN.filter(k => zeilen.some(z => z.k.abrechnung.jeArt[k.code].abrechenbar > 0));
+  /* Immer alle drei Leistungsarten, auch ohne Minuten.
+     a, b und c sind die geschlossene Menge aus Art. 7 Abs. 2 KLV. Eine
+     weggelassene Spalte liest sich als „gibt es nicht" statt als „null", und
+     die Tabelle änderte je Monat ihre Form — wer zwei Monate vergleicht,
+     fände die Spalten an anderer Stelle. Eine Null in a ist überdies selbst
+     ein Befund: es ist die teuerste Kategorie, und wenn einen Monat lang
+     nichts anfällt, wurde entweder nicht abgeklärt oder nicht erfasst. */
+  const arten = TARIF_KATEGORIEN;
   const summeJeArt = (code: TarifKategorie) => zeilen.reduce((s, z) => s + z.k.abrechnung.jeArt[code].abrechenbar, 0);
 
   const bereite = zeilen.filter(z => !z.abschluss && z.lage.bereit);
@@ -231,11 +235,11 @@ export function AbschlussListPage() {
       label: k.code.toUpperCase(),
       anteil: 7, minCh: 7, align: "right" as const, sortierbar: true,
       render: (z: Zeile) => {
-        const m = z.k.abrechnung.jeArt[k.code].abrechenbar;
-        /* Strich, nicht null: der Patient trägt diese Leistungsart nicht —
-           das ist etwas anderes als „null Minuten erbracht". */
-        if (m === 0) return <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>—</span>;
-        return zahl(Math.round(m));
+        /* Null, nicht Strich: ein Strich hiesse „unbekannt". Hier ist es
+           gemessen — die Einsätze des Monats sind erfasst, diese Kategorie
+           kam darin nicht vor. Gedämpft, weil sie nichts zu prüfen gibt. */
+        const m = Math.round(z.k.abrechnung.jeArt[k.code].abrechenbar);
+        return zahl(m, m === 0 ? "var(--text-tertiary)" : undefined);
       },
     })),
     { id: "verrechenbar", label: "Total", anteil: 9, minCh: 9, align: "right", sortierbar: true,
