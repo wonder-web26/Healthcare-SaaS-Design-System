@@ -19,11 +19,22 @@ interface VerordnungSeed {
   aerztin: string;
   beginn: string;
   bis: string;
+  /**
+   * Bedarfsmeldung in Minuten je Monat. Nur dort gesetzt, wo ein aktives
+   * Leistungsplanungsblatt besteht, gegen das sich vergleichen liesse —
+   * eine Meldung ohne Blatt wäre eine Zahl ohne Gegenstück.
+   */
+  gemeldet?: { a: string; b: string; c: string };
 }
 
 /** Beginn = Aufnahmedatum des Mandats; die Ärztin steht am jeweiligen Fall. */
 const VERORDNUNG_SEED: VerordnungSeed[] = [
-  { mandatId: "MAN-2026-1001", aerztin: "Dr. med. Peter Frei", beginn: "12.01.2026", bis: "11.01.2027" },
+  /* Steiner: die Meldung entspricht dem, was das Blatt KLV-2026-101 je Monat
+     plant — Kategorie b 147 Min./Woche, c 179 Min./Woche, hochgerechnet auf
+     einen Monat von 31 Tagen (4.43 Wochen). Kategorie a trägt nur einmalige
+     Positionen und damit keine monatliche Menge. */
+  { mandatId: "MAN-2026-1001", aerztin: "Dr. med. Peter Frei", beginn: "12.01.2026", bis: "11.01.2027",
+    gemeldet: { a: "0", b: "651", c: "793" } },
   { mandatId: "MAN-2026-1002", aerztin: "Dr. med. Ursula Bachmann", beginn: "20.02.2026", bis: "19.02.2027" },
   { mandatId: "MAN-2026-1003", aerztin: "Dr. med. Peter Frei", beginn: "03.09.2025", bis: "02.09.2026" },
   { mandatId: "MAN-2026-1004", aerztin: "Dr. med. Ursula Bachmann", beginn: "15.06.2025", bis: "14.06.2026" },
@@ -45,6 +56,7 @@ const verordnungenSeed: Verordnung[] = VERORDNUNG_SEED.map((v, i) => ({
   gueltigBis: v.bis,
   unterzeichnetAm: v.beginn,
   bemerkung: "",
+  gemeldeteMinuten: v.gemeldet ?? { a: "", b: "", c: "" },
 }));
 
 /* ── Kostengutsprachen: fünf Fälle, je einer für eine Regel ────────────────── */

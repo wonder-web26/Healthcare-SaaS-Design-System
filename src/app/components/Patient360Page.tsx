@@ -21,7 +21,7 @@ import { entscheidLabel } from "../../lib/stammdaten/entscheid";
 import {
   verordnungZustand, verordnungsartLabel, entscheidAnzeige, tageSeitEinreichung,
   tageBisAblauf, kgsDecktAm, v3GrundFehlt, lueckenBerechnen, offeneLuecke,
-  ausAnzeigedatum, alsAnzeigedatum,
+  ausAnzeigedatum, alsAnzeigedatum, hatBedarfsmeldung,
   type Verordnung, type Kostengutsprache, type Luecke,
 } from "../../lib/mandate/verordnungen";
 import {
@@ -103,7 +103,7 @@ import {
 import { wartetSeitTagen } from "../../lib/klv/warten";
 import { abgleichen, stunden } from "../../lib/klv/abgleich";
 import {
-  monatAufteilen, abweichungNachRichtung, fehlendeTageMuster,
+  monatAufteilen, abweichungNachRichtung, fehlendeTageMuster, einsatzDauer,
   aktuelleFassung, fruehereFassungen,
   hatAbweichung, WOCHENTAGE, WOCHENTAGE_LANG, MONATE,
   type Einsatz, type EinsatzUrheber, type ErbrachteLeistung, type Monatstag,
@@ -114,11 +114,16 @@ import {
   EINSATZ_BEZUGSMONAT,
 } from "../../lib/einsaetze/store";
 import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung } from "../../types/klinische-artefakte";
+import {
+  einsatzAbrechnen, monatAbrechnen, TAKT_MINUTEN, MINDESTWERT_EINSATZ,
+  type MinutenJeArt, type Monatsabrechnung,
+} from "../../lib/abrechnung/leistungsarten";
+import type { TarifKategorie } from "../../lib/stammdaten/pflegetarife";
 import { pruefzustandLabel } from "../../lib/stammdaten/einsatz";
 import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
 import {
   hProWoche, berechneSummen, einheitLabel,
-  istTaeglich, istImZeitraum, tagessollMinuten, erwarteteAnzahlImMonat, haeufigkeitText,
+  istTaeglich, tagessollMinuten, haeufigkeitText,
 } from "../../lib/klv/berechnung";
 import { toast } from "sonner";
 import { useRecording } from "../recording/RecordingContext";
@@ -2925,6 +2930,8 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   const alleEinsaetze = useEinsaetze().filter(e => e.patientId === patient.id);
   const alleLeistungen = useErbrachteLeistungen();
   const klvs = useKlvVerordnungen().filter(k => k.patientId === patient.id);
+  const alleMandate = useMandate();
+  const alleVerordnungen = useVerordnungen();
   const blatt = [...klvs].filter(k => k.status !== "ersetzt").sort((a, b) => b.version - a.version)[0] || null;
   const [meldung, setMeldung] = useState("");
   /* Zeitraum als Jahr/Monat, nicht als Datum: die Schaltung bewegt sich in
@@ -2948,7 +2955,6 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
      einer Unbekannten eine Zahl. */
   const positionen = blatt?.leistungspositionen ?? [];
   const sollProTag = tagessollMinuten(positionen);
-  const periodische = positionen.filter(istImZeitraum);
   const taeglicheIds = new Set(positionen.filter(istTaeglich).map(p => p.id));
   const istTaeglichePosition = (id: string) => taeglicheIds.has(id);
   /* Verordnete Zeit je Position — aus dem Blatt gelesen, nicht am Einsatz
@@ -2962,10 +2968,39 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
     sollProTag, istTaeglichePosition, verordneteZeit);
   const bilanz = abweichungNachRichtung(tage);
   const muster = fehlendeTageMuster(tage);
-  /* Verordnetes Monatssoll der periodischen Positionen — erwartete Anzahl mal
-     Dauer. Steht neben dem Tagessoll, nicht darin. */
-  const periodischSoll = periodische.reduce(
-    (sum, pos) => sum + erwarteteAnzahlImMonat(pos, tage.length) * pos.anzahl * pos.zeitMin, 0);
+
+  /* ── Abrechnung ───────────────────────────────────────────────────────────
+     Verglichen wird gegen die Bedarfsmeldung der Verordnung, die den Monat
+     deckt — nicht gegen das Tagessoll. Die Kasse prüft Monate je
+     Leistungsart; Tage plant nur das Blatt. */
+  const monatsAnfang = new Date(zeitraum.jahr, zeitraum.monat, 1);
+  const monatsEnde = new Date(zeitraum.jahr, zeitraum.monat + 1, 0);
+  const patientMandate = alleMandate.filter(m => m.patientId === patient.id).map(m => m.id);
+  const gueltigeVerordnung = alleVerordnungen.find(v => {
+    if (!patientMandate.includes(v.mandatId)) return false;
+    const ab = ausAnzeigedatum(v.gueltigAb);
+    const bis = ausAnzeigedatum(v.gueltigBis);
+    return (!ab || ab <= monatsEnde) && (!bis || bis >= monatsAnfang);
+  }) ?? null;
+  const gemeldet: MinutenJeArt | null =
+    gueltigeVerordnung && hatBedarfsmeldung(gueltigeVerordnung)
+      ? {
+          a: Number(gueltigeVerordnung.gemeldeteMinuten.a || 0),
+          b: Number(gueltigeVerordnung.gemeldeteMinuten.b || 0),
+          c: Number(gueltigeVerordnung.gemeldeteMinuten.c || 0),
+        }
+      : null;
+
+  const abrechnungen = tage
+    .flatMap(t => t.einsaetze)
+    .filter(e => e.zustand === "erbracht")
+    .map(e => einsatzAbrechnen(einsatzDauer(e), leistungenVon(e.id)
+      .filter(l => l.erbracht)
+      .map(l => {
+        const pos = positionVon(l.positionId);
+        return { kategorie: (pos?.kategorie ?? "c") as TarifKategorie, verordnet: pos ? pos.anzahl * pos.zeitMin : 0 };
+      })));
+  const abrechnung = monatAbrechnen(abrechnungen, gemeldet);
 
   const tagVon = (datum: string) => tage.find(t => t.datum === datum) ?? null;
   const gewaehlt = gewaehlterTag ? tagVon(gewaehlterTag) : null;
@@ -3064,47 +3099,14 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
         </div>
       </div>
 
-      {/* ── Urteilsleiste: getrennt nach Richtung ──
-          Netto allein verbirgt den Fall, der zählt: zwanzig Minuten zu viel an
-          einem Tag und zwanzig zu wenig an einem anderen ergeben null. */}
-      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "14px 18px" }}>
-        {blatt ? (
-          <div className="flex items-center flex-wrap" style={{ gap: 28 }}>
-            <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Erbracht im Monat</div>
-              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{min(bilanz.ist + bilanz.periodisch)}</div>
-              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
-                von {min(bilanz.soll + periodischSoll)} verordnet · davon {min(bilanz.periodisch)} periodisch
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Zu wenig erbracht</div>
-              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", color: bilanz.zuWenig > 0 ? "var(--status-warning-text)" : "var(--text-primary)" }}>{min(bilanz.zuWenig)}</div>
-              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
-                {min(bilanz.ausgefallen)} ausgefallen · {min(bilanz.zuWenigErbracht)} knapper
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Zu viel erfasst</div>
-              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", color: bilanz.zuViel > 0 ? "var(--status-info)" : "var(--text-primary)" }}>{min(bilanz.zuViel)}</div>
-              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-                {(() => { const n = tage.filter(t => t.abweichung > 0 && !t.fehlt).length; return `${n} ${n === 1 ? "Tag" : "Tage"}`; })()}
-              </div>
-            </div>
-            <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Pflegeberichte</div>
-              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>
-                {tage.filter(t => t.hatBericht).length} / {tage.filter(t => t.einsaetze.length > 0).length}
-              </div>
-              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Tage mit Einsatz</div>
-            </div>
-          </div>
-        ) : (
-          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", maxWidth: 560 }}>
-            Für diesen Patienten besteht kein aktives Leistungsplanungsblatt. Ohne Plan gibt es kein Soll — verglichen wird deshalb nichts.
-          </p>
-        )}
-      </div>
+      {/* ── Abrechenbare Minuten gegen die Bedarfsmeldung ──
+          Nicht mehr vier gleich grosse Zahlen ohne Rangfolge. Was zählt, ist
+          die abrechenbare Menge je Leistungsart gegen das Gemeldete; alles
+          andere beschreibt Pflegequalität und steht im Kalender. */}
+      <Abrechnungsleiste
+        abrechnung={abrechnung} tage={tage} monat={zeitraum.monat}
+        verordnung={gueltigeVerordnung} hatMeldung={gemeldet !== null} muster={muster}
+      />
 
       {meldung && (
         <div style={{ padding: "10px 12px", borderRadius: 10, background: "var(--status-info-bg)", fontSize: "var(--text-meta)", color: "var(--status-info)" }}>{meldung}</div>
@@ -3158,6 +3160,186 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   );
 }
 
+
+/* ══════════════════════════════════════════
+   Abrechnungsleiste
+
+   Abgerechnet wird, was erbracht wurde — getaktet in fünf Minuten je
+   Leistungsart, mindestens zehn je Einsatz. Verglichen wird gegen die
+   Bedarfsmeldung, die Minuten je Leistungsart und Monat nennt.
+
+   „Zu wenig erbracht" steht hier bewusst nicht mehr: ein Tag mit weniger
+   Pflege ist eine Frage der Pflegequalität. Sie gehört in den Kalender und in
+   „Zu prüfen", nicht in eine Leiste über die Abrechnung.
+   ══════════════════════════════════════════ */
+
+function Abrechnungsleiste({ abrechnung, tage, monat, verordnung, hatMeldung, muster }: {
+  abrechnung: Monatsabrechnung;
+  tage: Monatstag[];
+  monat: number;
+  verordnung: Verordnung | null;
+  hatMeldung: boolean;
+  muster: { tage: Monatstag[]; wochentag: number | null };
+}) {
+  const rahmen = { background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "14px 18px" } as const;
+  const min = (n: number) => `${Math.round(n)} Min.`;
+
+  if (abrechnung.anzahlEinsaetze === 0) {
+    return (
+      <div style={rahmen}>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch" }}>
+          In diesem Monat ist kein Einsatz erfasst. Ohne erbrachte Leistung gibt es nichts abzurechnen.
+        </p>
+      </div>
+    );
+  }
+
+  /* Ohne Bedarfsmeldung wird nicht verglichen — und schon gar nicht gegen
+     null. Der Versicherer vergütet dann nichts, unabhängig davon, was
+     erbracht wurde; ein leerer Balken würde das als „noch nichts erreicht"
+     lesbar machen statt als „es gibt keine Grundlage". */
+  if (!hatMeldung) {
+    const bis = verordnung?.gueltigBis?.trim();
+    return (
+      <div style={rahmen}>
+        <div className="flex items-start" style={{ gap: 9 }}>
+          <AlertTriangle style={{ width: 15, height: 15, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 2 }} />
+          <div>
+            <p style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+              Für diesen Monat liegt keine gültige Bedarfsmeldung vor. Ohne sie vergütet der Versicherer
+              nichts — unabhängig davon, was erbracht wurde. Ein Vergleich ist deshalb nicht möglich.
+            </p>
+            <p style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 7, marginBottom: 0 }}>
+              {verordnung
+                ? bis
+                  ? `Letzte Verordnung ${verordnung.id} gültig bis ${bis}, ohne gemeldete Minuten je Leistungsart.`
+                  : `Verordnung ${verordnung.id} unbefristet, ohne gemeldete Minuten je Leistungsart.`
+                : "Keine Verordnung deckt diesen Monat."}
+              {" "}{abrechnung.anzahlEinsaetze} {abrechnung.anzahlEinsaetze === 1 ? "Einsatz" : "Einsätze"} erfasst,
+              {" "}{min(abrechnung.gestempelt)} gestempelt.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const gemeldetTotal = abrechnung.jeArt.a.gemeldet + abrechnung.jeArt.b.gemeldet + abrechnung.jeArt.c.gemeldet;
+  const anteil = abrechnung.anteil ?? 0;
+  /* Der Balken endet nicht bei der gemeldeten Menge, sonst wäre eine
+     Überschreitung unsichtbar. Die Meldung ist eine Marke darin. */
+  const skala = Math.max(gemeldetTotal, abrechnung.abrechenbar) * 1.06;
+  const breite = (n: number) => `${Math.min(100, (n / skala) * 100)}%`;
+  const ueber = abrechnung.abrechenbar > gemeldetTotal;
+
+  const mitBericht = tage.filter(t => t.hatBericht).length;
+  const mitEinsatz = tage.filter(t => t.einsaetze.length > 0).length;
+  const alleEinsaetze = tage.flatMap(t => t.einsaetze);
+  const geprueft = alleEinsaetze.filter(e => e.pruefzustand === "geprueft").length;
+
+  return (
+    <div style={rahmen}>
+      {/* ── Kopf ── */}
+      <div className="flex items-start flex-wrap" style={{ gap: 12 }}>
+        <div>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Abrechenbar im Monat</div>
+          <div className="flex items-baseline" style={{ gap: 9 }}>
+            <span style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", lineHeight: 1.15 }}>
+              {Math.round(abrechnung.abrechenbar)}
+            </span>
+            <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Min.</span>
+            <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums",
+              color: ueber ? "var(--status-warning-text)" : "var(--text-secondary)" }}>
+              {anteil.toFixed(0)} % der Meldung
+            </span>
+          </div>
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>
+            {min(abrechnung.gestempelt)} gestempelt · + {min(abrechnung.ausRundung)} aus dem {TAKT_MINUTEN}-Minuten-Takt
+          </div>
+        </div>
+        <div style={{ marginLeft: "auto", textAlign: "right" }}>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Gemeldet</div>
+          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{min(gemeldetTotal)}</div>
+          {verordnung && <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{verordnung.id}</div>}
+        </div>
+      </div>
+
+      {/* ── Balken mit der Meldung als Marke ── */}
+      <div style={{ position: "relative", height: 10, borderRadius: 5, background: "var(--bg-secondary)", marginTop: 12, marginBottom: 4 }}
+        role="img" aria-label={`${Math.round(abrechnung.abrechenbar)} von ${Math.round(gemeldetTotal)} gemeldeten Minuten, ${anteil.toFixed(0)} Prozent`}>
+        <div style={{ position: "absolute", inset: 0, width: breite(abrechnung.abrechenbar), borderRadius: 5,
+          background: ueber ? "var(--status-warning-text)" : "var(--brand-primary)" }} />
+        <div style={{ position: "absolute", top: -3, bottom: -3, left: breite(gemeldetTotal), width: 2, background: "var(--text-primary)", borderRadius: 1 }} />
+      </div>
+      <div className="flex" style={{ justifyContent: "space-between", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+        <span>0</span>
+        <span>Marke: gemeldete Menge</span>
+      </div>
+
+      {/* ── Je Leistungsart. Sie gleichen sich nicht aus: eine Unterschreitung
+             bei c macht eine Überschreitung bei b nicht ungeschehen. ── */}
+      <div className="flex flex-col" style={{ gap: 3, marginTop: 12, paddingTop: 10, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+        {TARIF_KATEGORIEN.map(k => {
+          const b = abrechnung.jeArt[k.code];
+          const drueber = b.differenz > 0;
+          return (
+            <div key={k.code} className="flex items-baseline" style={{ gap: 8 }}>
+              <span style={{ width: 16, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", textTransform: "uppercase" }}>{k.code}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                {k.label.replace(/^KLV [abc] — /, "")}
+              </span>
+              <span style={{ width: 78, textAlign: "right", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                {Math.round(b.gemeldet)} gemeldet
+              </span>
+              <span style={{ width: 96, textAlign: "right", fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums" }}>
+                {Math.round(b.abrechenbar)} abrechenbar
+              </span>
+              <span style={{ width: 62, textAlign: "right", fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", fontWeight: drueber ? 500 : 400,
+                color: drueber ? "var(--status-warning-text)" : b.differenz < 0 ? "var(--text-tertiary)" : "var(--text-secondary)" }}>
+                {b.differenz > 0 ? "+" : b.differenz < 0 ? "−" : "±"}{Math.abs(Math.round(b.differenz))}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Zeilen darunter ── */}
+      <div className="flex flex-col" style={{ gap: 5, marginTop: 12, paddingTop: 10, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+        {abrechnung.nichtGedeckt > 0 && (
+          <LeisteZeile marke="Nicht gedeckt" warnung
+            text={`${min(abrechnung.nichtGedeckt)} über der Meldung in ${abrechnung.betroffene.length === 1 ? "Leistungsart" : "den Leistungsarten"} ${abrechnung.betroffene.map(c => c.toUpperCase()).join(" und ")}. Eine Unterschreitung anderswo deckt das nicht.`} />
+        )}
+        <LeisteZeile marke="Tage ohne Einsatz"
+          text={muster.tage.length === 0 ? "keine" : (
+            `${muster.tage.length} · ${tageBenennen(muster.tage, monat)}`
+            + (muster.wochentag !== null ? ` · alle an einem ${WOCHENTAGE_LANG[muster.wochentag]}` : "")
+          )} />
+        <LeisteZeile marke="Pflegeberichte" text={`${mitBericht} von ${mitEinsatz} Tagen mit Einsatz`} />
+        <LeisteZeile marke="Geprüft" text={`${geprueft} von ${alleEinsaetze.length} Einsätzen`} />
+        {abrechnung.unterMindestwert > 0 && (
+          <LeisteZeile marke="Unter Mindestwert" warnung
+            text={`${abrechnung.unterMindestwert} ${abrechnung.unterMindestwert === 1 ? "Einsatz liegt" : "Einsätze liegen"} nach der Rundung unter ${MINDESTWERT_EINSATZ} Minuten. Welcher Leistungsart die Aufstockung zugeschlagen wird, ist offen.`} />
+        )}
+      </div>
+
+      <p style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 10, marginBottom: 0, maxWidth: "74ch" }}>
+        Die Zeit je Leistungsart ist abgeleitet: die gestempelte Gesamtzeit wird im Verhältnis der
+        verordneten Zeiten auf die erbrachten Positionen verteilt. Das ist eine Setzung, keine
+        Erfassung — gestempelt wird eine Gesamtzeit je Einsatz.
+      </p>
+    </div>
+  );
+}
+
+/** Eine Zeile unter den Kategorien: Marke links, Aussage rechts. */
+function LeisteZeile({ marke, text, warnung }: { marke: string; text: string; warnung?: boolean }) {
+  return (
+    <div className="flex items-baseline" style={{ gap: 10 }}>
+      <span style={{ width: 128, flexShrink: 0, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{marke}</span>
+      <span style={{ fontSize: "var(--text-meta)", color: warnung ? "var(--status-warning-text)" : "var(--text-secondary)", maxWidth: "74ch" }}>{text}</span>
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════
    Abschnitt „Zu prüfen"

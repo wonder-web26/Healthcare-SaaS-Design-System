@@ -66,6 +66,24 @@ export interface Verordnung {
   gueltigBis: string;
   unterzeichnetAm: string;
   bemerkung: string;
+  /**
+   * Bedarfsmeldung: voraussichtliche Minuten je Leistungsart und Monat
+   * (Art. 7 Abs. 2 lit. a bis c KLV). Leerer String heisst „nicht gemeldet",
+   * nicht „null Minuten" — ohne gültige Bedarfsmeldung vergütet der
+   * Versicherer nichts, und das ist etwas anderes als eine Null.
+   *
+   * Sie steht an der Verordnung und nicht am Leistungsplanungsblatt: gemeldet
+   * wird, was die Ärztin für nötig hält; geplant wird, wie die Spitex es
+   * umsetzt. Beides kann auseinanderlaufen, und genau diese Differenz ist
+   * das, was bei einer Kontrolle zählt.
+   */
+  gemeldeteMinuten: { a: string; b: string; c: string };
+}
+
+/** Trägt die Verordnung eine ausgefüllte Bedarfsmeldung? */
+export function hatBedarfsmeldung(v: Verordnung): boolean {
+  const g = v.gemeldeteMinuten;
+  return [g.a, g.b, g.c].some(x => x.trim() !== "");
 }
 
 export const VERORDNUNGSART = [

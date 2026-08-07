@@ -53,8 +53,9 @@ export function istPeriodisch(l: KLVLeistung): boolean {
 
    · `t7` ist an jedem Tag verordnet — je Tag prüfbar.
    · `t2`–`t6`, `w` und `m` sind im Zeitraum verordnet, aber das Blatt sagt
-     nicht, an welchen Tagen. Nur die Anzahl im Zeitraum ist prüfbar; welcher
-     einzelne Tag gefehlt hat, wäre eine Behauptung.
+     nicht, an welchen Tagen. Welcher einzelne Tag gefehlt hat, wäre eine
+     Behauptung; ihre Zeit steht deshalb neben der Tagesabweichung, nicht
+     darin.
    · `e` (einmalig) und `nB` (nach Bedarf) tragen keine verordnete Menge, gegen
      die sich etwas prüfen liesse. Sie erscheinen in keiner der beiden
      Prüfungen — auch nicht als Null, denn eine Null wäre eine Aussage. */
@@ -64,30 +65,9 @@ export function istTaeglich(l: KLVLeistung): boolean {
   return l.einheit === "t7";
 }
 
-/** Im Zeitraum verordnet, aber ohne Wochentagsplan — nur als Anzahl prüfbar. */
-export function istImZeitraum(l: KLVLeistung): boolean {
-  return l.einheit === "w" || l.einheit === "m"
-    || (l.einheit.startsWith("t") && l.einheit !== "t7");
-}
-
 /** Minuten, die an einem Tag verordnet sind — Summe der täglichen Positionen. */
 export function tagessollMinuten(positionen: KLVLeistung[]): number {
   return positionen.filter(istTaeglich).reduce((s, l) => s + l.anzahl * l.zeitMin, 0);
-}
-
-/**
- * Wie oft eine Position im Monat erwartet wird.
- *
- * Wochenrhythmen werden über die Länge des Monats hochgerechnet, nicht über
- * eine feste Vier — ein Monat hat 4.3 bis 4.4 Wochen, und bei 3×/Woche macht
- * das über den Monat einen ganzen Einsatz Unterschied.
- */
-export function erwarteteAnzahlImMonat(l: KLVLeistung, tageImMonat: number): number {
-  const wochen = tageImMonat / 7;
-  if (l.einheit === "m") return l.anzahl;
-  if (l.einheit === "w") return Math.round(l.anzahl * wochen);
-  if (l.einheit.startsWith("t")) return Math.round(l.anzahl * tageProWoche(l.einheit) * wochen);
-  return 0;
 }
 
 /**
