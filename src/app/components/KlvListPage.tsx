@@ -17,9 +17,9 @@
  */
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
-import { Search, X } from "lucide-react";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
 import { AuswahlDropdown } from "./ui/AuswahlDropdown";
+import { ListenGeruest } from "./ui/ListenGeruest";
 import { ansichtPfad } from "./Patient360Page";
 import { useKlvVerordnungen } from "../../lib/klv/store";
 import { wartetSeitTagen, WARTEFRIST_TAGE } from "../../lib/klv/warten";
@@ -29,6 +29,7 @@ import { getMandate, MANDAT_STICHTAG } from "../../lib/mandate/store";
 import { useKostengutsprachen } from "../../lib/mandate/verordnungen-store";
 import { kgsDecktAm, type Kostengutsprache } from "../../lib/mandate/verordnungen";
 import { isoZuAnzeige } from "../../lib/datum";
+import { leerZuletzt, datumKey } from "../../lib/sortierung";
 import type { KLVVerordnung } from "../../types/klinische-artefakte";
 
 /** Zuständige Person kommt aus dem Mandat — nicht aus `erstelltVon`. */
@@ -67,19 +68,7 @@ const SORT_LABEL: Record<SortKey, string> = {
   warten: "Wartezeit", geplant: "geplanten Stunden", zustaendig: "Zuständigem", gueltigab: "Gültig ab",
 };
 
-/** Leere Werte stehen unabhängig von der Richtung am Ende. */
-function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): number {
-  if (la && lb) return 0;
-  if (la) return 1;
-  if (lb) return -1;
-  return f * cmp();
-}
 
-function datumKey(d: string | null): string {
-  if (!d) return "";
-  const [dd, mm, yy] = d.split(".");
-  return `${yy ?? ""}${mm ?? ""}${dd ?? ""}`;
-}
 
 export function KlvListPage() {
   const navigate = useNavigate();
@@ -192,78 +181,67 @@ export function KlvListPage() {
   const inhaltRahmen = { maxWidth: TABELLE_LAYOUT.inhaltMaxPx, margin: "0 auto", width: "100%" } as const;
 
   return (
-    <div style={{ padding: "var(--space-3) var(--space-6) var(--space-6)" }}>
-      <div style={inhaltRahmen}>
-        <div className="flex items-center justify-between" style={{ gap: 16, marginBottom: "var(--space-4)" }}>
-          <h2 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>KLV</h2>
-        </div>
+    <div className="flex flex-col h-full min-h-0">
+      <style>{`
+        .klv-list-pad { padding-left: var(--mobile-page-padding); padding-right: var(--mobile-page-padding); }
+        @media (min-width: 640px) { .klv-list-pad { padding-left: var(--space-6); padding-right: var(--space-6); } }
+      `}</style>
 
-        {/* Suche und Auswahlfelder */}
-        <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
-          <div className="relative" style={{ flex: "1 1 240px", minWidth: 200 }}>
-            <Search style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", width: 14, height: 14, color: "var(--text-tertiary)" }} />
-            <input value={filter.suche} onChange={e => setSuche(e.target.value)} placeholder="Patient oder Blattnummer…"
-              className="w-full outline-none"
-              style={{ padding: "8px 10px 8px 32px", borderRadius: "var(--radius-pill)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)", fontSize: "var(--text-small)", fontFamily: "inherit" }} />
-          </div>
-          <AuswahlDropdown label="Zustand" optionen={zustandOptionen} ausgewaehlt={filter.zustaende} onToggle={toggleZustand} />
-          <AuswahlDropdown label="Zuständig" optionen={zustaendigOptionen} ausgewaehlt={filter.zustaendige} onToggle={toggleZustaendig} />
-          <label className="inline-flex items-center cursor-pointer" style={{ gap: 6, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-            <input type="checkbox" checked={filter.mitErsetzten} onChange={e => setFilter(f => ({ ...f, mitErsetzten: e.target.checked }))}
-              style={{ width: 13, height: 13, accentColor: "var(--brand-primary)", cursor: "pointer" }} />
-            einschliesslich ersetzter
-          </label>
-        </div>
+      {/* ═══ KOPF — teilt Maximalbreite und Kanten mit der Tabelle ═══ */}
+      <div className="shrink-0 klv-list-pad" style={{ paddingTop: "var(--space-4)" }}>
+        <div style={inhaltRahmen}>
+          <ListenGeruest
+          titel="KLV"
+          suche={filter.suche}
+          onSuche={setSuche}
+          suchePlatzhalter="Patient oder Blattnummer…"
+          auswahlfelder={<>
+            <AuswahlDropdown label="Zustand" optionen={zustandOptionen} ausgewaehlt={filter.zustaende} onToggle={toggleZustand} />
+            <AuswahlDropdown label="Zuständig" optionen={zustaendigOptionen} ausgewaehlt={filter.zustaendige} onToggle={toggleZustaendig} />
+          </>}
+          chips={[
+            ...chips.map(c => ({
+              id: c.id, label: c.label, anzahl: chipCounts[c.id],
+              aktiv: filter.statusChips.has(c.id), onToggle: () => toggleChip(c.id),
+            })),
+            /* Ersetzte Fassungen sind kein Filter über den Inhalt, sondern über
+               den Umfang der Sicht — als Chip in derselben Reihe, damit sie dort
+               steht, wo die Nutzerin Einschränkungen sucht. */
+            {
+              id: "mit_ersetzten", label: "Einschliesslich ersetzter",
+              anzahl: alle.filter(v => v.status === "ersetzt").length,
+              aktiv: filter.mitErsetzten,
+              onToggle: () => setFilter(f => ({ ...f, mitErsetzten: !f.mitErsetzten })),
+            },
+          ]}
+          sichtText={`${filter.mitErsetzten ? "Alle Blätter einschliesslich ersetzter" : "Alle Blätter"} · sortiert nach ${SORT_LABEL[sort.key]}`}
+          filterMarken={filterTags}
+          onFilterZuruecksetzen={resetFilter}
+        >{null}</ListenGeruest>
 
-        {/* Chips */}
-        <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
-          {chips.map(c => {
-            const aktiv = filter.statusChips.has(c.id);
-            return (
-              <button key={c.id} type="button" onClick={() => toggleChip(c.id)} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
-                style={{ gap: 6, padding: "5px 12px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: aktiv ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: aktiv ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-                {c.label}
-                <span style={{ fontVariantNumeric: "tabular-nums", color: aktiv ? "var(--brand-primary)" : "var(--text-tertiary)" }}>{chipCounts[c.id]}</span>
-              </button>
-            );
-          })}
         </div>
+      </div>
 
-        {/* Aktivzeile */}
-        <div className="flex items-center flex-wrap" style={{ gap: 6, minHeight: 24, marginBottom: "var(--space-2)" }}>
-          {filterTags.length === 0 ? (
-            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-              Alle Blätter · sortiert nach {SORT_LABEL[sort.key]}
-            </span>
-          ) : (
-            <>
-              {filterTags.map(t => (
-                <button key={t.key} type="button" onClick={t.entfernen} className="ui-fokusring inline-flex items-center cursor-pointer"
-                  style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary-light)", color: "var(--brand-primary)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", border: "none", fontFamily: "inherit" }}>
-                  {t.label}<X style={{ width: 11, height: 11 }} />
-                </button>
-              ))}
-              <button type="button" onClick={resetFilter} style={suchButton}>Filter zurücksetzen</button>
-            </>
-          )}
+      {/* ═══ TABELLE ═══ */}
+      <div className="flex-1 overflow-y-auto klv-list-pad" style={{ paddingTop: 0, paddingBottom: "var(--space-4)" }}>
+        <div style={inhaltRahmen}>
+          <DataTable<KLVVerordnung>
+            spalten={spalten}
+            zeilen={sortiert}
+            zeilenKey={v => v.id}
+            sort={sort}
+            onSort={toggleSort}
+            onZeileKlick={v => v.patientId && navigate(ansichtPfad(v.patientId, "leistungsplanungsblatt"))}
+            karteTitel={v => (
+              <div className="flex items-center justify-between" style={{ gap: 8, width: "100%", minWidth: 0 }}>
+                <span style={{ fontWeight: "var(--weight-medium)", overflowWrap: "anywhere" }}>{v.patientName}</span>
+                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>V{v.version}</span>
+              </div>
+            )}
+            fusszeile={<><span>{sortiert.length} von {basis.length} Blättern</span><span>Stand: {isoZuAnzeige("2026-07-31")}</span></>}
+            leerText="Keine Blätter mit diesen Filtern."
+          />
         </div>
-
-        <DataTable<KLVVerordnung>
-          spalten={spalten}
-          zeilen={sortiert}
-          zeilenKey={v => v.id}
-          sort={sort}
-          onSort={toggleSort}
-          onZeileKlick={v => v.patientId && navigate(ansichtPfad(v.patientId, "leistungsplanungsblatt"))}
-          karteTitel={v => (
-            <div className="flex items-center justify-between" style={{ gap: 8, width: "100%", minWidth: 0 }}>
-              <span style={{ fontWeight: "var(--weight-medium)", overflowWrap: "anywhere" }}>{v.patientName}</span>
-              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>V{v.version}</span>
-            </div>
-          )}
-          fusszeile={<><span>{sortiert.length} von {basis.length} Blättern</span><span>Stand: {isoZuAnzeige("2026-07-31")}</span></>}
-          leerText="Keine Blätter mit diesen Filtern."
-        />
       </div>
     </div>
   );

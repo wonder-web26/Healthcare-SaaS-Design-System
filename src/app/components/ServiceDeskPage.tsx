@@ -6,7 +6,9 @@ import { personLink, personArtLabel } from "../../lib/mocks/personen-aufloesung"
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
 import { AuswahlDropdown } from "./ui/AuswahlDropdown";
+import { ListenGeruest } from "./ui/ListenGeruest";
 import { isoZuAnzeige, formatTagMonat, isoZuDate } from "../../lib/datum";
+import { leerZuletzt } from "../../lib/sortierung";
 import { useCurrentRole } from "../auth";
 import { AnnaPendenzVorschlag } from "../anna/AnnaPendenzVorschlag";
 import { AnnaDemoMockModal } from "../anna/AnnaDemoMockModal";
@@ -160,13 +162,6 @@ const SORT_LABEL: Record<SortKey, string> = { kennzeichen: "Kennzeichen", art: "
 const KENN_RANK: Record<string, number> = { rot: 0, gelb: 1 }; // kein Kennzeichen = 2
 const STATUS_RANK: Record<string, number> = { offen: 0, in_bearbeitung: 1, erledigt: 2 };
 function kennRang(e: UnifiedEntry): number { const t = ableitenKennzeichen(e).typ; return t ? KENN_RANK[t] : 2; }
-/** Leere Werte stehen unabhängig von der Richtung am Ende. */
-function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): number {
-  if (la && lb) return 0;
-  if (la) return 1;
-  if (lb) return -1;
-  return f * cmp();
-}
 function sortEntries(list: UnifiedEntry[], key: SortKey, dir: "asc" | "desc"): UnifiedEntry[] {
   const f = dir === "asc" ? 1 : -1;
   const artLabel = (e: UnifiedEntry) => pendenzTypen[e.pendenzTyp]?.label || e.typLabel;
@@ -438,27 +433,23 @@ export function ServiceDeskPage() {
         <style>{`@media (min-width: 640px) { .pendenzen-header { padding-left: var(--space-6) !important; padding-right: var(--space-6) !important; } }`}</style>
         <div className="pendenzen-header" style={{ padding: "0" }}>
           {/* Titel + Primäraktion */}
-          <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
-            <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Pendenzen</h1>
-            <button
-              className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
-              style={{ gap: "var(--space-2)", padding: "10px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
-              onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"}
-              onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
-            >
-              <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neue Pendenz</span>
-            </button>
-          </div>
-
-          {/* Steuerleiste: Suche, Zugehörigkeit, Auswahlfelder */}
-          <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
-            <div className="flex items-center" style={{ flex: "1 1 220px", maxWidth: 300, gap: "var(--space-2)", padding: "7px 14px", borderRadius: 8, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
-              <Search style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
-              <input value={filter.suche} onChange={e => setSuche(e.target.value)} placeholder="Pendenzen suchen…" className="flex-1 bg-transparent outline-none" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", minWidth: 0 }} />
-              {filter.suche && <button onClick={() => setSuche("")} className="cursor-pointer shrink-0" style={{ background: "transparent", border: "none" }}><X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} /></button>}
-            </div>
-
-            <div className="inline-flex shrink-0" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
+          <ListenGeruest
+            titel="Pendenzen"
+            aktion={
+              <button
+                className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
+                style={{ gap: "var(--space-2)", padding: "10px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"}
+                onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
+              >
+                <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neue Pendenz</span>
+              </button>
+            }
+            suche={filter.suche}
+            onSuche={setSuche}
+            suchePlatzhalter="Pendenzen suchen…"
+            segment={
+              <div className="inline-flex shrink-0" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
               {SEGMENTE.map(([seg, lbl]) => {
                 const aktiv = filter.segment === seg;
                 return (
@@ -469,47 +460,19 @@ export function ServiceDeskPage() {
                 );
               })}
             </div>
-
-            <AuswahlDropdown label="Art" optionen={alleArten.map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))} ausgewaehlt={filter.arten as Set<string>} onToggle={v => toggleArt(v as PendenzTyp)} />
-            <AuswahlDropdown label="Zuständig" optionen={alleZustaendige.map(n => ({ value: n, label: n }))} ausgewaehlt={filter.zustaendige} onToggle={toggleZustaendig} />
-          </div>
-
-          {/* Status-Chips — kombinierbar (UND), Zahl aus denselben Daten */}
-          <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
-            {STATUS_CHIPS.map(chip => {
-              const aktiv = filter.statusChips.has(chip.id);
-              const n = chipCounts[chip.id];
-              return (
-                <button key={chip.id} type="button" onClick={() => toggleChip(chip.id)} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
-                  style={{ gap: 7, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: aktiv ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: aktiv ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-                  <span className="inline-flex items-center justify-center shrink-0" style={{ width: 15, height: 15, borderRadius: 4, border: aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: aktiv ? "var(--brand-primary)" : "transparent" }}>
-                    {aktiv && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}
-                  </span>
-                  {chip.label}
-                  <span style={{ fontVariantNumeric: "tabular-nums", color: aktiv ? "var(--brand-primary)" : "var(--text-tertiary)" }}>{n}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Aktivzeile */}
-          <div className="flex items-center flex-wrap" style={{ gap: 6, minHeight: 24, marginBottom: "var(--space-2)" }}>
-            {filterTags.length === 0 ? (
-              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-                {SEGMENTE.find(([s]) => s === filter.segment)![1]} · sortiert nach {SORT_LABEL[sort.key]}
-              </span>
-            ) : (
-              <>
-                {filterTags.map(t => (
-                  <button key={t.key} type="button" onClick={t.entfernen} className="ui-fokusring inline-flex items-center cursor-pointer"
-                    style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary-light)", color: "var(--brand-primary)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", border: "none", fontFamily: "inherit" }}>
-                    {t.label} <X style={{ width: 10, height: 10 }} />
-                  </button>
-                ))}
-                <button type="button" onClick={resetFilter} className="cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", padding: "3px 6px", fontFamily: "inherit" }}>Filter zurücksetzen</button>
-              </>
-            )}
-          </div>
+            }
+            auswahlfelder={<>
+              <AuswahlDropdown label="Art" optionen={alleArten.map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))} ausgewaehlt={filter.arten as Set<string>} onToggle={v => toggleArt(v as PendenzTyp)} />
+              <AuswahlDropdown label="Zuständig" optionen={alleZustaendige.map(n => ({ value: n, label: n }))} ausgewaehlt={filter.zustaendige} onToggle={toggleZustaendig} />
+            </>}
+            chips={STATUS_CHIPS.map(chip => ({
+              id: chip.id, label: chip.label, anzahl: chipCounts[chip.id],
+              aktiv: filter.statusChips.has(chip.id), onToggle: () => toggleChip(chip.id),
+            }))}
+            sichtText={`${SEGMENTE.find(([sg]) => sg === filter.segment)![1]} · sortiert nach ${SORT_LABEL[sort.key]}`}
+            filterMarken={filterTags}
+            onFilterZuruecksetzen={resetFilter}
+          >{null}</ListenGeruest>
         </div>
       </div>
 
