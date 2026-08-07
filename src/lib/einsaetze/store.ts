@@ -20,6 +20,7 @@
 import { useSyncExternalStore } from "react";
 import type { Einsatz, ErbrachteLeistung, EinsatzUrheber } from "./einsaetze";
 import { istUnveraenderbar } from "./einsaetze";
+import { istMonatAbgeschlossen } from "../abschluss/store";
 
 /** Bezugsmonat der Mock-Demo: Juli 2026. Startwert der Zeitraumschaltung. */
 export const EINSATZ_BEZUGSMONAT = new Date(2026, 6, 1);
@@ -315,10 +316,21 @@ export function getLeistungen(einsatzId: string): ErbrachteLeistung[] {
   return leistungen.filter(l => l.einsatzId === einsatzId);
 }
 
+/**
+ * Zwei Sperren, ein Tor.
+ *
+ * Die Prüfung sperrt den einzelnen Einsatz, der Monatsabschluss sperrt alles
+ * eines Monats — auch das, was noch nicht geprüft war. Beide werden hier
+ * abgefragt, damit kein Schreibweg sie einzeln vergessen kann.
+ */
+function gesperrt(e: Einsatz): boolean {
+  return istMonatAbgeschlossen(e.patientId, e.datum);
+}
+
 /** Einsatz samt Unveränderbarkeitsprüfung; null heisst „nicht schreiben". */
 function schreibbar(id: string): Einsatz | null {
   const e = einsaetze.find(x => x.id === id);
-  if (!e || istUnveraenderbar(e)) return null;
+  if (!e || istUnveraenderbar(e) || gesperrt(e)) return null;
   return e;
 }
 
@@ -367,7 +379,10 @@ export function leistungAendern(id: string, felder: Partial<Omit<ErbrachteLeistu
  */
 export function berichtSchreiben(einsatzId: string, text: string, von: string, jetzt: string): void {
   const e = einsaetze.find(x => x.id === einsatzId);
-  if (!e || !text.trim()) return;
+  /* Der Prüfzustand hindert hier bewusst nicht — der Monatsabschluss schon.
+     Nach der Übergabe an den Versicherer ist auch die Beschreibung Teil
+     dessen, was abgerechnet wurde. */
+  if (!e || !text.trim() || gesperrt(e)) return;
   const fassung = { text: text.trim(), von, am: jetzt };
   einsaetze = einsaetze.map(x =>
     (x.id === einsatzId ? { ...x, berichtFassungen: [...x.berichtFassungen, fassung] } : x));
@@ -380,7 +395,10 @@ export function berichtSchreiben(einsatzId: string, text: string, von: string, j
  */
 export function nachtragAnlegen(ursprungId: string): Einsatz | null {
   const alt = einsaetze.find(e => e.id === ursprungId);
-  if (!alt) return null;
+  /* Ein Nachtrag zu einem geprüften Einsatz ist erlaubt — zu einem
+     abgeschlossenen Monat nicht: er würde die abgerechnete Menge
+     nachträglich verändern. */
+  if (!alt || gesperrt(alt)) return null;
   const neu: Einsatz = {
     ...alt,
     id: `${alt.id}-N${einsaetze.filter(e => e.korrigiert === ursprungId).length + 1}`,

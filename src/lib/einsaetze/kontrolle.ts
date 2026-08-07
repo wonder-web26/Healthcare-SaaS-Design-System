@@ -21,6 +21,7 @@ import {
   type MinutenJeArt, type Monatsabrechnung,
 } from "../abrechnung/leistungsarten";
 import type { TarifKategorie } from "../stammdaten/pflegetarife";
+import { quartalsMonate } from "../abschluss/abschluss";
 
 /** Die Bestände, aus denen sich die Kennzahlen speisen. */
 export interface KontrollQuellen {
@@ -50,6 +51,14 @@ export interface MonatsKennzahlen {
   ohneEinsatz: number;
   mitBericht: number;
   mitEinsatz: number;
+  /**
+   * Tage mit Abweichung, an denen keine Position einen Grund trägt.
+   *
+   * Eine Abweichung mit Grund ist dokumentiert und damit abschlussfähig; eine
+   * ohne Grund ist eine offene Frage — beim Controlling liesse sich später
+   * nicht mehr sagen, ob vergessen oder nicht nötig.
+   */
+  abweichungOhneGrund: number;
   /** Wer im Monat erbracht hat, ohne Wiederholung, in Reihenfolge des Auftretens. */
   urheber: EinsatzUrheber[];
 }
@@ -131,11 +140,29 @@ export function monatsKennzahlen(
     einsaetzeGesamt: alleEinsaetze.length,
     offen: alleEinsaetze.filter(e => e.pruefzustand !== "geprueft").length,
     abweichungsTage: tage.filter(t => !t.fehlt && t.abweichung !== 0 && t.einsaetze.length > 0).length,
+    abweichungOhneGrund: tage.filter(t =>
+      !t.fehlt && t.abweichung !== 0 && t.einsaetze.length > 0
+      && !t.einsaetze.some(e => leistungenVon(e.id).some(l => l.grund.trim() !== ""))).length,
     ohneEinsatz: muster.tage.length,
     mitBericht: tage.filter(t => t.hatBericht).length,
     mitEinsatz: tage.filter(t => t.einsaetze.length > 0).length,
     urheber,
   };
+}
+
+/**
+ * Verrechenbare Minuten des Quartals, in dem der Monat liegt.
+ *
+ * Über 60 Pflichtleistungsstunden je Quartal kann der Versicherer eine
+ * Leistungsprüfung veranlassen. Gerechnet wird über die verrechenbaren
+ * Minuten, nicht die gestempelten: geprüft wird, was in Rechnung gestellt
+ * wurde.
+ */
+export function quartalMinuten(
+  patientId: string, jahr: number, monat: number, q: KontrollQuellen,
+): number {
+  return quartalsMonate(monat)
+    .reduce((s, m) => s + monatsKennzahlen(patientId, jahr, m, q).abrechnung.abrechenbar, 0);
 }
 
 /**

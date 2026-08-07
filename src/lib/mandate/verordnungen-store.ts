@@ -42,7 +42,13 @@ const VERORDNUNG_SEED: VerordnungSeed[] = [
   { mandatId: "MAN-2026-1006", aerztin: "Dr. med. Marc Wyss", beginn: "22.02.2026", bis: "21.02.2027" },
   { mandatId: "MAN-2026-1007", aerztin: "Dr. med. Ursula Bachmann", beginn: "01.11.2025", bis: "31.10.2026" },
   { mandatId: "MAN-2026-1008", aerztin: "Dr. med. Peter Frei", beginn: "05.04.2025", bis: "04.04.2026" },
-  { mandatId: "MAN-2026-1009", aerztin: "Dr. med. Marc Wyss", beginn: "18.12.2025", bis: "17.12.2026" },
+  /* Zimmermann: die Meldung liegt bewusst etwas über dem, was das Blatt
+     KLV-2026-033 plant (190 Min./Woche, rund 841 im Monat). Die Bedarfsmeldung
+     ist eine Prognose, kein Kontingent — eine Ärztin, die knapp meldet, muss
+     nachmelden, also meldet sie mit Reserve. So zeigt der Abschluss beide
+     Lagen: Steiner über der Meldung, Zimmermann im Rahmen. */
+  { mandatId: "MAN-2026-1009", aerztin: "Dr. med. Marc Wyss", beginn: "18.12.2025", bis: "17.12.2026",
+    gemeldet: { a: "0", b: "0", c: "960" } },
   { mandatId: "MAN-2026-1010", aerztin: "Dr. med. Peter Frei", beginn: "10.10.2025", bis: "09.10.2026" },
 ];
 

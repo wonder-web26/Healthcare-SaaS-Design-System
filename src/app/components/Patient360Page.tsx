@@ -83,6 +83,7 @@ import {
   Trash2,
   HeartPulse,
   ChevronLeft,
+  Lock,
 } from "lucide-react";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import {
@@ -116,6 +117,7 @@ import {
 import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung } from "../../types/klinische-artefakte";
 import { TAKT_MINUTEN, MINDESTWERT_EINSATZ, type Monatsabrechnung } from "../../lib/abrechnung/leistungsarten";
 import { monatsKennzahlen } from "../../lib/einsaetze/kontrolle";
+import { useAbschluesse } from "../../lib/abschluss/store";
 import type { TarifKategorie } from "../../lib/stammdaten/pflegetarife";
 import { pruefzustandLabel } from "../../lib/stammdaten/einsatz";
 import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
@@ -2964,6 +2966,11 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
     klvs, mandate: alleMandate, verordnungen: alleVerordnungen,
   });
   const { tage, muster, abrechnung, gemeldet, verordnung: gueltigeVerordnung, sollProTag } = k;
+  /* Ist der Monat abgeschlossen, sind alle Schreibwege gesperrt — das steht
+     im Kopf, damit niemand vergeblich auf „Bestätigen" drückt. */
+  const alleAbschluesse = useAbschluesse();
+  const abgeschlossen = alleAbschluesse.find(a =>
+    a.patientId === patient.id && a.jahr === zeitraum.jahr && a.monat === zeitraum.monat) ?? null;
   const bilanz = abweichungNachRichtung(tage);
 
   const positionen = blatt?.leistungspositionen ?? [];
@@ -3057,12 +3064,22 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
               <ChevronRight style={{ width: 16, height: 16 }} />
             </button>
           </div>
-          {blatt ? (
-            <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-              Tagessoll {min(sollProTag)} · Blatt {blatt.id} · V{blatt.version}
+          <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+            {blatt ? `Tagessoll ${min(sollProTag)} · Blatt ${blatt.id} · V${blatt.version}` : "Kein aktives Blatt"}
+          </span>
+          {/* Der Abschluss geschieht auf dem Monatsabschluss über alle
+              Patienten — dort steht, ob der Monat überhaupt reif ist, und
+              dort wird bestätigt. Hier führt nur der Weg dorthin. */}
+          {abgeschlossen ? (
+            <span className="inline-flex items-center" style={{ gap: 6, padding: "3px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-success-bg)", color: "var(--status-success-text)" }}>
+              <Lock style={{ width: 11, height: 11 }} />
+              Abgeschlossen am {abgeschlossen.zeitpunkt} durch {abgeschlossen.person}
             </span>
           ) : (
-            <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Kein aktives Blatt</span>
+            <button type="button" onClick={() => nav(`/abschluss?monat=${zeitraum.jahr}-${String(zeitraum.monat + 1).padStart(2, "0")}`)}
+              className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
+              Monat abschliessen
+            </button>
           )}
         </div>
       </div>
@@ -3096,6 +3113,7 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
           der Vergleich mit dem Kalender darüber soll bestehen bleiben. */}
       {gewaehlt && (
         <Tagesansicht
+          gesperrt={abgeschlossen !== null}
           tag={gewaehlt} monat={zeitraum.monat}
           positionVon={positionVon} leistungenVon={leistungenVon}
           hatSoll={!!blatt} istTaeglichePosition={istTaeglichePosition}
@@ -3113,6 +3131,7 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
           handeln will, liest es zweimal und scrollt dann. Jetzt steht die
           Einordnung über den Gruppen, in denen gehandelt wird. */}
       <ZuPruefen
+        gesperrt={abgeschlossen !== null}
         tage={tage} monat={zeitraum.monat} offen={offeneImMonat.length}
         einordnung={einordnung} erzeugtAm={erzeugtAm}
         gewaehlt={gewaehlterTag} leistungenVon={leistungenVon}
@@ -3345,11 +3364,13 @@ function LeisteZeile({ marke, text }: { marke: string; text: string }) {
 type PruefGruppe = "fehlt" | "abweichung" | "stimmig";
 
 function ZuPruefen({
-  tage, monat, offen, einordnung, erzeugtAm, gewaehlt, leistungenVon,
+  tage, monat, offen, einordnung, erzeugtAm, gewaehlt, leistungenVon, gesperrt,
   onOeffnen, onBestaetigen, onRueckfrage, onAlleStimmigen, onFehlende,
   onNeuErzeugen, onStimmtNicht,
 }: {
   tage: Monatstag[]; monat: number; offen: number;
+  /** Monat abgeschlossen — dann wird keine Schreibaktion mehr angeboten. */
+  gesperrt: boolean;
   einordnung: string[]; erzeugtAm: string;
   gewaehlt: string | null;
   leistungenVon: (einsatzId: string) => ErbrachteLeistung[];
@@ -3384,7 +3405,7 @@ function ZuPruefen({
         <CheckCircle2 style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
         <h3 style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", margin: 0 }}>Zu prüfen</h3>
         <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
-          {offen} {offen === 1 ? "offener Einsatz" : "offene Einsätze"}
+          {gesperrt ? "Monat abgeschlossen · gesperrt" : `${offen} ${offen === 1 ? "offener Einsatz" : "offene Einsätze"}`}
         </span>
       </div>
 
@@ -3416,10 +3437,12 @@ function ZuPruefen({
               {anzahlWort(fehlende.length)} {fehlende.length === 1 ? "Tag" : "Tage"} ohne Erfassung, obwohl ein Tagessoll besteht
               {" · "}−{Math.round(fehlende.reduce((s, t) => s + t.soll, 0))} Min.
             </span>
-            <div className="flex items-center" style={{ gap: 12, marginLeft: "auto" }}>
-              <ZeilenAktion text="Nachtragen" betont onClick={() => onFehlende("nachtragen")} />
-              <ZeilenAktion text="Rückfrage" onClick={() => onFehlende("rueckfrage")} />
-            </div>
+            {!gesperrt && (
+              <div className="flex items-center" style={{ gap: 12, marginLeft: "auto" }}>
+                <ZeilenAktion text="Nachtragen" betont onClick={() => onFehlende("nachtragen")} />
+                <ZeilenAktion text="Rückfrage" onClick={() => onFehlende("rueckfrage")} />
+              </div>
+            )}
           </div>
         </GruppenKopf>
       )}
@@ -3430,7 +3453,7 @@ function ZuPruefen({
             <PruefZeile key={t.datum} tag={t} monat={monat} gewaehlt={t.datum === gewaehlt}
               leistungenVon={leistungenVon} onOeffnen={onOeffnen}>
               <ZeilenAktion text="Öffnen" betont onClick={() => onOeffnen(t.datum)} />
-              {t.offen && t.einsaetze[0] && (
+              {!gesperrt && t.offen && t.einsaetze[0] && (
                 <>
                   <ZeilenAktion text="Bestätigen" onClick={() => onBestaetigen(t.einsaetze[0].id)} />
                   <ZeilenAktion text="Rückfrage" onClick={() => onRueckfrage(t.einsaetze[0])} />
@@ -3443,7 +3466,7 @@ function ZuPruefen({
 
       {stimmige.length > 0 && (
         <GruppenKopf sorte="stimmig" titel="Stimmig" anzahl={stimmige.length}
-          aktion={<ZeilenAktion text="Alle bestätigen" betont onClick={onAlleStimmigen} />}>
+          aktion={gesperrt ? undefined : <ZeilenAktion text="Alle bestätigen" betont onClick={onAlleStimmigen} />}>
           <div className="flex items-center flex-wrap" style={{ gap: 10, padding: "9px 18px" }}>
             <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", minWidth: 132 }}>
               {stimmige.length} {stimmige.length === 1 ? "Tag" : "Tage"} im {MONATE[monat]}
@@ -3681,11 +3704,13 @@ function Tageskachel({ tag: t, monat, hatSoll, gewaehlt, onWaehlen }: {
  * der Bericht braucht eine Zeilenlänge, in der er lesbar bleibt.
  */
 function Tagesansicht({
-  tag, monat, positionVon, leistungenVon, hatSoll, istTaeglichePosition,
+  tag, monat, positionVon, leistungenVon, hatSoll, istTaeglichePosition, gesperrt,
   vorheriger, naechster, onBlaettern, onSchliessen,
   onBestaetigen, onRueckfrage, onBericht,
 }: {
   tag: Monatstag; monat: number;
+  /** Monat abgeschlossen — dann wird nichts mehr angeboten, was nicht ginge. */
+  gesperrt: boolean;
   positionVon: (id: string) => KLVLeistung | null;
   leistungenVon: (id: string) => ErbrachteLeistung[];
   hatSoll: boolean;
@@ -3849,7 +3874,7 @@ function Tagesansicht({
 
           {/* ── Rechts: der Pflegebericht in einer Lesespalte ── */}
           <div style={{ flex: "1 1 0", minWidth: 0, padding: "14px 16px", borderLeft: "var(--border-thin) solid var(--border-default)", background: "var(--bg-secondary)" }}>
-            <Berichtsspalte einsatz={einsatz} onBericht={onBericht} />
+            <Berichtsspalte einsatz={einsatz} gesperrt={gesperrt} onBericht={onBericht} />
           </div>
         </div>
       )}
@@ -3857,7 +3882,12 @@ function Tagesansicht({
       {/* ── Fusszeile ── */}
       {einsatz && (
         <div className="flex items-center flex-wrap" style={{ gap: 14, padding: "10px 16px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
-          {geprueft ? (
+          {gesperrt ? (
+            <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+              <Lock style={{ width: 11, height: 11 }} />
+              Monat abgeschlossen · nichts an diesem Tag ist mehr änderbar
+            </span>
+          ) : geprueft ? (
             <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
               Geprüft · Leistungsdaten nicht mehr änderbar. Der Pflegebericht bleibt es.
             </span>
@@ -3883,8 +3913,9 @@ function Tagesansicht({
  * verliert das Auge beim Zeilenwechsel den Anschluss; darunter zerfällt ein
  * Absatz in Fetzen.
  */
-function Berichtsspalte({ einsatz, onBericht }: {
+function Berichtsspalte({ einsatz, gesperrt, onBericht }: {
   einsatz: Einsatz;
+  gesperrt: boolean;
   onBericht: (einsatzId: string, text: string) => void;
 }) {
   const aktuell = aktuelleFassung(einsatz);
@@ -3941,10 +3972,12 @@ function Berichtsspalte({ einsatz, onBericht }: {
             {einsatz.berichtFassungen[0].von} · {einsatz.berichtFassungen[0].am}
           </span>
         )}
-        <button type="button" onClick={oeffnen} className="ui-fokusring cursor-pointer"
-          style={{ marginLeft: "auto", background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
-          {aktuell ? "Ändern" : "Bericht erfassen"}
-        </button>
+        {!gesperrt && (
+          <button type="button" onClick={oeffnen} className="ui-fokusring cursor-pointer"
+            style={{ marginLeft: "auto", background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            {aktuell ? "Ändern" : "Bericht erfassen"}
+          </button>
+        )}
       </div>
 
       {aktuell ? (

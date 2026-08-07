@@ -28,7 +28,7 @@ const navItems = [
   { id: "klv", label: "KLV", icon: ClipboardList },
   /* Die Prüfung der erfassten Einsätze über alle Patienten — der Bildschirm
      über der Pflegekontrolle im Dossier. */
-  { id: "kontrolle", label: "Kontrolle", icon: CalendarCheck },
+  { id: "abschluss", label: "Abschluss", icon: CalendarCheck },
   { id: "zuteilung", label: "Zuteilung", icon: GitBranch },
   { id: "servicedesk", label: "Pendenzen", icon: Headphones, badge: myOpenCount },
 ];
