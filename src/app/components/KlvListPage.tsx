@@ -46,7 +46,7 @@ function hatGueltigeKgs(v: KLVVerordnung, alle: Kostengutsprache[]): boolean {
 }
 
 /* ── Status-Chips ──────────────────────────────────────────────────────────── */
-type StatusChipId = "bei_arzt" | "bei_kasse" | "im_entwurf" | "ohne_kgs" | "ueber_bewilligung";
+type StatusChipId = "wartet" | "ohne_kgs" | "ueber_bewilligung";
 
 /* ── Filterzustand ─────────────────────────────────────────────────────────── */
 interface FilterZustand {
@@ -87,9 +87,12 @@ export function KlvListPage() {
   const resetFilter = () => setFilter(f => ({ ...LEERER_FILTER, suche: f.suche }));
 
   const chips: { id: StatusChipId; label: string; praedikat: (v: KLVVerordnung) => boolean }[] = useMemo(() => [
-    { id: "bei_arzt", label: "Bei der Ärztin", praedikat: v => v.status === "an_arzt" },
-    { id: "bei_kasse", label: "Bei der Kasse", praedikat: v => v.status === "an_kasse" },
-    { id: "im_entwurf", label: "Im Entwurf", praedikat: v => v.status === "entwurf" },
+    /* „Wartet auf Antwort" fasst die beiden Zustände zusammen, in denen das
+       Blatt ausserhalb des Hauses liegt. Einzelne Zustände sucht man im
+       Auswahlfeld „Zustand" — ein Chip, der einen Wert eines Auswahlfelds
+       wiederholt, sagt nichts Eigenes. Chips tragen Lagen, die Aufmerksamkeit
+       verlangen; Auswahlfelder tragen Merkmale. */
+    { id: "wartet", label: "Wartet auf Antwort", praedikat: v => v.status === "an_arzt" || v.status === "an_kasse" },
     { id: "ohne_kgs", label: "Ohne Kostengutsprache", praedikat: v => !hatGueltigeKgs(v, kgs) },
     /* Blätter ohne Kostengutsprache zählen NICHT dazu: für sie sagt der Chip
        daneben schon, was fehlt. Hier geht es um die Blätter, bei denen eine
@@ -209,7 +212,7 @@ export function KlvListPage() {
       <div className="shrink-0 klv-list-pad" style={{ paddingTop: "var(--space-4)" }}>
         <div style={inhaltRahmen}>
           <ListenGeruest
-          titel="KLV"
+          titel="Leistungsplanungsblätter"
           suche={filter.suche}
           onSuche={setSuche}
           suchePlatzhalter="Patient oder Blattnummer…"
