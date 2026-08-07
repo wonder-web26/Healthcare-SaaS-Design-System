@@ -52,12 +52,15 @@ const verordnungenSeed: Verordnung[] = VERORDNUNG_SEED.map((v, i) => ({
 const leer = { bewilligteMinutenProTag: "", bewilligteEinsatztage: "", kuerzungsgrund: "" };
 
 const kostengutsprachenSeed: Kostengutsprache[] = [
-  /* Normalfall — bewilligt und laufend. Steiner, MAN-2026-1001. */
+  /* Normalfall — bewilligt und laufend. Steiner, MAN-2026-1001.
+     Die bewilligte Menge liegt bewusst unter dem, was sein aktives Blatt
+     plant (326 Min./Woche): so zeigt der Abgleich den Fall, für den er da
+     ist — die Spitex plant mehr, als die Kasse zahlt. */
   {
     id: "KGS-2026-3001", mandatId: "MAN-2026-1001",
     eingereichtAm: "05.01.2026", entscheidAm: "14.01.2026", entscheidart: "bewilligt",
     gueltigAb: "12.01.2026", gueltigBis: "31.12.2026",
-    bewilligteMinutenProWoche: "600", bewilligteMinutenProTag: "120",
+    bewilligteMinutenProWoche: "300", bewilligteMinutenProTag: "60",
     bewilligteEinsatztage: "5", kuerzungsgrund: "",
   },
 

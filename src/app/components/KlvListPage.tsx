@@ -28,6 +28,7 @@ import { berechneSummen } from "../../lib/klv/berechnung";
 import { getMandate, MANDAT_STICHTAG } from "../../lib/mandate/store";
 import { useKostengutsprachen } from "../../lib/mandate/verordnungen-store";
 import { kgsDecktAm, type Kostengutsprache } from "../../lib/mandate/verordnungen";
+import { abgleichen, ueberBewilligung, stunden } from "../../lib/klv/abgleich";
 import { isoZuAnzeige } from "../../lib/datum";
 import { leerZuletzt, datumKey } from "../../lib/sortierung";
 import type { KLVVerordnung } from "../../types/klinische-artefakte";
@@ -45,7 +46,7 @@ function hatGueltigeKgs(v: KLVVerordnung, alle: Kostengutsprache[]): boolean {
 }
 
 /* ── Status-Chips ──────────────────────────────────────────────────────────── */
-type StatusChipId = "bei_arzt" | "bei_kasse" | "im_entwurf" | "ohne_kgs";
+type StatusChipId = "bei_arzt" | "bei_kasse" | "im_entwurf" | "ohne_kgs" | "ueber_bewilligung";
 
 /* ── Filterzustand ─────────────────────────────────────────────────────────── */
 interface FilterZustand {
@@ -62,9 +63,9 @@ const LEERER_FILTER: FilterZustand = {
 };
 
 /* ── Sortierung ────────────────────────────────────────────────────────────── */
-type SortKey = "patient" | "blatt" | "art" | "zustand" | "warten" | "geplant" | "zustaendig" | "gueltigab";
+type SortKey = "patient" | "blatt" | "art" | "zustand" | "warten" | "geplant" | "bewilligt" | "zustaendig" | "gueltigab";
 const SORT_LABEL: Record<SortKey, string> = {
-  patient: "Patient", blatt: "Blatt", art: "Art", zustand: "Zustand",
+  patient: "Patient", blatt: "Blatt", art: "Art", zustand: "Zustand", bewilligt: "bewilligter Menge",
   warten: "Wartezeit", geplant: "geplanten Stunden", zustaendig: "Zuständigem", gueltigab: "Gültig ab",
 };
 
@@ -90,6 +91,10 @@ export function KlvListPage() {
     { id: "bei_kasse", label: "Bei der Kasse", praedikat: v => v.status === "an_kasse" },
     { id: "im_entwurf", label: "Im Entwurf", praedikat: v => v.status === "entwurf" },
     { id: "ohne_kgs", label: "Ohne Kostengutsprache", praedikat: v => !hatGueltigeKgs(v, kgs) },
+    /* Blätter ohne Kostengutsprache zählen NICHT dazu: für sie sagt der Chip
+       daneben schon, was fehlt. Hier geht es um die Blätter, bei denen eine
+       Zusicherung vorliegt und trotzdem mehr geplant ist. */
+    { id: "ueber_bewilligung", label: "Über der Bewilligung", praedikat: v => ueberBewilligung(v, kgs, MANDAT_STICHTAG) },
   ], [kgs]);
 
   /* Ersetzte Blätter fehlen in der Vorgabesicht — sie sind abgelöste Fassungen
@@ -130,6 +135,12 @@ export function KlvListPage() {
         // Blätter ohne Wartezeit stehen in BEIDEN Richtungen zuletzt.
         case "warten": return leerZuletzt(tage(a) === null, tage(b) === null, f, () => tage(a)! - tage(b)!);
         case "geplant": return f * (berechneSummen(a.leistungspositionen).total - berechneSummen(b.leistungspositionen).total);
+        // Blätter ohne bewilligte Menge stehen in beiden Richtungen zuletzt.
+        case "bewilligt": {
+          const ba = abgleichen(a, kgs, MANDAT_STICHTAG).bewilligt;
+          const bb = abgleichen(b, kgs, MANDAT_STICHTAG).bewilligt;
+          return leerZuletzt(ba === null, bb === null, f, () => ba! - bb!);
+        }
         case "zustaendig": return leerZuletzt(!zustaendigePerson(a), !zustaendigePerson(b), f, () => zustaendigePerson(a).localeCompare(zustaendigePerson(b), "de"));
         case "gueltigab": return leerZuletzt(!a.beginnDatum, !b.beginnDatum, f, () => datumKey(a.beginnDatum).localeCompare(datumKey(b.beginnDatum)));
         default: return 0;
@@ -165,6 +176,13 @@ export function KlvListPage() {
       } },
     { id: "geplant", label: "Geplant", anteil: 9, minCh: 10, align: "right", sortierbar: true,
       render: v => <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", color: "var(--text-primary)" }}>{berechneSummen(v.leistungspositionen).total.toFixed(2)} h/Wo.</span> },
+    { id: "bewilligt", label: "Bewilligt", anteil: 9, minCh: 10, align: "right", sortierbar: true,
+      render: v => {
+        const a = abgleichen(v, kgs, MANDAT_STICHTAG);
+        // Leer, wo keine gültige Kostengutsprache besteht — keine Null.
+        if (a.bewilligt === null) return null;
+        return <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", color: a.lage === "ueber" ? "var(--status-warning-text)" : "var(--text-primary)" }}>{stunden(a.bewilligt)}</span>;
+      } },
     { id: "zustaendig", label: "Zuständig", anteil: 12, minCh: 15, align: "left", sortierbar: true, ausblendenUnter: "eng",
       render: v => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{zustaendigePerson(v)}</span> },
     { id: "gueltigab", label: "Gültig ab", anteil: 10, minCh: 12, align: "left", sortierbar: true,

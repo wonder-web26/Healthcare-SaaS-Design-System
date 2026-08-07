@@ -101,6 +101,7 @@ import {
   statusWechseln, neueVersionErstellen, istGesperrt, sperrGrund,
 } from "../../lib/klv/store";
 import { wartetSeitTagen } from "../../lib/klv/warten";
+import { abgleichen, stunden } from "../../lib/klv/abgleich";
 import { getArtefaktContainer, type KLVVerordnung, type KLVStatus } from "../../types/klinische-artefakte";
 import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
 import { hProWoche, berechneSummen, einheitLabel } from "../../lib/klv/berechnung";
@@ -3491,6 +3492,59 @@ function LpbKopf({ v, onNeueVersion }: { v: KLVVerordnung; onNeueVersion: () => 
   );
 }
 
+/* ══════════════════════════════════════════
+   Abgleich geplant gegen bewilligt.
+
+   Das Blatt wird bei einer Kürzung NICHT angepasst — die Differenz bleibt
+   stehen und sichtbar. Wer anpasst, erzeugt eine neue Version.
+   ══════════════════════════════════════════ */
+function LpbAbgleich({ v }: { v: KLVVerordnung }) {
+  const kgs = useKostengutsprachen();
+  const a = abgleichen(v, kgs, MANDAT_STICHTAG);
+
+  const zeile = (label: string, wert: string, betont = false, farbe?: string) => (
+    <div className="flex items-center justify-between" style={{ padding: "6px 0" }}>
+      <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{label}</span>
+      <span style={{ fontSize: "var(--text-small)", fontWeight: betont ? "var(--weight-medium)" : "var(--weight-regular)", fontVariantNumeric: "tabular-nums", color: farbe ?? "var(--text-primary)" }}>{wert}</span>
+    </div>
+  );
+
+  return (
+    <PSectionCard title="Geplant gegen bewilligt" icon={Shield}>
+      {a.lage === "keine" || a.lage === "abgelaufen" ? (
+        <>
+          {zeile("Geplant", stunden(a.geplant), true)}
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 8, maxWidth: 560 }}>
+            {a.lage === "abgelaufen"
+              ? `Die Kostengutsprache dieses Mandats war bis ${a.abgelaufenAm} gültig. Ohne gültige Zusicherung gibt es keine bewilligte Menge — verglichen wird deshalb nichts.`
+              : "Für dieses Mandat besteht keine gültige Kostengutsprache mit bewilligter Menge. Verglichen wird deshalb nichts."}
+          </p>
+        </>
+      ) : (
+        <>
+          {zeile("Geplant", stunden(a.geplant), true)}
+          {zeile("Bewilligt", stunden(a.bewilligt!), true)}
+          <div style={{ borderTop: "var(--border-thin) solid var(--border-default)", marginTop: 4 }} />
+          {zeile(
+            "Differenz",
+            `${a.differenz! >= 0 ? "+" : "−"}${Math.abs(a.differenz!).toFixed(2)} h/Wo.`,
+            true,
+            a.lage === "ueber" ? "var(--status-warning-text)" : "var(--text-primary)",
+          )}
+          {a.lage === "ueber" && (
+            <div className="flex items-start" style={{ gap: 8, marginTop: 8, padding: "10px 12px", borderRadius: 10, background: "var(--status-warning-bg)" }}>
+              <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
+              <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+                Das Blatt plant {Math.abs(a.differenz!).toFixed(2)} h/Wo. mehr, als die Kasse bewilligt hat. Diese Zeit zahlt niemand. Das Blatt wird deshalb nicht angepasst — wer es anpasst, erzeugt eine neue Version.
+              </span>
+            </div>
+          )}
+        </>
+      )}
+    </PSectionCard>
+  );
+}
+
 function TabKLV({ patientId }: { patientId: string }) {
   const navigate = useNavigate();
   const klvs = useKlvVerordnungen().filter(k => k.patientId === patientId);
@@ -3634,6 +3688,7 @@ function TabKLV({ patientId }: { patientId: string }) {
             const neu = neueVersionErstellen(current.id, "Maria Keller", jetztAnzeige());
             if (neu) toast(`Version ${neu.version} als Entwurf erstellt`);
           }} />
+          <LpbAbgleich v={current} />
           {current.beginnDatum && <div className="flex flex-wrap" style={{ gap: 8, marginBottom: 12, fontSize: "var(--text-small)" }}>
             <span style={{ padding: "6px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius-card)" }}>Beginn: <b>{current.beginnDatum}</b></span>
             {current.endDatum && <span style={{ padding: "6px 12px", background: daysUntil !== null && daysUntil < 30 ? "var(--status-warning-bg)" : "var(--bg-secondary)", borderRadius: "var(--radius-card)", color: daysUntil !== null && daysUntil < 30 ? "var(--status-warning-text)" : "var(--text-primary)" }}>Ende: <b>{current.endDatum}</b>{daysUntil !== null && daysUntil < 30 && ` (${daysUntil < 0 ? "abgelaufen" : `${daysUntil}d`})`}</span>}
