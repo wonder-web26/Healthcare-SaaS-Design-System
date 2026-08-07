@@ -104,18 +104,23 @@ import {
 import { wartetSeitTagen } from "../../lib/klv/warten";
 import { abgleichen, stunden } from "../../lib/klv/abgleich";
 import {
-  monatAufteilen, abweichungNachRichtung, fehlendeTageMuster,
-  einsatzMinuten, hatAbweichung, WOCHENTAGE, WOCHENTAGE_LANG, MONATE,
+  monatAufteilen, abweichungNachRichtung, fehlendeTageMuster, periodischeBilanz,
+  aktuelleFassung, fruehereFassungen,
+  hatAbweichung, WOCHENTAGE, WOCHENTAGE_LANG, MONATE,
   type Einsatz, type EinsatzUrheber, type ErbrachteLeistung, type Monatstag,
+  type Berichtfassung,
 } from "../../lib/einsaetze/einsaetze";
 import {
-  useEinsaetze, useErbrachteLeistungen, einsatzBestaetigen, einsatzRueckfrage,
+  useEinsaetze, useErbrachteLeistungen, einsatzBestaetigen, einsatzRueckfrage, berichtSchreiben,
   EINSATZ_BEZUGSMONAT,
 } from "../../lib/einsaetze/store";
 import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung } from "../../types/klinische-artefakte";
 import { pruefzustandLabel } from "../../lib/stammdaten/einsatz";
 import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
-import { hProWoche, berechneSummen, einheitLabel } from "../../lib/klv/berechnung";
+import {
+  hProWoche, berechneSummen, einheitLabel,
+  istTaeglich, istImZeitraum, tagessollMinuten, erwarteteAnzahlImMonat, haeufigkeitText,
+} from "../../lib/klv/berechnung";
 import { toast } from "sonner";
 import { useRecording } from "../recording/RecordingContext";
 import { getPersonByPatientId } from "../../lib/interrai/store";
@@ -2894,6 +2899,11 @@ function anzahlWort(n: number): string {
   return n < ANZAHL_WORT.length ? ANZAHL_WORT[n] : String(n);
 }
 
+/** Ersten Buchstaben gross — für Zahlwörter am Satzanfang. */
+function grossErst(t: string): string {
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 /** Dativ mit Nomen: „an einem Tag" / „an drei Tagen". */
 function anTagen(n: number): string {
   return n === 1 ? "an einem Tag" : `an ${anzahlWort(n)} Tagen`;
@@ -2903,6 +2913,10 @@ function anTagen(n: number): string {
 function davon(n: number): string {
   return n === 1 ? "einer" : anzahlWort(n);
 }
+
+/* Wer im Cockpit angemeldet ist. Dieselbe Person wie in den übrigen
+   Schreibwegen — für den Prototyp fest, nicht erfunden je Aufrufstelle. */
+const AKTUELLE_FACHPERSON = "Maria Keller";
 
 /** Farbgebung einer Tageskachel nach Richtung der Abweichung. */
 function tagesFarbe(t: Monatstag): { bg: string; text: string; rand: string } {
@@ -2931,15 +2945,26 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   const positionVon = (positionId: string) =>
     blatt?.leistungspositionen.find(p => p.id === positionId) ?? null;
 
-  /* Soll je Woche aus dem Blatt; je Tag der Wochenwert durch sieben — das
-     Blatt kennt keinen Wochentagsplan, nur Häufigkeiten. Gerundet, damit ein
-     Regeltag glatt aufgeht und nicht jeder Tag als Abweichung erscheint. */
-  const geplantProWocheMin = blatt ? berechneSummen(blatt.leistungspositionen).total * 60 : 0;
-  const sollProTag = blatt ? Math.round(geplantProWocheMin / 7) : 0;
+  /* Das Tagessoll sind die täglich verordneten Positionen — nicht die
+     Wochensumme durch sieben. Eine Position mit 3×/Woche steht an keinem
+     bestimmten Tag im Plan; sie in ein Tagesmittel zu rechnen, machte aus
+     einer Unbekannten eine Zahl. */
+  const positionen = blatt?.leistungspositionen ?? [];
+  const sollProTag = tagessollMinuten(positionen);
+  const periodische = positionen.filter(istImZeitraum);
+  const taeglicheIds = new Set(positionen.filter(istTaeglich).map(p => p.id));
+  const istTaeglichePosition = (id: string) => taeglicheIds.has(id);
 
-  const tage = monatAufteilen(alleEinsaetze, leistungenVon, zeitraum.jahr, zeitraum.monat, sollProTag);
+  const tage = monatAufteilen(alleEinsaetze, leistungenVon, zeitraum.jahr, zeitraum.monat, sollProTag, istTaeglichePosition);
   const bilanz = abweichungNachRichtung(tage);
   const muster = fehlendeTageMuster(tage);
+  /* Verordnetes Monatssoll der periodischen Positionen — erwartete Anzahl mal
+     Dauer. Steht neben dem Tagessoll, nicht darin. */
+  const periodischSoll = periodische.reduce(
+    (sum, pos) => sum + erwarteteAnzahlImMonat(pos, tage.length) * pos.anzahl * pos.zeitMin, 0);
+  const periodischKnapp = periodische
+    .map(pos => ({ pos, erwartet: erwarteteAnzahlImMonat(pos, tage.length), ist: periodischeBilanz(tage, leistungenVon, pos.id).anzahl }))
+    .filter(x => x.ist < x.erwartet);
 
   const tagVon = (datum: string) => tage.find(t => t.datum === datum) ?? null;
   const gewaehlt = gewaehlterTag ? tagVon(gewaehlterTag) : null;
@@ -2950,6 +2975,15 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
       const d = new Date(z.jahr, z.monat + schritt, 1);
       return { jahr: d.getFullYear(), monat: d.getMonth() };
     });
+  };
+
+  /* Blättern nur über Tage, die etwas zeigen — leere Tage ohne Soll wären ein
+     Klick ins Nichts. */
+  const blaetterbar = tage.filter(t => t.einsaetze.length > 0 || t.fehlt);
+  const nachbartag = (schritt: number): Monatstag | null => {
+    if (!gewaehlt) return null;
+    const i = blaetterbar.findIndex(t => t.datum === gewaehlt.datum);
+    return i < 0 ? null : blaetterbar[i + schritt] ?? null;
   };
 
   const offeneImMonat = tage.flatMap(t => t.einsaetze).filter(e => e.pruefzustand !== "geprueft");
@@ -2993,6 +3027,10 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
     const zuWenigTage = tage.filter(t => t.abweichung < 0 && !t.fehlt);
     if (zuWenigTage.length > 0) {
       befunde.push(`${anTagen(zuWenigTage.length).replace(/^an /, "An ")} wurde weniger erbracht als geplant, zusammen ${min(bilanz.zuWenigErbracht)}.`);
+    }
+    for (const k of periodischKnapp) {
+      const d = k.erwartet - k.ist;
+      befunde.push(`„${k.pos.bezeichnung}" ist ${haeufigkeitText(k.pos)} verordnet — im Monat also ${k.erwartet}×, erbracht wurde sie ${k.ist}×. ${grossErst(anzahlWort(d))} ${d === 1 ? "Erbringung" : "Erbringungen"} zu wenig; an welchem Tag, sagt das Blatt nicht.`);
     }
     const mitBericht = tage.filter(t => t.hatBericht).length;
     const mitEinsatz = tage.filter(t => t.einsaetze.length > 0).length;
@@ -3076,8 +3114,10 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
           <div className="flex items-center flex-wrap" style={{ gap: 28 }}>
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Erbracht im Monat</div>
-              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{min(bilanz.ist)}</div>
-              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>von {min(bilanz.soll)} geplant</div>
+              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{min(bilanz.ist + bilanz.periodisch)}</div>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                von {min(bilanz.soll + periodischSoll)} verordnet · davon {min(bilanz.periodisch)} periodisch
+              </div>
             </div>
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Zu wenig erbracht</div>
@@ -3093,9 +3133,12 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
                 {(() => { const n = tage.filter(t => t.abweichung > 0 && !t.fehlt).length; return `${n} ${n === 1 ? "Tag" : "Tage"}`; })()}
               </div>
             </div>
-            <div style={{ marginLeft: "auto", textAlign: "right" }}>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Netto</div>
-              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>{vorzeichen(bilanz.netto)}</div>
+            <div>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Pflegeberichte</div>
+              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>
+                {tage.filter(t => t.hatBericht).length} / {tage.filter(t => t.einsaetze.length > 0).length}
+              </div>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Tage mit Einsatz</div>
             </div>
           </div>
         ) : (
@@ -3109,46 +3152,77 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
         <div style={{ padding: "10px 12px", borderRadius: 10, background: "var(--status-info-bg)", fontSize: "var(--text-meta)", color: "var(--status-info)" }}>{meldung}</div>
       )}
 
-      {/* ── Kalender und Tagesansicht nebeneinander ── */}
-      <div className="flex flex-col lg:flex-row" style={{ gap: "var(--space-4)", alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <PSectionCard title="Monat im Überblick" icon={Clock}>
-            <Monatskalender
-              tage={tage} jahr={zeitraum.jahr} monat={zeitraum.monat}
-              gewaehlt={gewaehlterTag} hatSoll={!!blatt}
-              onWaehlen={d => setGewaehlterTag(v => (v === d ? null : d))}
-            />
-            <div className="flex items-center flex-wrap" style={{ gap: 14, marginTop: 12, paddingTop: 10, borderTop: "var(--border-thin) solid var(--border-default)" }}>
-              <Legende farbe="var(--bg-secondary)" text="wie verordnet" />
-              <Legende farbe="var(--status-warning-bg)" text="weniger erbracht" />
-              <Legende farbe="var(--status-info-bg)" text="mehr erfasst" />
-              <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-                <span style={{ width: 12, height: 12, borderRadius: 3, background: "var(--status-warning-bg)", border: "1px solid var(--status-warning-text)" }} /> kein Einsatz
-              </span>
-              <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-                <FileText style={{ width: 11, height: 11 }} /> Bericht vorhanden
-              </span>
-            </div>
-          </PSectionCard>
-        </div>
+      {/* ── Kalender ── */}
+      <PSectionCard title="Monat im Überblick" icon={Clock}>
+        <Monatskalender
+          tage={tage} jahr={zeitraum.jahr} monat={zeitraum.monat}
+          gewaehlt={gewaehlterTag} hatSoll={!!blatt}
+          onWaehlen={d => setGewaehlterTag(v => (v === d ? null : d))}
+        />
+      </PSectionCard>
 
-        {/* Seitenspalte nach dem Muster des Service Desks: die Auswahl bleibt
-            beim Kalender, die Spalte zeigt nur, was ausgewählt ist. */}
-        <div style={{ width: 360, flexShrink: 0 }} className="w-full lg:w-[360px]">
-          <PSectionCard title={gewaehlt ? `${gewaehlt.nummer}. ${MONATE[zeitraum.monat]}` : "Tagesansicht"} icon={CheckCircle2}>
-            {!gewaehlt ? (
-              <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-                Wählen Sie einen Tag im Kalender, um Einsatz, Positionen und Pflegebericht zu sehen.
-              </p>
-            ) : (
-              <Tagesansicht
-                tag={gewaehlt} positionVon={positionVon} leistungenVon={leistungenVon}
-                hatSoll={!!blatt} onBestaetigen={einsatzBestaetigen} onRueckfrage={rueckfrageStellen}
-              />
-            )}
-          </PSectionCard>
-        </div>
-      </div>
+      {/* ── Tagesansicht unter dem Kalender, über die volle Breite ──
+          Nicht als Seitenspalte: ein Pflegebericht ist mehrere Absätze lang,
+          und in 360 px passen keine 45 Zeichen je Zeile. Nicht als Dialog:
+          der Vergleich mit dem Kalender darüber soll bestehen bleiben. */}
+      {gewaehlt && (
+        <Tagesansicht
+          tag={gewaehlt} monat={zeitraum.monat}
+          positionVon={positionVon} leistungenVon={leistungenVon}
+          hatSoll={!!blatt} istTaeglichePosition={istTaeglichePosition}
+          vorheriger={nachbartag(-1)} naechster={nachbartag(1)}
+          onBlaettern={setGewaehlterTag}
+          onSchliessen={() => setGewaehlterTag(null)}
+          onBestaetigen={einsatzBestaetigen} onRueckfrage={rueckfrageStellen}
+          onBericht={(id, text) => { berichtSchreiben(id, text, AKTUELLE_FACHPERSON, jetztAnzeige()); setMeldung(""); }}
+        />
+      )}
+
+      {/* ── Positionen, die im Zeitraum verordnet sind ── */}
+      {blatt && periodische.length > 0 && (
+        <PSectionCard title="Periodisch verordnete Positionen" icon={CalendarOff}>
+          <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 12, maxWidth: 620 }}>
+            Diese Positionen sind für den Zeitraum verordnet, nicht für einen bestimmten Wochentag.
+            Geprüft wird deshalb die Anzahl im Monat — an welchem Tag eine fehlte, lässt sich aus
+            dem Blatt nicht sagen.
+          </p>
+          <div className="flex flex-col" style={{ gap: 10 }}>
+            {periodische.map(pos => {
+              const erwartet = erwarteteAnzahlImMonat(pos, tage.length);
+              const b = periodischeBilanz(tage, leistungenVon, pos.id);
+              const fehlend = erwartet - b.anzahl;
+              return (
+                <div key={pos.id} style={{ padding: "11px 13px", borderRadius: 10, border: "var(--border-thin) solid var(--border-default)" }}>
+                  <div className="flex items-baseline flex-wrap" style={{ gap: 8 }}>
+                    <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)" }}>{pos.bezeichnung}</span>
+                    <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>Nr. {pos.klvNummer}</span>
+                    <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{haeufigkeitText(pos)} · {pos.zeitMin} min</span>
+                    <span style={{ marginLeft: "auto", fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums",
+                      fontWeight: "var(--weight-medium)", color: fehlend > 0 ? "var(--status-warning-text)" : "var(--text-primary)" }}>
+                      {b.anzahl} von {erwartet} erbracht
+                    </span>
+                  </div>
+                  {fehlend > 0 && (
+                    <div className="inline-flex items-start" style={{ gap: 6, marginTop: 6, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+                      <AlertTriangle style={{ width: 13, height: 13, flexShrink: 0, marginTop: 2 }} />
+                      <span>
+                        {grossErst(anzahlWort(fehlend))} {fehlend === 1 ? "Erbringung" : "Erbringungen"} zu wenig im Monat
+                        {" "}({min(fehlend * pos.zeitMin)}). Welcher Tag betroffen ist, sagt das Blatt nicht —
+                        es verordnet die Anzahl, nicht die Wochentage.
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ marginTop: 7, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                    {b.anzahl === 0 ? "An keinem Tag dieses Monats erbracht." : (
+                      <>Erbracht am {b.tage.map(t => `${t.nummer}.`).join(" ")} {MONATE[zeitraum.monat]} · {min(b.minuten)} gesamt</>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </PSectionCard>
+      )}
 
       {/* ── Annas Befunde ── */}
       {befunde.length > 0 && (
@@ -3233,20 +3307,16 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   );
 }
 
-function Legende({ farbe, text }: { farbe: string; text: string }) {
-  return (
-    <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-      <span style={{ width: 12, height: 12, borderRadius: 3, background: farbe }} /> {text}
-    </span>
-  );
-}
-
 /**
  * Monatskalender, nach Wochentagen gerastert.
  *
  * Die Rasterung ist der eigentliche Zweck: fällt jeden Sonntag der Einsatz
  * aus, steht das in einer Spalte untereinander und nicht verteilt in einer
  * Liste.
+ *
+ * Jede Kachel trägt ihre Aussage im Klartext. Eine Legende unter dem Kalender
+ * wäre eine zweite Stelle, an der nachzuschlagen ist — und sie wird übersehen.
+ * Farbe verstärkt, was dasteht; sie ersetzt es nicht.
  */
 function Monatskalender({ tage, jahr, monat, gewaehlt, hatSoll, onWaehlen }: {
   tage: Monatstag[]; jahr: number; monat: number;
@@ -3264,148 +3334,371 @@ function Monatskalender({ tage, jahr, monat, gewaehlt, hatSoll, onWaehlen }: {
       </div>
       <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
         {Array.from({ length: vorlauf }, (_, i) => <div key={`v${i}`} />)}
-        {tage.map(t => {
-          const f = tagesFarbe(t);
-          const ist = t.datum === gewaehlt;
-          return (
-            <button
-              key={t.datum} type="button" onClick={() => onWaehlen(t.datum)}
-              aria-pressed={ist}
-              aria-label={`${t.nummer}. ${MONATE[monat]}, ${t.fehlt ? "kein Einsatz erfasst" : `${Math.round(t.ist)} Minuten erbracht`}`}
-              className="ui-fokusring cursor-pointer flex flex-col"
-              style={{
-                gap: 2, padding: "6px 7px", minHeight: 62, borderRadius: 8, fontFamily: "inherit", textAlign: "left",
-                background: f.bg,
-                border: `1px solid ${ist ? "var(--brand-primary)" : f.rand}`,
-                boxShadow: ist ? "0 0 0 1px var(--brand-primary)" : "none",
-              }}>
-              <div className="flex items-center" style={{ gap: 4 }}>
-                <span style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: f.text, fontVariantNumeric: "tabular-nums" }}>{t.nummer}</span>
-                {t.hatBericht && <FileText style={{ width: 10, height: 10, color: "var(--text-tertiary)" }} aria-hidden />}
-                {t.offen && <span aria-hidden style={{ marginLeft: "auto", width: 5, height: 5, borderRadius: "50%", background: "var(--text-tertiary)" }} />}
-              </div>
-              {t.fehlt ? (
-                <span style={{ fontSize: "var(--text-micro)", color: f.text }}>—</span>
-              ) : t.einsaetze.length === 0 ? null : (
-                <>
-                  <span style={{ fontSize: "var(--text-micro)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{Math.round(t.ist)} min</span>
-                  {hatSoll && t.abweichung !== 0 && (
-                    <span style={{ fontSize: "var(--text-micro)", color: f.text, fontVariantNumeric: "tabular-nums" }}>
-                      {t.abweichung > 0 ? "+" : "−"}{Math.abs(Math.round(t.abweichung))}
-                    </span>
-                  )}
-                </>
-              )}
-            </button>
-          );
-        })}
+        {tage.map(t => <Tageskachel key={t.datum} tag={t} monat={monat} hatSoll={hatSoll}
+          gewaehlt={t.datum === gewaehlt} onWaehlen={onWaehlen} />)}
       </div>
     </div>
   );
 }
 
-/** Ein Tag im Einzelnen: Einsatz, Positionen mit Grund, Pflegebericht, Prüfung. */
-function Tagesansicht({ tag, positionVon, leistungenVon, hatSoll, onBestaetigen, onRueckfrage }: {
-  tag: Monatstag;
+/** Die Aussage einer Kachel als Text — dieselbe Formulierung wie im Vorlesen. */
+function tagesUrteil(t: Monatstag): string {
+  if (t.fehlt) return `nicht erfasst · −${Math.round(t.soll)} Min.`;
+  if (t.soll === 0) return t.einsaetze.length ? "erfasst" : "";
+  if (t.abweichung === 0) return "wie verordnet";
+  return `${t.abweichung < 0 ? "weniger · −" : "mehr · +"}${Math.abs(Math.round(t.abweichung))} Min.`;
+}
+
+function Tageskachel({ tag: t, monat, hatSoll, gewaehlt, onWaehlen }: {
+  tag: Monatstag; monat: number; hatSoll: boolean; gewaehlt: boolean;
+  onWaehlen: (datum: string) => void;
+}) {
+  const f = tagesFarbe(t);
+  const leer = !t.fehlt && t.einsaetze.length === 0;
+  const urteil = tagesUrteil(t);
+  const bericht = t.einsaetze.length === 0 ? "" : t.hatBericht ? "Bericht" : "kein Bericht";
+  /* Die Vorlesefassung sagt dasselbe wie die Kachel, in einem Satz. */
+  const vorlesen = [
+    `${t.nummer}. ${MONATE[monat]}, ${WOCHENTAGE_LANG[t.wochentag]}`,
+    t.fehlt ? "kein Einsatz erfasst" : leer ? "nichts erfasst" : `${Math.round(t.ist)} von ${Math.round(t.soll)} Minuten erbracht`,
+    urteil, t.periodisch > 0 ? `zusätzlich ${Math.round(t.periodisch)} Minuten periodisch` : "",
+    bericht, t.einsaetze.length === 0 ? "" : t.offen ? "offen" : "geprüft",
+  ].filter(Boolean).join(", ");
+
+  return (
+    <button
+      type="button" onClick={() => onWaehlen(t.datum)} aria-pressed={gewaehlt} aria-label={vorlesen}
+      className="ui-fokusring cursor-pointer flex flex-col"
+      style={{
+        gap: 1, padding: "6px 7px", minHeight: 92, borderRadius: 8, fontFamily: "inherit", textAlign: "left",
+        background: f.bg,
+        border: `1px solid ${gewaehlt ? "var(--brand-primary)" : f.rand}`,
+        boxShadow: gewaehlt ? "0 0 0 1px var(--brand-primary)" : "none",
+      }}>
+      <div className="flex items-baseline" style={{ gap: 4 }}>
+        <span style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: f.text, fontVariantNumeric: "tabular-nums" }}>{t.nummer}</span>
+        <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{WOCHENTAGE[t.wochentag]}</span>
+        {t.einsaetze.length > 0 && (
+          <span style={{ marginLeft: "auto", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+            {t.offen ? "offen" : "geprüft"}
+          </span>
+        )}
+      </div>
+      {leer ? null : (
+        <>
+          {hatSoll && !t.fehlt && (
+            <span style={{ fontSize: "var(--text-micro)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>
+              {Math.round(t.ist)} / {Math.round(t.soll)} Min.
+            </span>
+          )}
+          {!hatSoll && !t.fehlt && (
+            <span style={{ fontSize: "var(--text-micro)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{Math.round(t.ist)} Min.</span>
+          )}
+          {urteil && (
+            <span style={{ fontSize: "var(--text-micro)", color: f.text, fontVariantNumeric: "tabular-nums", fontWeight: t.abweichung === 0 ? 400 : 500 }}>{urteil}</span>
+          )}
+          {t.periodisch > 0 && (
+            <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+              + {Math.round(t.periodisch)} Min. periodisch
+            </span>
+          )}
+          {bericht && (
+            <span style={{ fontSize: "var(--text-micro)", color: t.hatBericht ? "var(--text-secondary)" : "var(--text-tertiary)", marginTop: "auto" }}>{bericht}</span>
+          )}
+        </>
+      )}
+    </button>
+  );
+}
+
+/**
+ * Ein Tag im Einzelnen, über die volle Breite.
+ *
+ * Links, was gegen den Plan geprüft wird; rechts, was geschrieben wurde. Die
+ * Trennung ist gewollt: Zahlen und Text werden unterschiedlich gelesen, und
+ * der Bericht braucht eine Zeilenlänge, in der er lesbar bleibt.
+ */
+function Tagesansicht({
+  tag, monat, positionVon, leistungenVon, hatSoll, istTaeglichePosition,
+  vorheriger, naechster, onBlaettern, onSchliessen,
+  onBestaetigen, onRueckfrage, onBericht,
+}: {
+  tag: Monatstag; monat: number;
   positionVon: (id: string) => KLVLeistung | null;
   leistungenVon: (id: string) => ErbrachteLeistung[];
   hatSoll: boolean;
+  istTaeglichePosition: (positionId: string) => boolean;
+  vorheriger: Monatstag | null; naechster: Monatstag | null;
+  onBlaettern: (datum: string) => void;
+  onSchliessen: () => void;
   onBestaetigen: (id: string) => void;
   onRueckfrage: (e: Einsatz) => void;
+  onBericht: (einsatzId: string, text: string) => void;
 }) {
-  if (tag.einsaetze.length === 0) {
-    return (
-      <div>
-        <div className="inline-flex items-center" style={{ gap: 7, fontSize: "var(--text-small)", color: tag.fehlt ? "var(--status-warning-text)" : "var(--text-secondary)" }}>
-          {tag.fehlt && <AlertTriangle style={{ width: 14, height: 14 }} />}
-          {tag.fehlt
-            ? "Kein Einsatz erfasst, obwohl geplant."
-            : "Für diesen Tag ist nichts erfasst."}
-        </div>
-        {tag.fehlt && (
-          <p style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 8 }}>
-            Geplant waren {Math.round(tag.soll)} Minuten. Ein fehlender Tag lässt sich hier nicht nachtragen — das geschieht in der Erfassung.
-          </p>
-        )}
-      </div>
-    );
-  }
+  const min = (n: number) => `${Math.round(n)} min`;
+  const einsatz = tag.einsaetze[0] ?? null;
+  const geprueft = einsatz?.pruefzustand === "geprueft";
+  const urteil = tagesUrteil(tag);
+
   return (
-    <div className="flex flex-col" style={{ gap: 14 }}>
-      {tag.einsaetze.map(e => {
-        const ls = leistungenVon(e.id);
-        const geprueft = e.pruefzustand === "geprueft";
-        return (
-          <div key={e.id} className="flex flex-col" style={{ gap: 8 }}>
-            <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
-              <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{e.von}–{e.bis}</span>
-              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{urheberName(e.erbrachtDurch)}</span>
-              <span style={{ marginLeft: "auto", padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)",
-                background: geprueft ? "var(--status-success-bg)" : "var(--bg-secondary)",
-                color: geprueft ? "var(--status-success-text)" : "var(--text-secondary)" }}>
-                {pruefzustandLabel(e.pruefzustand)}
+    <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
+      {/* ── Kopfzeile ── */}
+      <div className="flex items-center flex-wrap" style={{ gap: 10, padding: "11px 16px", borderBottom: "var(--border-thin) solid var(--border-default)", background: "var(--bg-secondary)" }}>
+        <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)" }}>
+          {tag.nummer}. {MONATE[monat]} · {WOCHENTAGE_LANG[tag.wochentag]}
+        </span>
+        {einsatz && (
+          <>
+            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{einsatz.von}–{einsatz.bis}</span>
+            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{urheberName(einsatz.erbrachtDurch)}</span>
+          </>
+        )}
+        {urteil && (
+          <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)",
+            background: tag.abweichung === 0 && !tag.fehlt ? "var(--bg-elevated)" : tag.abweichung > 0 ? "var(--status-info-bg)" : "var(--status-warning-bg)",
+            color: tag.abweichung === 0 && !tag.fehlt ? "var(--text-secondary)" : tag.abweichung > 0 ? "var(--status-info)" : "var(--status-warning-text)" }}>
+            {urteil}
+          </span>
+        )}
+        {einsatz && (
+          <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)",
+            background: geprueft ? "var(--status-success-bg)" : "var(--bg-elevated)",
+            color: geprueft ? "var(--status-success-text)" : "var(--text-secondary)" }}>
+            {pruefzustandLabel(einsatz.pruefzustand)}
+          </span>
+        )}
+        <div className="flex items-center" style={{ gap: 2, marginLeft: "auto" }}>
+          <button type="button" disabled={!vorheriger} aria-label="Vorheriger Tag"
+            onClick={() => vorheriger && onBlaettern(vorheriger.datum)}
+            className="ui-fokusring flex items-center justify-center"
+            style={{ width: 28, height: 28, borderRadius: 8, background: "none", border: "none", cursor: vorheriger ? "pointer" : "not-allowed", opacity: vorheriger ? 1 : 0.35, color: "var(--text-secondary)" }}>
+            <ChevronLeft style={{ width: 16, height: 16 }} />
+          </button>
+          <button type="button" disabled={!naechster} aria-label="Nächster Tag"
+            onClick={() => naechster && onBlaettern(naechster.datum)}
+            className="ui-fokusring flex items-center justify-center"
+            style={{ width: 28, height: 28, borderRadius: 8, background: "none", border: "none", cursor: naechster ? "pointer" : "not-allowed", opacity: naechster ? 1 : 0.35, color: "var(--text-secondary)" }}>
+            <ChevronRight style={{ width: 16, height: 16 }} />
+          </button>
+          <button type="button" aria-label="Tagesansicht schliessen" onClick={onSchliessen}
+            className="ui-fokusring cursor-pointer flex items-center justify-center"
+            style={{ width: 28, height: 28, borderRadius: 8, background: "none", border: "none", color: "var(--text-secondary)" }}>
+            <X style={{ width: 15, height: 15 }} />
+          </button>
+        </div>
+      </div>
+
+      {!einsatz ? (
+        <div style={{ padding: "16px" }}>
+          <div className="inline-flex items-center" style={{ gap: 7, fontSize: "var(--text-small)", color: tag.fehlt ? "var(--status-warning-text)" : "var(--text-secondary)" }}>
+            {tag.fehlt && <AlertTriangle style={{ width: 14, height: 14 }} />}
+            {tag.fehlt ? "Kein Einsatz erfasst, obwohl geplant." : "Für diesen Tag ist nichts erfasst."}
+          </div>
+          {tag.fehlt && (
+            <p style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 8, maxWidth: 620 }}>
+              Verordnet waren {min(tag.soll)} aus den täglichen Positionen. Ein fehlender Tag lässt sich
+              hier nicht nachtragen — das geschieht in der Erfassung.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col lg:flex-row">
+          {/* ── Links: erbracht gegen verordnet ── */}
+          <div style={{ flex: "1 1 0", minWidth: 0, padding: "14px 16px" }}>
+            <div className="flex items-baseline" style={{ gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>
+                {Math.round(tag.ist)}{hatSoll && ` / ${Math.round(tag.soll)}`}
               </span>
+              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                Minuten {hatSoll ? "erbracht von verordnet" : "erbracht"}
+              </span>
+              {tag.periodisch > 0 && (
+                <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+                  + {min(tag.periodisch)} periodisch
+                </span>
+              )}
             </div>
 
-            {/* Positionen: geplant gegen erfasst, Grund direkt darunter */}
-            <div className="flex flex-col" style={{ gap: 5 }}>
-              {ls.map(l => {
+            <div className="flex flex-col" style={{ gap: 6 }}>
+              {tag.einsaetze.flatMap(e => leistungenVon(e.id)).map(l => {
                 const pos = positionVon(l.positionId);
+                const taeglich = istTaeglichePosition(l.positionId);
                 return (
                   <div key={l.id}>
-                    <div className="flex items-center" style={{ gap: 8 }}>
+                    <div className="flex items-baseline" style={{ gap: 8 }}>
                       <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-meta)", color: l.erbracht ? "var(--text-primary)" : "var(--text-tertiary)", textDecoration: l.erbracht ? "none" : "line-through" }}>
                         {pos ? pos.bezeichnung : l.positionId}
                       </span>
-                      <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>
-                        {l.minuten} min
-                      </span>
-                      {hatSoll && pos && (
-                        <span style={{ fontSize: "var(--text-micro)", fontVariantNumeric: "tabular-nums", color: "var(--text-tertiary)", width: 56, textAlign: "right" }}>
-                          von {pos.zeitMin} min
+                      {!taeglich && pos && (
+                        <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+                          periodisch · {haeufigkeitText(pos)}
                         </span>
                       )}
+                      <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                        {l.minuten}{hatSoll && pos ? ` / ${pos.anzahl * pos.zeitMin}` : ""} min
+                      </span>
                     </div>
                     {l.grund.trim() && (
-                      <div style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)", marginTop: 3, paddingLeft: 2 }}>{l.grund}</div>
+                      <div style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)", marginTop: 3, maxWidth: 560 }}>{l.grund}</div>
                     )}
                   </div>
                 );
               })}
             </div>
 
-            {/* Pflegebericht — der Wortlaut aus der Erfassung, unverändert */}
-            <div style={{ padding: "9px 11px", borderRadius: 10, background: "var(--bg-secondary)" }}>
-              <div className="flex items-center" style={{ gap: 6, marginBottom: e.bericht.trim() ? 5 : 0 }}>
-                <FileText style={{ width: 12, height: 12, color: "var(--text-tertiary)" }} />
-                <span style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)" }}>Pflegebericht</span>
-                {e.bericht.trim() && (
-                  <span style={{ marginLeft: "auto", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-                    {e.berichtVon} · {e.berichtAm}
-                  </span>
-                )}
-              </div>
-              <p style={{ fontSize: "var(--text-meta)", color: e.bericht.trim() ? "var(--text-primary)" : "var(--text-tertiary)", margin: 0, lineHeight: 1.55 }}>
-                {e.bericht.trim() || "Für diesen Einsatz wurde kein Bericht geschrieben."}
-              </p>
-            </div>
-
-            {/* Prüfvermerk der Fachperson — steht getrennt vom Bericht */}
-            {e.bemerkung.trim() && (
-              <div style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)" }}>{e.bemerkung}</div>
-            )}
-
-            {geprueft ? (
-              <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Geprüft · nicht mehr änderbar</span>
-            ) : (
-              <div className="flex items-center" style={{ gap: 12 }}>
-                <button type="button" onClick={() => onBestaetigen(e.id)} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>Bestätigen</button>
-                <button type="button" onClick={() => onRueckfrage(e)} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Rückfrage</button>
+            {tag.einsaetze.some(e => e.bemerkung.trim()) && (
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 3 }}>Prüfvermerk der Fachperson</div>
+                {tag.einsaetze.filter(e => e.bemerkung.trim()).map(e => (
+                  <div key={e.id} style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>{e.bemerkung}</div>
+                ))}
               </div>
             )}
           </div>
-        );
-      })}
+
+          {/* ── Rechts: der Pflegebericht in einer Lesespalte ── */}
+          <div style={{ flex: "1 1 0", minWidth: 0, padding: "14px 16px", borderLeft: "var(--border-thin) solid var(--border-default)", background: "var(--bg-secondary)" }}>
+            <Berichtsspalte einsatz={einsatz} onBericht={onBericht} />
+          </div>
+        </div>
+      )}
+
+      {/* ── Fusszeile ── */}
+      {einsatz && (
+        <div className="flex items-center flex-wrap" style={{ gap: 14, padding: "10px 16px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+          {geprueft ? (
+            <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+              Geprüft · Leistungsdaten nicht mehr änderbar. Der Pflegebericht bleibt es.
+            </span>
+          ) : (
+            <>
+              <AppButton variant="sekundaer" onClick={() => onBestaetigen(einsatz.id)}>Bestätigen</AppButton>
+              <button type="button" onClick={() => onRueckfrage(einsatz)} className="ui-fokusring cursor-pointer"
+                style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                Rückfrage stellen
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Der Pflegebericht: lesen, erfassen, ändern, frühere Fassungen einsehen.
+ *
+ * Die Lesespalte ist auf 74 Zeichen begrenzt (`max-width: 74ch`). Darüber
+ * verliert das Auge beim Zeilenwechsel den Anschluss; darunter zerfällt ein
+ * Absatz in Fetzen.
+ */
+function Berichtsspalte({ einsatz, onBericht }: {
+  einsatz: Einsatz;
+  onBericht: (einsatzId: string, text: string) => void;
+}) {
+  const aktuell = aktuelleFassung(einsatz);
+  const frueher = fruehereFassungen(einsatz);
+  const [bearbeiten, setBearbeiten] = useState(false);
+  const [entwurf, setEntwurf] = useState("");
+  const [fassungenOffen, setFassungenOffen] = useState(false);
+
+  /* Wechselt der Einsatz unter der offenen Maske, wäre der Entwurf dem
+     falschen Tag zugeordnet. Also zurücksetzen. */
+  useEffect(() => { setBearbeiten(false); setFassungenOffen(false); }, [einsatz.id]);
+
+  const oeffnen = () => { setEntwurf(aktuell?.text ?? ""); setBearbeiten(true); };
+  const sichern = () => {
+    if (entwurf.trim() && entwurf.trim() !== (aktuell?.text ?? "")) onBericht(einsatz.id, entwurf);
+    setBearbeiten(false);
+  };
+
+  if (bearbeiten) {
+    return (
+      <div style={{ maxWidth: "74ch" }}>
+        <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>
+          {aktuell ? "Pflegebericht ändern" : "Pflegebericht erfassen"}
+        </div>
+        <textarea
+          value={entwurf} onChange={e => setEntwurf(e.target.value)} rows={8} autoFocus
+          aria-label={aktuell ? "Pflegebericht ändern" : "Pflegebericht erfassen"}
+          className="ui-fokusring"
+          style={{ width: "100%", padding: "10px 12px", borderRadius: 10, resize: "vertical",
+            border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)",
+            fontFamily: "inherit", fontSize: "var(--text-meta)", lineHeight: 1.6, color: "var(--text-primary)" }}
+        />
+        <div className="flex items-center" style={{ gap: 12, marginTop: 8 }}>
+          <AppButton variant="sekundaer" onClick={sichern}>Sichern</AppButton>
+          <button type="button" onClick={() => setBearbeiten(false)} className="ui-fokusring cursor-pointer"
+            style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+            Verwerfen
+          </button>
+          <span style={{ marginLeft: "auto", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+            Frühere Fassungen bleiben erhalten.
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: "74ch" }}>
+      <div className="flex items-center" style={{ gap: 8, marginBottom: 6 }}>
+        <FileText style={{ width: 13, height: 13, color: "var(--text-tertiary)" }} />
+        <span style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)" }}>Pflegebericht</span>
+        {aktuell && (
+          <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+            {einsatz.berichtFassungen[0].von} · {einsatz.berichtFassungen[0].am}
+          </span>
+        )}
+        <button type="button" onClick={oeffnen} className="ui-fokusring cursor-pointer"
+          style={{ marginLeft: "auto", background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
+          {aktuell ? "Ändern" : "Bericht erfassen"}
+        </button>
+      </div>
+
+      {aktuell ? (
+        <>
+          {aktuell.text.split("\n").filter(a => a.trim()).map((absatz, i) => (
+            <p key={i} style={{ fontSize: "var(--text-meta)", color: "var(--text-primary)", lineHeight: 1.65, margin: i === 0 ? 0 : "8px 0 0" }}>{absatz}</p>
+          ))}
+          {/* Nur wenn je geändert wurde — sonst behauptete die Zeile eine
+              Bearbeitung, die nie stattfand. */}
+          {frueher.length > 0 && (
+            <div style={{ marginTop: 10, paddingTop: 8, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                Zuletzt geändert am {aktuell.am} durch {aktuell.von}
+              </div>
+              <button type="button" onClick={() => setFassungenOffen(o => !o)} className="ui-fokusring cursor-pointer"
+                style={{ background: "none", border: "none", padding: 0, marginTop: 4, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
+                {fassungenOffen ? "Frühere Fassungen ausblenden" : `${frueher.length} frühere ${frueher.length === 1 ? "Fassung" : "Fassungen"} anzeigen`}
+              </button>
+              {fassungenOffen && (
+                <div className="flex flex-col" style={{ gap: 8, marginTop: 8 }}>
+                  {frueher.map((f, i) => <FruehereFassung key={i} fassung={f} />)}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <p style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", margin: 0, lineHeight: 1.65 }}>
+          Für diesen Einsatz wurde kein Bericht geschrieben.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Eine frühere Fassung — lesbar, nicht bearbeitbar. */
+function FruehereFassung({ fassung }: { fassung: Berichtfassung }) {
+  return (
+    <div style={{ padding: "8px 10px", borderRadius: 8, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
+      <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginBottom: 4 }}>
+        {fassung.von} · {fassung.am}
+      </div>
+      {fassung.text.split("\n").filter(a => a.trim()).map((absatz, i) => (
+        <p key={i} style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", lineHeight: 1.6, margin: i === 0 ? 0 : "6px 0 0" }}>{absatz}</p>
+      ))}
     </div>
   );
 }

@@ -36,6 +36,21 @@ export interface ErbrachteLeistung {
   grund: string;
 }
 
+/**
+ * Eine Fassung des Pflegeberichts.
+ *
+ * Der Urheber steht hier und nicht am Einsatz: den Bericht schreibt nicht
+ * zwingend, wer den Einsatz geleistet hat. Ergänzt die Fachperson bei der
+ * Kontrolle einen Text, stünde er sonst unter dem Namen der angehörigen
+ * Person.
+ */
+export interface Berichtfassung {
+  text: string;
+  von: string;
+  /** TT.MM.JJJJ HH:MM */
+  am: string;
+}
+
 export interface Einsatz {
   id: string;
   patientId: string;
@@ -50,17 +65,19 @@ export interface Einsatz {
   /** Prüfvermerk der Fachperson — heute die Rückfrage. Nicht der Bericht. */
   bemerkung: string;
   /**
-   * Pflegebericht des Tages im Wortlaut.
+   * Pflegebericht des Tages, alle Fassungen in Reihenfolge — die letzte gilt.
    *
    * Ein eigenes Feld, nicht `bemerkung`: dort steht der Prüfvermerk der
    * Fachperson. Zwei Bedeutungen in einem Feld liessen später nicht mehr
    * unterscheiden, wer was geschrieben hat. Ein eigenes Objekt ist es
    * bewusst nicht — der Text gehört zum Einsatz.
+   *
+   * Eine Liste statt eines Textes, weil Überschreiben in der Pflege-
+   * dokumentation nichts vernichten darf: was einmal dokumentiert wurde,
+   * bleibt lesbar. Angezeigt wird die letzte Fassung, aufbewahrt werden alle.
+   * Leere Liste heisst „kein Bericht" — nicht ein Bericht ohne Text.
    */
-  bericht: string;
-  berichtVon: string;
-  /** TT.MM.JJJJ HH:MM */
-  berichtAm: string;
+  berichtFassungen: Berichtfassung[];
   /** Gesetzt bei einem Nachtrag: Kennung des korrigierten Einsatzes. */
   korrigiert: string | null;
 }
@@ -75,9 +92,14 @@ export function istUnveraenderbar(e: Einsatz): boolean {
   return e.pruefzustand === "geprueft";
 }
 
-/** Minuten eines Einsatzes aus seinen erbrachten Leistungen. */
-export function einsatzMinuten(leistungen: ErbrachteLeistung[]): number {
-  return leistungen.filter(l => l.erbracht).reduce((s, l) => s + l.minuten, 0);
+/** Die geltende Fassung des Pflegeberichts, oder null wenn keiner besteht. */
+export function aktuelleFassung(e: Einsatz): Berichtfassung | null {
+  return e.berichtFassungen.length ? e.berichtFassungen[e.berichtFassungen.length - 1] : null;
+}
+
+/** Frühere Fassungen, neueste zuerst. Leer, solange nie geändert wurde. */
+export function fruehereFassungen(e: Einsatz): Berichtfassung[] {
+  return e.berichtFassungen.slice(0, -1).reverse();
 }
 
 /** Weicht der Einsatz vom Plan ab — nicht erbrachte Position oder Zeitgrund? */
@@ -113,12 +135,20 @@ export interface Monatstag {
   /** 0 = Montag */
   wochentag: number;
   einsaetze: Einsatz[];
-  /** Erbrachte Minuten des Tages. */
+  /** Erbrachte Minuten aus täglich verordneten Positionen. */
   ist: number;
-  /** Tagessoll aus dem Blatt. */
+  /** Tagessoll — Summe der täglich verordneten Positionen. */
   soll: number;
   /** ist − soll. Negativ = weniger erbracht. */
   abweichung: number;
+  /**
+   * Minuten aus Positionen, die im Zeitraum verordnet sind.
+   *
+   * Sie stehen ausserhalb der Tagesabweichung: eine Wochenleistung, die heute
+   * erbracht wurde, ist kein Mehraufwand des Tages, sondern ein Teil ihres
+   * Zeitraums. Zählte sie mit, erschiene jeder solche Tag als Überschreitung.
+   */
+  periodisch: number;
   /** Kein Einsatz erfasst, obwohl ein Soll besteht. */
   fehlt: boolean;
   hatBericht: boolean;
@@ -138,6 +168,8 @@ export function monatAufteilen(
   jahr: number,
   monat: number,
   sollProTag: number,
+  /** Gehört die Position zum Tagessoll? Ohne Blatt zählt nichts als täglich. */
+  istTaeglichePosition: (positionId: string) => boolean,
 ): Monatstag[] {
   const tage: Monatstag[] = [];
   const letzter = new Date(jahr, monat + 1, 0).getDate();
@@ -145,18 +177,43 @@ export function monatAufteilen(
     const d = new Date(jahr, monat, n);
     const datum = alsAnzeigedatum(d);
     const desTages = einsaetze.filter(e => e.datum === datum);
-    const ist = desTages
+    const erbracht = desTages
       .filter(e => e.zustand === "erbracht")
-      .reduce((s, e) => s + einsatzMinuten(leistungenVon(e.id)), 0);
+      .flatMap(e => leistungenVon(e.id))
+      .filter(l => l.erbracht);
+    const ist = erbracht.filter(l => istTaeglichePosition(l.positionId))
+      .reduce((s, l) => s + l.minuten, 0);
+    const periodisch = erbracht.filter(l => !istTaeglichePosition(l.positionId))
+      .reduce((s, l) => s + l.minuten, 0);
     tage.push({
       datum, nummer: n, wochentag: (d.getDay() + 6) % 7,
-      einsaetze: desTages, ist, soll: sollProTag, abweichung: ist - sollProTag,
+      einsaetze: desTages, ist, soll: sollProTag, abweichung: ist - sollProTag, periodisch,
       fehlt: sollProTag > 0 && desTages.length === 0,
-      hatBericht: desTages.some(e => e.bericht.trim() !== ""),
+      hatBericht: desTages.some(e => e.berichtFassungen.length > 0),
       offen: desTages.some(e => e.pruefzustand !== "geprueft"),
     });
   }
   return tage;
+}
+
+/**
+ * Wie oft und an welchen Tagen eine Position im Monat erbracht wurde.
+ *
+ * Bewusst ohne Aussage darüber, an welchem Tag sie gefehlt hat: das Blatt
+ * kennt keinen Wochentagsplan, also ist nur die Anzahl im Zeitraum prüfbar.
+ */
+export function periodischeBilanz(
+  tage: Monatstag[],
+  leistungenVon: (einsatzId: string) => ErbrachteLeistung[],
+  positionId: string,
+): { anzahl: number; minuten: number; tage: Monatstag[] } {
+  const getroffen = tage.filter(t =>
+    t.einsaetze.some(e => e.zustand === "erbracht"
+      && leistungenVon(e.id).some(l => l.positionId === positionId && l.erbracht)));
+  const minuten = getroffen.flatMap(t => t.einsaetze).flatMap(e => leistungenVon(e.id))
+    .filter(l => l.positionId === positionId && l.erbracht)
+    .reduce((s, l) => s + l.minuten, 0);
+  return { anzahl: getroffen.length, minuten, tage: getroffen };
 }
 
 /**
@@ -172,19 +229,20 @@ export function monatAufteilen(
  */
 export function abweichungNachRichtung(tage: Monatstag[]): {
   netto: number; zuWenig: number; zuWenigErbracht: number; ausgefallen: number;
-  zuViel: number; ist: number; soll: number;
+  zuViel: number; ist: number; soll: number; periodisch: number;
 } {
-  let zuWenig = 0, zuWenigErbracht = 0, ausgefallen = 0, zuViel = 0, ist = 0, soll = 0;
+  let zuWenig = 0, zuWenigErbracht = 0, ausgefallen = 0, zuViel = 0, ist = 0, soll = 0, periodisch = 0;
   for (const t of tage) {
     ist += t.ist;
     soll += t.soll;
+    periodisch += t.periodisch;
     if (t.abweichung < 0) {
       zuWenig += -t.abweichung;
       if (t.fehlt) ausgefallen += -t.abweichung;
       else zuWenigErbracht += -t.abweichung;
     } else if (t.abweichung > 0) zuViel += t.abweichung;
   }
-  return { netto: ist - soll, zuWenig, zuWenigErbracht, ausgefallen, zuViel, ist, soll };
+  return { netto: ist - soll, zuWenig, zuWenigErbracht, ausgefallen, zuViel, ist, soll, periodisch };
 }
 
 /**
