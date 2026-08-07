@@ -47,7 +47,20 @@ export interface Einsatz {
   erbrachtDurch: EinsatzUrheber;
   zustand: EinsatzZustandCode;
   pruefzustand: PruefzustandCode;
+  /** Prüfvermerk der Fachperson — heute die Rückfrage. Nicht der Bericht. */
   bemerkung: string;
+  /**
+   * Pflegebericht des Tages im Wortlaut.
+   *
+   * Ein eigenes Feld, nicht `bemerkung`: dort steht der Prüfvermerk der
+   * Fachperson. Zwei Bedeutungen in einem Feld liessen später nicht mehr
+   * unterscheiden, wer was geschrieben hat. Ein eigenes Objekt ist es
+   * bewusst nicht — der Text gehört zum Einsatz.
+   */
+  bericht: string;
+  berichtVon: string;
+  /** TT.MM.JJJJ HH:MM */
+  berichtAm: string;
   /** Gesetzt bei einem Nachtrag: Kennung des korrigierten Einsatzes. */
   korrigiert: string | null;
 }
@@ -72,7 +85,7 @@ export function hatAbweichung(leistungen: ErbrachteLeistung[]): boolean {
   return leistungen.some(l => !l.erbracht || l.grund.trim() !== "");
 }
 
-/* ── Wochenrechnung ────────────────────────────────────────────────────────── */
+/* ── Datum und Bezeichnungen ───────────────────────────────────────────────── */
 
 function ausAnzeigedatum(wert: string): Date | null {
   const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec((wert ?? "").trim());
@@ -86,54 +99,103 @@ function alsAnzeigedatum(d: Date): string {
   return `${zz(d.getDate())}.${zz(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 
-/** Montag der Woche, in der das Datum liegt. */
-export function wochenbeginn(d: Date): Date {
-  const k = new Date(d);
-  const tag = (k.getDay() + 6) % 7; // Montag = 0
-  k.setDate(k.getDate() - tag);
-  k.setHours(0, 0, 0, 0);
-  return k;
-}
-
 export const WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+export const WOCHENTAGE_LANG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+export const MONATE = ["Januar", "Februar", "März", "April", "Mai", "Juni",
+  "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
-export interface Wochentag {
+/* ── Monatsrechnung ────────────────────────────────────────────────────────── */
+
+export interface Monatstag {
   datum: string;
-  kurz: string;
+  /** 1..31 */
+  nummer: number;
+  /** 0 = Montag */
+  wochentag: number;
   einsaetze: Einsatz[];
   /** Erbrachte Minuten des Tages. */
-  erbracht: number;
-  /** Geplante Minuten des Tages aus dem Blatt. */
-  geplant: number;
-  /** Kein Einsatz, obwohl geplant — die Lücke. */
-  luecke: boolean;
+  ist: number;
+  /** Tagessoll aus dem Blatt. */
+  soll: number;
+  /** ist − soll. Negativ = weniger erbracht. */
+  abweichung: number;
+  /** Kein Einsatz erfasst, obwohl ein Soll besteht. */
+  fehlt: boolean;
+  hatBericht: boolean;
+  /** Mindestens ein Einsatz des Tages wartet noch auf Prüfung. */
+  offen: boolean;
 }
 
-/** Die sieben Tage einer Woche mit ihren Einsätzen. */
-export function wocheAufteilen(
+/**
+ * Die Tage eines Monats mit Ist, Soll und Abweichung.
+ *
+ * Der Kalender rastert nach Wochentagen: Muster richten sich untereinander
+ * aus. Fehlt jeder Sonntag, steht das in einer Spalte.
+ */
+export function monatAufteilen(
   einsaetze: Einsatz[],
   leistungenVon: (einsatzId: string) => ErbrachteLeistung[],
-  montag: Date,
-  geplantProTag: number,
-): Wochentag[] {
-  const tage: Wochentag[] = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(montag);
-    d.setDate(d.getDate() + i);
+  jahr: number,
+  monat: number,
+  sollProTag: number,
+): Monatstag[] {
+  const tage: Monatstag[] = [];
+  const letzter = new Date(jahr, monat + 1, 0).getDate();
+  for (let n = 1; n <= letzter; n++) {
+    const d = new Date(jahr, monat, n);
     const datum = alsAnzeigedatum(d);
     const desTages = einsaetze.filter(e => e.datum === datum);
-    const erbracht = desTages
+    const ist = desTages
       .filter(e => e.zustand === "erbracht")
       .reduce((s, e) => s + einsatzMinuten(leistungenVon(e.id)), 0);
     tage.push({
-      datum, kurz: WOCHENTAGE[i], einsaetze: desTages, erbracht,
-      geplant: geplantProTag,
-      // Lücke heisst: geplant, aber nichts erfasst. Ein Tag ohne Plan ist
-      // keine Lücke, sondern schlicht ein Tag ohne Einsatz.
-      luecke: geplantProTag > 0 && desTages.length === 0,
+      datum, nummer: n, wochentag: (d.getDay() + 6) % 7,
+      einsaetze: desTages, ist, soll: sollProTag, abweichung: ist - sollProTag,
+      fehlt: sollProTag > 0 && desTages.length === 0,
+      hatBericht: desTages.some(e => e.bericht.trim() !== ""),
+      offen: desTages.some(e => e.pruefzustand !== "geprueft"),
     });
   }
   return tage;
+}
+
+/**
+ * Abweichung getrennt nach Richtung.
+ *
+ * Netto verdeckt, dass an einem Tag zu viel gestempelt wurde — und zu viel ist
+ * bei einer Kassenkontrolle das grössere Problem. Deshalb werden beide
+ * Richtungen einzeln summiert, nicht nur ihre Differenz.
+ *
+ * Innerhalb von „zu wenig" wird nochmals getrennt: ein Tag ohne jeden Einsatz
+ * ist kein knapper Einsatz, sondern ein ausgefallener. Beides in einer Summe
+ * liesse den einen Fall im anderen verschwinden.
+ */
+export function abweichungNachRichtung(tage: Monatstag[]): {
+  netto: number; zuWenig: number; zuWenigErbracht: number; ausgefallen: number;
+  zuViel: number; ist: number; soll: number;
+} {
+  let zuWenig = 0, zuWenigErbracht = 0, ausgefallen = 0, zuViel = 0, ist = 0, soll = 0;
+  for (const t of tage) {
+    ist += t.ist;
+    soll += t.soll;
+    if (t.abweichung < 0) {
+      zuWenig += -t.abweichung;
+      if (t.fehlt) ausgefallen += -t.abweichung;
+      else zuWenigErbracht += -t.abweichung;
+    } else if (t.abweichung > 0) zuViel += t.abweichung;
+  }
+  return { netto: ist - soll, zuWenig, zuWenigErbracht, ausgefallen, zuViel, ist, soll };
+}
+
+/**
+ * Fällt jeder fehlende Tag auf denselben Wochentag? Dann ist es ein Muster
+ * und keine Reihe von Zufällen.
+ */
+export function fehlendeTageMuster(tage: Monatstag[]): { tage: Monatstag[]; wochentag: number | null } {
+  const fehlend = tage.filter(t => t.fehlt);
+  if (fehlend.length < 2) return { tage: fehlend, wochentag: null };
+  const erster = fehlend[0].wochentag;
+  return { tage: fehlend, wochentag: fehlend.every(t => t.wochentag === erster) ? erster : null };
 }
 
 export { ausAnzeigedatum, alsAnzeigedatum };

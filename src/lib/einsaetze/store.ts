@@ -10,8 +10,10 @@
  * an, der auf den Ursprung verweist. Beide bleiben sichtbar — beim Controlling
  * zählt, was dokumentiert wurde, nicht was zuletzt dastand.
  *
- * Der Startbestand deckt eine Woche für zwei Patienten ab: eine vollständige
- * mit einem Abweichungstag und eine mit einem fehlenden Tag. Erbracht durch
+ * Der Startbestand deckt einen vollen Monat für Herrn Steiner ab (Juli 2026)
+ * und eine Woche für Frau Zimmermann. Ein Monat, weil sich erst über diese
+ * Länge zeigt, was die Kontrolle finden soll: ein Wochentag, der regelmässig
+ * ausfällt, ein Tag mit weniger als geplant und einer mit mehr. Erbracht durch
  * die am Mandat abgerechnete angehörige Person, Positionen und Minuten aus
  * dem jeweils aktiven Leistungsplanungsblatt.
  */
@@ -19,8 +21,8 @@ import { useSyncExternalStore } from "react";
 import type { Einsatz, ErbrachteLeistung, EinsatzUrheber } from "./einsaetze";
 import { istUnveraenderbar } from "./einsaetze";
 
-/** Bezugswoche der Mock-Demo: Montag 27.07.2026 bis Sonntag 02.08.2026. */
-export const EINSATZ_BEZUGSWOCHE = new Date(2026, 6, 27);
+/** Bezugsmonat der Mock-Demo: Juli 2026. Startwert der Zeitraumschaltung. */
+export const EINSATZ_BEZUGSMONAT = new Date(2026, 6, 1);
 
 const VERA: EinsatzUrheber = { art: "angehoeriger", kennung: "A-2026-0101" };
 const KARL: EinsatzUrheber = { art: "angehoeriger", kennung: "A-2026-0109" };
@@ -37,26 +39,103 @@ interface TagVorlage {
   bis: string;
   /** [PositionsId, Minuten, erbracht, Grund] */
   leistungen: [string, number, boolean, string][];
+  bericht?: string;
+  pruefzustand?: Einsatz["pruefzustand"];
 }
 
-/** Steiner, KLV-2026-101: LP-S6/S7 dreimal die Woche, LP-S8 täglich. */
-const STEINER_WOCHE: TagVorlage[] = [
-  { datum: "27.07.2026", von: "08:00", bis: "08:50", leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 8, true, ""]] },
-  { datum: "28.07.2026", von: "08:00", bis: "08:10", leistungen: [["LP-S8", 8, true, ""]] },
-  { datum: "29.07.2026", von: "08:00", bis: "08:50", leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 8, true, ""]] },
-  { datum: "30.07.2026", von: "08:05", bis: "08:15", leistungen: [["LP-S8", 8, true, ""]] },
-  /* Abweichungstag: das An- und Auskleiden entfiel, der Grund steht dabei —
-     nicht erbracht ist eine Angabe, kein Weglassen. */
-  { datum: "31.07.2026", von: "08:00", bis: "08:36", leistungen: [
-    ["LP-S6", 26, true, ""],
-    ["LP-S7", 0, false, "Herr Steiner war bereits angekleidet, als ich kam — seine Tochter war vor mir da."],
-    ["LP-S8", 8, true, ""]] },
-  { datum: "01.08.2026", von: "09:00", bis: "09:10", leistungen: [["LP-S8", 8, true, ""]] },
-  { datum: "02.08.2026", von: "09:00", bis: "09:10", leistungen: [["LP-S8", 8, true, ""]] },
+/**
+ * Steiner, KLV-2026-101 — Juli 2026, ohne Sonntage.
+ *
+ * Tagessoll ist das Wochensoll durch sieben (47 Min.), weil das Blatt zwar
+ * Rhythmen kennt, aber keinen Wochenplan. Ein Regeltag erfasst genau diese
+ * 47 Minuten; erfasste Minuten sind die tatsächlichen, nicht die geplanten.
+ */
+const STEINER_MONAT: TagVorlage[] = [
+  { datum: "01.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "Herr Steiner war wach und ansprechbar. Frühstück selbstständig eingenommen, Kreislauf stabil.",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "02.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "03.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "04.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "Etwas müde heute. Beim Gehen unsicherer als sonst, ich bin die ganze Strecke mitgegangen.",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "06.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "07.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "08.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "Guter Tag. Er hat von früher erzählt und war beim Ankleiden fast selbstständig.",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "09.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "10.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "11.07.2026", von: "08:00", bis: "08:32", pruefzustand: "geprueft",
+    bericht: "Rechtes Knie schmerzt beim Aufstehen. Habe ihm mehr Zeit gelassen.",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 0, false, "Herr Steiner hatte Schmerzen im Knie und wollte im Bett bleiben; das Ankleiden entfiel."], ["LP-S8", 6, true, ""]] },
+  { datum: "13.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "14.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "15.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "Unverändert. Appetit gut, keine Auffälligkeiten.",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "16.07.2026", von: "08:00", bis: "08:47", pruefzustand: "geprueft",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "17.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "18.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "Nach dem Mittagsschlaf verwirrt gewirkt, nach zwanzig Minuten wieder klar.",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "20.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "21.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "22.07.2026", von: "07:55", bis: "08:50", pruefzustand: "zu_pruefen",
+    bericht: "Blutdruck etwas tiefer als sonst gemessen, ihm ging es dabei gut.",
+    leistungen: [["LP-S6", 30, true, ""], ["LP-S7", 17, true, ""], ["LP-S8", 8, true, ""]] },
+  { datum: "23.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "24.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "25.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "Er wollte heute allein duschen. Ich habe vor der Tür gewartet.",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "27.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "28.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "29.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "Ruhiger Tag, nichts Besonderes zu berichten.",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "30.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
+  { datum: "31.07.2026", von: "08:00", bis: "08:47", pruefzustand: "zu_pruefen",
+    bericht: "Tochter war zu Besuch, er war sehr aufgeräumt.",
+    leistungen: [["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""], ["LP-S8", 6, true, ""]] },
 ];
 
-/** Am Sonntag übernahm die Pflegefachkraft — derselbe Patient, andere Urheberart. */
-const STEINER_SONNTAG_URHEBER = "02.08.2026";
+/** An diesem Tag übernahm die Pflegefachkraft — andere Urheberart. */
+const STEINER_FACHPERSON_TAG = "18.07.2026";
 
 /** Zimmermann, KLV-2026-033: LP-Z1 dreimal, LP-Z2 zweimal täglich. Do fehlt. */
 const ZIMMERMANN_WOCHE: TagVorlage[] = [
@@ -69,6 +148,11 @@ const ZIMMERMANN_WOCHE: TagVorlage[] = [
   { datum: "02.08.2026", von: "08:00", bis: "08:16", leistungen: [["LP-Z2", 16, true, ""]] },
 ];
 
+/** Kurzname für den Bericht — Mitarbeitende haben einen Namen, Angehörige eine Kennung. */
+function urheberKurz(u: EinsatzUrheber): string {
+  return u.art === "mitarbeitende" ? u.name : u.kennung;
+}
+
 function bauen(patientId: string, urheber: EinsatzUrheber, praefix: string, woche: TagVorlage[]) {
   const einsaetze: Einsatz[] = [];
   const leistungen: ErbrachteLeistung[] = [];
@@ -76,9 +160,12 @@ function bauen(patientId: string, urheber: EinsatzUrheber, praefix: string, woch
     const id = `${praefix}-${String(i + 1).padStart(2, "0")}`;
     einsaetze.push({
       id, patientId, datum: t.datum, von: t.von, bis: t.bis,
-      erbrachtDurch: t.datum === STEINER_SONNTAG_URHEBER && patientId === "P-2026-0041" ? SANDRA : urheber,
-      zustand: "erbracht", pruefzustand: "zu_pruefen",
+      erbrachtDurch: t.datum === STEINER_FACHPERSON_TAG && patientId === "P-2026-0041" ? SANDRA : urheber,
+      zustand: "erbracht", pruefzustand: t.pruefzustand ?? "zu_pruefen",
       bemerkung: "", korrigiert: null,
+      bericht: t.bericht ?? "",
+      berichtVon: t.bericht ? urheberKurz(urheber) : "",
+      berichtAm: t.bericht ? `${t.datum} ${t.bis}` : "",
     });
     t.leistungen.forEach(([positionId, minuten, erbracht, grund], k) => {
       leistungen.push({ id: `${id}-L${k + 1}`, einsatzId: id, positionId, minuten, erbracht, grund });
@@ -87,7 +174,7 @@ function bauen(patientId: string, urheber: EinsatzUrheber, praefix: string, woch
   return { einsaetze, leistungen };
 }
 
-const steiner = bauen("P-2026-0041", VERA, "EIN-2026-S", STEINER_WOCHE);
+const steiner = bauen("P-2026-0041", VERA, "EIN-2026-S", STEINER_MONAT);
 const zimmermann = bauen("P-2026-0049", KARL, "EIN-2026-Z", ZIMMERMANN_WOCHE);
 
 /* ── Bestand ───────────────────────────────────────────────────────────────── */

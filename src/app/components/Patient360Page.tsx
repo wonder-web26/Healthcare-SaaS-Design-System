@@ -83,6 +83,7 @@ import {
   Mic,
   Trash2,
   HeartPulse,
+  ChevronLeft,
 } from "lucide-react";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import {
@@ -103,14 +104,16 @@ import {
 import { wartetSeitTagen } from "../../lib/klv/warten";
 import { abgleichen, stunden } from "../../lib/klv/abgleich";
 import {
-  wocheAufteilen, einsatzMinuten, hatAbweichung,
-  type Einsatz, type EinsatzUrheber,
+  monatAufteilen, abweichungNachRichtung, fehlendeTageMuster,
+  einsatzMinuten, hatAbweichung, WOCHENTAGE, WOCHENTAGE_LANG, MONATE,
+  type Einsatz, type EinsatzUrheber, type ErbrachteLeistung, type Monatstag,
 } from "../../lib/einsaetze/einsaetze";
 import {
   useEinsaetze, useErbrachteLeistungen, einsatzBestaetigen, einsatzRueckfrage,
-  EINSATZ_BEZUGSWOCHE,
+  EINSATZ_BEZUGSMONAT,
 } from "../../lib/einsaetze/store";
-import { getArtefaktContainer, type KLVVerordnung, type KLVStatus } from "../../types/klinische-artefakte";
+import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung } from "../../types/klinische-artefakte";
+import { pruefzustandLabel } from "../../lib/stammdaten/einsatz";
 import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
 import { hProWoche, berechneSummen, einheitLabel } from "../../lib/klv/berechnung";
 import { toast } from "sonner";
@@ -197,7 +200,7 @@ const PATIENT_NAV: GruppeDef[] = [
   ] },
   { schluessel: "einsaetze", label: "Einsätze", ansichten: [
     { schluessel: "termine", label: "Termine" },
-    { schluessel: "stempelkontrolle", label: "Stempelkontrolle" },
+    { schluessel: "pflegekontrolle", label: "Pflegekontrolle" },
   ] },
   { schluessel: "dossier", label: "Dossier", ansichten: [
     { schluessel: "ordnerstruktur", label: "Ordnerstruktur" },
@@ -664,7 +667,7 @@ const ANSICHT_HAT_INHALT: Record<string, true> = {
   ueberblick: true, beziehungen: true, mandate: true, "interrai-hc": true, atl: true, anamnese: true,
   pflegeplan: true, vitalwerte: true, betreuungsrhythmus: true,
   leistungsplanungsblatt: true, "verordnung-und-kostengutsprache": true,
-  stempelkontrolle: true, dokumente: true, pendenzen: true, verlauf: true,
+  pflegekontrolle: true, dokumente: true, pendenzen: true, verlauf: true,
 };
 
 /** Ansichten, deren Umfang schon feststeht — sie nennen ihn statt zu schweigen. */
@@ -718,7 +721,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "betreuungsrhythmus": return <TabWorkflow patient={patient} />;
     case "leistungsplanungsblatt": return <TabKLV patientId={patient.id} />;
     case "verordnung-und-kostengutsprache": return <AnsichtVerordnung patient={patient} />;
-    case "stempelkontrolle": return <AnsichtStempelkontrolle patient={patient} />;
+    case "pflegekontrolle": return <AnsichtPflegekontrolle patient={patient} />;
     case "dokumente": return <TabDokumente patient={patient} />;
     case "pendenzen": return <TabTickets tickets={tickets} navigate={navigate} />;
     case "verlauf": return <TabHistorie patient={patient} />;
@@ -2865,11 +2868,13 @@ function VoFeld({ label, wert, bearbeitet, onChange }: {
 }
 
 /* ══════════════════════════════════════════
-   ANSICHT: Einsätze › Stempelkontrolle
+   ANSICHT: Einsätze › Pflegekontrolle
 
    Die angehörige Person erfasst täglich in einer eigenen mobilen Anwendung;
-   hier prüft die diplomierte Pflegefachperson wöchentlich. Drei Abschnitte:
-   die Woche im Überblick, was zu prüfen ist, was geprüft wurde.
+   hier prüft die diplomierte Pflegefachperson. Der Zeitraum ist der Monat,
+   nicht die Woche: ein Wochentag, der regelmässig ausfällt, zeigt sich erst
+   über vier Vorkommen. Der Monatskalender rastert deshalb nach Wochentagen —
+   ein Muster steht dann untereinander in einer Spalte.
    ══════════════════════════════════════════ */
 
 /** Anzeigename des Urhebers — Mitarbeitende tragen ihren Namen, Angehörige eine Kennung. */
@@ -2879,37 +2884,83 @@ function urheberName(u: EinsatzUrheber): string {
   return a ? `${a.vorname} ${a.nachname}` : u.kennung;
 }
 
-function AnsichtStempelkontrolle({ patient }: { patient: Patient }) {
+/* Zahlwörter mit Beugung. „An ein Tag" liest sich falsch, und ein Text, der
+   falsch klingt, wird nicht geglaubt — auch wenn die Zahl darin stimmt. */
+const ANZAHL_WORT = ["kein", "ein", "zwei", "drei", "vier", "fünf", "sechs",
+  "sieben", "acht", "neun", "zehn", "elf", "zwölf"];
+
+/** „ein" bis „zwölf", darüber die Ziffer. */
+function anzahlWort(n: number): string {
+  return n < ANZAHL_WORT.length ? ANZAHL_WORT[n] : String(n);
+}
+
+/** Dativ mit Nomen: „an einem Tag" / „an drei Tagen". */
+function anTagen(n: number): string {
+  return n === 1 ? "an einem Tag" : `an ${anzahlWort(n)} Tagen`;
+}
+
+/** Nominativ ohne Nomen: „einer" / „drei" — für „davon … ohne Begründung". */
+function davon(n: number): string {
+  return n === 1 ? "einer" : anzahlWort(n);
+}
+
+/** Farbgebung einer Tageskachel nach Richtung der Abweichung. */
+function tagesFarbe(t: Monatstag): { bg: string; text: string; rand: string } {
+  if (t.fehlt) return { bg: "var(--status-warning-bg)", text: "var(--status-warning-text)", rand: "var(--status-warning-text)" };
+  if (t.einsaetze.length === 0) return { bg: "transparent", text: "var(--text-tertiary)", rand: "transparent" };
+  if (t.abweichung < 0) return { bg: "var(--status-warning-bg)", text: "var(--status-warning-text)", rand: "transparent" };
+  if (t.abweichung > 0) return { bg: "var(--status-info-bg)", text: "var(--status-info)", rand: "transparent" };
+  return { bg: "var(--bg-secondary)", text: "var(--text-primary)", rand: "transparent" };
+}
+
+function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   const alleEinsaetze = useEinsaetze().filter(e => e.patientId === patient.id);
   const alleLeistungen = useErbrachteLeistungen();
   const klvs = useKlvVerordnungen().filter(k => k.patientId === patient.id);
   const blatt = [...klvs].filter(k => k.status !== "ersetzt").sort((a, b) => b.version - a.version)[0] || null;
   const [meldung, setMeldung] = useState("");
-  const [geprueftOffen, setGeprueftOffen] = useState(false);
+  /* Zeitraum als Jahr/Monat, nicht als Datum: die Schaltung bewegt sich in
+     Monatsschritten, ein Tag im Zustand liesse Zwischenstände zu, die es nicht
+     gibt. Startwert ist der Monat der Bezugswoche. */
+  const [zeitraum, setZeitraum] = useState({
+    jahr: EINSATZ_BEZUGSMONAT.getFullYear(), monat: EINSATZ_BEZUGSMONAT.getMonth(),
+  });
+  const [gewaehlterTag, setGewaehlterTag] = useState<string | null>(null);
 
   const leistungenVon = (id: string) => alleLeistungen.filter(l => l.einsatzId === id);
   const positionVon = (positionId: string) =>
     blatt?.leistungspositionen.find(p => p.id === positionId) ?? null;
 
   /* Soll je Woche aus dem Blatt; je Tag der Wochenwert durch sieben — das
-     Blatt kennt keinen Wochentagsplan, nur Häufigkeiten. */
+     Blatt kennt keinen Wochentagsplan, nur Häufigkeiten. Gerundet, damit ein
+     Regeltag glatt aufgeht und nicht jeder Tag als Abweichung erscheint. */
   const geplantProWocheMin = blatt ? berechneSummen(blatt.leistungspositionen).total * 60 : 0;
-  const geplantProTag = blatt ? geplantProWocheMin / 7 : 0;
+  const sollProTag = blatt ? Math.round(geplantProWocheMin / 7) : 0;
 
-  const tage = wocheAufteilen(alleEinsaetze, leistungenVon, EINSATZ_BEZUGSWOCHE, geplantProTag);
-  const erbrachtProWoche = tage.reduce((s, t) => s + t.erbracht, 0);
-  const abweichung = erbrachtProWoche - geplantProWocheMin;
+  const tage = monatAufteilen(alleEinsaetze, leistungenVon, zeitraum.jahr, zeitraum.monat, sollProTag);
+  const bilanz = abweichungNachRichtung(tage);
+  const muster = fehlendeTageMuster(tage);
 
-  const zuPruefen = alleEinsaetze
-    .filter(e => e.pruefzustand !== "geprueft")
-    .sort((a, b) => a.datum.localeCompare(b.datum));
-  const geprueft = alleEinsaetze.filter(e => e.pruefzustand === "geprueft");
+  const tagVon = (datum: string) => tage.find(t => t.datum === datum) ?? null;
+  const gewaehlt = gewaehlterTag ? tagVon(gewaehlterTag) : null;
 
-  const alleVollstaendigenBestaetigen = () => {
-    const ohneAbweichung = zuPruefen.filter(e =>
-      e.pruefzustand === "zu_pruefen" && !hatAbweichung(leistungenVon(e.id)));
-    ohneAbweichung.forEach(e => einsatzBestaetigen(e.id));
-    setMeldung(`${ohneAbweichung.length} Einsätze ohne Abweichung bestätigt.`);
+  const monatWechseln = (schritt: number) => {
+    setGewaehlterTag(null);
+    setZeitraum(z => {
+      const d = new Date(z.jahr, z.monat + schritt, 1);
+      return { jahr: d.getFullYear(), monat: d.getMonth() };
+    });
+  };
+
+  const offeneImMonat = tage.flatMap(t => t.einsaetze).filter(e => e.pruefzustand !== "geprueft");
+
+  const alleStimmigenBestaetigen = () => {
+    const stimmig = tage
+      .filter(t => !t.fehlt && t.abweichung === 0)
+      .flatMap(t => t.einsaetze)
+      .filter(e => e.pruefzustand === "zu_pruefen" && !hatAbweichung(leistungenVon(e.id)));
+    stimmig.forEach(e => einsatzBestaetigen(e.id));
+    setMeldung(`${stimmig.length} Einsätze ohne Abweichung bestätigt.`);
   };
 
   const rueckfrageStellen = (e: Einsatz) => {
@@ -2919,30 +2970,133 @@ function AnsichtStempelkontrolle({ patient }: { patient: Patient }) {
   };
 
   const min = (n: number) => `${Math.round(n)} min`;
+  const vorzeichen = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(Math.round(n))} min`;
+
+  /* ── Annas Befunde: ausschliesslich gerechnet ──────────────────────────────
+     Jeder Satz zählt etwas ab, das im Kalender darüber sichtbar ist. Nichts
+     wird geschätzt, nichts geraten — Anna liest hier nur laut vor. */
+  const befunde: string[] = [];
+  if (blatt) {
+    if (muster.wochentag !== null && muster.tage.length >= 2) {
+      befunde.push(`Alle ${anzahlWort(muster.tage.length)} Tage ohne Einsatz fallen auf einen ${WOCHENTAGE_LANG[muster.wochentag]}. Das ist kein Zufall, sondern eine Lücke im Rhythmus — zusammen ${min(bilanz.ausgefallen)}.`);
+    } else if (muster.tage.length > 0) {
+      befunde.push(`${anTagen(muster.tage.length).replace(/^an /, "An ")} ist kein Einsatz erfasst, obwohl ein Soll besteht. Ein gemeinsamer Wochentag ist nicht erkennbar.`);
+    }
+    const zuVielTage = tage.filter(t => t.abweichung > 0 && !t.fehlt);
+    const zuVielOhneGrund = zuVielTage.filter(t =>
+      !t.einsaetze.some(e => leistungenVon(e.id).some(l => l.grund.trim() !== "")));
+    if (zuVielTage.length > 0) {
+      befunde.push(`${anTagen(zuVielTage.length).replace(/^an /, "An ")} wurde mehr erfasst als geplant, zusammen ${min(bilanz.zuViel)}${zuVielOhneGrund.length > 0 ? ` — davon ${davon(zuVielOhneGrund.length)} ohne Begründung` : ""}. Mehr als geplant fällt bei der Kasse auf.`);
+    }
+    /* Ohne die ausgefallenen Tage: sonst stünde neben „an einem Tag" eine
+       Summe, die aus fünf Tagen stammt. */
+    const zuWenigTage = tage.filter(t => t.abweichung < 0 && !t.fehlt);
+    if (zuWenigTage.length > 0) {
+      befunde.push(`${anTagen(zuWenigTage.length).replace(/^an /, "An ")} wurde weniger erbracht als geplant, zusammen ${min(bilanz.zuWenigErbracht)}.`);
+    }
+    const mitBericht = tage.filter(t => t.hatBericht).length;
+    const mitEinsatz = tage.filter(t => t.einsaetze.length > 0).length;
+    if (mitEinsatz > 0) {
+      befunde.push(`An ${mitBericht} von ${mitEinsatz} Tagen mit Einsatz liegt ein Pflegebericht vor.`);
+    }
+    if (offeneImMonat.length > 0) {
+      befunde.push(`${offeneImMonat.length} ${offeneImMonat.length === 1 ? "Einsatz wartet" : "Einsätze warten"} noch auf Prüfung.`);
+    }
+  }
+
+  /* ── Aufmerksamkeitsliste ──────────────────────────────────────────────────
+     Auffällige Tage einzeln, stimmige Tage zu Strecken zusammengefasst. Eine
+     Liste, die dreissig Zeilen „wie verordnet" zeigt, wird nicht gelesen —
+     also steht dort eine Zeile je zusammenhängender Strecke. */
+  type Strecke = "stimmig" | "fehlt";
+  type Eintrag =
+    | { art: "tag"; tag: Monatstag }
+    | { art: "strecke"; sorte: Strecke; von: Monatstag; bis: Monatstag; anzahl: number };
+  const aufmerksamkeit: Eintrag[] = [];
+  {
+    /* Zwei Sorten werden verdichtet: Tage wie verordnet und Tage ohne jeden
+       Einsatz. Ein Monat ohne Erfassung ergibt sonst dreissig gleiche Zeilen —
+       und eine Liste, die niemand zu Ende liest. */
+    let lauf: Monatstag[] = [];
+    let sorte: Strecke | null = null;
+    const laufSchliessen = () => {
+      if (lauf.length === 0) return;
+      if (lauf.length === 1) aufmerksamkeit.push({ art: "tag", tag: lauf[0] });
+      else aufmerksamkeit.push({ art: "strecke", sorte: sorte!, von: lauf[0], bis: lauf[lauf.length - 1], anzahl: lauf.length });
+      lauf = []; sorte = null;
+    };
+    for (const t of tage) {
+      const eigen: Strecke | null =
+        t.fehlt ? "fehlt"
+        : (t.abweichung === 0 && t.einsaetze.length > 0) ? "stimmig"
+        : null;
+      if (eigen && eigen === sorte) { lauf.push(t); continue; }
+      laufSchliessen();
+      if (eigen) { lauf = [t]; sorte = eigen; }
+      else if (t.einsaetze.length > 0) aufmerksamkeit.push({ art: "tag", tag: t });
+    }
+    laufSchliessen();
+  }
 
   return (
     <div className="space-y-4">
-      {/* ── Kopf: Soll gegen Ist ── */}
+      {/* ── Kopfzeile: Zeitraum und Tagessoll ── */}
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "14px 18px" }}>
+        <div className="flex items-center flex-wrap" style={{ gap: 12 }}>
+          <div className="flex items-center" style={{ gap: 2 }}>
+            <button type="button" onClick={() => monatWechseln(-1)} aria-label="Vorheriger Monat"
+              className="ui-fokusring cursor-pointer flex items-center justify-center"
+              style={{ width: 28, height: 28, borderRadius: 8, background: "none", border: "none", color: "var(--text-secondary)" }}>
+              <ChevronLeft style={{ width: 16, height: 16 }} />
+            </button>
+            <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", minWidth: 132, textAlign: "center" }}>
+              {MONATE[zeitraum.monat]} {zeitraum.jahr}
+            </span>
+            <button type="button" onClick={() => monatWechseln(1)} aria-label="Nächster Monat"
+              className="ui-fokusring cursor-pointer flex items-center justify-center"
+              style={{ width: 28, height: 28, borderRadius: 8, background: "none", border: "none", color: "var(--text-secondary)" }}>
+              <ChevronRight style={{ width: 16, height: 16 }} />
+            </button>
+          </div>
+          {blatt ? (
+            <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+              Tagessoll {min(sollProTag)} · Blatt {blatt.id} · V{blatt.version}
+            </span>
+          ) : (
+            <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Kein aktives Blatt</span>
+          )}
+        </div>
+      </div>
+
+      {/* ── Urteilsleiste: getrennt nach Richtung ──
+          Netto allein verbirgt den Fall, der zählt: zwanzig Minuten zu viel an
+          einem Tag und zwanzig zu wenig an einem anderen ergeben null. */}
       <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "14px 18px" }}>
         {blatt ? (
-          <div className="flex items-center flex-wrap" style={{ gap: 20 }}>
+          <div className="flex items-center flex-wrap" style={{ gap: 28 }}>
             <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Geplant je Woche</div>
-              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{min(geplantProWocheMin)}</div>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Erbracht im Monat</div>
+              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{min(bilanz.ist)}</div>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>von {min(bilanz.soll)} geplant</div>
             </div>
             <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Erbracht</div>
-              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{min(erbrachtProWoche)}</div>
-            </div>
-            <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Abweichung</div>
-              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", color: abweichung < 0 ? "var(--status-warning-text)" : "var(--text-primary)" }}>
-                {abweichung >= 0 ? "+" : "−"}{Math.abs(Math.round(abweichung))} min
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Zu wenig erbracht</div>
+              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", color: bilanz.zuWenig > 0 ? "var(--status-warning-text)" : "var(--text-primary)" }}>{min(bilanz.zuWenig)}</div>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                {min(bilanz.ausgefallen)} ausgefallen · {min(bilanz.zuWenigErbracht)} knapper
               </div>
             </div>
-            <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-              Woche ab {alsAnzeigedatum(EINSATZ_BEZUGSWOCHE)} · Blatt {blatt.id} · V{blatt.version}
-            </span>
+            <div>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Zu viel erfasst</div>
+              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", color: bilanz.zuViel > 0 ? "var(--status-info)" : "var(--text-primary)" }}>{min(bilanz.zuViel)}</div>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                {(() => { const n = tage.filter(t => t.abweichung > 0 && !t.fehlt).length; return `${n} ${n === 1 ? "Tag" : "Tage"}`; })()}
+              </div>
+            </div>
+            <div style={{ marginLeft: "auto", textAlign: "right" }}>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Netto</div>
+              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>{vorzeichen(bilanz.netto)}</div>
+            </div>
           </div>
         ) : (
           <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", maxWidth: 560 }}>
@@ -2955,98 +3109,123 @@ function AnsichtStempelkontrolle({ patient }: { patient: Patient }) {
         <div style={{ padding: "10px 12px", borderRadius: 10, background: "var(--status-info-bg)", fontSize: "var(--text-meta)", color: "var(--status-info)" }}>{meldung}</div>
       )}
 
-      {/* ── 1 · Woche im Überblick ── */}
-      <PSectionCard title="Woche im Überblick" icon={Clock}>
-        <div className="flex flex-col" style={{ gap: 4 }}>
-          {tage.map(t => (
-            <div key={t.datum} className="flex items-center" style={{ gap: 10, padding: "7px 10px", borderRadius: 8, background: t.luecke ? "var(--status-warning-bg)" : "transparent" }}>
-              <span style={{ width: 28, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: t.luecke ? "var(--status-warning-text)" : "var(--text-primary)" }}>{t.kurz}</span>
-              <span style={{ width: 84, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{t.datum}</span>
-              {t.luecke ? (
-                <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
-                  <AlertTriangle style={{ width: 13, height: 13 }} /> Kein Einsatz erfasst, obwohl geplant
-                </span>
-              ) : (
-                <>
-                  <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{min(t.erbracht)} erbracht</span>
-                  {/* Ohne Blatt gibt es kein Soll — dann steht dort nichts, nicht null. */}
-                  {blatt && <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>von {min(t.geplant)} geplant</span>}
-                  {t.einsaetze.some(e => hatAbweichung(leistungenVon(e.id))) && (
-                    <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}>Abweichung</span>
-                  )}
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      </PSectionCard>
-
-      {/* ── 2 · Zu prüfen ── */}
-      <PSectionCard title="Zu prüfen" icon={CheckCircle2}>
-        {zuPruefen.length === 0 ? (
-          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Kein Einsatz dieser Woche wartet auf Prüfung.</p>
-        ) : (
-          <>
-            <div className="flex items-center" style={{ gap: 10, marginBottom: 10 }}>
-              <AppButton variant="sekundaer" onClick={alleVollstaendigenBestaetigen}>Alle vollständigen bestätigen</AppButton>
-              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-                {zuPruefen.filter(e => !hatAbweichung(leistungenVon(e.id))).length} ohne Abweichung
+      {/* ── Kalender und Tagesansicht nebeneinander ── */}
+      <div className="flex flex-col lg:flex-row" style={{ gap: "var(--space-4)", alignItems: "flex-start" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <PSectionCard title="Monat im Überblick" icon={Clock}>
+            <Monatskalender
+              tage={tage} jahr={zeitraum.jahr} monat={zeitraum.monat}
+              gewaehlt={gewaehlterTag} hatSoll={!!blatt}
+              onWaehlen={d => setGewaehlterTag(v => (v === d ? null : d))}
+            />
+            <div className="flex items-center flex-wrap" style={{ gap: 14, marginTop: 12, paddingTop: 10, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+              <Legende farbe="var(--bg-secondary)" text="wie verordnet" />
+              <Legende farbe="var(--status-warning-bg)" text="weniger erbracht" />
+              <Legende farbe="var(--status-info-bg)" text="mehr erfasst" />
+              <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                <span style={{ width: 12, height: 12, borderRadius: 3, background: "var(--status-warning-bg)", border: "1px solid var(--status-warning-text)" }} /> kein Einsatz
+              </span>
+              <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                <FileText style={{ width: 11, height: 11 }} /> Bericht vorhanden
               </span>
             </div>
-            <div className="flex flex-col" style={{ gap: 8 }}>
-              {zuPruefen.map(e => {
-                const ls = leistungenVon(e.id);
-                const erbrachtePos = ls.filter(l => l.erbracht).length;
-                const istMin = einsatzMinuten(ls);
-                const planMin = ls.reduce((s, l) => s + (positionVon(l.positionId)?.zeitMin ?? 0), 0);
-                const gruende = ls.filter(l => l.grund.trim()).map(l => l.grund);
-                return (
-                  <div key={e.id} style={{ padding: "10px 12px", borderRadius: 10, border: "var(--border-thin) solid var(--border-default)" }}>
-                    <div className="flex items-center flex-wrap" style={{ gap: 10 }}>
-                      <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", minWidth: 84 }}>{e.datum}</span>
-                      <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{urheberName(e.erbrachtDurch)}</span>
-                      <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{erbrachtePos} von {ls.length} Positionen</span>
-                      <span style={{ fontSize: "var(--text-meta)", color: istMin < planMin ? "var(--status-warning-text)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{min(istMin)} von {min(planMin)}</span>
-                      {e.pruefzustand === "rueckfrage" && (
-                        <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}>Rückfrage</span>
-                      )}
-                      <div className="flex items-center" style={{ gap: 8, marginLeft: "auto" }}>
-                        <button type="button" onClick={() => einsatzBestaetigen(e.id)} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>Bestätigen</button>
-                        <button type="button" onClick={() => rueckfrageStellen(e)} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Rückfrage</button>
-                      </div>
-                    </div>
-                    {gruende.map((g, i) => (
-                      <div key={i} style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 6 }}>{g}</div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </PSectionCard>
+          </PSectionCard>
+        </div>
 
-      {/* ── 3 · Geprüft ── */}
-      <PSectionCard title={`Geprüft (${geprueft.length})`} icon={Check}>
-        {geprueft.length === 0 ? (
-          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Noch kein Einsatz dieser Woche bestätigt.</p>
+        {/* Seitenspalte nach dem Muster des Service Desks: die Auswahl bleibt
+            beim Kalender, die Spalte zeigt nur, was ausgewählt ist. */}
+        <div style={{ width: 360, flexShrink: 0 }} className="w-full lg:w-[360px]">
+          <PSectionCard title={gewaehlt ? `${gewaehlt.nummer}. ${MONATE[zeitraum.monat]}` : "Tagesansicht"} icon={CheckCircle2}>
+            {!gewaehlt ? (
+              <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+                Wählen Sie einen Tag im Kalender, um Einsatz, Positionen und Pflegebericht zu sehen.
+              </p>
+            ) : (
+              <Tagesansicht
+                tag={gewaehlt} positionVon={positionVon} leistungenVon={leistungenVon}
+                hatSoll={!!blatt} onBestaetigen={einsatzBestaetigen} onRueckfrage={rueckfrageStellen}
+              />
+            )}
+          </PSectionCard>
+        </div>
+      </div>
+
+      {/* ── Annas Befunde ── */}
+      {befunde.length > 0 && (
+        <PSectionCard title="Was auffällt" icon={Sparkles}>
+          <ul className="flex flex-col" style={{ gap: 7, listStyle: "none", padding: 0, margin: 0 }}>
+            {befunde.map((b, i) => (
+              <li key={i} className="flex" style={{ gap: 8, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+                <span aria-hidden style={{ color: "var(--text-tertiary)" }}>·</span>
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+          <p style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 10 }}>
+            Gezählt aus den erfassten Einsätzen dieses Monats. Anna wertet hier nicht, sie rechnet.
+          </p>
+        </PSectionCard>
+      )}
+
+      {/* ── Aufmerksamkeitsliste ── */}
+      <PSectionCard title="Tage im Einzelnen" icon={Check}>
+        {aufmerksamkeit.length === 0 ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+            In diesem Monat ist kein Einsatz erfasst.
+          </p>
         ) : (
           <>
-            <button type="button" onClick={() => setGeprueftOffen(o => !o)} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
-              {geprueftOffen ? "Einklappen" : `${geprueft.length} bestätigte Einsätze anzeigen`}
-            </button>
-            {geprueftOffen && (
-              <div className="flex flex-col" style={{ gap: 6, marginTop: 8 }}>
-                {geprueft.map(e => (
-                  <div key={e.id} className="flex items-center" style={{ gap: 10, padding: "7px 10px", borderRadius: 8, background: "var(--bg-secondary)" }}>
-                    <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", minWidth: 84 }}>{e.datum}</span>
-                    <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{urheberName(e.erbrachtDurch)}</span>
-                    <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{min(einsatzMinuten(leistungenVon(e.id)))}</span>
-                    <span style={{ marginLeft: "auto", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>geprüft · nicht mehr änderbar</span>
-                  </div>
-                ))}
+            {offeneImMonat.length > 0 && (
+              <div className="flex items-center" style={{ gap: 10, marginBottom: 10 }}>
+                <AppButton variant="sekundaer" onClick={alleStimmigenBestaetigen}>Alle stimmigen Tage bestätigen</AppButton>
+                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+                  {offeneImMonat.length} von {tage.flatMap(t => t.einsaetze).length} Einsätzen offen
+                </span>
               </div>
             )}
+            <div className="flex flex-col" style={{ gap: 4 }}>
+              {aufmerksamkeit.map(e => e.art === "strecke" ? (
+                <div key={`s-${e.von.datum}`} className="flex items-center" style={{ gap: 10, padding: "7px 10px", borderRadius: 8, fontSize: "var(--text-small)",
+                  color: e.sorte === "fehlt" ? "var(--status-warning-text)" : "var(--text-tertiary)",
+                  background: e.sorte === "fehlt" ? "var(--status-warning-bg)" : "transparent" }}>
+                  <span style={{ fontVariantNumeric: "tabular-nums", minWidth: 96 }}>{e.von.nummer}.–{e.bis.nummer}. {MONATE[zeitraum.monat]}</span>
+                  {e.sorte === "fehlt" ? (
+                    <span className="inline-flex items-center" style={{ gap: 6 }}>
+                      <AlertTriangle style={{ width: 13, height: 13 }} /> {anzahlWort(e.anzahl)} Tage ohne Einsatz, obwohl geplant
+                    </span>
+                  ) : (
+                    <span>{anzahlWort(e.anzahl)} Tage wie verordnet</span>
+                  )}
+                </div>
+              ) : (
+                <button
+                  key={`t-${e.tag.datum}`} type="button" onClick={() => setGewaehlterTag(e.tag.datum)}
+                  className="ui-fokusring cursor-pointer flex items-center text-left"
+                  style={{ gap: 10, padding: "7px 10px", borderRadius: 8, border: "none", fontFamily: "inherit", width: "100%",
+                    background: e.tag.datum === gewaehlterTag ? "var(--bg-secondary)" : "transparent" }}>
+                  <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", minWidth: 96, fontWeight: "var(--weight-medium)" }}>
+                    {e.tag.nummer}. {MONATE[zeitraum.monat]}
+                  </span>
+                  <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", width: 26 }}>{WOCHENTAGE[e.tag.wochentag]}</span>
+                  {e.tag.fehlt ? (
+                    <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
+                      <AlertTriangle style={{ width: 13, height: 13 }} /> Kein Einsatz erfasst, obwohl geplant
+                    </span>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums" }}>{min(e.tag.ist)}</span>
+                      <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: e.tag.abweichung < 0 ? "var(--status-warning-text)" : "var(--status-info)" }}>
+                        {vorzeichen(e.tag.abweichung)}
+                      </span>
+                    </>
+                  )}
+                  {e.tag.hatBericht && <FileText style={{ width: 12, height: 12, color: "var(--text-tertiary)" }} aria-label="Bericht vorhanden" />}
+                  {e.tag.offen && (
+                    <span style={{ marginLeft: "auto", padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--bg-secondary)", color: "var(--text-secondary)" }}>offen</span>
+                  )}
+                </button>
+              ))}
+            </div>
           </>
         )}
       </PSectionCard>
@@ -3054,7 +3233,182 @@ function AnsichtStempelkontrolle({ patient }: { patient: Patient }) {
   );
 }
 
+function Legende({ farbe, text }: { farbe: string; text: string }) {
+  return (
+    <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+      <span style={{ width: 12, height: 12, borderRadius: 3, background: farbe }} /> {text}
+    </span>
+  );
+}
 
+/**
+ * Monatskalender, nach Wochentagen gerastert.
+ *
+ * Die Rasterung ist der eigentliche Zweck: fällt jeden Sonntag der Einsatz
+ * aus, steht das in einer Spalte untereinander und nicht verteilt in einer
+ * Liste.
+ */
+function Monatskalender({ tage, jahr, monat, gewaehlt, hatSoll, onWaehlen }: {
+  tage: Monatstag[]; jahr: number; monat: number;
+  gewaehlt: string | null; hatSoll: boolean; onWaehlen: (datum: string) => void;
+}) {
+  const vorlauf = (new Date(jahr, monat, 1).getDay() + 6) % 7;
+  return (
+    <div>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 4 }}>
+        {WOCHENTAGE.map((w, i) => (
+          <div key={w} style={{ textAlign: "center", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", paddingBottom: 2 }}>
+            <abbr title={WOCHENTAGE_LANG[i]} style={{ textDecoration: "none" }}>{w}</abbr>
+          </div>
+        ))}
+      </div>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+        {Array.from({ length: vorlauf }, (_, i) => <div key={`v${i}`} />)}
+        {tage.map(t => {
+          const f = tagesFarbe(t);
+          const ist = t.datum === gewaehlt;
+          return (
+            <button
+              key={t.datum} type="button" onClick={() => onWaehlen(t.datum)}
+              aria-pressed={ist}
+              aria-label={`${t.nummer}. ${MONATE[monat]}, ${t.fehlt ? "kein Einsatz erfasst" : `${Math.round(t.ist)} Minuten erbracht`}`}
+              className="ui-fokusring cursor-pointer flex flex-col"
+              style={{
+                gap: 2, padding: "6px 7px", minHeight: 62, borderRadius: 8, fontFamily: "inherit", textAlign: "left",
+                background: f.bg,
+                border: `1px solid ${ist ? "var(--brand-primary)" : f.rand}`,
+                boxShadow: ist ? "0 0 0 1px var(--brand-primary)" : "none",
+              }}>
+              <div className="flex items-center" style={{ gap: 4 }}>
+                <span style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: f.text, fontVariantNumeric: "tabular-nums" }}>{t.nummer}</span>
+                {t.hatBericht && <FileText style={{ width: 10, height: 10, color: "var(--text-tertiary)" }} aria-hidden />}
+                {t.offen && <span aria-hidden style={{ marginLeft: "auto", width: 5, height: 5, borderRadius: "50%", background: "var(--text-tertiary)" }} />}
+              </div>
+              {t.fehlt ? (
+                <span style={{ fontSize: "var(--text-micro)", color: f.text }}>—</span>
+              ) : t.einsaetze.length === 0 ? null : (
+                <>
+                  <span style={{ fontSize: "var(--text-micro)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{Math.round(t.ist)} min</span>
+                  {hatSoll && t.abweichung !== 0 && (
+                    <span style={{ fontSize: "var(--text-micro)", color: f.text, fontVariantNumeric: "tabular-nums" }}>
+                      {t.abweichung > 0 ? "+" : "−"}{Math.abs(Math.round(t.abweichung))}
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Ein Tag im Einzelnen: Einsatz, Positionen mit Grund, Pflegebericht, Prüfung. */
+function Tagesansicht({ tag, positionVon, leistungenVon, hatSoll, onBestaetigen, onRueckfrage }: {
+  tag: Monatstag;
+  positionVon: (id: string) => KLVLeistung | null;
+  leistungenVon: (id: string) => ErbrachteLeistung[];
+  hatSoll: boolean;
+  onBestaetigen: (id: string) => void;
+  onRueckfrage: (e: Einsatz) => void;
+}) {
+  if (tag.einsaetze.length === 0) {
+    return (
+      <div>
+        <div className="inline-flex items-center" style={{ gap: 7, fontSize: "var(--text-small)", color: tag.fehlt ? "var(--status-warning-text)" : "var(--text-secondary)" }}>
+          {tag.fehlt && <AlertTriangle style={{ width: 14, height: 14 }} />}
+          {tag.fehlt
+            ? "Kein Einsatz erfasst, obwohl geplant."
+            : "Für diesen Tag ist nichts erfasst."}
+        </div>
+        {tag.fehlt && (
+          <p style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 8 }}>
+            Geplant waren {Math.round(tag.soll)} Minuten. Ein fehlender Tag lässt sich hier nicht nachtragen — das geschieht in der Erfassung.
+          </p>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col" style={{ gap: 14 }}>
+      {tag.einsaetze.map(e => {
+        const ls = leistungenVon(e.id);
+        const geprueft = e.pruefzustand === "geprueft";
+        return (
+          <div key={e.id} className="flex flex-col" style={{ gap: 8 }}>
+            <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
+              <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{e.von}–{e.bis}</span>
+              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{urheberName(e.erbrachtDurch)}</span>
+              <span style={{ marginLeft: "auto", padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)",
+                background: geprueft ? "var(--status-success-bg)" : "var(--bg-secondary)",
+                color: geprueft ? "var(--status-success-text)" : "var(--text-secondary)" }}>
+                {pruefzustandLabel(e.pruefzustand)}
+              </span>
+            </div>
+
+            {/* Positionen: geplant gegen erfasst, Grund direkt darunter */}
+            <div className="flex flex-col" style={{ gap: 5 }}>
+              {ls.map(l => {
+                const pos = positionVon(l.positionId);
+                return (
+                  <div key={l.id}>
+                    <div className="flex items-center" style={{ gap: 8 }}>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-meta)", color: l.erbracht ? "var(--text-primary)" : "var(--text-tertiary)", textDecoration: l.erbracht ? "none" : "line-through" }}>
+                        {pos ? pos.bezeichnung : l.positionId}
+                      </span>
+                      <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>
+                        {l.minuten} min
+                      </span>
+                      {hatSoll && pos && (
+                        <span style={{ fontSize: "var(--text-micro)", fontVariantNumeric: "tabular-nums", color: "var(--text-tertiary)", width: 56, textAlign: "right" }}>
+                          von {pos.zeitMin} min
+                        </span>
+                      )}
+                    </div>
+                    {l.grund.trim() && (
+                      <div style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)", marginTop: 3, paddingLeft: 2 }}>{l.grund}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pflegebericht — der Wortlaut aus der Erfassung, unverändert */}
+            <div style={{ padding: "9px 11px", borderRadius: 10, background: "var(--bg-secondary)" }}>
+              <div className="flex items-center" style={{ gap: 6, marginBottom: e.bericht.trim() ? 5 : 0 }}>
+                <FileText style={{ width: 12, height: 12, color: "var(--text-tertiary)" }} />
+                <span style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)" }}>Pflegebericht</span>
+                {e.bericht.trim() && (
+                  <span style={{ marginLeft: "auto", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                    {e.berichtVon} · {e.berichtAm}
+                  </span>
+                )}
+              </div>
+              <p style={{ fontSize: "var(--text-meta)", color: e.bericht.trim() ? "var(--text-primary)" : "var(--text-tertiary)", margin: 0, lineHeight: 1.55 }}>
+                {e.bericht.trim() || "Für diesen Einsatz wurde kein Bericht geschrieben."}
+              </p>
+            </div>
+
+            {/* Prüfvermerk der Fachperson — steht getrennt vom Bericht */}
+            {e.bemerkung.trim() && (
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)" }}>{e.bemerkung}</div>
+            )}
+
+            {geprueft ? (
+              <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Geprüft · nicht mehr änderbar</span>
+            ) : (
+              <div className="flex items-center" style={{ gap: 12 }}>
+                <button type="button" onClick={() => onBestaetigen(e.id)} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>Bestätigen</button>
+                <button type="button" onClick={() => onRueckfrage(e)} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Rückfrage</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════
    TAB: TICKETS
