@@ -100,6 +100,7 @@ import {
   useKlvVerordnungen, verordnungAnlegen, verordnungEntfernen,
   statusWechseln, neueVersionErstellen, istGesperrt, sperrGrund,
 } from "../../lib/klv/store";
+import { wartetSeitTagen } from "../../lib/klv/warten";
 import { getArtefaktContainer, type KLVVerordnung, type KLVStatus } from "../../types/klinische-artefakte";
 import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
 import { hProWoche, berechneSummen, einheitLabel } from "../../lib/klv/berechnung";
@@ -3400,25 +3401,6 @@ function TabPflegeplanung({ patientId, navigate }: { patientId: string; navigate
    schon, steht im Protokoll: der Zeitpunkt des Wechsels IN diesen Zustand.
    ══════════════════════════════════════════ */
 
-/**
- * Tage seit dem Wechsel in den aktuellen Zustand; null ohne lesbaren Eintrag.
- *
- * Bezug ist der echte heutige Tag, nicht das Bezugsdatum der Mock-Listen: die
- * Protokolleinträge werden beim Wechsel mit der echten Uhr gestempelt. Ein
- * eingefrorenes Bezugsdatum gegen einen lebenden Zeitstempel zu rechnen würde
- * für jeden neuen Wechsel eine negative Wartezeit ergeben.
- */
-function wartetSeitTagen(v: KLVVerordnung, stichtag: Date): number | null {
-  const letzter = [...v.statusProtokoll].reverse().find(e => e.status === v.status);
-  if (!letzter) return null;
-  const m = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(letzter.zeitpunkt);
-  if (!m) return null;
-  const seit = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-  const tage = Math.floor((Date.UTC(stichtag.getFullYear(), stichtag.getMonth(), stichtag.getDate())
-    - Date.UTC(seit.getFullYear(), seit.getMonth(), seit.getDate())) / 86400000);
-  return tage >= 0 ? tage : null;
-}
-
 const WARTET_AUF: Record<string, string> = { arzt: "der Ärztin", kasse: "der Kasse" };
 
 function LpbKopf({ v, onNeueVersion }: { v: KLVVerordnung; onNeueVersion: () => void }) {
@@ -3477,18 +3459,21 @@ function LpbKopf({ v, onNeueVersion }: { v: KLVVerordnung; onNeueVersion: () => 
         })}
       </div>
 
-      {gesperrt ? (
-        <div className="flex items-start" style={{ gap: 8, padding: "10px 12px", borderRadius: 10, background: "var(--status-warning-bg)" }}>
+      {gesperrt && (
+        <div className="flex items-start" style={{ gap: 8, padding: "10px 12px", borderRadius: 10, background: "var(--status-warning-bg)", marginBottom: naechster ? 10 : 0 }}>
           <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
           <span className="flex-1" style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>{sperrGrund(v)}</span>
           <AppButton variant="sekundaer" icon={Plus} onClick={onNeueVersion}>Neue Version erstellen</AppButton>
         </div>
-      ) : naechster ? (
+      )}
+      {/* Der Zustand läuft weiter, auch wenn der Inhalt gesperrt ist — sonst
+          liesse sich der Entscheid der Kasse nie eintragen. */}
+      {naechster && (
         <div className="flex items-center flex-wrap" style={{ gap: 10 }}>
           <AppButton variant="sekundaer" onClick={weiter}>Weiter zu „{lpbStatusLabel(naechster)}“</AppButton>
           {meldung && <span style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)" }}>{meldung}</span>}
         </div>
-      ) : null}
+      )}
 
       {v.statusProtokoll.length > 0 && (
         <div style={{ marginTop: 12, paddingTop: 10, borderTop: "var(--border-thin) solid var(--border-default)" }}>

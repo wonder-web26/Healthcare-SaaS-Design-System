@@ -240,9 +240,13 @@ const HUBER_PP: Pflegeplanung = {
 const HUBER_KLV: KLVVerordnung = {
   id: "KLV-2026-020", onboardingId: "OB-2026-105", patientId: null,
   patientName: "Huber, Fritz", pflegeplanungId: null,
-  status: "entwurf",
+  status: "an_arzt",
   version: 1, art: "erst",
-  statusProtokoll: [{ status: "entwurf", person: "Maria Keller", zeitpunkt: "25.02.2026 10:30" }],
+  statusProtokoll: [
+    { status: "entwurf", person: "Maria Keller", zeitpunkt: "25.02.2026 10:30" },
+    { status: "kontrolliert", person: "Maria Keller", zeitpunkt: "02.07.2026 09:15" },
+    { status: "an_arzt", person: "Maria Keller", zeitpunkt: "05.07.2026 11:40" },
+  ],
   erstelltVon: "Maria Keller",
   erstellDatum: "25.02.2026", beginnDatum: null, endDatum: null,
   diagnosen: [
@@ -457,9 +461,15 @@ const STEINER_PP: Pflegeplanung = {
 const STEINER_KLV: KLVVerordnung = {
   id: "KLV-2026-101", onboardingId: "OB-2026-101", patientId: null,
   patientName: "Steiner, Hans-Rudolf", pflegeplanungId: "PP-2026-101",
-  status: "entscheid_erhalten",
+  status: "an_kasse",
   version: 2, art: "folge",
-  statusProtokoll: [{ status: "entscheid_erhalten", person: "Maria Keller", zeitpunkt: "24.02.2026 14:15" }],
+  statusProtokoll: [
+    { status: "entwurf", person: "Maria Keller", zeitpunkt: "24.02.2026 14:15" },
+    { status: "kontrolliert", person: "Maria Keller", zeitpunkt: "10.06.2026 08:30" },
+    { status: "an_arzt", person: "Maria Keller", zeitpunkt: "11.06.2026 16:00" },
+    { status: "unterzeichnet", person: "Dr. med. Peter Frei", zeitpunkt: "16.06.2026 10:20" },
+    { status: "an_kasse", person: "Maria Keller", zeitpunkt: "18.06.2026 09:05" },
+  ],
   erstelltVon: "Maria Keller",
   erstellDatum: "24.02.2026", beginnDatum: "01.03.2026", endDatum: "31.08.2026",
   diagnosen: [

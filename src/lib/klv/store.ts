@@ -172,8 +172,13 @@ export function verordnungAendern(
  * Rückgabe: der Grund einer Ablehnung, sonst leer.
  */
 export function statusWechseln(klvId: string, status: KLVStatus, person: string, jetzt: string): string {
-  const v = schreibbar(klvId);
-  if (!v) return "Das Blatt ist gesperrt.";
+  /* Bewusst NICHT über schreibbar(): die Sperre schützt den INHALT — Positionen,
+     Diagnosen, Kopffelder. Der Zustand muss weiterlaufen können, sonst endete
+     die Kette bei „an Kasse übermittelt" in einer Sackgasse und der Entscheid
+     liesse sich nie eintragen. Eine ersetzte Fassung wechselt nichts mehr. */
+  const v = bestand.find(k => k.id === klvId);
+  if (!v) return "Das Blatt wurde nicht gefunden.";
+  if (v.status === "ersetzt") return "Eine ersetzte Fassung wechselt den Zustand nicht mehr.";
   if (status === "ersetzt") return "„Ersetzt“ entsteht nur beim Erstellen einer neuen Version.";
   if (lpbNaechster(v.status) !== status) return "Es wird nur vorwärts gewechselt, und nur um einen Schritt.";
   if (status === "kontrolliert" && v.leistungspositionen.length === 0) {

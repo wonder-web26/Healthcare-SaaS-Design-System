@@ -1,6 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router";
-import { Plus, X, AlertTriangle, Check, ArrowLeft, Send, Sparkles, Search, ChevronDown, ExternalLink } from "lucide-react";
+import { Plus, X, AlertTriangle, Check, ArrowLeft, Send, Sparkles, Search, ChevronDown, ExternalLink, Clock } from "lucide-react";
+import { useKlvVerordnungen } from "../../lib/klv/store";
+import { wartendeBlaetter } from "../../lib/klv/warten";
+import { ansichtPfad } from "./Patient360Page";
 import { getUnifiedEntries, entryBetreff, entryPersonName, CURRENT_USER, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
 import { personLink, personArtLabel } from "../../lib/mocks/personen-aufloesung";
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
@@ -231,6 +234,78 @@ function AuswahlDropdown({ label, optionen, ausgewaehlt, onToggle }: {
 /* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════
+   ABSCHNITT: Wartet auf Antwort
+
+   Blätter, die bei einer Ärztin oder einer Kasse liegen. Der Abschnitt
+   verschwindet nie: „nichts hängt" ist selbst eine Aussage, und wer ihn
+   sucht, soll ihn finden.
+   ══════════════════════════════════════════ */
+function WartetAufAntwort() {
+  const navigate = useNavigate();
+  const wartend = wartendeBlaetter(useKlvVerordnungen());
+
+  return (
+    <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", marginBottom: "var(--space-4)" }}>
+      <div className="flex items-center" style={{ gap: 8, padding: "12px 16px", borderBottom: wartend.length > 0 ? "var(--border-thin) solid var(--border-default)" : "none" }}>
+        <Clock style={{ width: 15, height: 15, color: "var(--text-secondary)" }} />
+        <h5 style={{ flex: 1, fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Wartet auf Antwort</h5>
+        {wartend.length > 0 && (
+          <span style={{ padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--bg-secondary)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+            {wartend.length}
+          </span>
+        )}
+      </div>
+
+      {wartend.length === 0 ? (
+        <div style={{ padding: "14px 16px", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+          Kein Leistungsplanungsblatt liegt bei einer Ärztin oder einer Kasse.
+        </div>
+      ) : (
+        <div className="flex flex-col">
+          {wartend.map(({ verordnung: v, amZug, tage, ueberfaellig }) => (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => v.patientId && navigate(ansichtPfad(v.patientId, "leistungsplanungsblatt"))}
+              className="ui-fokusring w-full flex items-center flex-wrap cursor-pointer transition-colors text-left"
+              style={{ gap: 10, padding: "10px 16px", background: "transparent", border: "none", borderTop: "var(--border-thin) solid var(--border-default)", fontFamily: "inherit" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", minWidth: 170 }}>
+                {v.patientName}
+              </span>
+              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                {v.id} · V{v.version}
+              </span>
+              <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+                bei {amZug === "arzt" ? "der Ärztin" : "der Kasse"}
+              </span>
+              <span style={{
+                padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)",
+                fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums",
+                background: ueberfaellig ? "var(--status-warning-bg)" : "var(--bg-secondary)",
+                color: ueberfaellig ? "var(--status-warning-text)" : "var(--text-secondary)",
+              }}>
+                seit {tage} {tage === 1 ? "Tag" : "Tagen"}
+              </span>
+              {ueberfaellig && amZug === "kasse" && (
+                <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+                  gilt als stillschweigend angenommen
+                </span>
+              )}
+              <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+                {v.erstelltVon}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ServiceDeskPage() {
   const role = useCurrentRole();
@@ -560,6 +635,8 @@ export function ServiceDeskPage() {
         <style>{`@media (min-width: 640px) { .pendenzen-list-area { padding-left: var(--space-6) !important; padding-right: var(--space-6) !important; } }`}</style>
         {/* ── LIST ── */}
         <div className="pendenzen-list-area flex-1 min-w-0 overflow-y-auto" style={{ paddingRight: selected ? "var(--space-4)" : 0 }}>
+          <WartetAufAntwort />
+
           {/* Bulk-Aktionsleiste */}
           {bulkSelected.size > 0 && (
             <div className="sticky top-0 z-10 flex items-center justify-between" style={{ padding: "12px 16px", marginBottom: 12, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
