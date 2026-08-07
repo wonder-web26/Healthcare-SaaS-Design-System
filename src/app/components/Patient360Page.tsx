@@ -102,6 +102,14 @@ import {
 } from "../../lib/klv/store";
 import { wartetSeitTagen } from "../../lib/klv/warten";
 import { abgleichen, stunden } from "../../lib/klv/abgleich";
+import {
+  wocheAufteilen, einsatzMinuten, hatAbweichung,
+  type Einsatz, type EinsatzUrheber,
+} from "../../lib/einsaetze/einsaetze";
+import {
+  useEinsaetze, useErbrachteLeistungen, einsatzBestaetigen, einsatzRueckfrage,
+  EINSATZ_BEZUGSWOCHE,
+} from "../../lib/einsaetze/store";
 import { getArtefaktContainer, type KLVVerordnung, type KLVStatus } from "../../types/klinische-artefakte";
 import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
 import { hProWoche, berechneSummen, einheitLabel } from "../../lib/klv/berechnung";
@@ -710,7 +718,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "betreuungsrhythmus": return <TabWorkflow patient={patient} />;
     case "leistungsplanungsblatt": return <TabKLV patientId={patient.id} />;
     case "verordnung-und-kostengutsprache": return <AnsichtVerordnung patient={patient} />;
-    case "stempelkontrolle": return <AnsichtStempelkontrolle />;
+    case "stempelkontrolle": return <AnsichtStempelkontrolle patient={patient} />;
     case "dokumente": return <TabDokumente patient={patient} />;
     case "pendenzen": return <TabTickets tickets={tickets} navigate={navigate} />;
     case "verlauf": return <TabHistorie patient={patient} />;
@@ -2858,259 +2866,190 @@ function VoFeld({ label, wert, bearbeitet, onChange }: {
 
 /* ══════════════════════════════════════════
    ANSICHT: Einsätze › Stempelkontrolle
-   Übernimmt Abschnitt 3 der früheren Sammelliste unverändert: die Absenzen.
+
+   Die angehörige Person erfasst täglich in einer eigenen mobilen Anwendung;
+   hier prüft die diplomierte Pflegefachperson wöchentlich. Drei Abschnitte:
+   die Woche im Überblick, was zu prüfen ist, was geprüft wurde.
    ══════════════════════════════════════════ */
-function AnsichtStempelkontrolle() {
-  const [hatAbsenzen, setHatAbsenzen] = useState(false);
-  const [absenzForm, setAbsenzForm] = useState({ zeitraum: "", tage: "", typ: "Krankheit", bemerkung: "" });
 
-  interface Absenz { id: number; zeitraum: string; tage: string; typ: string; bemerkung: string; }
-  const [absenzen, setAbsenzen] = useState<Absenz[]>([]);
-  const [nextId, setNextId] = useState(1);
-  const [editingId, setEditingId] = useState<number | null>(null);
+/** Anzeigename des Urhebers — Mitarbeitende tragen ihren Namen, Angehörige eine Kennung. */
+function urheberName(u: EinsatzUrheber): string {
+  if (u.art === "mitarbeitende") return u.name;
+  const a = getAngehoerige().find(x => x.id === u.kennung);
+  return a ? `${a.vorname} ${a.nachname}` : u.kennung;
+}
 
-  const canSave = absenzForm.zeitraum.trim() !== "" && absenzForm.tage.trim() !== "";
-  const isEditing = editingId !== null;
+function AnsichtStempelkontrolle({ patient }: { patient: Patient }) {
+  const alleEinsaetze = useEinsaetze().filter(e => e.patientId === patient.id);
+  const alleLeistungen = useErbrachteLeistungen();
+  const klvs = useKlvVerordnungen().filter(k => k.patientId === patient.id);
+  const blatt = [...klvs].filter(k => k.status !== "ersetzt").sort((a, b) => b.version - a.version)[0] || null;
+  const [meldung, setMeldung] = useState("");
+  const [geprueftOffen, setGeprueftOffen] = useState(false);
 
-  const handleAddAbsenz = () => {
-    if (!canSave) return;
-    if (isEditing) {
-      setAbsenzen((prev) => prev.map((a) => a.id === editingId ? { ...absenzForm, id: editingId } : a));
-      setEditingId(null);
-    } else {
-      setAbsenzen((prev) => [...prev, { ...absenzForm, id: nextId }]);
-      setNextId((n) => n + 1);
-    }
-    setAbsenzForm({ zeitraum: "", tage: "", typ: "Krankheit", bemerkung: "" });
+  const leistungenVon = (id: string) => alleLeistungen.filter(l => l.einsatzId === id);
+  const positionVon = (positionId: string) =>
+    blatt?.leistungspositionen.find(p => p.id === positionId) ?? null;
+
+  /* Soll je Woche aus dem Blatt; je Tag der Wochenwert durch sieben — das
+     Blatt kennt keinen Wochentagsplan, nur Häufigkeiten. */
+  const geplantProWocheMin = blatt ? berechneSummen(blatt.leistungspositionen).total * 60 : 0;
+  const geplantProTag = blatt ? geplantProWocheMin / 7 : 0;
+
+  const tage = wocheAufteilen(alleEinsaetze, leistungenVon, EINSATZ_BEZUGSWOCHE, geplantProTag);
+  const erbrachtProWoche = tage.reduce((s, t) => s + t.erbracht, 0);
+  const abweichung = erbrachtProWoche - geplantProWocheMin;
+
+  const zuPruefen = alleEinsaetze
+    .filter(e => e.pruefzustand !== "geprueft")
+    .sort((a, b) => a.datum.localeCompare(b.datum));
+  const geprueft = alleEinsaetze.filter(e => e.pruefzustand === "geprueft");
+
+  const alleVollstaendigenBestaetigen = () => {
+    const ohneAbweichung = zuPruefen.filter(e =>
+      e.pruefzustand === "zu_pruefen" && !hatAbweichung(leistungenVon(e.id)));
+    ohneAbweichung.forEach(e => einsatzBestaetigen(e.id));
+    setMeldung(`${ohneAbweichung.length} Einsätze ohne Abweichung bestätigt.`);
   };
 
-  const handleEditAbsenz = (a: Absenz) => {
-    setEditingId(a.id);
-    setAbsenzForm({ zeitraum: a.zeitraum, tage: a.tage, typ: a.typ, bemerkung: a.bemerkung });
-    setHatAbsenzen(true);
+  const rueckfrageStellen = (e: Einsatz) => {
+    const text = `Rückfrage zum Einsatz vom ${e.datum} bei ${patient.nachname}, ${patient.vorname}`;
+    einsatzRueckfrage(e.id, text);
+    setMeldung(`Pendenz erstellt: „${text}". Der Einsatz bleibt offen.`);
   };
 
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setAbsenzForm({ zeitraum: "", tage: "", typ: "Krankheit", bemerkung: "" });
-  };
-
-  const handleDeleteAbsenz = (id: number) => {
-    setAbsenzen((prev) => {
-      const next = prev.filter((a) => a.id !== id);
-      if (next.length === 0) setHatAbsenzen(false);
-      return next;
-    });
-    if (editingId === id) handleCancelEdit();
-  };
+  const min = (n: number) => `${Math.round(n)} min`;
 
   return (
     <div className="space-y-4">
-
-      {/* ═══ SECTION 3: Absenzen ═══ */}
-      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-        <div className="px-5 py-4 border-b border-border-light flex items-center gap-2">
-          <CalendarOff className="w-4 h-4 text-primary" />
-          <h5 className="text-foreground flex-1">Absenzen</h5>
-          {absenzen.length > 0 && (
-            <span className="text-[11px] text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full" style={{ fontWeight: 500 }}>
-              {absenzen.length} {absenzen.length === 1 ? "Eintrag" : "Einträge"}
+      {/* ── Kopf: Soll gegen Ist ── */}
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "14px 18px" }}>
+        {blatt ? (
+          <div className="flex items-center flex-wrap" style={{ gap: 20 }}>
+            <div>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Geplant je Woche</div>
+              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{min(geplantProWocheMin)}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Erbracht</div>
+              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{min(erbrachtProWoche)}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Abweichung</div>
+              <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", color: abweichung < 0 ? "var(--status-warning-text)" : "var(--text-primary)" }}>
+                {abweichung >= 0 ? "+" : "−"}{Math.abs(Math.round(abweichung))} min
+              </div>
+            </div>
+            <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+              Woche ab {alsAnzeigedatum(EINSATZ_BEZUGSWOCHE)} · Blatt {blatt.id} · V{blatt.version}
             </span>
-          )}
-        </div>
-        <div className="p-5 space-y-4">
-
-          {/* Toggle */}
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] text-foreground" style={{ fontWeight: 450 }}>
-              Gab es Absenzen in diesem Monat?
-            </span>
-            <button
-              type="button"
-              onClick={() => setHatAbsenzen((v) => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                hatAbsenzen ? "bg-primary" : "bg-border"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-                  hatAbsenzen ? "translate-x-6" : "translate-x-1"
-                }`}
-              />
-            </button>
           </div>
+        ) : (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", maxWidth: 560 }}>
+            Für diesen Patienten besteht kein aktives Leistungsplanungsblatt. Ohne Plan gibt es kein Soll — verglichen wird deshalb nichts.
+          </p>
+        )}
+      </div>
 
-          {/* NO → green badge */}
-          {!hatAbsenzen && absenzen.length === 0 && (
-            <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-success/[0.06] border border-success/15">
-              <CheckCircle2 className="w-4 h-4 text-success" />
-              <span className="text-[13px] text-success" style={{ fontWeight: 500 }}>
-                Keine Absenzen in diesem Monat
+      {meldung && (
+        <div style={{ padding: "10px 12px", borderRadius: 10, background: "var(--status-info-bg)", fontSize: "var(--text-meta)", color: "var(--status-info)" }}>{meldung}</div>
+      )}
+
+      {/* ── 1 · Woche im Überblick ── */}
+      <PSectionCard title="Woche im Überblick" icon={Clock}>
+        <div className="flex flex-col" style={{ gap: 4 }}>
+          {tage.map(t => (
+            <div key={t.datum} className="flex items-center" style={{ gap: 10, padding: "7px 10px", borderRadius: 8, background: t.luecke ? "var(--status-warning-bg)" : "transparent" }}>
+              <span style={{ width: 28, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: t.luecke ? "var(--status-warning-text)" : "var(--text-primary)" }}>{t.kurz}</span>
+              <span style={{ width: 84, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{t.datum}</span>
+              {t.luecke ? (
+                <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
+                  <AlertTriangle style={{ width: 13, height: 13 }} /> Kein Einsatz erfasst, obwohl geplant
+                </span>
+              ) : (
+                <>
+                  <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{min(t.erbracht)} erbracht</span>
+                  {/* Ohne Blatt gibt es kein Soll — dann steht dort nichts, nicht null. */}
+                  {blatt && <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>von {min(t.geplant)} geplant</span>}
+                  {t.einsaetze.some(e => hatAbweichung(leistungenVon(e.id))) && (
+                    <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}>Abweichung</span>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </PSectionCard>
+
+      {/* ── 2 · Zu prüfen ── */}
+      <PSectionCard title="Zu prüfen" icon={CheckCircle2}>
+        {zuPruefen.length === 0 ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Kein Einsatz dieser Woche wartet auf Prüfung.</p>
+        ) : (
+          <>
+            <div className="flex items-center" style={{ gap: 10, marginBottom: 10 }}>
+              <AppButton variant="sekundaer" onClick={alleVollstaendigenBestaetigen}>Alle vollständigen bestätigen</AppButton>
+              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+                {zuPruefen.filter(e => !hatAbweichung(leistungenVon(e.id))).length} ohne Abweichung
               </span>
             </div>
-          )}
-
-          {/* Saved absences list */}
-          {absenzen.length > 0 && (
-            <div className="space-y-2">
-              {absenzen.map((a) => (
-                <div
-                  key={a.id}
-                  className={`group flex items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                    editingId === a.id
-                      ? "border-primary/30 bg-primary/[0.04] ring-1 ring-primary/10"
-                      : "border-border bg-secondary/20 hover:bg-secondary/40"
-                  }`}
-                >
-                  <CalendarOff className={`w-4 h-4 mt-0.5 shrink-0 ${editingId === a.id ? "text-primary" : "text-warning"}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{a.zeitraum}</span>
-                      <span className="text-[11px] text-muted-foreground">·</span>
-                      <span className="text-[12px] text-muted-foreground">{a.tage} {Number(a.tage) === 1 ? "Tag" : "Tage"}</span>
-                      <span className="inline-flex items-center px-1.5 py-[1px] rounded text-[10px] bg-warning/10 text-warning border border-warning/15" style={{ fontWeight: 500 }}>
-                        {a.typ}
-                      </span>
-                      {editingId === a.id && (
-                        <span className="inline-flex items-center px-1.5 py-[1px] rounded text-[10px] bg-primary/10 text-primary border border-primary/15" style={{ fontWeight: 500 }}>
-                          Wird bearbeitet
-                        </span>
+            <div className="flex flex-col" style={{ gap: 8 }}>
+              {zuPruefen.map(e => {
+                const ls = leistungenVon(e.id);
+                const erbrachtePos = ls.filter(l => l.erbracht).length;
+                const istMin = einsatzMinuten(ls);
+                const planMin = ls.reduce((s, l) => s + (positionVon(l.positionId)?.zeitMin ?? 0), 0);
+                const gruende = ls.filter(l => l.grund.trim()).map(l => l.grund);
+                return (
+                  <div key={e.id} style={{ padding: "10px 12px", borderRadius: 10, border: "var(--border-thin) solid var(--border-default)" }}>
+                    <div className="flex items-center flex-wrap" style={{ gap: 10 }}>
+                      <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", minWidth: 84 }}>{e.datum}</span>
+                      <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{urheberName(e.erbrachtDurch)}</span>
+                      <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{erbrachtePos} von {ls.length} Positionen</span>
+                      <span style={{ fontSize: "var(--text-meta)", color: istMin < planMin ? "var(--status-warning-text)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{min(istMin)} von {min(planMin)}</span>
+                      {e.pruefzustand === "rueckfrage" && (
+                        <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}>Rückfrage</span>
                       )}
+                      <div className="flex items-center" style={{ gap: 8, marginLeft: "auto" }}>
+                        <button type="button" onClick={() => einsatzBestaetigen(e.id)} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>Bestätigen</button>
+                        <button type="button" onClick={() => rueckfrageStellen(e)} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Rückfrage</button>
+                      </div>
                     </div>
-                    {a.bemerkung && (
-                      <p className="text-[12px] text-muted-foreground mt-1 truncate">{a.bemerkung}</p>
-                    )}
+                    {gruende.map((g, i) => (
+                      <div key={i} style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 6 }}>{g}</div>
+                    ))}
                   </div>
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleEditAbsenz(a)}
-                      className={`p-1 rounded-md transition-all ${
-                        editingId === a.id
-                          ? "text-primary bg-primary/10"
-                          : "opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                      }`}
-                      title="Absenz bearbeiten"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteAbsenz(a.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-muted-foreground hover:text-error hover:bg-error/10 transition-all"
-                      title="Absenz löschen"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </PSectionCard>
+
+      {/* ── 3 · Geprüft ── */}
+      <PSectionCard title={`Geprüft (${geprueft.length})`} icon={Check}>
+        {geprueft.length === 0 ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Noch kein Einsatz dieser Woche bestätigt.</p>
+        ) : (
+          <>
+            <button type="button" onClick={() => setGeprueftOffen(o => !o)} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+              {geprueftOffen ? "Einklappen" : `${geprueft.length} bestätigte Einsätze anzeigen`}
+            </button>
+            {geprueftOffen && (
+              <div className="flex flex-col" style={{ gap: 6, marginTop: 8 }}>
+                {geprueft.map(e => (
+                  <div key={e.id} className="flex items-center" style={{ gap: 10, padding: "7px 10px", borderRadius: 8, background: "var(--bg-secondary)" }}>
+                    <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", minWidth: 84 }}>{e.datum}</span>
+                    <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{urheberName(e.erbrachtDurch)}</span>
+                    <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{min(einsatzMinuten(leistungenVon(e.id)))}</span>
+                    <span style={{ marginLeft: "auto", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>geprüft · nicht mehr änderbar</span>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* YES → structured form */}
-          {hatAbsenzen && (
-            <div className="space-y-4">
-              {absenzen.length > 0 && (
-                <div className="border-t border-border-light pt-4">
-                  <p className="text-[12px] text-muted-foreground mb-3" style={{ fontWeight: 450 }}>
-                    {isEditing ? "Absenz bearbeiten" : "Weitere Absenz erfassen"}
-                  </p>
-                </div>
-              )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Zeitraum */}
-                <div>
-                  <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>
-                    Zeitraum
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="z.B. 10.03. – 14.03.2026"
-                    value={absenzForm.zeitraum}
-                    onChange={(e) => setAbsenzForm((p) => ({ ...p, zeitraum: e.target.value }))}
-                    className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50"
-                  />
-                </div>
-
-                {/* Anzahl Tage */}
-                <div>
-                  <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>
-                    Anzahl Tage
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    placeholder="z.B. 5"
-                    value={absenzForm.tage}
-                    onChange={(e) => setAbsenzForm((p) => ({ ...p, tage: e.target.value }))}
-                    className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50"
-                  />
-                </div>
-
-                {/* Absenztyp */}
-                <div>
-                  <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>
-                    Absenztyp
-                  </label>
-                  <select
-                    value={absenzForm.typ}
-                    onChange={(e) => setAbsenzForm((p) => ({ ...p, typ: e.target.value }))}
-                    className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all appearance-none"
-                  >
-                    <option>Krankheit</option>
-                    <option>Spitalaufenthalt</option>
-                    <option>Ferien / Abwesenheit</option>
-                    <option>Rehabilitation</option>
-                    <option>Sonstiges</option>
-                  </select>
-                </div>
+                ))}
               </div>
-
-              {/* Bemerkung */}
-              <div>
-                <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>
-                  <MessageSquare className="w-3 h-3 inline -mt-0.5 mr-1" />
-                  Bemerkung
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Optionale Bemerkung…"
-                  value={absenzForm.bemerkung}
-                  onChange={(e) => setAbsenzForm((p) => ({ ...p, bemerkung: e.target.value }))}
-                  className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all resize-none placeholder:text-muted-foreground/50"
-                />
-              </div>
-
-              {/* Save / Cancel */}
-              <div className="flex justify-end gap-2">
-                {isEditing && (
-                  <button
-                    onClick={handleCancelEdit}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] border border-border bg-card hover:bg-secondary/60 text-foreground transition-colors cursor-pointer"
-                    style={{ fontWeight: 500 }}
-                  >
-                    Abbrechen
-                  </button>
-                )}
-                <button
-                  onClick={handleAddAbsenz}
-                  disabled={!canSave}
-                  className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] transition-colors ${
-                    canSave
-                      ? "text-primary-foreground bg-primary hover:bg-primary-hover cursor-pointer"
-                      : "text-muted-foreground bg-muted cursor-not-allowed"
-                  }`}
-                  style={{ fontWeight: 500 }}
-                >
-                  {isEditing ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                  {isEditing ? "Änderungen speichern" : "Absenz erfassen"}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+            )}
+          </>
+        )}
+      </PSectionCard>
     </div>
   );
 }
