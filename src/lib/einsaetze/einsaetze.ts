@@ -25,14 +25,22 @@ export type EinsatzUrheber =
   | { art: "mitarbeitende"; name: string }
   | { art: "angehoeriger"; kennung: string };
 
+/**
+ * Was bei einem Einsatz erbracht wurde — als Haken, nicht als Zeit.
+ *
+ * KEIN MINUTENFELD. Die angehörige Person stempelt eine Gesamtzeit und hakt
+ * ab, welche Leistungen sie erbracht hat; sie stoppt die Uhr nicht je
+ * Position. Eine Minutenzahl je Position wäre eine Zahl, die niemand erfasst
+ * hat. Verordnete Zeiten stehen im Leistungsplanungsblatt und werden von dort
+ * gelesen, nie hier gespiegelt.
+ */
 export interface ErbrachteLeistung {
   id: string;
   einsatzId: string;
   /** Verweis auf die Position des Blattes (LP-…). */
   positionId: string;
-  minuten: number;
   erbracht: boolean;
-  /** Pflicht, wenn nicht erbracht oder die Zeit abweicht. */
+  /** Pflicht, wenn nicht erbracht. */
   grund: string;
 }
 
@@ -102,6 +110,21 @@ export function fruehereFassungen(e: Einsatz): Berichtfassung[] {
   return e.berichtFassungen.slice(0, -1).reverse();
 }
 
+/**
+ * Gestempelte Dauer in Minuten — aus Beginn und Ende, nicht aus einer Summe.
+ *
+ * Über Mitternacht hinweg wird nicht gerechnet: ein Einsatz, der am Folgetag
+ * endet, gehörte zu zwei Tagen und ist im Modell nicht vorgesehen. Ein
+ * negatives Ergebnis wäre Unsinn, also steht dort null.
+ */
+export function einsatzDauer(e: Einsatz): number {
+  const alsMinuten = (hhmm: string) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+    return m ? Number(m[1]) * 60 + Number(m[2]) : 0;
+  };
+  return Math.max(0, alsMinuten(e.bis) - alsMinuten(e.von));
+}
+
 /** Weicht der Einsatz vom Plan ab — nicht erbrachte Position oder Zeitgrund? */
 export function hatAbweichung(leistungen: ErbrachteLeistung[]): boolean {
   return leistungen.some(l => !l.erbracht || l.grund.trim() !== "");
@@ -135,8 +158,10 @@ export interface Monatstag {
   /** 0 = Montag */
   wochentag: number;
   einsaetze: Einsatz[];
-  /** Erbrachte Minuten aus täglich verordneten Positionen. */
+  /** Gestempelte Zeit abzüglich der periodisch verordneten Anteile. */
   ist: number;
+  /** Gesamte gestempelte Zeit des Tages, Beginn bis Ende. */
+  gestempelt: number;
   /** Tagessoll — Summe der täglich verordneten Positionen. */
   soll: number;
   /** ist − soll. Negativ = weniger erbracht. */
@@ -170,6 +195,8 @@ export function monatAufteilen(
   sollProTag: number,
   /** Gehört die Position zum Tagessoll? Ohne Blatt zählt nichts als täglich. */
   istTaeglichePosition: (positionId: string) => boolean,
+  /** Verordnete Zeit einer Position aus dem Blatt, in Minuten. */
+  verordneteZeit: (positionId: string) => number,
 ): Monatstag[] {
   const tage: Monatstag[] = [];
   const letzter = new Date(jahr, monat + 1, 0).getDate();
@@ -177,43 +204,28 @@ export function monatAufteilen(
     const d = new Date(jahr, monat, n);
     const datum = alsAnzeigedatum(d);
     const desTages = einsaetze.filter(e => e.datum === datum);
-    const erbracht = desTages
-      .filter(e => e.zustand === "erbracht")
+    const geleistet = desTages.filter(e => e.zustand === "erbracht");
+    /* Die Stempeluhr läuft über den ganzen Besuch. Wurde an diesem Tag auch
+       eine periodisch verordnete Position erbracht, steckt deren Zeit mit
+       darin — sie gehört aber nicht in die Tagesabweichung, sonst erschiene
+       jeder solche Tag als Überschreitung. Abgezogen wird die verordnete
+       Zeit aus dem Blatt, nicht eine je Position erfasste: eine solche gibt
+       es nicht. */
+    const gestempelt = geleistet.reduce((s, e) => s + einsatzDauer(e), 0);
+    const periodisch = geleistet
       .flatMap(e => leistungenVon(e.id))
-      .filter(l => l.erbracht);
-    const ist = erbracht.filter(l => istTaeglichePosition(l.positionId))
-      .reduce((s, l) => s + l.minuten, 0);
-    const periodisch = erbracht.filter(l => !istTaeglichePosition(l.positionId))
-      .reduce((s, l) => s + l.minuten, 0);
+      .filter(l => l.erbracht && !istTaeglichePosition(l.positionId))
+      .reduce((s, l) => s + verordneteZeit(l.positionId), 0);
+    const ist = Math.max(0, gestempelt - periodisch);
     tage.push({
       datum, nummer: n, wochentag: (d.getDay() + 6) % 7,
-      einsaetze: desTages, ist, soll: sollProTag, abweichung: ist - sollProTag, periodisch,
+      einsaetze: desTages, ist, soll: sollProTag, abweichung: ist - sollProTag, periodisch, gestempelt,
       fehlt: sollProTag > 0 && desTages.length === 0,
       hatBericht: desTages.some(e => e.berichtFassungen.length > 0),
       offen: desTages.some(e => e.pruefzustand !== "geprueft"),
     });
   }
   return tage;
-}
-
-/**
- * Wie oft und an welchen Tagen eine Position im Monat erbracht wurde.
- *
- * Bewusst ohne Aussage darüber, an welchem Tag sie gefehlt hat: das Blatt
- * kennt keinen Wochentagsplan, also ist nur die Anzahl im Zeitraum prüfbar.
- */
-export function periodischeBilanz(
-  tage: Monatstag[],
-  leistungenVon: (einsatzId: string) => ErbrachteLeistung[],
-  positionId: string,
-): { anzahl: number; minuten: number; tage: Monatstag[] } {
-  const getroffen = tage.filter(t =>
-    t.einsaetze.some(e => e.zustand === "erbracht"
-      && leistungenVon(e.id).some(l => l.positionId === positionId && l.erbracht)));
-  const minuten = getroffen.flatMap(t => t.einsaetze).flatMap(e => leistungenVon(e.id))
-    .filter(l => l.positionId === positionId && l.erbracht)
-    .reduce((s, l) => s + l.minuten, 0);
-  return { anzahl: getroffen.length, minuten, tage: getroffen };
 }
 
 /**

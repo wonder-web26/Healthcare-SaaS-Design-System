@@ -37,8 +37,8 @@ interface TagVorlage {
   datum: string;
   von: string;
   bis: string;
-  /** [PositionsId, Minuten, erbracht, Grund] */
-  leistungen: [string, number, boolean, string][];
+  /** [PositionsId, erbracht, Grund] — keine Minuten, die Zeit steht am Einsatz. */
+  leistungen: [string, boolean, string][];
   bericht?: string;
   pruefzustand?: Einsatz["pruefzustand"];
 }
@@ -58,85 +58,85 @@ interface TagVorlage {
 const STEINER_MONAT: TagVorlage[] = [
   { datum: "01.07.2026", von: "08:00", bis: "09:10", pruefzustand: "geprueft",
     bericht: "Herr Steiner war wach und ansprechbar. Der Blutzucker lag im gewohnten Bereich.\n\nBeim Gehen im Flur brauchte er heute keine Stütze, nur Begleitung.",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""], ["LP-S7", true, ""]] },
   { datum: "02.07.2026", von: "08:00", bis: "08:29", pruefzustand: "geprueft",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "03.07.2026", von: "08:00", bis: "09:10", pruefzustand: "geprueft",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""], ["LP-S7", true, ""]] },
   { datum: "04.07.2026", von: "08:00", bis: "08:29", pruefzustand: "geprueft",
     bericht: "Etwas müde. Beim Aufstehen unsicherer als sonst, ich bin die ganze Strecke mitgegangen.",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "06.07.2026", von: "08:00", bis: "09:10", pruefzustand: "geprueft",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""], ["LP-S7", true, ""]] },
   { datum: "07.07.2026", von: "08:00", bis: "08:29", pruefzustand: "geprueft",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "08.07.2026", von: "08:00", bis: "08:55", pruefzustand: "geprueft",
     bericht: "Guter Tag. Er hat von seiner Zeit bei der Post erzählt und war beim Waschen fast selbstständig.",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""]] },
   { datum: "09.07.2026", von: "08:00", bis: "08:29", pruefzustand: "geprueft",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "10.07.2026", von: "08:00", bis: "09:10", pruefzustand: "geprueft",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""], ["LP-S7", true, ""]] },
   { datum: "11.07.2026", von: "08:00", bis: "08:19", pruefzustand: "geprueft",
     bericht: "Rechtes Knie schmerzt beim Aufstehen. Habe ihm mehr Zeit gelassen und die Blutentnahme auf morgen verschoben — er hatte sehr kalte Hände.",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 0, false, "Herr Steiner hatte sehr kalte Hände, die Kapillarblutentnahme war nicht möglich. Auf morgen verschoben."], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", false, "Herr Steiner hatte sehr kalte Hände, die Kapillarblutentnahme war nicht möglich. Auf morgen verschoben."], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "13.07.2026", von: "08:00", bis: "09:10", pruefzustand: "geprueft",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""], ["LP-S7", true, ""]] },
   { datum: "14.07.2026", von: "08:00", bis: "08:29", pruefzustand: "geprueft",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "15.07.2026", von: "08:00", bis: "09:10", pruefzustand: "geprueft",
     bericht: "Unverändert. Appetit gut, Blutdruck im gewohnten Rahmen, keine Auffälligkeiten.",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""], ["LP-S7", true, ""]] },
   { datum: "16.07.2026", von: "08:00", bis: "08:29", pruefzustand: "geprueft",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "17.07.2026", von: "08:00", bis: "08:55", pruefzustand: "zu_pruefen",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""]] },
   { datum: "18.07.2026", von: "08:00", bis: "08:29", pruefzustand: "zu_pruefen",
     bericht: "Nach dem Mittagsschlaf kurz verwirrt gewirkt, nach zwanzig Minuten wieder klar.",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "20.07.2026", von: "08:00", bis: "09:10", pruefzustand: "zu_pruefen",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""], ["LP-S7", true, ""]] },
   { datum: "21.07.2026", von: "08:00", bis: "08:29", pruefzustand: "zu_pruefen",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "22.07.2026", von: "07:55", bis: "09:12", pruefzustand: "zu_pruefen",
     bericht: "Blutdruck etwas tiefer als sonst gemessen, ihm ging es dabei gut.",
-    leistungen: [["LP-S3", 8, true, ""], ["LP-S4", 12, true, ""], ["LP-S5", 6, true, ""], ["LP-S8", 10, true, ""], ["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""], ["LP-S7", true, ""]] },
   { datum: "23.07.2026", von: "08:00", bis: "08:29", pruefzustand: "zu_pruefen",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "24.07.2026", von: "08:00", bis: "08:55", pruefzustand: "zu_pruefen",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""]] },
   { datum: "25.07.2026", von: "08:00", bis: "08:29", pruefzustand: "zu_pruefen",
     bericht: "Er wollte heute allein duschen. Ich habe vor der Tür gewartet.",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "27.07.2026", von: "08:00", bis: "09:10", pruefzustand: "zu_pruefen",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""], ["LP-S7", true, ""]] },
   { datum: "28.07.2026", von: "08:00", bis: "08:29", pruefzustand: "zu_pruefen",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "29.07.2026", von: "08:00", bis: "08:55", pruefzustand: "zu_pruefen",
     bericht: "Ruhiger Tag, nichts Besonderes zu berichten.",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""]] },
   { datum: "30.07.2026", von: "08:00", bis: "08:29", pruefzustand: "zu_pruefen",
     bericht: "",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""]] },
   { datum: "31.07.2026", von: "08:00", bis: "09:10", pruefzustand: "zu_pruefen",
     bericht: "Tochter war zu Besuch, er war sehr aufgeräumt.",
-    leistungen: [["LP-S3", 6, true, ""], ["LP-S4", 10, true, ""], ["LP-S5", 5, true, ""], ["LP-S8", 8, true, ""], ["LP-S6", 26, true, ""], ["LP-S7", 15, true, ""]] },
+    leistungen: [["LP-S3", true, ""], ["LP-S4", true, ""], ["LP-S5", true, ""], ["LP-S8", true, ""], ["LP-S6", true, ""], ["LP-S7", true, ""]] },
 ];
 
 /** An diesem Tag übernahm die Pflegefachkraft — andere Urheberart. */
@@ -149,13 +149,13 @@ const STEINER_FACHPERSON_TAG = "18.07.2026";
  * wöchentlich. Der Donnerstag fehlt ganz — die Lücke der Woche.
  */
 const ZIMMERMANN_WOCHE: TagVorlage[] = [
-  { datum: "27.07.2026", von: "07:30", bis: "08:12", leistungen: [["LP-Z2", 16, true, ""], ["LP-Z1", 26, true, ""]] },
-  { datum: "28.07.2026", von: "07:30", bis: "07:46", leistungen: [["LP-Z2", 16, true, ""]] },
-  { datum: "29.07.2026", von: "07:30", bis: "08:12", leistungen: [["LP-Z2", 16, true, ""], ["LP-Z1", 26, true, ""]] },
+  { datum: "27.07.2026", von: "07:30", bis: "08:12", leistungen: [["LP-Z2", true, ""], ["LP-Z1", true, ""]] },
+  { datum: "28.07.2026", von: "07:30", bis: "07:46", leistungen: [["LP-Z2", true, ""]] },
+  { datum: "29.07.2026", von: "07:30", bis: "08:12", leistungen: [["LP-Z2", true, ""], ["LP-Z1", true, ""]] },
   /* 30.07.2026 fehlt — die Lücke der Woche. */
-  { datum: "31.07.2026", von: "07:30", bis: "08:12", leistungen: [["LP-Z2", 16, true, ""], ["LP-Z1", 26, true, ""]] },
-  { datum: "01.08.2026", von: "08:00", bis: "08:16", leistungen: [["LP-Z2", 16, true, ""]] },
-  { datum: "02.08.2026", von: "08:00", bis: "08:16", leistungen: [["LP-Z2", 16, true, ""]] },
+  { datum: "31.07.2026", von: "07:30", bis: "08:12", leistungen: [["LP-Z2", true, ""], ["LP-Z1", true, ""]] },
+  { datum: "01.08.2026", von: "08:00", bis: "08:16", leistungen: [["LP-Z2", true, ""]] },
+  { datum: "02.08.2026", von: "08:00", bis: "08:16", leistungen: [["LP-Z2", true, ""]] },
 ];
 
 /** Kurzname für den Bericht — Mitarbeitende haben einen Namen, Angehörige eine Kennung. */
@@ -181,8 +181,8 @@ function bauen(patientId: string, urheber: EinsatzUrheber, praefix: string, woch
         ? [{ text: t.bericht, von: urheberKurz(wer), am: `${t.datum} ${t.bis}` }]
         : [],
     });
-    t.leistungen.forEach(([positionId, minuten, erbracht, grund], k) => {
-      leistungen.push({ id: `${id}-L${k + 1}`, einsatzId: id, positionId, minuten, erbracht, grund });
+    t.leistungen.forEach(([positionId, erbracht, grund], k) => {
+      leistungen.push({ id: `${id}-L${k + 1}`, einsatzId: id, positionId, erbracht, grund });
     });
   });
   return { einsaetze, leistungen };

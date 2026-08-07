@@ -78,7 +78,6 @@ import {
   Eye,
   EyeOff,
   Info,
-  CalendarOff,
   MessageSquare,
   Mic,
   Trash2,
@@ -104,7 +103,7 @@ import {
 import { wartetSeitTagen } from "../../lib/klv/warten";
 import { abgleichen, stunden } from "../../lib/klv/abgleich";
 import {
-  monatAufteilen, abweichungNachRichtung, fehlendeTageMuster, periodischeBilanz,
+  monatAufteilen, abweichungNachRichtung, fehlendeTageMuster,
   aktuelleFassung, fruehereFassungen,
   hatAbweichung, WOCHENTAGE, WOCHENTAGE_LANG, MONATE,
   type Einsatz, type EinsatzUrheber, type ErbrachteLeistung, type Monatstag,
@@ -2899,11 +2898,6 @@ function anzahlWort(n: number): string {
   return n < ANZAHL_WORT.length ? ANZAHL_WORT[n] : String(n);
 }
 
-/** Ersten Buchstaben gross — für Zahlwörter am Satzanfang. */
-function grossErst(t: string): string {
-  return t.charAt(0).toUpperCase() + t.slice(1);
-}
-
 /** Dativ mit Nomen: „an einem Tag" / „an drei Tagen". */
 function anTagen(n: number): string {
   return n === 1 ? "an einem Tag" : `an ${anzahlWort(n)} Tagen`;
@@ -2940,6 +2934,9 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
     jahr: EINSATZ_BEZUGSMONAT.getFullYear(), monat: EINSATZ_BEZUGSMONAT.getMonth(),
   });
   const [gewaehlterTag, setGewaehlterTag] = useState<string | null>(null);
+  /* Der Zeitpunkt der Einordnung wird einmal genommen und bleibt stehen, bis
+     jemand neu erzeugen lässt — sonst wanderte er bei jedem Neuzeichnen. */
+  const [erzeugtAm, setErzeugtAm] = useState(() => jetztAnzeige());
 
   const leistungenVon = (id: string) => alleLeistungen.filter(l => l.einsatzId === id);
   const positionVon = (positionId: string) =>
@@ -2954,17 +2951,21 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   const periodische = positionen.filter(istImZeitraum);
   const taeglicheIds = new Set(positionen.filter(istTaeglich).map(p => p.id));
   const istTaeglichePosition = (id: string) => taeglicheIds.has(id);
+  /* Verordnete Zeit je Position — aus dem Blatt gelesen, nicht am Einsatz
+     erfasst. Die angehörige Person stempelt eine Gesamtzeit. */
+  const verordneteZeit = (id: string) => {
+    const p = positionen.find(x => x.id === id);
+    return p ? p.anzahl * p.zeitMin : 0;
+  };
 
-  const tage = monatAufteilen(alleEinsaetze, leistungenVon, zeitraum.jahr, zeitraum.monat, sollProTag, istTaeglichePosition);
+  const tage = monatAufteilen(alleEinsaetze, leistungenVon, zeitraum.jahr, zeitraum.monat,
+    sollProTag, istTaeglichePosition, verordneteZeit);
   const bilanz = abweichungNachRichtung(tage);
   const muster = fehlendeTageMuster(tage);
   /* Verordnetes Monatssoll der periodischen Positionen — erwartete Anzahl mal
      Dauer. Steht neben dem Tagessoll, nicht darin. */
   const periodischSoll = periodische.reduce(
     (sum, pos) => sum + erwarteteAnzahlImMonat(pos, tage.length) * pos.anzahl * pos.zeitMin, 0);
-  const periodischKnapp = periodische
-    .map(pos => ({ pos, erwartet: erwarteteAnzahlImMonat(pos, tage.length), ist: periodischeBilanz(tage, leistungenVon, pos.id).anzahl }))
-    .filter(x => x.ist < x.erwartet);
 
   const tagVon = (datum: string) => tage.find(t => t.datum === datum) ?? null;
   const gewaehlt = gewaehlterTag ? tagVon(gewaehlterTag) : null;
@@ -3004,76 +3005,33 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   };
 
   const min = (n: number) => `${Math.round(n)} min`;
-  const vorzeichen = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(Math.round(n))} min`;
 
-  /* ── Annas Befunde: ausschliesslich gerechnet ──────────────────────────────
+  /* ── Annas Einordnung: ausschliesslich gerechnet ──────────────────────────
      Jeder Satz zählt etwas ab, das im Kalender darüber sichtbar ist. Nichts
-     wird geschätzt, nichts geraten — Anna liest hier nur laut vor. */
-  const befunde: string[] = [];
+     wird geschätzt, nichts geraten, und kein Berichtsinhalt wird gelesen —
+     Anna sagt, was zu prüfen ist, nicht was jemand geschrieben hat. */
+  const einordnung: string[] = [];
   if (blatt) {
     if (muster.wochentag !== null && muster.tage.length >= 2) {
-      befunde.push(`Alle ${anzahlWort(muster.tage.length)} Tage ohne Einsatz fallen auf einen ${WOCHENTAGE_LANG[muster.wochentag]}. Das ist kein Zufall, sondern eine Lücke im Rhythmus — zusammen ${min(bilanz.ausgefallen)}.`);
+      einordnung.push(`Alle ${anzahlWort(muster.tage.length)} Tage ohne Erfassung fallen auf einen ${WOCHENTAGE_LANG[muster.wochentag]} — zusammen ${min(bilanz.ausgefallen)}. Das ist ein Muster, keine Reihe von Zufällen.`);
     } else if (muster.tage.length > 0) {
-      befunde.push(`${anTagen(muster.tage.length).replace(/^an /, "An ")} ist kein Einsatz erfasst, obwohl ein Soll besteht. Ein gemeinsamer Wochentag ist nicht erkennbar.`);
+      einordnung.push(`${anTagen(muster.tage.length).replace(/^an /, "An ")} ist kein Einsatz erfasst, obwohl ein Tagessoll besteht. Ein gemeinsamer Wochentag ist nicht erkennbar.`);
     }
     const zuVielTage = tage.filter(t => t.abweichung > 0 && !t.fehlt);
-    const zuVielOhneGrund = zuVielTage.filter(t =>
-      !t.einsaetze.some(e => leistungenVon(e.id).some(l => l.grund.trim() !== "")));
-    if (zuVielTage.length > 0) {
-      befunde.push(`${anTagen(zuVielTage.length).replace(/^an /, "An ")} wurde mehr erfasst als geplant, zusammen ${min(bilanz.zuViel)}${zuVielOhneGrund.length > 0 ? ` — davon ${davon(zuVielOhneGrund.length)} ohne Begründung` : ""}. Mehr als geplant fällt bei der Kasse auf.`);
-    }
-    /* Ohne die ausgefallenen Tage: sonst stünde neben „an einem Tag" eine
-       Summe, die aus fünf Tagen stammt. */
     const zuWenigTage = tage.filter(t => t.abweichung < 0 && !t.fehlt);
-    if (zuWenigTage.length > 0) {
-      befunde.push(`${anTagen(zuWenigTage.length).replace(/^an /, "An ")} wurde weniger erbracht als geplant, zusammen ${min(bilanz.zuWenigErbracht)}.`);
+    if (zuVielTage.length > 0) {
+      const ohneGrund = zuVielTage.filter(t =>
+        !t.einsaetze.some(e => leistungenVon(e.id).some(l => l.grund.trim() !== "")));
+      einordnung.push(`${anTagen(zuVielTage.length).replace(/^an /, "An ")} wurde mehr gestempelt als verordnet, zusammen ${min(bilanz.zuViel)}${ohneGrund.length > 0 ? ` — davon ${davon(ohneGrund.length)} ohne Begründung` : ""}. Mehr als verordnet fällt bei der Kasse auf.`);
     }
-    for (const k of periodischKnapp) {
-      const d = k.erwartet - k.ist;
-      befunde.push(`„${k.pos.bezeichnung}" ist ${haeufigkeitText(k.pos)} verordnet — im Monat also ${k.erwartet}×, erbracht wurde sie ${k.ist}×. ${grossErst(anzahlWort(d))} ${d === 1 ? "Erbringung" : "Erbringungen"} zu wenig; an welchem Tag, sagt das Blatt nicht.`);
+    if (zuWenigTage.length > 0) {
+      einordnung.push(`${anTagen(zuWenigTage.length).replace(/^an /, "An ")} blieb die gestempelte Zeit unter dem Tagessoll, zusammen ${min(bilanz.zuWenigErbracht)}.`);
     }
     const mitBericht = tage.filter(t => t.hatBericht).length;
     const mitEinsatz = tage.filter(t => t.einsaetze.length > 0).length;
     if (mitEinsatz > 0) {
-      befunde.push(`An ${mitBericht} von ${mitEinsatz} Tagen mit Einsatz liegt ein Pflegebericht vor.`);
+      einordnung.push(`An ${mitBericht} von ${mitEinsatz} Tagen mit Einsatz liegt ein Pflegebericht vor.`);
     }
-    if (offeneImMonat.length > 0) {
-      befunde.push(`${offeneImMonat.length} ${offeneImMonat.length === 1 ? "Einsatz wartet" : "Einsätze warten"} noch auf Prüfung.`);
-    }
-  }
-
-  /* ── Aufmerksamkeitsliste ──────────────────────────────────────────────────
-     Auffällige Tage einzeln, stimmige Tage zu Strecken zusammengefasst. Eine
-     Liste, die dreissig Zeilen „wie verordnet" zeigt, wird nicht gelesen —
-     also steht dort eine Zeile je zusammenhängender Strecke. */
-  type Strecke = "stimmig" | "fehlt";
-  type Eintrag =
-    | { art: "tag"; tag: Monatstag }
-    | { art: "strecke"; sorte: Strecke; von: Monatstag; bis: Monatstag; anzahl: number };
-  const aufmerksamkeit: Eintrag[] = [];
-  {
-    /* Zwei Sorten werden verdichtet: Tage wie verordnet und Tage ohne jeden
-       Einsatz. Ein Monat ohne Erfassung ergibt sonst dreissig gleiche Zeilen —
-       und eine Liste, die niemand zu Ende liest. */
-    let lauf: Monatstag[] = [];
-    let sorte: Strecke | null = null;
-    const laufSchliessen = () => {
-      if (lauf.length === 0) return;
-      if (lauf.length === 1) aufmerksamkeit.push({ art: "tag", tag: lauf[0] });
-      else aufmerksamkeit.push({ art: "strecke", sorte: sorte!, von: lauf[0], bis: lauf[lauf.length - 1], anzahl: lauf.length });
-      lauf = []; sorte = null;
-    };
-    for (const t of tage) {
-      const eigen: Strecke | null =
-        t.fehlt ? "fehlt"
-        : (t.abweichung === 0 && t.einsaetze.length > 0) ? "stimmig"
-        : null;
-      if (eigen && eigen === sorte) { lauf.push(t); continue; }
-      laufSchliessen();
-      if (eigen) { lauf = [t]; sorte = eigen; }
-      else if (t.einsaetze.length > 0) aufmerksamkeit.push({ art: "tag", tag: t });
-    }
-    laufSchliessen();
   }
 
   return (
@@ -3178,132 +3136,262 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
         />
       )}
 
-      {/* ── Positionen, die im Zeitraum verordnet sind ── */}
-      {blatt && periodische.length > 0 && (
-        <PSectionCard title="Periodisch verordnete Positionen" icon={CalendarOff}>
-          <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 12, maxWidth: 620 }}>
-            Diese Positionen sind für den Zeitraum verordnet, nicht für einen bestimmten Wochentag.
-            Geprüft wird deshalb die Anzahl im Monat — an welchem Tag eine fehlte, lässt sich aus
-            dem Blatt nicht sagen.
-          </p>
-          <div className="flex flex-col" style={{ gap: 10 }}>
-            {periodische.map(pos => {
-              const erwartet = erwarteteAnzahlImMonat(pos, tage.length);
-              const b = periodischeBilanz(tage, leistungenVon, pos.id);
-              const fehlend = erwartet - b.anzahl;
-              return (
-                <div key={pos.id} style={{ padding: "11px 13px", borderRadius: 10, border: "var(--border-thin) solid var(--border-default)" }}>
-                  <div className="flex items-baseline flex-wrap" style={{ gap: 8 }}>
-                    <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)" }}>{pos.bezeichnung}</span>
-                    <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>Nr. {pos.klvNummer}</span>
-                    <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{haeufigkeitText(pos)} · {pos.zeitMin} min</span>
-                    <span style={{ marginLeft: "auto", fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums",
-                      fontWeight: "var(--weight-medium)", color: fehlend > 0 ? "var(--status-warning-text)" : "var(--text-primary)" }}>
-                      {b.anzahl} von {erwartet} erbracht
-                    </span>
-                  </div>
-                  {fehlend > 0 && (
-                    <div className="inline-flex items-start" style={{ gap: 6, marginTop: 6, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
-                      <AlertTriangle style={{ width: 13, height: 13, flexShrink: 0, marginTop: 2 }} />
-                      <span>
-                        {grossErst(anzahlWort(fehlend))} {fehlend === 1 ? "Erbringung" : "Erbringungen"} zu wenig im Monat
-                        {" "}({min(fehlend * pos.zeitMin)}). Welcher Tag betroffen ist, sagt das Blatt nicht —
-                        es verordnet die Anzahl, nicht die Wochentage.
-                      </span>
-                    </div>
-                  )}
-                  <div style={{ marginTop: 7, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-                    {b.anzahl === 0 ? "An keinem Tag dieses Monats erbracht." : (
-                      <>Erbracht am {b.tage.map(t => `${t.nummer}.`).join(" ")} {MONATE[zeitraum.monat]} · {min(b.minuten)} gesamt</>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </PSectionCard>
-      )}
-
-      {/* ── Annas Befunde ── */}
-      {befunde.length > 0 && (
-        <PSectionCard title="Was auffällt" icon={Sparkles}>
-          <ul className="flex flex-col" style={{ gap: 7, listStyle: "none", padding: 0, margin: 0 }}>
-            {befunde.map((b, i) => (
-              <li key={i} className="flex" style={{ gap: 8, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-                <span aria-hidden style={{ color: "var(--text-tertiary)" }}>·</span>
-                <span>{b}</span>
-              </li>
-            ))}
-          </ul>
-          <p style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 10 }}>
-            Gezählt aus den erfassten Einsätzen dieses Monats. Anna wertet hier nicht, sie rechnet.
-          </p>
-        </PSectionCard>
-      )}
-
-      {/* ── Aufmerksamkeitsliste ── */}
-      <PSectionCard title="Tage im Einzelnen" icon={Check}>
-        {aufmerksamkeit.length === 0 ? (
-          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-            In diesem Monat ist kein Einsatz erfasst.
-          </p>
-        ) : (
-          <>
-            {offeneImMonat.length > 0 && (
-              <div className="flex items-center" style={{ gap: 10, marginBottom: 10 }}>
-                <AppButton variant="sekundaer" onClick={alleStimmigenBestaetigen}>Alle stimmigen Tage bestätigen</AppButton>
-                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-                  {offeneImMonat.length} von {tage.flatMap(t => t.einsaetze).length} Einsätzen offen
-                </span>
-              </div>
-            )}
-            <div className="flex flex-col" style={{ gap: 4 }}>
-              {aufmerksamkeit.map(e => e.art === "strecke" ? (
-                <div key={`s-${e.von.datum}`} className="flex items-center" style={{ gap: 10, padding: "7px 10px", borderRadius: 8, fontSize: "var(--text-small)",
-                  color: e.sorte === "fehlt" ? "var(--status-warning-text)" : "var(--text-tertiary)",
-                  background: e.sorte === "fehlt" ? "var(--status-warning-bg)" : "transparent" }}>
-                  <span style={{ fontVariantNumeric: "tabular-nums", minWidth: 96 }}>{e.von.nummer}.–{e.bis.nummer}. {MONATE[zeitraum.monat]}</span>
-                  {e.sorte === "fehlt" ? (
-                    <span className="inline-flex items-center" style={{ gap: 6 }}>
-                      <AlertTriangle style={{ width: 13, height: 13 }} /> {anzahlWort(e.anzahl)} Tage ohne Einsatz, obwohl geplant
-                    </span>
-                  ) : (
-                    <span>{anzahlWort(e.anzahl)} Tage wie verordnet</span>
-                  )}
-                </div>
-              ) : (
-                <button
-                  key={`t-${e.tag.datum}`} type="button" onClick={() => setGewaehlterTag(e.tag.datum)}
-                  className="ui-fokusring cursor-pointer flex items-center text-left"
-                  style={{ gap: 10, padding: "7px 10px", borderRadius: 8, border: "none", fontFamily: "inherit", width: "100%",
-                    background: e.tag.datum === gewaehlterTag ? "var(--bg-secondary)" : "transparent" }}>
-                  <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", minWidth: 96, fontWeight: "var(--weight-medium)" }}>
-                    {e.tag.nummer}. {MONATE[zeitraum.monat]}
-                  </span>
-                  <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", width: 26 }}>{WOCHENTAGE[e.tag.wochentag]}</span>
-                  {e.tag.fehlt ? (
-                    <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
-                      <AlertTriangle style={{ width: 13, height: 13 }} /> Kein Einsatz erfasst, obwohl geplant
-                    </span>
-                  ) : (
-                    <>
-                      <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums" }}>{min(e.tag.ist)}</span>
-                      <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: e.tag.abweichung < 0 ? "var(--status-warning-text)" : "var(--status-info)" }}>
-                        {vorzeichen(e.tag.abweichung)}
-                      </span>
-                    </>
-                  )}
-                  {e.tag.hatBericht && <FileText style={{ width: 12, height: 12, color: "var(--text-tertiary)" }} aria-label="Bericht vorhanden" />}
-                  {e.tag.offen && (
-                    <span style={{ marginLeft: "auto", padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--bg-secondary)", color: "var(--text-secondary)" }}>offen</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </PSectionCard>
+      {/* ── Ein Abschnitt zum Prüfen ──
+          Vorher standen Annas Befunde und die Tagesliste getrennt und sagten
+          dasselbe: vier fehlende Sonntage hier, dieselben vier Tage dort. Wer
+          handeln will, liest es zweimal und scrollt dann. Jetzt steht die
+          Einordnung über den Gruppen, in denen gehandelt wird. */}
+      <ZuPruefen
+        tage={tage} monat={zeitraum.monat} offen={offeneImMonat.length}
+        einordnung={einordnung} erzeugtAm={erzeugtAm}
+        gewaehlt={gewaehlterTag} leistungenVon={leistungenVon}
+        onOeffnen={setGewaehlterTag}
+        onBestaetigen={einsatzBestaetigen} onRueckfrage={rueckfrageStellen}
+        onAlleStimmigen={alleStimmigenBestaetigen}
+        onFehlende={art => setMeldung(art === "nachtragen"
+          ? "Nachtragen geschieht in der Erfassung der angehörigen Person — hier lässt sich kein Einsatz anlegen, den niemand geleistet hat."
+          : "Rückfrage vermerkt. Für Tage ohne Erfassung entsteht die Pendenz an der Betreuung, nicht am Einsatz — es gibt keinen.")}
+        onNeuErzeugen={() => setErzeugtAm(jetztAnzeige())}
+        onStimmtNicht={() => setMeldung("Vermerkt. Die Einordnung wird gerechnet, nicht erzeugt — eine Rückmeldung ändert die Zahlen nicht, sondern die Regel dahinter.")}
+      />
     </div>
+  );
+}
+
+
+/* ══════════════════════════════════════════
+   Abschnitt „Zu prüfen"
+
+   Ein Ort statt zweier. Annas Einordnung sagt, was auffällt; die Gruppen
+   darunter enthalten dieselben Tage mit den Aktionen dazu. Vorher stand
+   beides getrennt und nannte dieselben Tage — man las es zweimal und
+   scrollte dann zum Handeln.
+   ══════════════════════════════════════════ */
+
+type PruefGruppe = "fehlt" | "abweichung" | "stimmig";
+
+function ZuPruefen({
+  tage, monat, offen, einordnung, erzeugtAm, gewaehlt, leistungenVon,
+  onOeffnen, onBestaetigen, onRueckfrage, onAlleStimmigen, onFehlende,
+  onNeuErzeugen, onStimmtNicht,
+}: {
+  tage: Monatstag[]; monat: number; offen: number;
+  einordnung: string[]; erzeugtAm: string;
+  gewaehlt: string | null;
+  leistungenVon: (einsatzId: string) => ErbrachteLeistung[];
+  onOeffnen: (datum: string) => void;
+  onBestaetigen: (id: string) => void;
+  onRueckfrage: (e: Einsatz) => void;
+  onAlleStimmigen: () => void;
+  onFehlende: (art: "nachtragen" | "rueckfrage") => void;
+  onNeuErzeugen: () => void;
+  onStimmtNicht: () => void;
+}) {
+  const fehlende = tage.filter(t => t.fehlt);
+  const abweichende = tage.filter(t => !t.fehlt && t.abweichung !== 0 && t.einsaetze.length > 0);
+  /* Stimmig heisst hier: keine Abweichung UND noch offen. Bereits geprüfte
+     Tage stehen in keiner Gruppe — es ist nichts mehr an ihnen zu prüfen. */
+  const stimmige = tage.filter(t => !t.fehlt && t.abweichung === 0 && t.einsaetze.length > 0 && t.offen);
+
+  if (fehlende.length === 0 && abweichende.length === 0 && stimmige.length === 0) {
+    return (
+      <PSectionCard title="Zu prüfen" icon={CheckCircle2}>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+          In diesem Monat ist nichts offen: kein Tag fehlt, keiner weicht ab, keiner wartet auf Bestätigung.
+        </p>
+      </PSectionCard>
+    );
+  }
+
+  return (
+    <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
+      {/* ── Kopfzeile ── */}
+      <div className="flex items-center" style={{ gap: 10, padding: "13px 18px" }}>
+        <CheckCircle2 style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
+        <h3 style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", margin: 0 }}>Zu prüfen</h3>
+        <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+          {offen} {offen === 1 ? "offener Einsatz" : "offene Einsätze"}
+        </span>
+      </div>
+
+      {/* ── Annas Einordnung ── */}
+      {einordnung.length > 0 && (
+        <div style={{ margin: "0 18px 14px", padding: "12px 14px", borderRadius: 12, background: "var(--anna-bg, var(--status-info-bg))" }}>
+          <div className="flex items-center" style={{ gap: 7, marginBottom: 7 }}>
+            <Sparkles style={{ width: 14, height: 14, color: "var(--brand-primary)" }} />
+            <span style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)" }}>Annas Einordnung</span>
+            <span style={{ padding: "1px 7px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
+              Erzeugt
+            </span>
+          </div>
+          <p style={{ fontSize: "var(--text-meta)", color: "var(--text-primary)", lineHeight: 1.6, margin: 0, maxWidth: "74ch" }}>
+            {einordnung.join(" ")}
+          </p>
+        </div>
+      )}
+
+      {/* ── Gruppen. Leere entfallen — eine Gruppe mit null Zeilen ist keine
+             Information, sondern eine Zeile, die man überliest. ── */}
+      {fehlende.length > 0 && (
+        <GruppenKopf sorte="fehlt" titel="Kein Einsatz" anzahl={fehlende.length}>
+          <div className="flex items-center flex-wrap" style={{ gap: 10, padding: "9px 18px" }}>
+            <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", minWidth: 132 }}>
+              {tageBenennen(fehlende, monat)}
+            </span>
+            <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+              {anzahlWort(fehlende.length)} {fehlende.length === 1 ? "Tag" : "Tage"} ohne Erfassung, obwohl ein Tagessoll besteht
+              {" · "}−{Math.round(fehlende.reduce((s, t) => s + t.soll, 0))} Min.
+            </span>
+            <div className="flex items-center" style={{ gap: 12, marginLeft: "auto" }}>
+              <ZeilenAktion text="Nachtragen" betont onClick={() => onFehlende("nachtragen")} />
+              <ZeilenAktion text="Rückfrage" onClick={() => onFehlende("rueckfrage")} />
+            </div>
+          </div>
+        </GruppenKopf>
+      )}
+
+      {abweichende.length > 0 && (
+        <GruppenKopf sorte="abweichung" titel="Abweichung" anzahl={abweichende.length}>
+          {abweichende.map(t => (
+            <PruefZeile key={t.datum} tag={t} monat={monat} gewaehlt={t.datum === gewaehlt}
+              leistungenVon={leistungenVon} onOeffnen={onOeffnen}>
+              <ZeilenAktion text="Öffnen" betont onClick={() => onOeffnen(t.datum)} />
+              {t.offen && t.einsaetze[0] && (
+                <>
+                  <ZeilenAktion text="Bestätigen" onClick={() => onBestaetigen(t.einsaetze[0].id)} />
+                  <ZeilenAktion text="Rückfrage" onClick={() => onRueckfrage(t.einsaetze[0])} />
+                </>
+              )}
+            </PruefZeile>
+          ))}
+        </GruppenKopf>
+      )}
+
+      {stimmige.length > 0 && (
+        <GruppenKopf sorte="stimmig" titel="Stimmig" anzahl={stimmige.length}
+          aktion={<ZeilenAktion text="Alle bestätigen" betont onClick={onAlleStimmigen} />}>
+          <div className="flex items-center flex-wrap" style={{ gap: 10, padding: "9px 18px" }}>
+            <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", minWidth: 132 }}>
+              {stimmige.length} {stimmige.length === 1 ? "Tag" : "Tage"} im {MONATE[monat]}
+            </span>
+            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+              Gestempelte Zeit gleich Tagessoll, alle verordneten Leistungen erbracht
+            </span>
+            <button type="button" onClick={() => onOeffnen(stimmige[0].datum)} className="ui-fokusring cursor-pointer"
+              style={{ marginLeft: "auto", background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+              Einzeln ansehen
+            </button>
+          </div>
+        </GruppenKopf>
+      )}
+
+      {/* ── Fusszeile ── */}
+      <div className="flex items-center flex-wrap" style={{ gap: 12, padding: "10px 18px", borderTop: "var(--border-thin) solid var(--border-default)", background: "var(--bg-secondary)" }}>
+        <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", maxWidth: "74ch" }}>
+          Gerechnet aus den erfassten Einsätzen und dem Leistungsplanungsblatt · {erzeugtAm} ·
+          Berichtsinhalte werden nicht ausgewertet.
+        </span>
+        <div className="flex items-center" style={{ gap: 12, marginLeft: "auto" }}>
+          <ZeilenAktion text="Stimmt nicht" onClick={onStimmtNicht} />
+          <ZeilenAktion text="Neu erzeugen" onClick={onNeuErzeugen} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Tage benennen — einzeln, solange man sie noch lesen kann.
+ *
+ * Einunddreissig Zahlen hintereinander sind keine Aufzählung mehr, sondern
+ * eine Wand. Ab acht Tagen steht deshalb nur noch die Spanne.
+ */
+function tageBenennen(tage: Monatstag[], monat: number): string {
+  if (tage.length === 0) return "";
+  if (tage.length <= 8) return `${tage.map(t => `${t.nummer}.`).join(" ")} ${MONATE[monat]}`;
+  return `${tage[0].nummer}. bis ${tage[tage.length - 1].nummer}. ${MONATE[monat]}`;
+}
+
+/** Kopfzeile einer Gruppe mit Marke, Titel und Zahl. */
+function GruppenKopf({ sorte, titel, anzahl, aktion, children }: {
+  sorte: PruefGruppe; titel: string; anzahl: number;
+  aktion?: React.ReactNode; children: React.ReactNode;
+}) {
+  const farbe = sorte === "fehlt"
+    ? { bg: "var(--status-warning-bg)", fg: "var(--status-warning-text)" }
+    : sorte === "abweichung"
+      ? { bg: "var(--status-info-bg)", fg: "var(--status-info)" }
+      : { bg: "var(--bg-secondary)", fg: "var(--text-secondary)" };
+  return (
+    <div style={{ borderTop: "var(--border-thin) solid var(--border-default)" }}>
+      <div className="flex items-center" style={{ gap: 9, padding: "8px 18px" }}>
+        <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: farbe.bg, color: farbe.fg }}>
+          {titel}
+        </span>
+        <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+          {anzahl} {anzahl === 1 ? "Tag" : "Tage"}
+        </span>
+        {aktion && <div style={{ marginLeft: "auto" }}>{aktion}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Eine Zeile der Gruppe „Abweichung": Datum, Sachverhalt, Vorschau, Aktionen. */
+function PruefZeile({ tag, monat, gewaehlt, leistungenVon, onOeffnen, children }: {
+  tag: Monatstag; monat: number; gewaehlt: boolean;
+  leistungenVon: (einsatzId: string) => ErbrachteLeistung[];
+  onOeffnen: (datum: string) => void;
+  children: React.ReactNode;
+}) {
+  const gruende = tag.einsaetze.flatMap(e => leistungenVon(e.id)).map(l => l.grund).filter(g => g.trim());
+  const bericht = tag.einsaetze.map(e => aktuelleFassung(e)?.text ?? "").find(t => t.trim()) ?? "";
+  return (
+    <div className="flex items-start flex-wrap" style={{ gap: 10, padding: "9px 18px", background: gewaehlt ? "var(--bg-secondary)" : "transparent" }}>
+      <button type="button" onClick={() => onOeffnen(tag.datum)} className="ui-fokusring cursor-pointer text-left"
+        style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", minWidth: 132 }}>
+        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>
+          {tag.nummer}. {MONATE[monat]}
+        </span>
+        <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginLeft: 6 }}>{WOCHENTAGE[tag.wochentag]}</span>
+        <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+          {Math.round(tag.gestempelt)} Min. gestempelt
+        </div>
+      </button>
+
+      <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ fontSize: "var(--text-meta)", color: tag.abweichung > 0 ? "var(--status-info)" : "var(--status-warning-text)", fontVariantNumeric: "tabular-nums" }}>
+          {tag.abweichung > 0 ? "Mehr als verordnet" : "Weniger als verordnet"}
+          {" · "}{tag.abweichung > 0 ? "+" : "−"}{Math.abs(Math.round(tag.abweichung))} Min.
+        </div>
+        {gruende.map((g, i) => (
+          <div key={i} style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)", marginTop: 3 }}>{g}</div>
+        ))}
+        {/* Vorschau auf zwei Zeilen — mehr ist keine Vorschau mehr, sondern
+            der Bericht an der falschen Stelle. */}
+        {bericht && (
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 4, lineHeight: 1.5,
+            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {bericht}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center" style={{ gap: 12, marginLeft: "auto" }}>{children}</div>
+    </div>
+  );
+}
+
+/** Textaktion in einer Zeile — keine Schaltfläche, damit die Zeile ruhig bleibt. */
+function ZeilenAktion({ text, betont, onClick }: { text: string; betont?: boolean; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="ui-fokusring cursor-pointer"
+      style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", whiteSpace: "nowrap",
+        fontSize: "var(--text-micro)", fontWeight: betont ? 500 : 400,
+        color: betont ? "var(--brand-primary)" : "var(--text-secondary)" }}>
+      {text}
+    </button>
   );
 }
 
@@ -3505,20 +3593,43 @@ function Tagesansicht({
         <div className="flex flex-col lg:flex-row">
           {/* ── Links: erbracht gegen verordnet ── */}
           <div style={{ flex: "1 1 0", minWidth: 0, padding: "14px 16px" }}>
-            <div className="flex items-baseline" style={{ gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>
-                {Math.round(tag.ist)}{hatSoll && ` / ${Math.round(tag.soll)}`}
-              </span>
-              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-                Minuten {hatSoll ? "erbracht von verordnet" : "erbracht"}
-              </span>
-              {tag.periodisch > 0 && (
-                <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
-                  + {min(tag.periodisch)} periodisch
+            {/* Drei Zeilen: was die Uhr sagt, was das Blatt sagt, die Differenz. */}
+            <div className="flex flex-col" style={{ gap: 4, marginBottom: 14 }}>
+              <div className="flex items-baseline" style={{ gap: 8 }}>
+                <span style={{ width: 82, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Gestempelt</span>
+                <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>
+                  {einsatz.von} – {einsatz.bis}
                 </span>
+                <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>
+                  {min(tag.gestempelt)}
+                </span>
+              </div>
+              {hatSoll && (
+                <div className="flex items-baseline" style={{ gap: 8 }}>
+                  <span style={{ width: 82, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Verordnet</span>
+                  <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums" }}>{min(tag.soll)} Tagessoll</span>
+                  {tag.periodisch > 0 && (
+                    <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                      + {min(tag.periodisch)} periodisch verordnet
+                    </span>
+                  )}
+                </div>
+              )}
+              {hatSoll && (
+                <div className="flex items-baseline" style={{ gap: 8 }}>
+                  <span style={{ width: 82, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Abweichung</span>
+                  <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums",
+                    background: tag.abweichung === 0 ? "var(--bg-secondary)" : tag.abweichung > 0 ? "var(--status-info-bg)" : "var(--status-warning-bg)",
+                    color: tag.abweichung === 0 ? "var(--text-secondary)" : tag.abweichung > 0 ? "var(--status-info)" : "var(--status-warning-text)" }}>
+                    {tag.abweichung === 0 ? "± 0 Min." : `${tag.abweichung > 0 ? "+" : "−"}${Math.abs(Math.round(tag.abweichung))} Min.`}
+                  </span>
+                </div>
               )}
             </div>
 
+            {/* Verordnete Leistungen: abgehakt oder nicht. Keine Minuten je
+                Position — gestempelt wird eine Gesamtzeit, nicht je Handgriff. */}
+            <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>Verordnete Leistungen</div>
             <div className="flex flex-col" style={{ gap: 6 }}>
               {tag.einsaetze.flatMap(e => leistungenVon(e.id)).map(l => {
                 const pos = positionVon(l.positionId);
@@ -3526,7 +3637,7 @@ function Tagesansicht({
                 return (
                   <div key={l.id}>
                     <div className="flex items-baseline" style={{ gap: 8 }}>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-meta)", color: l.erbracht ? "var(--text-primary)" : "var(--text-tertiary)", textDecoration: l.erbracht ? "none" : "line-through" }}>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-meta)", color: l.erbracht ? "var(--text-primary)" : "var(--text-tertiary)" }}>
                         {pos ? pos.bezeichnung : l.positionId}
                       </span>
                       {!taeglich && pos && (
@@ -3534,10 +3645,16 @@ function Tagesansicht({
                           periodisch · {haeufigkeitText(pos)}
                         </span>
                       )}
-                      <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                        {l.minuten}{hatSoll && pos ? ` / ${pos.anzahl * pos.zeitMin}` : ""} min
+                      <span style={{ fontSize: "var(--text-meta)", whiteSpace: "nowrap",
+                        color: l.erbracht ? "var(--status-success-text)" : "var(--status-warning-text)" }}>
+                        {l.erbracht ? "erbracht" : "nicht erbracht"}
                       </span>
                     </div>
+                    {!l.erbracht && pos && (
+                      <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
+                        {pos.anzahl * pos.zeitMin} Min. verordnet
+                      </div>
+                    )}
                     {l.grund.trim() && (
                       <div style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)", marginTop: 3, maxWidth: 560 }}>{l.grund}</div>
                     )}
