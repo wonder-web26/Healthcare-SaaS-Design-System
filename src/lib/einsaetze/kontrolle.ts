@@ -9,7 +9,7 @@
  * Zahlen zurück. So kann die Liste es für zehn Patienten in einer Schleife
  * aufrufen, ohne die Regeln von React zu verletzen.
  */
-import type { Einsatz, ErbrachteLeistung, EinsatzUrheber, Monatstag } from "./einsaetze";
+import type { Einsatz, ErbrachteLeistung, Monatstag } from "./einsaetze";
 import { monatAufteilen, fehlendeTageMuster, einsatzDauer } from "./einsaetze";
 import type { KLVVerordnung } from "../../types/klinische-artefakte";
 import type { Mandat } from "../mandate/mandate";
@@ -59,8 +59,6 @@ export interface MonatsKennzahlen {
    * nicht mehr sagen, ob vergessen oder nicht nötig.
    */
   abweichungOhneGrund: number;
-  /** Wer im Monat erbracht hat, ohne Wiederholung, in Reihenfolge des Auftretens. */
-  urheber: EinsatzUrheber[];
 }
 
 /**
@@ -129,11 +127,6 @@ export function monatsKennzahlen(
     gemeldet);
 
   const alleEinsaetze = tage.flatMap(t => t.einsaetze);
-  const urheber: EinsatzUrheber[] = [];
-  for (const e of alleEinsaetze) {
-    const kennung = e.erbrachtDurch.art === "mitarbeitende" ? e.erbrachtDurch.name : e.erbrachtDurch.kennung;
-    if (!urheber.some(u => (u.art === "mitarbeitende" ? u.name : u.kennung) === kennung)) urheber.push(e.erbrachtDurch);
-  }
 
   return {
     patientId, blatt, sollProTag, tage, muster, abrechnung, gemeldet, verordnung,
@@ -146,7 +139,6 @@ export function monatsKennzahlen(
     ohneEinsatz: muster.tage.length,
     mitBericht: tage.filter(t => t.hatBericht).length,
     mitEinsatz: tage.filter(t => t.einsaetze.length > 0).length,
-    urheber,
   };
 }
 

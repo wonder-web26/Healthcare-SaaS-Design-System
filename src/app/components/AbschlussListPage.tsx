@@ -29,22 +29,15 @@ import { useKlvVerordnungen } from "../../lib/klv/store";
 import { useMandate } from "../../lib/mandate/store";
 import { useVerordnungen } from "../../lib/mandate/verordnungen-store";
 import { usePatienten } from "../../lib/patienten/store";
-import { getAngehoerige } from "../../lib/angehoerige/store";
-import { MONATE, type EinsatzUrheber } from "../../lib/einsaetze/einsaetze";
+import { MONATE } from "../../lib/einsaetze/einsaetze";
 import { monatsKennzahlen, quartalMinuten, type MonatsKennzahlen } from "../../lib/einsaetze/kontrolle";
 import { abschlussLage, BLOCKADE_TEXT, QUARTALSSCHWELLE_STUNDEN, type AbschlussLage, type Monatsabschluss } from "../../lib/abschluss/abschluss";
+import { TAKT_MINUTEN, MINDESTWERT_EINSATZ } from "../../lib/abrechnung/leistungsarten";
 import { useAbschluesse, getAbschluss, getOeffnungen, monatAbschliessen, monatWiederOeffnen } from "../../lib/abschluss/store";
 import { jetztAnzeige } from "../../lib/datum";
 import { AppButton } from "./ui/AppButton";
 import { ansichtPfad } from "./Patient360Page";
 import { leerZuletzt } from "../../lib/sortierung";
-
-/** Anzeigename des Urhebers — Mitarbeitende tragen ihren Namen, Angehörige eine Kennung. */
-function urheberName(u: EinsatzUrheber): string {
-  if (u.art === "mitarbeitende") return u.name;
-  const a = getAngehoerige().find(x => x.id === u.kennung);
-  return a ? `${a.vorname} ${a.nachname}` : u.kennung;
-}
 
 interface Zeile {
   id: string;
@@ -55,6 +48,13 @@ interface Zeile {
   /** Verrechenbare Minuten des Quartals, in dem der Monat liegt. */
   quartal: number;
   abschluss: Monatsabschluss | null;
+}
+
+/** Überschrift eines Kopffelds — dieselbe Gestaltung wie in den übrigen Leisten. */
+function KopfTitel({ text }: { text: string }) {
+  return (
+    <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 1 }}>{text}</div>
+  );
 }
 
 /* Wer im Cockpit angemeldet ist — dieselbe Person wie in den übrigen
@@ -170,9 +170,8 @@ export function AbschlussListPage() {
         /* Wer nichts Offenes hat, steht in beiden Richtungen zuletzt: eine
            erledigte Zeile soll die Arbeitsliste nicht anführen, nur weil man
            die Richtung umkehrt. */
-        case "offen": return leerZuletzt(a.k.offen === 0, b.k.offen === 0, f, () => a.k.offen - b.k.offen);
+        case "differenz": return f * (a.k.abrechnung.ausRundung - b.k.abrechnung.ausRundung);
         case "zustaendig": return f * a.zustaendig.localeCompare(b.zustaendig, "de");
-        case "urheber": return f * (a.k.urheber[0] ? urheberName(a.k.urheber[0]) : "").localeCompare(b.k.urheber[0] ? urheberName(b.k.urheber[0]) : "", "de");
         default: return f * a.name.localeCompare(b.name, "de");
       }
     });
@@ -208,25 +207,23 @@ export function AbschlussListPage() {
   );
 
   const spalten: SpalteDef<Zeile>[] = [
-    { id: "patient", label: "Patient", anteil: 15, minCh: 18, align: "left", sortierbar: true,
+    { id: "patient", label: "Patient", anteil: 20, minCh: 22, align: "left", sortierbar: true,
       render: z => <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{z.name}</span> },
-    { id: "urheber", label: "Erbracht durch", anteil: 13, minCh: 16, align: "left", sortierbar: true, ausblendenUnter: "eng",
-      render: z => {
-        if (z.k.urheber.length === 0) return null;
-        const erster = urheberName(z.k.urheber[0]);
-        return (
-          <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>
-            {z.k.urheber.length === 1 ? erster : `${erster} und weitere`}
-          </span>
-        );
-      } },
-    /* Verrechenbar und gearbeitet stehen nebeneinander und werden nie
-       zusammengefasst: das eine geht an die Kasse, das andere in den Lohn. */
-    { id: "verrechenbar", label: "Verrechenbar", anteil: 10, minCh: 12, align: "right", sortierbar: true,
+    /* Verrechenbar, gearbeitet und ihre Differenz stehen nebeneinander und
+       werden nie zusammengefasst: das eine geht an die Kasse, das andere in
+       den Lohn, und die Differenz erklärt, warum sie auseinandergehen. */
+    { id: "verrechenbar", label: "Verrechenbar", anteil: 13, minCh: 13, align: "right", sortierbar: true,
       render: z => zahl(Math.round(z.k.abrechnung.abrechenbar)) },
-    { id: "gearbeitet", label: "Gearbeitet", anteil: 10, minCh: 11, align: "right", sortierbar: true,
+    { id: "gearbeitet", label: "Gearbeitet", anteil: 13, minCh: 12, align: "right", sortierbar: true,
       render: z => zahl(Math.round(z.k.abrechnung.gestempelt), "var(--text-secondary)") },
-    { id: "meldung", label: "Gegen Meldung", anteil: 12, minCh: 14, align: "right", sortierbar: true,
+    { id: "differenz", label: "Differenz", anteil: 11, minCh: 11, align: "right", sortierbar: true,
+      render: z => (
+        <span title={`Aus dem ${TAKT_MINUTEN}-Minuten-Takt: je Einsatz und Leistungsart wird aufgerundet, mindestens ${MINDESTWERT_EINSATZ} Minuten je Einsatz.`}
+          style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)", cursor: "help" }}>
+          + {Math.round(z.k.abrechnung.ausRundung)}
+        </span>
+      ) },
+    { id: "meldung", label: "Gegen Meldung", anteil: 15, minCh: 15, align: "right", sortierbar: true,
       render: z => {
         /* Ohne Bedarfsmeldung gibt es nichts zu vergleichen — dann steht dort
            eine Marke und keine Null. Eine Null hiesse „im Rahmen". */
@@ -243,32 +240,24 @@ export function AbschlussListPage() {
            Verstoss. */
         return (
           <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", color: "var(--status-warning-text)", whiteSpace: "nowrap" }}>
-            {z.k.abrechnung.betroffene.map(c => c).join(", ")} +{Math.round(z.k.abrechnung.nichtGedeckt)} Min.
+            {z.k.abrechnung.betroffene.join(", ")} +{Math.round(z.k.abrechnung.nichtGedeckt)} Min.
           </span>
         );
       } },
-    { id: "quartal", label: "Quartal", anteil: 9, minCh: 11, align: "right", sortierbar: true, ausblendenUnter: "eng",
+    { id: "status", label: "Status", anteil: 28, minCh: 30, align: "left", sortierbar: true,
       render: z => {
-        const drueber = z.quartal / 60 > QUARTALSSCHWELLE_STUNDEN;
-        return (
+        /* Die Quartalsschwelle blockiert nicht — sie weist hin. Über 60
+           Pflichtleistungsstunden je Quartal kann der Versicherer eine
+           Leistungsprüfung veranlassen; bei einer Angehörigen-Spitex ist das
+           der Regelfall und kein Fehler. */
+        const quartalsmarke = z.quartal / 60 > QUARTALSSCHWELLE_STUNDEN ? (
           <span
-            title={drueber ? `Über ${QUARTALSSCHWELLE_STUNDEN} Pflichtleistungsstunden im Quartal — der Versicherer kann eine Leistungsprüfung veranlassen.` : undefined}
-            style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap",
-              fontWeight: drueber ? 500 : 400, cursor: drueber ? "help" : "default",
-              color: drueber ? "var(--status-warning-text)" : "var(--text-primary)" }}>
-            {std(z.quartal)} Std.
+            title={`${std(z.quartal)} Stunden im laufenden Quartal — über ${QUARTALSSCHWELLE_STUNDEN} kann der Versicherer eine Leistungsprüfung veranlassen. Der Abschluss ist davon nicht betroffen.`}
+            style={{ padding: "1px 7px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)", whiteSpace: "nowrap", cursor: "help" }}>
+            Quartal {std(z.quartal)} Std.
           </span>
-        );
-      } },
-    { id: "offen", label: "Offen", anteil: 9, minCh: 11, align: "right", sortierbar: true, ausblendenUnter: "eng",
-      render: z => (
-        <span style={{ fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums",
-          color: z.k.offen > 0 ? "var(--text-primary)" : "var(--text-tertiary)" }}>
-          {z.k.offen} von {z.k.einsaetzeGesamt}
-        </span>
-      ) },
-    { id: "status", label: "Status", anteil: 22, minCh: 26, align: "left", sortierbar: true,
-      render: z => {
+        ) : null;
+
         if (z.abschluss) return (
           <div className="flex items-center" style={{ gap: 8 }}>
             <span className="inline-flex items-center" style={{ gap: 5, padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-success-bg)", color: "var(--status-success-text)", whiteSpace: "nowrap" }}>
@@ -277,6 +266,7 @@ export function AbschlussListPage() {
             <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
               {z.abschluss.zeitpunkt} · {z.abschluss.person}
             </span>
+            {quartalsmarke}
             <button type="button" onClick={e => { e.stopPropagation(); setOeffnenDialog(z); setOeffnenGrund(""); }}
               className="ui-fokusring cursor-pointer" style={{ marginLeft: "auto", background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
               Wieder öffnen
@@ -286,6 +276,7 @@ export function AbschlussListPage() {
         if (z.lage.bereit) return (
           <div className="flex items-center" style={{ gap: 8 }}>
             <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--brand-primary-light)", color: "var(--brand-primary)", whiteSpace: "nowrap" }}>Bereit</span>
+            {quartalsmarke}
             <button type="button" onClick={e => { e.stopPropagation(); setAbschlussDialog([z]); }}
               className="ui-fokusring cursor-pointer" style={{ marginLeft: "auto", background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
               Abschliessen
@@ -293,10 +284,13 @@ export function AbschlussListPage() {
           </div>
         );
         return (
-          <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
-            <AlertTriangle style={{ width: 12, height: 12, flexShrink: 0 }} />
-            {z.lage.grund ? BLOCKADE_TEXT[z.lage.grund] : "Blockiert"}
-          </span>
+          <div className="flex items-center" style={{ gap: 8 }}>
+            <span className="inline-flex items-center" style={{ gap: 6, fontSize: "var(--text-small)", color: "var(--status-warning-text)", whiteSpace: "nowrap" }}>
+              <AlertTriangle style={{ width: 12, height: 12, flexShrink: 0 }} />
+              {z.lage.grund ? BLOCKADE_TEXT[z.lage.grund] : "Blockiert"}
+            </span>
+            {quartalsmarke}
+          </div>
         );
       } },
   ];
@@ -328,6 +322,8 @@ export function AbschlussListPage() {
 
   const summeVerrechenbar = zeilen.reduce((s, z) => s + z.k.abrechnung.abrechenbar, 0);
   const summeGearbeitet = zeilen.reduce((s, z) => s + z.k.abrechnung.gestempelt, 0);
+  const abgeschlosseneZahl = zeilen.filter(z => z.abschluss).length;
+  const trenner = { borderLeft: "var(--border-thin) solid var(--border-default)", paddingLeft: 18 } as const;
 
   return (
     <div style={{ padding: "var(--space-6)" }}>
@@ -353,34 +349,41 @@ export function AbschlussListPage() {
           </div>
         ) : (
           <>
-            {/* ── Drei Werte für den Monat ──
-                Verrechenbar und gearbeitet stehen getrennt: das eine geht an
-                die Kasse, das andere in den Lohn, und der Arbeitgeber schuldet
-                den Lohn unabhängig davon, ob die Kasse zahlt. */}
-            <div className="flex items-center flex-wrap"
-              style={{ gap: 28, padding: "11px 18px", marginBottom: "var(--space-3)",
-                background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-              <div>
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Verrechenbar</div>
+            {/* ── Totale des Monats ──
+                Beim Abschluss zählt zuerst, wie weit der Monat insgesamt ist —
+                bei fünfhundert Patienten mehr als jede einzelne Zeile.
+                Gestaltung wie die Urteilsleiste der Pflegekontrolle: Felder
+                nebeneinander, durch senkrechte Linien getrennt. */}
+            <div className="flex flex-col sm:flex-row" style={{ padding: "11px 18px", gap: 18, marginBottom: "var(--space-3)",
+              background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+              <div style={{ minWidth: 150 }}>
+                <KopfTitel text="Verrechenbar" />
                 <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", lineHeight: 1.25 }}>
                   {Math.round(summeVerrechenbar)} Min.
                 </div>
                 <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>an den Versicherer</div>
               </div>
-              <div>
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Gearbeitet</div>
-                <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", lineHeight: 1.25 }}>
+              <div style={{ minWidth: 140, ...trenner }}>
+                <KopfTitel text="Gearbeitet" />
+                <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", lineHeight: 1.35 }}>
                   {Math.round(summeGearbeitet)} Min.
                 </div>
                 <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>lohnwirksam</div>
               </div>
-              <div>
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Bereit</div>
-                <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", lineHeight: 1.25 }}>
-                  {bereite.length} von {zeilen.length}
+              <div style={{ minWidth: 160, ...trenner }}>
+                <KopfTitel text="Differenz" />
+                <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", lineHeight: 1.35, color: "var(--text-secondary)" }}>
+                  + {Math.round(summeVerrechenbar - summeGearbeitet)} Min.
+                </div>
+                <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>aus dem {TAKT_MINUTEN}-Minuten-Takt</div>
+              </div>
+              <div style={{ minWidth: 130, ...trenner }}>
+                <KopfTitel text="Bereit" />
+                <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums", lineHeight: 1.35 }}>
+                  {abgeschlosseneZahl === zeilen.length ? "alle bereit" : `${bereite.length} von ${zeilen.length}`}
                 </div>
                 <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-                  {zeilen.filter(z => z.abschluss).length} bereits abgeschlossen
+                  {abgeschlosseneZahl} abgeschlossen
                 </div>
               </div>
             </div>
