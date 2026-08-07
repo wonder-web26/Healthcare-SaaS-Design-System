@@ -4,16 +4,10 @@ import {
   Users,
   AlertTriangle,
   CheckCircle2,
-  Sparkles,
-  Star,
-  MapPin,
-  Globe,
-  Briefcase,
   X,
   Check,
   ChevronDown,
   Plus,
-  UserPlus,
 } from "lucide-react";
 import {
   statusConfig,
@@ -23,7 +17,7 @@ import {
   type Schweregrad,
 } from "./patientData";
 import { usePatienten, PATIENTEN_BEZUGSDATUM_ISO } from "../../lib/patienten/store";
-import { sdaSpracheCode, sdaSpracheLabel } from "../../lib/stammdaten/sda-sprache";
+import { sdaSpracheCode } from "../../lib/stammdaten/sda-sprache";
 import { isoZuAnzeige } from "../../lib/datum";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
 
@@ -55,31 +49,45 @@ const pflegefachkraefte: Pflegefachkraft[] = [
   { id: "pf6", name: "Sophie Dubois", initialen: "SD", sprachen: ["2", "1"] /* Französisch, Schweizerdeutsch */, skills: ["Pflege A", "Palliative Care", "Wundmanagement"], regionen: ["BE", "FR", "VD"], kapazitaet: 25, maxKapazitaet: 40, bewertung: 4.4 },
 ];
 
-/* ── Matching algorithm (unverändert) ──────────────────── */
-function getTopMatches(patient: Patient): (Pflegefachkraft & { score: number; reasons: string[] })[] {
-  return pflegefachkraefte
-    .map((pf) => {
-      let score = 0;
-      const reasons: string[] = [];
-      if (pf.sprachen.includes(sdaSpracheCode(patient.sprache))) {
-        score += 40;
-        reasons.push(`Spricht ${patient.sprache}`);
-      }
-      if (pf.regionen.includes(patient.kanton)) {
-        score += 30;
-        reasons.push(`Region ${patient.kanton}`);
-      }
-      if (pf.skills.includes(patient.leistungsart)) {
-        score += 20;
-        reasons.push(`Skill: ${patient.leistungsart}`);
-      }
-      const capacityRatio = 1 - pf.kapazitaet / pf.maxKapazitaet;
-      score += Math.round(capacityRatio * 10);
-      if (capacityRatio > 0.25) reasons.push("Kapazität verfügbar");
-      return { ...pf, score, reasons };
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+/* ── Prüfung statt Bewertung ──────────────────────────────
+   Vier gleichrangige, unabhängig prüfbare Bedingungen (Sprache, Region,
+   Qualifikation, Kapazität). Kein gewichteter Score mehr, keine Sterne — die
+   Reihung zählt erfüllte Kriterien, bei Gleichstand entscheidet freie Kapazität.
+   Die Werte sind je Kriterium der massgebliche Wert plus ein Ja/Nein-Ergebnis. ── */
+const KAPAZITAET_MIN_FREI = 3; // ab hier gilt die Kapazität als erfüllt (gesetzter Wert)
+
+type KriteriumTon = "ok" | "miss" | "warn";
+interface Kriterium { label: string; erfuellt: boolean; wert: string; ton: KriteriumTon; }
+type Kandidat = Pflegefachkraft & {
+  kriterien: Kriterium[];
+  erfuelltAnzahl: number;
+  pflichtTreffer: number; // Sprache + Region
+  freieKapazitaet: number;
+};
+
+function bewerteKandidaten(patient: Patient): { vorschlaege: Kandidat[]; ohnePflicht: Kandidat[]; keinVolltreffer: boolean } {
+  const bewertet: Kandidat[] = pflegefachkraefte.map((pf) => {
+    const spracheOk = pf.sprachen.includes(sdaSpracheCode(patient.sprache));
+    const regionOk = pf.regionen.includes(patient.kanton);
+    const qualiOk = pf.skills.includes(patient.leistungsart);
+    const frei = pf.maxKapazitaet - pf.kapazitaet;
+    const kapaOk = frei >= KAPAZITAET_MIN_FREI;
+    const kriterien: Kriterium[] = [
+      { label: "Sprache", erfuellt: spracheOk, ton: spracheOk ? "ok" : "miss", wert: spracheOk ? patient.sprache : `kein ${patient.sprache}` },
+      { label: "Region", erfuellt: regionOk, ton: regionOk ? "ok" : "miss", wert: regionOk ? patient.kanton : `${pf.regionen.join(", ")} · nicht ${patient.kanton}` },
+      { label: "Qualifikation", erfuellt: qualiOk, ton: qualiOk ? "ok" : "miss", wert: qualiOk ? patient.leistungsart : "fehlt" },
+      { label: "Kapazität", erfuellt: kapaOk, ton: kapaOk ? "ok" : "warn", wert: `${pf.kapazitaet} von ${pf.maxKapazitaet} Klienten · ${frei} frei${kapaOk ? "" : " · nahezu ausgeschöpft"}` },
+    ];
+    return { ...pf, kriterien, erfuelltAnzahl: [spracheOk, regionOk, qualiOk, kapaOk].filter(Boolean).length, pflichtTreffer: (spracheOk ? 1 : 0) + (regionOk ? 1 : 0), freieKapazitaet: frei };
+  });
+  // Ohne freie Kapazität: erscheint gar nicht.
+  const mitKapazitaet = bewertet.filter((k) => k.freieKapazitaet > 0);
+  const sortiert = [...mitKapazitaet].sort((a, b) => b.erfuelltAnzahl - a.erfuelltAnzahl || b.freieKapazitaet - a.freieKapazitaet || kurznameVon(a.name).localeCompare(kurznameVon(b.name), "de"));
+  return {
+    vorschlaege: sortiert.filter((k) => k.pflichtTreffer >= 1),   // mind. Sprache ODER Region
+    ohnePflicht: sortiert.filter((k) => k.pflichtTreffer === 0),  // weder noch → zusammengefasst
+    keinVolltreffer: !sortiert.some((k) => k.pflichtTreffer >= 1 && k.erfuelltAnzahl === 4),
+  };
 }
 
 /* ══════════════════════════════════════════ */
@@ -288,7 +296,8 @@ export function ZuteilungPage() {
     setTimeout(() => setConfirmToast(null), 3000);
   };
 
-  const topMatches = selectedPatient ? getTopMatches(selectedPatient) : [];
+  const pruefung = useMemo(() => selectedPatient ? bewerteKandidaten(selectedPatient) : null, [selectedPatient, assignments]);
+  const [zeigeOhnePflicht, setZeigeOhnePflicht] = useState(false);
 
   /* ── Zell-Renderer ── */
   const kennzeichenIcon = (p: EnrichedPatient) => {
@@ -354,6 +363,52 @@ export function ZuteilungPage() {
     </div>
   );
 
+  /* ── Prüfansicht: eine Kriteriumszeile (Zeichen + Farbe, nie Farbe allein) ── */
+  const renderKriterium = (kr: Kriterium) => {
+    const Zeichen = kr.ton === "ok" ? Check : kr.ton === "warn" ? AlertTriangle : X;
+    const farbe = kr.ton === "ok" ? "text-success" : kr.ton === "warn" ? "text-warning" : "text-error";
+    return (
+      <div key={kr.label} className="flex items-center gap-2 text-[12px]">
+        <Zeichen className={`w-3.5 h-3.5 shrink-0 ${farbe}`} />
+        <span className="text-muted-foreground shrink-0" style={{ width: 82 }}>{kr.label}</span>
+        <span className="text-foreground truncate" title={kr.wert}>{kr.wert}</span>
+      </div>
+    );
+  };
+
+  /* ── Prüfansicht: eine Kandidatenkarte (feste Reihenfolge der vier Kriterien) ── */
+  const renderKandidat = (k: Kandidat) => {
+    const isAssigned = selectedPatient != null && assignments[selectedPatient.id] === k.name;
+    return (
+      <div key={k.id} className={`rounded-xl border ${isAssigned ? "border-success/30 bg-success-light" : "border-border"}`} style={{ padding: 14 }}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center shrink-0">
+              <span className="text-[11px] text-muted-foreground" style={{ fontWeight: 600 }}>{k.initialen}</span>
+            </span>
+            <span className="text-[13px] text-foreground truncate" style={{ fontWeight: 500 }}>{kurznameVon(k.name)}</span>
+          </div>
+          <span className="text-[12px] shrink-0" style={{ fontWeight: 600, color: k.erfuelltAnzahl === 4 ? "var(--status-success-text)" : "var(--text-secondary)" }}>{k.erfuelltAnzahl} von 4</span>
+        </div>
+        <div className="space-y-1.5 mb-3">
+          {k.kriterien.map(renderKriterium)}
+        </div>
+        {isAssigned ? (
+          <div className="flex items-center gap-1.5 text-[12px] text-success" style={{ fontWeight: 500 }}>
+            <CheckCircle2 className="w-4 h-4" /> Zugewiesen
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button onClick={() => selectedPatient && handleConfirmMatch(selectedPatient, k)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-[12px] bg-primary text-primary-foreground hover:bg-primary-hover transition-colors" style={{ fontWeight: 500 }}>
+              <Check className="w-3.5 h-3.5" /> Zuweisen
+            </button>
+            <button type="button" className="inline-flex items-center justify-center px-3 py-2 rounded-xl text-[12px] border border-border text-foreground hover:bg-secondary/60 transition-colors" style={{ fontWeight: 500 }}>Profil</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const leerImBestand = allPatients.length === 0;
   const keineTreffer = sorted.length === 0;
   const suchButton = { background: "transparent", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-pill)", padding: "5px 12px", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", cursor: "pointer" } as const;
@@ -365,7 +420,7 @@ export function ZuteilungPage() {
         <div>
           <h2 className="text-foreground">Management Zuteilung</h2>
           <p className="text-[13px] text-muted-foreground mt-0.5">
-            Patienten an Pflegefachkräfte zuweisen — KI-unterstütztes Matching
+            Patienten an Pflegefachkräfte zuweisen
           </p>
         </div>
       </div>
@@ -476,155 +531,46 @@ export function ZuteilungPage() {
             )}
           </div>
 
-          {/* ── Right: Matching panel (unverändert) ────── */}
+          {/* ── Right: Prüfansicht — Zuweisung prüfen, nicht bewerten ────── */}
           <div className="w-full xl:w-[380px] shrink-0">
             <div className="bg-card rounded-2xl border border-border overflow-hidden sticky top-4">
-              <div className="px-5 py-4 border-b border-border-light">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-primary-light flex items-center justify-center">
-                    <Sparkles className="w-3.5 h-3.5 text-primary" />
-                  </div>
-                  <div>
-                    <h5 className="text-foreground">Matching Algorithmus</h5>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">Top-3 Empfehlungen</p>
-                  </div>
-                </div>
-              </div>
-
-              {selectedPatient ? (
-                <div className="p-4 space-y-3">
-                  <div className="p-3 rounded-xl bg-primary-light/50 border border-primary/10">
-                    <div className="text-[11px] text-primary uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>Ausgewählter Patient</div>
+              {selectedPatient && pruefung ? (
+                <>
+                  {/* Kopf: Anforderung einmal oben, nicht je Vorschlag */}
+                  <div className="px-5 py-4 border-b border-border-light">
                     <div className="text-[14px] text-foreground" style={{ fontWeight: 600 }}>
-                      {selectedPatient.nachname}, {selectedPatient.vorname}
+                      Vorschläge für {selectedPatient.nachname}, {selectedPatient.vorname}
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground flex-wrap">
-                      <span>{selectedPatient.kanton}</span>
-                      <span>·</span>
-                      <span>{selectedPatient.sprache}</span>
-                      <span>·</span>
-                      <span>{selectedPatient.leistungsart}</span>
+                    <div className="text-[12px] text-muted-foreground mt-1">
+                      Anforderung: <span className="text-foreground" style={{ fontWeight: 500 }}>{selectedPatient.sprache}</span> · <span className="text-foreground" style={{ fontWeight: 500 }}>{selectedPatient.kanton}</span> · <span className="text-foreground" style={{ fontWeight: 500 }}>{selectedPatient.leistungsart}</span>
                     </div>
                   </div>
 
-                  {topMatches.map((match, idx) => {
-                    const isAssigned = assignments[selectedPatient.id] === match.name;
-                    const capacityPct = (match.kapazitaet / match.maxKapazitaet) * 100;
-                    const capacityColor =
-                      capacityPct >= 90 ? "bg-error" : capacityPct >= 75 ? "bg-warning" : "bg-success";
-
-                    return (
-                      <div
-                        key={match.id}
-                        className={`p-3.5 rounded-xl border transition-all ${
-                          isAssigned
-                            ? "border-success/30 bg-success-light"
-                            : idx === 0
-                            ? "border-primary/20 bg-primary-light/30"
-                            : "border-border hover:border-primary/20"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-2.5">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                              isAssigned ? "bg-success-medium" : idx === 0 ? "bg-primary text-primary-foreground" : "bg-muted"
-                            }`}>
-                              {isAssigned ? (
-                                <CheckCircle2 className="w-[18px] h-[18px] text-success" />
-                              ) : (
-                                <span className={`text-[11px] ${idx === 0 ? "text-primary-foreground" : "text-muted-foreground"}`} style={{ fontWeight: 600 }}>
-                                  {match.initialen}
-                                </span>
-                              )}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{match.name}</span>
-                                {idx === 0 && !isAssigned && (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-primary/10 text-primary" style={{ fontWeight: 600 }}>
-                                    TOP MATCH
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[11px] text-muted-foreground">
-                                Score: {match.score}%
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-0.5">
-                            {[1, 2, 3, 4, 5].map((s) => (
-                              <Star
-                                key={s}
-                                className={`w-3 h-3 ${s <= Math.round(match.bewertung) ? "text-warning fill-warning" : "text-muted-foreground/20"}`}
-                              />
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="space-y-1.5 mb-3">
-                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                            <Globe className="w-3 h-3 shrink-0" />
-                            <span>{match.sprachen.map(sdaSpracheLabel).join(", ")}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                            <Briefcase className="w-3 h-3 shrink-0" />
-                            <span>{match.skills.join(", ")}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                            <MapPin className="w-3 h-3 shrink-0" />
-                            <span>{match.regionen.join(", ")}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full transition-all ${capacityColor}`} style={{ width: `${capacityPct}%` }} />
-                          </div>
-                          <span className="text-[11px] text-muted-foreground shrink-0" style={{ fontWeight: 500 }}>
-                            {match.kapazitaet}/{match.maxKapazitaet}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-wrap gap-1 mb-3">
-                          {match.reasons.map((r, ri) => (
-                            <span key={ri} className="text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground" style={{ fontWeight: 500 }}>
-                              {r}
-                            </span>
-                          ))}
-                        </div>
-
-                        {isAssigned ? (
-                          <div className="flex items-center gap-1.5 text-[12px] text-success" style={{ fontWeight: 500 }}>
-                            <CheckCircle2 className="w-4 h-4" />
-                            Zugewiesen
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleConfirmMatch(selectedPatient, match)}
-                            className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-[12px] transition-all ${
-                              idx === 0
-                                ? "bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm"
-                                : "border border-border bg-card text-foreground hover:bg-secondary/60"
-                            }`}
-                            style={{ fontWeight: 500 }}
-                          >
-                            {idx === 0 ? (
-                              <>
-                                <Check className="w-3.5 h-3.5" />
-                                Top Match bestätigen
-                              </>
-                            ) : (
-                              <>
-                                <UserPlus className="w-3.5 h-3.5" />
-                                Zuweisen
-                              </>
-                            )}
-                          </button>
-                        )}
+                  <div className="p-4 space-y-3">
+                    {pruefung.keinVolltreffer && (
+                      <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-warning-light">
+                        <AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0" style={{ marginTop: 1 }} />
+                        <span className="text-[12px] text-warning-foreground">Keine Pflegefachkraft erfüllt alle Kriterien. Angezeigt sind die besten Teiltreffer.</span>
                       </div>
-                    );
-                  })}
-                </div>
+                    )}
+
+                    {pruefung.vorschlaege.length === 0 && (
+                      <p className="text-[12px] text-muted-foreground">Keine Pflegefachkraft mit Sprach- oder Regionstreffer und freier Kapazität.</p>
+                    )}
+
+                    {pruefung.vorschlaege.map(renderKandidat)}
+
+                    {pruefung.ohnePflicht.length > 0 && (
+                      <div className="pt-1">
+                        <button type="button" onClick={() => setZeigeOhnePflicht(v => !v)} className="ui-fokusring inline-flex items-center gap-1.5 cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-small)", color: "var(--text-secondary)", fontFamily: "inherit", padding: "2px 0" }}>
+                          <ChevronDown className="w-3.5 h-3.5" style={{ transition: "transform 0.15s", transform: zeigeOhnePflicht ? "rotate(180deg)" : "none" }} />
+                          {pruefung.ohnePflicht.length} weitere ohne Sprach- oder Regionstreffer
+                        </button>
+                        {zeigeOhnePflicht && <div className="space-y-3" style={{ marginTop: 10 }}>{pruefung.ohnePflicht.map(renderKandidat)}</div>}
+                      </div>
+                    )}
+                  </div>
+                </>
               ) : (
                 <div className="p-8 text-center">
                   <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3">
@@ -634,7 +580,7 @@ export function ZuteilungPage() {
                     Patient auswählen
                   </p>
                   <p className="text-[12px] text-muted-foreground mt-1 max-w-[240px] mx-auto">
-                    Klicken Sie auf einen Patienten in der Tabelle, um Matching-Vorschläge zu sehen.
+                    Klicken Sie auf einen Patienten in der Tabelle, um die Vorschläge zu prüfen.
                   </p>
                 </div>
               )}
