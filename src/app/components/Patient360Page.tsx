@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
 import { useParams, useNavigate } from "react-router";
-import { AnnaPatientSummary } from "../anna/AnnaPatientSummary";
 import { InlineSelect } from "./ui/InlineSelect";
 import { KRANKENKASSEN_OPTIONS, getKrankenkasseLabel } from "../../lib/stammdaten/krankenkassen";
 import {
@@ -21,7 +20,7 @@ import { entscheidLabel } from "../../lib/stammdaten/entscheid";
 import {
   verordnungZustand, verordnungsartLabel, entscheidAnzeige, tageSeitEinreichung,
   tageBisAblauf, kgsDecktAm, v3GrundFehlt, lueckenBerechnen, offeneLuecke,
-  ausAnzeigedatum, alsAnzeigedatum, hatBedarfsmeldung,
+  ausAnzeigedatum, alsAnzeigedatum,
   type Verordnung, type Kostengutsprache, type Luecke,
 } from "../../lib/mandate/verordnungen";
 import {
@@ -117,8 +116,11 @@ import {
 import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung } from "../../types/klinische-artefakte";
 import { TAKT_MINUTEN, MINDESTWERT_EINSATZ, type Monatsabrechnung } from "../../lib/abrechnung/leistungsarten";
 import { monatsKennzahlen } from "../../lib/einsaetze/kontrolle";
+import { lagebild, NICHT_BEURTEILBAR, GEPRUEFT_WURDE } from "../../lib/lagebild/lagebild";
+import { useAlleNotizen } from "../../lib/notizen/store";
+import { sichtbareNotizen } from "../../lib/notizen/notizen";
+import { unifiedEntries } from "../../lib/mocks/service-desk-unified";
 import { useAbschluesse } from "../../lib/abschluss/store";
-import type { TarifKategorie } from "../../lib/stammdaten/pflegetarife";
 import { pruefzustandLabel } from "../../lib/stammdaten/einsatz";
 import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
 import {
@@ -606,9 +608,13 @@ function Patient360Inhalt() {
               <h2 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
                 {patient.nachname}, {patient.vorname}
               </h2>
-              {/* Status/Abrechnung/Schweregrad: Information (nicht bedienbar), je Zustand mit Symbol. */}
+              {/* Status/Abrechnung/Schweregrad: Information (nicht bedienbar), je Zustand mit Symbol.
+                  Der Abrechnungsstatus wird aus dem Status abgeleitet und
+                  lautet bei „Nicht abrechenbar" gleich. Zweimal dasselbe Wort
+                  nebeneinander liest sich wie zwei Befunde, ist aber einer —
+                  die abgeleitete Marke entfällt dann. */}
               <StatusMarke label={st.label} variante={bgZuVariante(st.bg)} />
-              <StatusMarke label={ast.label} variante={bgZuVariante(ast.bg)} />
+              {ast.label !== st.label && <StatusMarke label={ast.label} variante={bgZuVariante(ast.bg)} />}
               {sg && <StatusMarke label={sg.label} variante={bgZuVariante(sg.bg)} />}
             </div>
             <div className="flex items-center flex-wrap" style={{ gap: "var(--space-3)", marginTop: 6, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
@@ -715,8 +721,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "ueberblick":
       return (
         <>
-          {/* KI-Zusammenfassung gehört inhaltlich in den Überblick (§H) */}
-          <div style={{ marginBottom: 20 }}><AnnaPatientSummary patient={patient} /></div>
+          <div style={{ marginBottom: 20 }}><AnnaLagebild patient={patient} /></div>
           <TabUeberblick patient={patient} />
         </>
       );
@@ -1029,7 +1034,6 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const [adresse, setAdresse] = useState(patient.adresse);
   const [kanton, setKanton] = useState(patient.kanton);
   const [leistungsart, setLeistungsart] = useState(patient.leistungsart);
-  const [letzterBesuch, setLetzterBesuch] = useState(patient.letzterBesuch);
 
   /* ── Editable fields: Versicherung & Arzt — Werte kommen aus dem Patienten ── */
   const [kkName, setKkName] = useState(patient.krankenkasse);
@@ -1044,7 +1048,7 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const startEdit = (section: string) => {
     // Snapshot current values for the section
     if (section === "adresse") {
-      setSnapshot({ adresse, kanton, leistungsart, letzterBesuch });
+      setSnapshot({ adresse, kanton, leistungsart });
     } else if (section === "versicherung") {
       setSnapshot({ kkName, kkNummer, arztName, arztFach, arztTel });
     }
@@ -1057,7 +1061,6 @@ function TabUeberblick({ patient }: { patient: Patient }) {
       setAdresse(snapshot.adresse ?? adresse);
       setKanton(snapshot.kanton ?? kanton);
       setLeistungsart(snapshot.leistungsart ?? leistungsart);
-      setLetzterBesuch(snapshot.letzterBesuch ?? letzterBesuch);
     } else if (section === "versicherung") {
       setKkName(snapshot.kkName ?? kkName);
       setKkNummer(snapshot.kkNummer ?? kkNummer);
@@ -1077,7 +1080,7 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const saveEdit = () => {
     if (editingSection === "adresse") {
       aktualisierePatient(patient.id, {
-        adresse, kanton, leistungsart, letzterBesuch,
+        adresse, kanton, leistungsart,
       });
     } else if (editingSection === "versicherung") {
       aktualisierePatient(patient.id, {
@@ -1118,8 +1121,8 @@ function TabUeberblick({ patient }: { patient: Patient }) {
             <PEditableField label="Sprache" value={patient.sprache} editing={false} onChange={() => {}} />
             <PEditableField label="Leistungsart" value={leistungsart} editing={editingSection === "adresse"} onChange={setLeistungsart} />
             {/* Quelle ist AA2 im Reiter Anmeldung — hier nur Anzeige, nicht bearbeitbar. */}
-            <PEditableField label="Aufnahmedatum" value={patient.aufnahmeDatum} editing={false} onChange={() => {}} />
-            <PEditableField label="Letzter Besuch" value={letzterBesuch} editing={editingSection === "adresse"} onChange={setLetzterBesuch} />
+            {/* Aufnahmedatum, letzter Besuch und Bezugsperson stehen in der
+                Kopfzeile darüber — hier standen sie ein zweites Mal. */}
           </div>
         </PSectionCard>
 
@@ -1174,15 +1177,28 @@ function TabUeberblick({ patient }: { patient: Patient }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>Hausarzt</div>
-                  <div className="text-[13px] text-foreground" style={{ fontWeight: 400 }}>
-                    {arztName}
-                    <span className="text-muted-foreground ml-2 text-[11px]">{arztFach}</span>
-                  </div>
+                  {arztName.trim() ? (
+                    <div className="text-[13px] text-foreground" style={{ fontWeight: 400 }}>
+                      {arztName}
+                      {arztFach && <span className="text-muted-foreground ml-2 text-[11px]">{arztFach}</span>}
+                    </div>
+                  ) : (
+                    /* Erklärter Leerzustand statt eines Telefonsymbols ohne
+                       Nummer: ohne Hausarzt lässt sich keine Verordnung
+                       einholen, und ohne Verordnung darf nicht abgerechnet
+                       werden. Das ist keine Nebensache, sondern der Anfang
+                       der Kette. */
+                    <div style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", maxWidth: "62ch", lineHeight: 1.5 }}>
+                      Kein Hausarzt erfasst. Ohne ihn kann keine ärztliche Verordnung eingeholt werden.
+                    </div>
+                  )}
                 </div>
-                <a href={`tel:${arztTel}`} className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-primary transition-colors shrink-0" style={{ fontWeight: 400 }}>
-                  <Phone className="w-3 h-3" />
-                  {arztTel}
-                </a>
+                {arztName.trim() && arztTel.trim() && (
+                  <a href={`tel:${arztTel}`} className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-primary transition-colors shrink-0" style={{ fontWeight: 400 }}>
+                    <Phone className="w-3 h-3" />
+                    {arztTel}
+                  </a>
+                )}
               </div>
             </div>
           )}
@@ -1191,6 +1207,8 @@ function TabUeberblick({ patient }: { patient: Patient }) {
 
       {/* ═══ RIGHT COLUMN ═══ */}
       <div className="xl:col-span-1 space-y-4">
+
+        <NotizKarte patient={patient} />
 
         {/* Nächste Aufgabe */}
         <PSectionCard title="Nächste Aufgabe" icon={ListChecks}>
@@ -3148,6 +3166,195 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   );
 }
 
+
+/* ══════════════════════════════════════════
+   Annas Lagebild
+
+   Ersetzt die frühere Zusammenfassung, die Name, Alter, Schweregrad und
+   Bezugsperson wiederholte — alles vier stand schon in der Kopfzeile
+   darüber. Hier steht, was offen ist, und jede Aussage nennt die Stelle, an
+   der sie nachprüfbar ist.
+   ══════════════════════════════════════════ */
+
+function AnnaLagebild({ patient }: { patient: Patient }) {
+  const nav = useNavigate();
+  const einsaetze = useEinsaetze();
+  const leistungen = useErbrachteLeistungen();
+  const klvs = useKlvVerordnungen();
+  const mandate = useMandate();
+  const verordnungen = useVerordnungen();
+  const kgs = useKostengutsprachen();
+  const [erzeugtAm, setErzeugtAm] = useState(() => jetztAnzeige());
+  const [meldung, setMeldung] = useState("");
+
+  const monat = { jahr: EINSATZ_BEZUGSMONAT.getFullYear(), monat: EINSATZ_BEZUGSMONAT.getMonth() };
+  const mandatIds = mandate.filter(m => m.patientId === patient.id).map(m => m.id);
+  const kennzahlen = monatsKennzahlen(patient.id, monat.jahr, monat.monat, {
+    einsaetze, leistungen, klvs, mandate, verordnungen,
+  });
+  /* Pendenzen der Person aus dem gemeinsamen Bestand — dieselbe Quelle, die
+     der Service Desk liest. */
+  const eigenePendenzen = unifiedEntries.filter(e =>
+    e.personBezug.art === "patient" && e.personBezug.kennung === patient.id && e.status !== "erledigt");
+  const pendenzen = {
+    offen: eigenePendenzen.length,
+    ueberfaellig: eigenePendenzen.filter(e => {
+      const f = e.faellig ? isoZuAnzeige(e.faellig) : "";
+      const d = f ? ausAnzeigedatum(f) : null;
+      return d !== null && d < MANDAT_STICHTAG;
+    }).length,
+  };
+
+  const befunde = lagebild({
+    patientId: patient.id, klvs, kostengutsprachen: kgs, mandatIds,
+    kennzahlen, monat, pendenzen, stichtag: MANDAT_STICHTAG,
+  });
+
+  return (
+    <div style={{ background: "var(--anna-bg, var(--status-info-bg))", borderLeft: "3px solid var(--brand-primary)",
+      borderRadius: "var(--radius-card)", overflow: "hidden" }}>
+      {/* ── Kopf ── */}
+      <div className="flex items-center flex-wrap" style={{ gap: 9, padding: "12px 16px 8px" }}>
+        <Sparkles style={{ width: 15, height: 15, color: "var(--brand-primary)" }} />
+        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)" }}>Annas Lagebild</span>
+        <span style={{ padding: "1px 7px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--bg-elevated)", color: "var(--text-secondary)" }}>
+          Erzeugt
+        </span>
+        <span style={{ marginLeft: "auto", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{erzeugtAm}</span>
+      </div>
+
+      <div style={{ padding: "0 16px 12px" }}>
+        <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: "0 0 10px", maxWidth: "74ch" }}>
+          {befunde.length > 0
+            ? "Was bei diesem Patienten offen ist — gezählt aus den Daten des Dossiers, jede Aussage mit Quelle."
+            : "Was bei diesem Patienten offen ist — gezählt aus den Daten des Dossiers."}
+        </p>
+
+        {befunde.length === 0 ? (
+          /* Eine Zeile, kein leerer Block: „nichts offen" ohne Nennung des
+             Geprüften wäre wertlos, weil unklar bliebe, worauf es sich bezieht. */
+          <div className="flex items-start" style={{ gap: 8, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
+            <Check style={{ width: 14, height: 14, color: "var(--status-success)", flexShrink: 0, marginTop: 2 }} />
+            <span style={{ maxWidth: "74ch" }}>Nichts offen. Geprüft wurden {GEPRUEFT_WURDE}</span>
+          </div>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 7 }}>
+            {befunde.map(b => (
+              <div key={b.id} className="flex items-start flex-wrap" style={{ gap: 8 }}>
+                <span style={{ flexShrink: 0, padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap",
+                  background: b.band === "pruefen" ? "var(--status-warning-bg)" : "var(--bg-elevated)",
+                  color: b.band === "pruefen" ? "var(--status-warning-text)" : "var(--text-secondary)" }}>
+                  {b.band === "pruefen" ? "Bitte prüfen" : "Belegt"}
+                </span>
+                <span style={{ flex: 1, minWidth: 240, fontSize: "var(--text-small)", color: "var(--text-primary)", lineHeight: 1.55 }}>
+                  {b.text}
+                </span>
+                <button type="button"
+                  onClick={() => nav(`${ansichtPfad(patient.id, b.ansicht)}${b.suchteil ?? ""}`)}
+                  className="ui-fokusring cursor-pointer inline-flex items-center"
+                  style={{ gap: 4, flexShrink: 0, background: "none", border: "none", padding: 0, fontFamily: "inherit",
+                    fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
+                  {b.quelle} <ChevronRight style={{ width: 11, height: 11 }} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Was mangels Datenmodell offen bleibt ──
+            Damit das Schweigen des Lagebilds nicht als Unbedenklichkeit
+            gelesen wird. */}
+        <div style={{ marginTop: 12, padding: "9px 11px", borderRadius: 10, background: "var(--bg-elevated)" }}>
+          <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 4 }}>Nicht beurteilbar</div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {NICHT_BEURTEILBAR.map((t, i) => (
+              <li key={i} style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.55, maxWidth: "74ch" }}>{t}</li>
+            ))}
+          </ul>
+        </div>
+
+        {meldung && (
+          <div style={{ marginTop: 8, fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>{meldung}</div>
+        )}
+      </div>
+
+      {/* ── Fusszeile ── */}
+      <div className="flex items-center flex-wrap" style={{ gap: 12, padding: "8px 16px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+        <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", maxWidth: "74ch" }}>
+          Gerechnet aus Leistungsplanungsblatt, Verordnung, Kostengutsprache, Einsätzen und Pendenzen. Kein Modell im Spiel.
+        </span>
+        <div className="flex items-center" style={{ gap: 12, marginLeft: "auto" }}>
+          <button type="button" onClick={() => setMeldung("Vermerkt. Das Lagebild wird gerechnet — eine Rückmeldung ändert nicht die Zahlen, sondern die Regel dahinter.")}
+            className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+            Stimmt nicht
+          </button>
+          <button type="button" onClick={() => { setErzeugtAm(jetztAnzeige()); setMeldung(""); }}
+            className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+            Neu erzeugen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Notizen im Überblick — zeigen und verweisen, nicht erfassen.
+ *
+ * Sie lagen in der linken Spalte des früheren Layouts und haben beim Umbau
+ * auf die Seitennavigation keinen Ort bekommen. Der Bestand trägt sie
+ * weiterhin; nur sichtbar waren sie nirgends mehr.
+ */
+function NotizKarte({ patient }: { patient: Patient }) {
+  const alle = useAlleNotizen();
+  const eigene = sichtbareNotizen(alle, { art: "patient", kennung: patient.id });
+  /* Angeheftete zuerst — die Sortierung besorgt `sichtbareNotizen` —, danach
+     die beiden neuesten. Mehr gehört in die Notizspur, nicht in den
+     Überblick. */
+  const gezeigt = eigene.slice(0, 3);
+
+  return (
+    <PSectionCard title="Notizen" icon={MessageSquare}>
+      {eigene.length === 0 ? (
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch" }}>
+          Keine Notiz zu diesem Patienten. Notizen halten fest, was zwischen den Feldern steht —
+          Absprachen, Beobachtungen, Zugangswege.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-col" style={{ gap: 9 }}>
+            {gezeigt.map(n => (
+              <div key={n.id}>
+                <div className="flex items-center" style={{ gap: 6, marginBottom: 2 }}>
+                  {n.angeheftet && (
+                    <span style={{ padding: "0 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--brand-primary-light)", color: "var(--brand-primary)" }}>
+                      Angeheftet
+                    </span>
+                  )}
+                  <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                    {n.autor} · {formatDatumZeit(new Date(n.erstelltAm))}
+                  </span>
+                </div>
+                <p style={{ fontSize: "var(--text-meta)", color: "var(--text-primary)", margin: 0, lineHeight: 1.55,
+                  display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                  {n.text}
+                </p>
+              </div>
+            ))}
+          </div>
+          {/* Kein Verweis auf „alle Notizen": eine Notizansicht besteht im
+              Dossier nicht, und einen Ort zu erfinden, den es nicht gibt,
+              wäre schlimmer als die Zahl allein. */}
+          {eigene.length > gezeigt.length && (
+            <p style={{ marginTop: 9, marginBottom: 0, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+              {eigene.length - gezeigt.length} weitere {eigene.length - gezeigt.length === 1 ? "Notiz" : "Notizen"} zu diesem Patienten.
+            </p>
+          )}
+        </>
+      )}
+    </PSectionCard>
+  );
+}
 
 /* ══════════════════════════════════════════
    Abrechnungsleiste
