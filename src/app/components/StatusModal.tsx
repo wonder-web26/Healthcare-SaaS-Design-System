@@ -49,7 +49,13 @@ export function StatusModal({
   if (!open) return null;
 
   const explanation = statusExplanations[selectedStatus];
-  const showStopReason = selectedStatus !== "aktiv";
+  /**
+   * Ein Austritt wird hier nicht gesetzt und nicht zurückgenommen. Er entsteht
+   * im Dossier unter Patient, weil dort Austrittsdatum und Lebensumstände
+   * dazugehören — der Abrechnungsstatus ist nur seine Folge.
+   */
+  const ausgetreten = currentStatus === "ausgetreten";
+  const showStopReason = !ausgetreten && selectedStatus !== "aktiv";
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -81,7 +87,7 @@ export function StatusModal({
         {/* Body */}
         <div className="px-6 py-5 overflow-y-auto space-y-5">
           {/* Status selector grid */}
-          <div>
+          <div style={{ display: ausgetreten ? "none" : undefined }}>
             <label className="text-[12px] text-muted-foreground uppercase tracking-wider mb-2 block" style={{ fontWeight: 500 }}>
               Status wählen
             </label>
@@ -216,9 +222,9 @@ export function StatusModal({
             </button>
             <button
               onClick={onClose}
-              disabled={showStopReason && !stopReason.trim()}
+              disabled={ausgetreten || (showStopReason && !stopReason.trim())}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] text-primary-foreground shadow-sm transition-all ${
-                showStopReason && !stopReason.trim()
+                ausgetreten || (showStopReason && !stopReason.trim())
                   ? "bg-primary/40 cursor-not-allowed"
                   : "bg-primary hover:bg-primary-hover"
               }`}

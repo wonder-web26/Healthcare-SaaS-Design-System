@@ -17,7 +17,9 @@
 import { useSyncExternalStore } from "react";
 import { type Patient, type PatientStatus, type AbrechnungsStatus, patientenSeed } from "../../app/components/patientData";
 import { getKrankenkasseLabel } from "../stammdaten/krankenkassen";
-import { isoZuDate } from "../datum";
+import { isoZuDate, anzeigeZuIso, jetztAnzeige } from "../datum";
+import { ENTLASSUNG_SONSTIGES } from "../stammdaten/entlassung";
+import { getMandate, aktualisiereMandat } from "../mandate/store";
 import { sdaSpracheLabel } from "../stammdaten/sda-sprache";
 
 /** Zeichen für "keine Pflegefachkraft zugewiesen" — Bestandskonvention. */
@@ -190,6 +192,7 @@ function abrechnungsStatusZu(status: PatientStatus): AbrechnungsStatus {
     case "im_onboarding": return "in_vorbereitung";
     case "nicht_abrechenbar": return "nicht_abrechenbar";
     case "gekuendigt": return "gekuendigt";
+    case "ausgetreten": return "ausgetreten";
     case "aktiv": default: return "abrechenbar";
   }
 }
@@ -326,6 +329,12 @@ export function erfassePatientImOnboarding(
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     bagNr: "",
     abrechnungsStatus: abrechnungsStatusZu("im_onboarding"),
     reAssessmentFrist: null,
@@ -367,4 +376,99 @@ export function aktualisierePatient(
 /** Zuweisung einer Pflegefachkraft (Sidebar der Patientenliste). */
 export function weisePflegefachkraftZu(patientId: string, name: string, initialen: string): void {
   setzeBestand(bestand.map(p => (p.id === patientId ? { ...p, pflegefachkraft: name, pflegefachkraftInitialen: initialen } : p)));
+}
+
+/* ══════════════════════════════════════════
+   AUSTRITT — Bereich Z des Standardkatalogs
+   ══════════════════════════════════════════ */
+
+export interface AustrittEingabe {
+  /** Z1 — letzter Tag der Inanspruchnahme, TT.MM.JJJJ. */
+  datum: string;
+  /** Z2 — Code aus lib/stammdaten/entlassung. */
+  nach: string;
+  /** Nur bei Code 13 gefüllt. */
+  nachAndere: string;
+  praezisierungen: string;
+  /** Z3 — wer kodiert hat. Das Produkt kennt keine Unterschrift. */
+  erfasstVon: string;
+}
+
+export type AustrittFehler =
+  | "kein_datum"
+  | "datum_unleserlich"
+  | "datum_zukunft"
+  | "datum_vor_aufnahme"
+  | "kein_ziel"
+  | "kein_freitext"
+  | "unbekannt"
+  | "bereits_ausgetreten";
+
+export const AUSTRITT_FEHLERTEXT: Record<AustrittFehler, string> = {
+  kein_datum: "Bitte das Austrittsdatum erfassen.",
+  datum_unleserlich: "Das Austrittsdatum ist unvollständig oder ungültig.",
+  datum_zukunft: "Das Austrittsdatum liegt in der Zukunft. Ein Austritt wird erfasst, wenn er eingetreten ist.",
+  datum_vor_aufnahme: "Das Austrittsdatum liegt vor dem Aufnahmedatum.",
+  kein_ziel: "Bitte angeben, wohin die Person nach dem Austritt geht.",
+  kein_freitext: "Bei „Sonstiges“ braucht es eine Angabe im Freitext.",
+  unbekannt: "Dieser Patient ist nicht im Bestand.",
+  bereits_ausgetreten: "Dieser Patient ist bereits ausgetreten.",
+};
+
+/**
+ * Austritt erfassen.
+ *
+ * Ein Vorgang, ein Schreibweg: der Zustand des Patienten wechselt auf
+ * "ausgetreten", die Felder des Bereichs Z werden gesetzt, und die laufenden
+ * Mandate erhalten dasselbe Enddatum. Die Mandate haben kein eigenes
+ * Zustandsfeld — `mandatZustand` leitet "beendet" aus dem Enddatum ab; darum
+ * genügt das Datum und es wird kein zweiter Zustand geführt.
+ *
+ * Geprüft wird gegen PATIENTEN_BEZUGSDATUM_ISO, nicht gegen new Date() —
+ * dieselbe Regel wie bei allen Fristen am Patienten.
+ *
+ * Der Katalog unterscheidet Entlassung und Einsatzabbruch; bei einem Abbruch
+ * wird kein Formular Entlassung ausgefüllt. Das Produkt kennt den Abbruch
+ * nicht. Diese Lücke wird hier bewusst nicht überbrückt.
+ */
+export function austrittErfassen(
+  patientId: string,
+  eingabe: AustrittEingabe,
+  bezugIso: string = PATIENTEN_BEZUGSDATUM_ISO,
+): AustrittFehler | null {
+  const patient = bestand.find(p => p.id === patientId);
+  if (!patient) return "unbekannt";
+  if (patient.status === "ausgetreten") return "bereits_ausgetreten";
+
+  const datum = eingabe.datum.trim();
+  if (!datum) return "kein_datum";
+  const austrittIso = anzeigeZuIso(datum);
+  if (!austrittIso) return "datum_unleserlich";
+  if (austrittIso > bezugIso) return "datum_zukunft";
+  const aufnahmeIso = anzeigeZuIso(patient.aufnahmeDatum);
+  if (aufnahmeIso && austrittIso < aufnahmeIso) return "datum_vor_aufnahme";
+
+  if (!eingabe.nach) return "kein_ziel";
+  if (eingabe.nach === ENTLASSUNG_SONSTIGES && !eingabe.nachAndere.trim()) return "kein_freitext";
+
+  const aktualisiert: Patient = {
+    ...patient,
+    status: "ausgetreten",
+    abrechnungsStatus: abrechnungsStatusZu("ausgetreten"),
+    austrittDatum: datum,
+    austrittNach: eingabe.nach,
+    // Freitext nur dort, wo der Katalog ihn vorsieht — sonst leer statt mitgeschleppt.
+    austrittNachAndere: eingabe.nach === ENTLASSUNG_SONSTIGES ? eingabe.nachAndere.trim() : "",
+    austrittPraezisierungen: eingabe.praezisierungen.trim(),
+    austrittErfasstVon: eingabe.erfasstVon,
+    austrittErfasstAm: jetztAnzeige(),
+  };
+  setzeBestand(bestand.map(p => (p.id === patientId ? aktualisiert : p)));
+
+  // Laufende Mandate auf dasselbe Datum enden lassen. Bereits beendete bleiben,
+  // wie sie sind — ein früheres Ende wird nicht überschrieben.
+  for (const m of getMandate(patientId)) {
+    if (!m.ende.trim()) aktualisiereMandat(m.id, { ende: datum });
+  }
+  return null;
 }

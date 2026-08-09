@@ -15,15 +15,23 @@ interface InlineSelectProps {
   onChange: (value: string) => void;
   options: Option[];
   disabled?: boolean;
+  /**
+   * Text, solange nichts gewählt ist. Ohne ihn steht das Feld leer da und
+   * sieht aus wie ein Fehler statt wie eine offene Entscheidung. Kein
+   * Eintrag der Liste — er ist nicht wählbar und wird nie gespeichert.
+   */
+  platzhalter?: string;
   style?: React.CSSProperties;
 }
 
-export function InlineSelect({ value, onChange, options, disabled, style }: InlineSelectProps) {
+export function InlineSelect({ value, onChange, options, disabled, platzhalter, style }: InlineSelectProps) {
   const [open, setOpen] = useState(false);
   const [lage, setLage] = useState<AufklappLage | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const ausloeserRef = useRef<HTMLButtonElement>(null);
-  const selectedLabel = options.find(o => o.value === value)?.label || value;
+  const gewaehlt = options.find(o => o.value === value)?.label || value;
+  const leer = gewaehlt === "" && platzhalter !== undefined;
+  const selectedLabel = leer ? platzhalter : gewaehlt;
 
   /* Höhe eines Eintrags: 8px oben + 8px unten + 21px Zeile. */
   const EINTRAG_HOEHE = 37;
@@ -86,7 +94,7 @@ export function InlineSelect({ value, onChange, options, disabled, style }: Inli
           borderRadius: 12,
           border: open ? "1.5px solid var(--brand-primary)" : "0.5px solid var(--border-default)",
           background: "var(--bg-elevated)",
-          color: "var(--text-primary)",
+          color: leer ? "var(--text-tertiary)" : "var(--text-primary)",
           fontFamily: "inherit",
           textAlign: "left",
         }}

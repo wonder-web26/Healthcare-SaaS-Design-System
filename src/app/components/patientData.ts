@@ -8,7 +8,17 @@ export type PatientStatus =
   | "im_onboarding"
   | "aktiv"
   | "nicht_abrechenbar"
-  | "gekuendigt";
+  | "gekuendigt"
+  /**
+   * Z — die Person bezieht keine Spitex-Leistungen mehr.
+   *
+   * Nicht dasselbe wie `gekuendigt`: das meint die Kündigung des Vertrags,
+   * der Austritt das Ende der Leistungen. Der Katalog unterscheidet zudem
+   * Entlassung und Einsatzabbruch — bei einem Abbruch wird kein Formular
+   * Entlassung ausgefüllt. Diese Unterscheidung kennt das Produkt nicht;
+   * sie ist als Lücke vermerkt.
+   */
+  | "ausgetreten";
 
 export type Schweregrad = "leicht" | "mittel" | "schwer" | "kritisch";
 
@@ -16,7 +26,14 @@ export type AbrechnungsStatus =
   | "abrechenbar"
   | "nicht_abrechenbar"
   | "in_vorbereitung"
-  | "gekuendigt";
+  | "gekuendigt"
+  /**
+   * Austritt — es entstehen keine Leistungen mehr, also gibt es auch nichts
+   * abzurechnen. Bewusst nicht "nicht_abrechenbar": das bezeichnet eine
+   * Sperre mit Grund an einem laufenden Fall. Und bewusst nicht "gekuendigt":
+   * sonst stünde am ausgetretenen Patienten die Beschriftung "Gekündigt".
+   */
+  | "ausgetreten";
 
 export interface Patient {
   id: string;
@@ -94,6 +111,26 @@ export interface Patient {
   /** PA-01 — IV-Assistenzbeitrag. */
   assistenzbeitrag: string;
   quellensteuerHinweise: string;
+  /* ── Bereich Z · Entlassung ──────────────────────────────────────────────
+     Erst beim Austritt gefüllt. Leer heisst „nicht ausgetreten"; der Zustand
+     sagt es ebenfalls, aber die Felder tragen das Wann und Wohin. */
+  /** Z1 — letzter Tag der Inanspruchnahme, TT.MM.JJJJ. */
+  austrittDatum: string;
+  /** Z2 — Code aus lib/stammdaten/entlassung. */
+  austrittNach: string;
+  /** Z2 Code 13 — Lebensumstände als Freitext. */
+  austrittNachAndere: string;
+  /** Bereich Z · Individuelle Präzisierungen. */
+  austrittPraezisierungen: string;
+  /**
+   * Z3 — wer den Austritt kodiert hat.
+   *
+   * Der Katalog verlangt eine Unterschrift. Das Produkt kennt keine; bei
+   * BB17 wurde derselbe Punkt als Protokoll gelöst — wer, wann. Hier ebenso.
+   * Als Abweichung vom Katalog vermerkt.
+   */
+  austrittErfasstVon: string;
+  austrittErfasstAm: string;
   /* ── Notfallkontakt — eigene Person, unabhängig vom Angehörigen ── */
   notfallkontaktName: string;
   notfallkontaktTelefon: string;
@@ -143,6 +180,13 @@ export const statusConfig: Record<
     text: "text-error-foreground",
     dot: "bg-error",
     variant: "error",
+  },
+  ausgetreten: {
+    label: "Ausgetreten",
+    bg: "bg-neutral-medium",
+    text: "text-neutral-foreground",
+    dot: "bg-neutral",
+    variant: "neutral",
   },
   gekuendigt: {
     label: "Gekündigt",
@@ -209,6 +253,12 @@ export const abrechnungsStatusConfig: Record<
     text: "text-neutral-foreground",
     dot: "bg-neutral",
   },
+  ausgetreten: {
+    label: "Ausgetreten",
+    bg: "bg-neutral-medium",
+    text: "text-neutral-foreground",
+    dot: "bg-neutral",
+  },
 };
 
 /* ── Status modal explanations ─────────── */
@@ -229,6 +279,13 @@ export const statusExplanations: Record<
       "Alle Voraussetzungen für die Abrechnung sind erfüllt. Die Leistungen dieses Patienten können über die Krankenkasse oder den Kanton abgerechnet werden.",
     detail:
       "Kostengutsprache liegt vor. Ärztliche Verordnung ist gültig. Leistungserfassung ist aktiv.",
+  },
+  ausgetreten: {
+    title: "Ausgetreten",
+    description:
+      "Die Person bezieht keine Spitex-Leistungen mehr. Der Austritt wird im Dossier unter Patient erfasst, nicht hier — dort werden Austrittsdatum und Lebensumstände nach dem Austritt festgehalten.",
+    detail:
+      "Ein Austritt ist kein Abrechnungsstopp. Er beendet die laufenden Mandate und lässt sich hier nicht setzen und nicht zurücknehmen.",
   },
   nicht_abrechenbar: {
     title: "Nicht abrechenbar",
@@ -316,6 +373,12 @@ export const patientenSeed: Patient[] = [
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     prozessStatus: {
       naechsteAufgabe: "Dokumentation überprüfen",
       faelligDatum: "01.03.2026",
@@ -386,6 +449,12 @@ export const patientenSeed: Patient[] = [
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     prozessStatus: {
       naechsteAufgabe: "Kostengutsprache einholen",
       faelligDatum: "25.02.2026",
@@ -456,6 +525,12 @@ export const patientenSeed: Patient[] = [
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     prozessStatus: {
       naechsteAufgabe: "Re-Assessment durchführen",
       faelligDatum: "15.04.2026",
@@ -526,6 +601,12 @@ export const patientenSeed: Patient[] = [
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     prozessStatus: null,
   },
   {
@@ -592,6 +673,12 @@ export const patientenSeed: Patient[] = [
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     prozessStatus: {
       naechsteAufgabe: "Kostengutsprache einholen",
       faelligDatum: "28.02.2026",
@@ -662,6 +749,12 @@ export const patientenSeed: Patient[] = [
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     prozessStatus: {
       naechsteAufgabe: "Bedarfsmeldung erstellen",
       faelligDatum: "25.02.2026",
@@ -732,6 +825,12 @@ export const patientenSeed: Patient[] = [
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     prozessStatus: {
       naechsteAufgabe: "Re-Assessment planen",
       faelligDatum: "28.03.2026",
@@ -802,6 +901,12 @@ export const patientenSeed: Patient[] = [
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     prozessStatus: {
       naechsteAufgabe: "Arztbericht einholen",
       faelligDatum: "28.02.2026",
@@ -872,6 +977,12 @@ export const patientenSeed: Patient[] = [
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     prozessStatus: null,
   },
   {
@@ -938,6 +1049,12 @@ export const patientenSeed: Patient[] = [
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     prozessStatus: {
       naechsteAufgabe: "Bewilligung prüfen",
       faelligDatum: "10.03.2026",

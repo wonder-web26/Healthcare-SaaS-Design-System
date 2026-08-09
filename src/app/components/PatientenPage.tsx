@@ -53,12 +53,29 @@ function istNichtAbrechenbar(p: Patient): boolean {
   return p.status === "nicht_abrechenbar";
 }
 
+function istAusgetreten(p: Patient): boolean {
+  return p.status === "ausgetreten";
+}
+
+/**
+ * Grundgesamtheit der Liste. Ausgetretene sind standardmässig nicht dabei —
+ * die Liste ist eine Arbeitsliste, und an einem Austritt ist nichts mehr zu
+ * tun. Dieselbe Einschränkung speist Chip-Zahlen, Zeilen und Fusszeile, damit
+ * die Zahlen zueinander passen.
+ */
+function inGrundgesamtheit(p: Patient, ausgetreteneZeigen: boolean): boolean {
+  return ausgetreteneZeigen || !istAusgetreten(p);
+}
+
 /* ── Kennzeichen: Rot schlägt Gelb. Jeder Grund ist zusätzlich in einer Spalte
    sichtbar (überfällig → Prozessstatus, nicht abrechenbar → Status,
    nicht zugewiesen → Pflegefachkraft) — im Kennzeichen steckt nichts allein. ── */
 type KennzeichenTyp = "rot" | "gelb" | null;
 
 function ableitenKennzeichen(p: Patient, bezugIso: string): { typ: KennzeichenTyp; grund: string } {
+  // Am Austritt ist nichts mehr offen. Ein Kennzeichen würde zu einer Handlung
+  // auffordern, die es nicht mehr gibt.
+  if (istAusgetreten(p)) return { typ: null, grund: "" };
   const ueberfaellig = istProzessUeberfaellig(p, bezugIso);
   const nichtAbrechenbar = istNichtAbrechenbar(p);
   if (ueberfaellig && nichtAbrechenbar) return { typ: "rot", grund: "Prozessschritt überfällig und nicht abrechenbar" };
@@ -92,8 +109,10 @@ interface FilterZustand {
   schweregrade: Set<Schweregrad>;
   pflegefachkraefte: Set<string>;
   suche: string;
+  /** Ausgetretene einblenden. Aus, solange niemand sie ausdrücklich sehen will. */
+  ausgetreteneZeigen: boolean;
 }
-const LEERER_FILTER: FilterZustand = { segment: "alle", statusChips: new Set(), schweregrade: new Set(), pflegefachkraefte: new Set(), suche: "" };
+const LEERER_FILTER: FilterZustand = { segment: "alle", statusChips: new Set(), schweregrade: new Set(), pflegefachkraefte: new Set(), suche: "", ausgetreteneZeigen: false };
 
 /* ── Anfangszustand aus der URL: Anna verlinkt die Liste vorgefiltert
    (/patienten?schweregrad=… und ?zuweisung=nicht_zugewiesen). Einmalig gelesen —
@@ -116,6 +135,7 @@ function imSegment(p: Patient, segment: Segment, meinName: string): boolean {
 /** Reine Ableitung: Patienten + Filterzustand + Bezugsdatum → gefilterte Patienten. */
 function filterPatienten(list: Patient[], f: FilterZustand, bezugIso: string, meinName: string): Patient[] {
   return list.filter(p => {
+    if (!inGrundgesamtheit(p, f.ausgetreteneZeigen)) return false;
     if (!imSegment(p, f.segment, meinName)) return false;
     for (const chip of STATUS_CHIPS) if (f.statusChips.has(chip.id) && !chip.praedikat(p, bezugIso)) return false;
     if (f.schweregrade.size > 0 && (!p.schweregrad || !f.schweregrade.has(p.schweregrad))) return false;
@@ -131,7 +151,7 @@ function filterPatienten(list: Patient[], f: FilterZustand, bezugIso: string, me
    Ende. Keine Vorsortierung (Standard unverändert). ── */
 type SortKey = "name" | "angehoeriger" | "status" | "schweregrad" | "pflegefachkraft" | "prozessstatus" | "reassessment" | "tasks" | "aktivitaet";
 const SCHWEREGRAD_RANK: Record<string, number> = { leicht: 0, mittel: 1, schwer: 2, kritisch: 3 };
-const PAT_STATUS_RANK: Record<string, number> = { aktiv: 0, nicht_abrechenbar: 1, gekuendigt: 2 };
+const PAT_STATUS_RANK: Record<string, number> = { aktiv: 0, nicht_abrechenbar: 1, gekuendigt: 2, ausgetreten: 3 };
 const SORT_LABEL: Record<SortKey, string> = {
   name: "Name", angehoeriger: "Angehörigem", status: "Status", schweregrad: "Schweregrad",
   pflegefachkraft: "Pflegefachkraft", prozessstatus: "Prozessstatus",
@@ -170,6 +190,7 @@ const STATUS_LABEL: Record<Patient["status"], string> = {
   aktiv: "Aktiv",
   nicht_abrechenbar: "Nicht abrechenbar",
   gekuendigt: "Gekündigt",
+  ausgetreten: "Ausgetreten",
 };
 /** Leerer Schweregrad wird nirgends dargestellt — weder als Text noch als Pille. */
 const SCHWEREGRAD_LABEL: Record<Schweregrad, string> = { leicht: "Leicht", mittel: "Mittel", schwer: "Schwer", kritisch: "Kritisch" };
@@ -202,6 +223,7 @@ export function PatientenPage() {
   const toggleChip = (id: StatusChipId) => setFilter(f => { const s = new Set(f.statusChips); if (s.has(id)) s.delete(id); else s.add(id); return { ...f, statusChips: s }; });
   const toggleSchweregrad = (g: Schweregrad) => setFilter(f => { const s = new Set(f.schweregrade); if (s.has(g)) s.delete(g); else s.add(g); return { ...f, schweregrade: s }; });
   const togglePflegefachkraft = (pf: string) => setFilter(f => { const s = new Set(f.pflegefachkraefte); if (s.has(pf)) s.delete(pf); else s.add(pf); return { ...f, pflegefachkraefte: s }; });
+  const toggleAusgetretene = () => setFilter(f => ({ ...f, ausgetreteneZeigen: !f.ausgetreteneZeigen }));
   const resetFilter = () => setFilter(f => ({ ...LEERER_FILTER, suche: f.suche })); // Suche behält ihr eigenes Löschen
 
   const [statusModal, setStatusModal] = useState<{ open: boolean; patient: Patient | null }>({ open: false, patient: null });
@@ -225,7 +247,9 @@ export function PatientenPage() {
   };
 
   /* ── Ableitungen ── */
-  const segmentBasis = useMemo(() => patients.filter(p => imSegment(p, filter.segment, meinName)), [patients, filter.segment, meinName]);
+  const grundgesamtheit = useMemo(() => patients.filter(p => inGrundgesamtheit(p, filter.ausgetreteneZeigen)), [patients, filter.ausgetreteneZeigen]);
+  const ausgetreteneAnzahl = useMemo(() => patients.filter(istAusgetreten).length, [patients]);
+  const segmentBasis = useMemo(() => grundgesamtheit.filter(p => imSegment(p, filter.segment, meinName)), [grundgesamtheit, filter.segment, meinName]);
   const chipCounts = useMemo(() => {
     const r = {} as Record<StatusChipId, number>;
     // Zahl = wie viele Patienten im aktiven Segment der Chip zusätzlich einschränken würde.
@@ -238,6 +262,7 @@ export function PatientenPage() {
   const filterTags = useMemo(() => {
     const t: { key: string; label: string; entfernen: () => void }[] = [];
     STATUS_CHIPS.forEach(chip => { if (filter.statusChips.has(chip.id)) t.push({ key: `s-${chip.id}`, label: chip.label, entfernen: () => toggleChip(chip.id) }); });
+    if (filter.ausgetreteneZeigen) t.push({ key: "ausgetretene", label: "Ausgetretene eingeblendet", entfernen: toggleAusgetretene });
     filter.schweregrade.forEach(g => t.push({ key: `g-${g}`, label: `Schweregrad: ${SCHWEREGRAD_LABEL[g]}`, entfernen: () => toggleSchweregrad(g) }));
     filter.pflegefachkraefte.forEach(pf => t.push({ key: `pf-${pf}`, label: `Pflegefachkraft: ${pf}`, entfernen: () => togglePflegefachkraft(pf) }));
     return t;
@@ -285,13 +310,16 @@ export function PatientenPage() {
       // Ausnahmen behalten die Pille. Der Klick auf den Status bleibt erhalten.
       render: p => {
         const still = p.status === "aktiv";
+        // Ein Austritt ist kein Alarm, sondern ein Abschluss — Pille in Ruhe,
+        // nicht in Warnfarbe.
+        const ruhig = istAusgetreten(p);
         return (
           <button type="button" onClick={e => { e.stopPropagation(); setStatusModal({ open: true, patient: p }); }}
             className="ui-fokusring inline-flex items-center cursor-pointer"
             style={still
               ? { padding: 0, background: "transparent", border: "none", fontSize: "0.8125rem", color: "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }
-              : { gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: "var(--status-danger-bg)", color: "var(--status-danger)", border: "none", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-            {!still && <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "var(--status-danger)" }} />}
+              : { gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: ruhig ? "var(--bg-subtle)" : "var(--status-danger-bg)", color: ruhig ? "var(--text-secondary)" : "var(--status-danger)", border: ruhig ? "var(--border-thin) solid var(--border-default)" : "none", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+            {!still && !ruhig && <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "var(--status-danger)" }} />}
             {STATUS_LABEL[p.status]}
           </button>
         );
@@ -411,6 +439,15 @@ export function PatientenPage() {
               auswahlfelder={<>
                                 <AuswahlDropdown label="Schweregrad" optionen={SCHWEREGRAD_OPTIONEN} ausgewaehlt={filter.schweregrade as Set<string>} onToggle={v => toggleSchweregrad(v as Schweregrad)} />
                 <AuswahlDropdown label="Pflegefachkraft" optionen={allePflegefachkraefte.map(pf => ({ value: pf, label: pf }))} ausgewaehlt={filter.pflegefachkraefte} onToggle={togglePflegefachkraft} />
+                {/* Nur anbieten, wenn es etwas einzublenden gibt. */}
+                {ausgetreteneAnzahl > 0 && (
+                  <button type="button" onClick={toggleAusgetretene} aria-pressed={filter.ausgetreteneZeigen}
+                    className="ui-fokusring cursor-pointer transition-colors"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: "var(--radius-pill)", border: "var(--border-thin) solid var(--border-default)", background: filter.ausgetreteneZeigen ? "var(--bg-subtle)" : "transparent", fontSize: "var(--text-small)", fontWeight: filter.ausgetreteneZeigen ? "var(--weight-medium)" : "var(--weight-regular)", color: "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                    {filter.ausgetreteneZeigen ? "Ausgetretene ausblenden" : "Ausgetretene einblenden"}
+                    <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-tertiary)" }}>{ausgetreteneAnzahl}</span>
+                  </button>
+                )}
               </>}
               chips={STATUS_CHIPS.map(chip => ({
                 id: chip.id, label: chip.label, anzahl: chipCounts[chip.id],
@@ -451,7 +488,10 @@ export function PatientenPage() {
                 sort={sort}
                 onSort={k => toggleSort(k as SortKey)}
                 karteTitel={karteTitel}
-                fusszeile={<><span>{filtered.length} von {patients.length} {patients.length === 1 ? "Patient" : "Patienten"}</span><span>Stand: {isoZuAnzeige(BEZUGSDATUM_ISO)}</span></>}
+                fusszeile={<><span>
+                  {filtered.length} von {grundgesamtheit.length} {grundgesamtheit.length === 1 ? "Patient" : "Patienten"}
+                  {!filter.ausgetreteneZeigen && ausgetreteneAnzahl > 0 && ` · ${ausgetreteneAnzahl} ausgetreten, nicht angezeigt`}
+                </span><span>Stand: {isoZuAnzeige(BEZUGSDATUM_ISO)}</span></>}
                 leerText="Keine Patienten mit diesen Filtern."
               />
             )}

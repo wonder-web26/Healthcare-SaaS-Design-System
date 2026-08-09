@@ -70,6 +70,7 @@ import {
   ArrowRight,
   Heart,
   Stethoscope,
+  LogOut,
   MapPin,
   Users,
   X,
@@ -97,7 +98,9 @@ import {
   abrechnungsStatusConfig,
   type Patient,
 } from "./patientData";
-import { usePatienten, getPatient, aktualisierePatient, tageBisReAssessment } from "../../lib/patienten/store";
+import { usePatienten, getPatient, aktualisierePatient, tageBisReAssessment,
+  austrittErfassen, AUSTRITT_FEHLERTEXT, type AustrittFehler } from "../../lib/patienten/store";
+import { ENTLASSUNG_NACH, ENTLASSUNG_SONSTIGES, entlassungNachLabel } from "../../lib/stammdaten/entlassung";
 import { StatusModal } from "./StatusModal";
 import { DetailNavigation } from "./DetailNavigation";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
@@ -214,6 +217,7 @@ const PATIENT_NAV: GruppeDef[] = [
     { schluessel: "beziehungen", label: "Beziehungen" },
     { schluessel: "vorgeschichte", label: "Vorgeschichte" },
     { schluessel: "diagnosen", label: "Diagnosen" },
+    { schluessel: "austritt", label: "Austritt" },
   ] },
   { schluessel: "abklaerung", label: "Abklärung", ansichten: [
     { schluessel: "sda", label: "SDA" },
@@ -450,7 +454,9 @@ function getPatientProzess(patientStatus: string): ProcessStep[] {
     "15.02.2026", "20.02.2026", "28.02.2026",
   ];
 
-  const doneCount = patientStatus === "aktiv" ? 12 : patientStatus === "gekuendigt" ? 15 : 7;
+  const doneCount = patientStatus === "aktiv" ? 12
+    : patientStatus === "gekuendigt" || patientStatus === "ausgetreten" ? 15
+    : 7;
   const dates = [
     "12.01.2026", "13.01.2026", "15.01.2026", "18.01.2026",
     "20.01.2026", "22.01.2026", "25.01.2026", "28.01.2026",
@@ -595,8 +601,12 @@ function Patient360Inhalt() {
     );
   }
 
-  // WF-02: Patient-Rhythmus-Tickets generieren (idempotent)
-  if (patient.aufnahmeDatum) {
+  /* WF-02: Patient-Rhythmus-Tickets generieren (idempotent).
+     Für ausgetretene Patienten wird kein Rhythmus mehr angelegt — sonst
+     erzeugte allein das Öffnen des Dossiers Pendenzen an einem Fall, an dem
+     nichts mehr zu tun ist. Bereits bestehende Instanzen bleiben; die Engine
+     kennt keinen Weg, eine Instanz zu beenden (siehe lib/rhythmus/engine.ts). */
+  if (patient.aufnahmeDatum && patient.status !== "ausgetreten") {
     const parts = patient.aufnahmeDatum.split(".");
     const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : patient.aufnahmeDatum;
     generiereRhythmusTickets("patient", patient.id, `${patient.nachname}, ${patient.vorname}`, isoAnker, patient.pflegefachkraft);
@@ -761,6 +771,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
         </>
       );
     case "stammdaten": return <AnsichtStammdaten patient={patient} />;
+    case "austritt": return <AnsichtAustritt patient={patient} />;
     case "beziehungen": return <AnsichtBeziehungenNeu patient={patient} />;
     case "vorgeschichte": return <AnsichtVorgeschichte patient={patient} />;
     case "diagnosen": return <AnsichtDiagnosen patient={patient} />;
@@ -2708,6 +2719,12 @@ function anTagen(n: number): string {
   return n === 1 ? "an einem Tag" : `an ${anzahlWort(n)} Tagen`;
 }
 
+/** „Zwei Mandate" — Zahlwort gross, weil es einen Satz beginnt. */
+function mandateWort(n: number): string {
+  const w = anzahlWort(n);
+  return `${w.charAt(0).toUpperCase()}${w.slice(1)} Mandate`;
+}
+
 /** Nominativ ohne Nomen: „einer" / „drei" — für „davon … ohne Begründung". */
 function davon(n: number): string {
   return n === 1 ? "einer" : anzahlWort(n);
@@ -3701,6 +3718,169 @@ function FormFeld({ label, wert, platzhalter, onAendern }: {
       <input value={wert} onChange={e => onAendern(e.target.value)} placeholder={platzhalter} aria-label={label} className="ui-fokusring"
         style={{ width: "100%", padding: "6px 9px", borderRadius: 8, fontFamily: "inherit", fontSize: "var(--text-small)",
           color: "var(--text-primary)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }} />
+    </div>
+  );
+}
+
+/* ── Austritt ────────────────────────────────────────────────────────────── */
+
+/**
+ * Bereich Z des Standardkatalogs.
+ *
+ * Der Austritt ist der einzige Vorgang am Patienten, der nicht nur etwas
+ * festhält, sondern etwas beendet: den Zustand, die laufenden Mandate und die
+ * Anwesenheit in der Arbeitsliste. Darum steht er in einer eigenen Ansicht und
+ * nicht als Karte zwischen den Stammdaten, und darum verlangt er eine
+ * Bestätigung, die die Folgen benennt statt sie anzudeuten.
+ */
+function AnsichtAustritt({ patient }: { patient: Patient }) {
+  const mandate = useMandate().filter(m => m.patientId === patient.id);
+  const laufende = mandate.filter(m => !m.ende.trim());
+
+  const [datum, setDatum] = useState("");
+  const [nach, setNach] = useState("");
+  const [andere, setAndere] = useState("");
+  const [praezisierungen, setPraezisierungen] = useState("");
+  const [fehler, setFehler] = useState<AustrittFehler | null>(null);
+  const [frage, setFrage] = useState(false);
+
+  if (patient.status === "ausgetreten") {
+    return (
+      <div className="space-y-4">
+        <PSectionCard title="Austritt" icon={LogOut}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: 16 }}>
+            <PDataField label="Austrittsdatum" value={patient.austrittDatum} />
+            <PDataField
+              label="Danach"
+              value={patient.austrittNach === ENTLASSUNG_SONSTIGES && patient.austrittNachAndere
+                ? `${entlassungNachLabel(patient.austrittNach)}: ${patient.austrittNachAndere}`
+                : entlassungNachLabel(patient.austrittNach)}
+            />
+            <PDataField label="Erfasst" value={patient.austrittErfasstVon ? `${patient.austrittErfasstVon}, ${patient.austrittErfasstAm}` : "—"} />
+          </div>
+          {patient.austrittPraezisierungen && (
+            <div style={{ marginTop: 16 }}>
+              <PDataField label="Individuelle Präzisierungen" value={patient.austrittPraezisierungen} />
+            </div>
+          )}
+          {/* Der Katalog sieht an dieser Stelle eine Unterschrift vor. Das
+              Produkt kennt keine; wie bei BB17 wird stattdessen protokolliert,
+              wer kodiert hat und wann. Abweichung, bewusst und benannt. */}
+          <p style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", margin: "14px 0 0", maxWidth: "74ch", lineHeight: 1.6 }}>
+            Der Standardkatalog verlangt in Bereich Z eine Unterschrift. Erfasst wird hier stattdessen,
+            wer den Austritt kodiert hat — eine Unterschrift wird nicht nachgebildet.
+          </p>
+        </PSectionCard>
+
+        <PSectionCard title="Was der Austritt bewirkt hat" icon={Info}>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "74ch" }}>
+            <li>Der Patient erscheint nicht mehr in der Arbeitsliste. Über „Ausgetretene einblenden" bleibt er erreichbar.</li>
+            <li>{mandate.length === 0
+              ? "Es bestand kein Mandat."
+              : mandate.length === 1
+              ? `Das Mandat endet auf den ${patient.austrittDatum}.`
+              : `${mandateWort(mandate.length)} enden auf den ${patient.austrittDatum}.`}</li>
+            <li>Es wird kein Betreuungsrhythmus mehr angelegt.</li>
+            <li>Bereits erfasste Einsätze, Berichte und Abschlüsse bleiben unverändert — sie sind Vergangenheit, nicht Planung.</li>
+          </ul>
+          <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: "14px 0 0", maxWidth: "74ch", lineHeight: 1.6 }}>
+            Ein Austritt lässt sich hier nicht zurücknehmen. Kehrt die Person zurück, ist das eine neue Aufnahme.
+          </p>
+        </PSectionCard>
+      </div>
+    );
+  }
+
+  const speichern = () => {
+    const f = austrittErfassen(patient.id, {
+      datum, nach, nachAndere: andere, praezisierungen, erfasstVon: AKTUELLE_FACHPERSON,
+    });
+    setFehler(f);
+    if (!f) setFrage(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <PSectionCard title="Austritt erfassen" icon={LogOut}>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 0 16px", maxWidth: "74ch", lineHeight: 1.6 }}>
+          Der Austritt hält fest, wann die Person zuletzt Leistungen bezogen hat und wie sie danach lebt.
+          Er beendet die laufenden Mandate und nimmt den Patienten aus der Arbeitsliste.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: 12 }}>
+          <DateField label="Austrittsdatum" value={datum} wertFormat="display" bereich="past"
+            onChange={v => { setDatum(typeof v === "string" ? v : ""); setFehler(null); setFrage(false); }} />
+          <div className="sm:col-span-1">
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Danach</div>
+            <InlineSelect
+              value={nach}
+              onChange={v => { setNach(v); setFehler(null); setFrage(false); }}
+              options={ENTLASSUNG_NACH.map(w => ({ value: w.code, label: w.label }))}
+              platzhalter="Bitte wählen"
+            />
+          </div>
+          {/* Freitext nur, wo der Katalog ihn vorsieht. */}
+          {nach === ENTLASSUNG_SONSTIGES && (
+            <FormFeld label="Sonstiges — welche" wert={andere} platzhalter="Lebensumstände nach dem Austritt"
+              onAendern={v => { setAndere(v); setFehler(null); setFrage(false); }} />
+          )}
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <FormFeld label="Individuelle Präzisierungen" wert={praezisierungen} platzhalter="Freiwillig — was zum Austritt festzuhalten ist"
+            onAendern={v => { setPraezisierungen(v); setFrage(false); }} />
+        </div>
+
+        <p style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", margin: "10px 0 0" }}>
+          Erfasst wird auf {AKTUELLE_FACHPERSON}. Der Standardkatalog verlangt hier eine Unterschrift;
+          festgehalten wird stattdessen, wer kodiert hat.
+        </p>
+
+        {fehler && (
+          <div role="alert" style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 12, maxWidth: "74ch" }}>
+            {AUSTRITT_FEHLERTEXT[fehler]}
+          </div>
+        )}
+
+        {!frage ? (
+          <div style={{ marginTop: 16 }}>
+            <AppButton variant="sekundaer" onClick={() => { setFehler(null); setFrage(true); }}>Austritt erfassen</AppButton>
+          </div>
+        ) : (
+          /* Zweiter Schritt: die Folgen stehen da, bevor sie eintreten. */
+          <div style={{ marginTop: 16, padding: "14px 16px", borderRadius: 12, background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
+            <p style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", margin: "0 0 8px" }}>
+              Austritt von {patient.vorname} {patient.nachname} bestätigen?
+            </p>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: "var(--text-meta)", color: "var(--text-secondary)", lineHeight: 1.7, maxWidth: "74ch" }}>
+              <li>Der Zustand wechselt auf „Ausgetreten"; abgerechnet wird nichts mehr.</li>
+              <li>{laufende.length === 0
+                ? "Es läuft kein Mandat, das zu beenden wäre."
+                : laufende.length === 1
+                ? `Ein laufendes Mandat endet auf den ${datum || "das Austrittsdatum"}.`
+                : `${mandateWort(laufende.length)} enden auf den ${datum || "das Austrittsdatum"}.`}</li>
+              <li>Der Patient verschwindet aus der Arbeitsliste und ist nur noch über „Ausgetretene einblenden" zu finden.</li>
+              <li>Zurücknehmen lässt sich das hier nicht.</li>
+            </ul>
+            <div className="flex items-center" style={{ gap: 12, marginTop: 14 }}>
+              <AppButton variant="sekundaer" onClick={speichern}>Austritt bestätigen</AppButton>
+              <button type="button" onClick={() => setFrage(false)} className="ui-fokusring cursor-pointer"
+                style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        )}
+      </PSectionCard>
+
+      <PSectionCard title="Nicht dasselbe wie ein Einsatzabbruch" icon={Info}>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+          Der Standardkatalog unterscheidet den Austritt vom Einsatzabbruch — bei einem Abbruch wird
+          kein Formular Entlassung ausgefüllt. Das Cockpit kennt den Einsatzabbruch nicht als eigenen
+          Vorgang. Wer einen Abbruch festhalten will, findet dafür hier bewusst keinen Weg;
+          die Lücke ist bekannt und wird nicht durch dieses Formular überdeckt.
+        </p>
+      </PSectionCard>
     </div>
   );
 }
