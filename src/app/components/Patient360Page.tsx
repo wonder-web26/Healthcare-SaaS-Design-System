@@ -101,6 +101,7 @@ import {
 import { usePatienten, getPatient, aktualisierePatient, tageBisReAssessment,
   austrittErfassen, AUSTRITT_FEHLERTEXT, type AustrittFehler } from "../../lib/patienten/store";
 import { ENTLASSUNG_NACH, ENTLASSUNG_SONSTIGES, entlassungNachLabel } from "../../lib/stammdaten/entlassung";
+import { austrittVon, austrittText, monatNachAustritt, austrittsMonat } from "../../lib/patienten/austritt";
 import { StatusModal } from "./StatusModal";
 import { DetailNavigation } from "./DetailNavigation";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
@@ -127,7 +128,7 @@ import { monatsKennzahlen } from "../../lib/einsaetze/kontrolle";
 import { lagebild, NICHT_BEURTEILBAR, GEPRUEFT_WURDE } from "../../lib/lagebild/lagebild";
 import {
   pruefbereitschaft, zeitraumMonate, zeitraumText, zaehleVollstaendig,
-  NICHT_BEURTEILBAR_CONTROLLING, type Zustand,
+  NICHT_BEURTEILBAR_CONTROLLING, type Zustand, type Zeitraum,
 } from "../../lib/controlling/pruefbereitschaft";
 import { useAlleNotizen } from "../../lib/notizen/store";
 import { useAngehoerige } from "../../lib/angehoerige/store";
@@ -169,7 +170,7 @@ import { DateField } from "./form/DateField";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { ItemRow } from "./ui/ItemRow";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
-import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
+import { generiereRhythmusTickets, getTicketsFuerSubjekt } from "../../lib/rhythmus/engine";
 import { getNachweiseFuerPatient } from "../../lib/schulung/nachweis-store";
 import "../../lib/schulung/demo-seed";
 import { BezugspersonFeld } from "./BezugspersonFeld";
@@ -2816,6 +2817,11 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
 
   const offeneImMonat = tage.flatMap(t => t.einsaetze).filter(e => e.pruefzustand !== "geprueft");
 
+  /* Nach dem Austritt gibt es keine Monate mehr, nur noch Kalender. Der
+     Austrittsmonat selbst zählt nicht dazu — an seinen Tagen wurde gepflegt. */
+  const austritt = austrittVon(patient);
+  const monatBeendet = austritt !== null && monatNachAustritt(austritt, zeitraum.jahr, zeitraum.monat);
+
   const alleStimmigenBestaetigen = () => {
     const stimmig = tage
       .filter(t => !t.fehlt && t.abweichung === 0)
@@ -2892,6 +2898,10 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
               <Lock style={{ width: 11, height: 11 }} />
               Abgeschlossen am {abgeschlossen.zeitpunkt} durch {abgeschlossen.person}
             </span>
+          ) : monatBeendet ? (
+            <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+              Nach dem Austritt
+            </span>
           ) : (
             <button type="button" onClick={() => nav(`/abschluss?monat=${zeitraum.jahr}-${String(zeitraum.monat + 1).padStart(2, "0")}`)}
               className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
@@ -2901,6 +2911,17 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
         </div>
       </div>
 
+      {monatBeendet && austritt ? (
+        /* Der Kopf mit der Monatsschaltung bleibt stehen — von hier führt der
+           Weg zurück in die Monate, in denen gepflegt wurde. */
+        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "16px 18px" }}>
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+            Der Patient ist {austrittText(austritt)}. In diesem Monat wurde nicht mehr gepflegt —
+            es gibt nichts zu prüfen und nichts abzurechnen. Die Monate bis zum Austritt sind
+            unverändert bedienbar.
+          </p>
+        </div>
+      ) : (<>
       {/* ── Abrechenbare Minuten gegen die Bedarfsmeldung ──
           Nicht mehr vier gleich grosse Zahlen ohne Rangfolge. Was zählt, ist
           die abrechenbare Menge je Leistungsart gegen das Gemeldete; alles
@@ -2961,6 +2982,7 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
         onNeuErzeugen={() => setErzeugtAm(jetztAnzeige())}
         onStimmtNicht={() => setMeldung("Vermerkt. Die Einordnung wird gerechnet, nicht erzeugt — eine Rückmeldung ändert die Zahlen nicht, sondern die Regel dahinter.")}
       />
+      </>)}
     </div>
   );
 }
@@ -3736,6 +3758,11 @@ function FormFeld({ label, wert, platzhalter, onAendern }: {
 function AnsichtAustritt({ patient }: { patient: Patient }) {
   const mandate = useMandate().filter(m => m.patientId === patient.id);
   const laufende = mandate.filter(m => !m.ende.trim());
+  /* Der Rhythmus wird gelesen, nicht gerechnet — es steht dort, was die
+     Engine tatsächlich getan hat. */
+  const rhythmusTickets = getTicketsFuerSubjekt("patient", patient.id);
+  const entfallen = rhythmusTickets.filter(t => t.status === "entfallen").length;
+  const erledigt = rhythmusTickets.filter(t => t.status === "erledigt").length;
 
   const [datum, setDatum] = useState("");
   const [nach, setNach] = useState("");
@@ -3780,7 +3807,9 @@ function AnsichtAustritt({ patient }: { patient: Patient }) {
               : mandate.length === 1
               ? `Das Mandat endet auf den ${patient.austrittDatum}.`
               : `${mandateWort(mandate.length)} enden auf den ${patient.austrittDatum}.`}</li>
-            <li>Es wird kein Betreuungsrhythmus mehr angelegt.</li>
+            <li>{rhythmusTickets.length === 0
+              ? "Es bestand kein Betreuungsrhythmus."
+              : `Der Betreuungsrhythmus ist beendet: ${entfallen} ${entfallen === 1 ? "offener Schritt ist" : "offene Schritte sind"} entfallen, ${erledigt} erledigte ${erledigt === 1 ? "bleibt" : "bleiben"} als Nachweis stehen.`}</li>
             <li>Bereits erfasste Einsätze, Berichte und Abschlüsse bleiben unverändert — sie sind Vergangenheit, nicht Planung.</li>
           </ul>
           <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: "14px 0 0", maxWidth: "74ch", lineHeight: 1.6 }}>
@@ -3860,6 +3889,7 @@ function AnsichtAustritt({ patient }: { patient: Patient }) {
                 ? `Ein laufendes Mandat endet auf den ${datum || "das Austrittsdatum"}.`
                 : `${mandateWort(laufende.length)} enden auf den ${datum || "das Austrittsdatum"}.`}</li>
               <li>Der Patient verschwindet aus der Arbeitsliste und ist nur noch über „Ausgetretene einblenden" zu finden.</li>
+              <li>Der Betreuungsrhythmus endet; offene Schritte entfallen mit Grund, erledigte bleiben als Nachweis.</li>
               <li>Zurücknehmen lässt sich das hier nicht.</li>
             </ul>
             <div className="flex items-center" style={{ gap: 12, marginTop: 14 }}>
@@ -4640,7 +4670,13 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
   const alleDokumente = useDokumente();
   const [monate, setMonate] = useState(3);
 
-  const zeitraum = zeitraumMonate(EINSATZ_BEZUGSMONAT.getFullYear(), EINSATZ_BEZUGSMONAT.getMonth(), monate);
+  /* Eine Kassenkontrolle kann rückwirkend kommen — geprüft wird deshalb der
+     Zeitraum, in dem gepflegt wurde. Monate nach dem Austritt gehören nicht
+     dazu: dort gab es keine Leistung, die zu belegen wäre. */
+  const austritt = austrittVon(patient);
+  const ende = (austritt && austrittsMonat(austritt))
+    ?? { jahr: EINSATZ_BEZUGSMONAT.getFullYear(), monat: EINSATZ_BEZUGSMONAT.getMonth() };
+  const zeitraum: Zeitraum = zeitraumMonate(ende.jahr, ende.monat, monate);
   const mandatIds = mandate.filter(m => m.patientId === patient.id).map(m => m.id);
   const blatt = [...klvs].filter(k => k.patientId === patient.id && k.status !== "ersetzt")
     .sort((a, b) => b.version - a.version)[0] ?? null;
@@ -4739,6 +4775,11 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
           <div>
             <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Geprüfter Zeitraum</div>
             <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)" }}>{zeitraumText(zeitraum)}</div>
+            {austritt && (
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 2 }}>
+                Betreuung beendet — {austrittText(austritt)}
+              </div>
+            )}
           </div>
           <div className="flex items-center" style={{ gap: 6, marginLeft: "auto" }}>
             {CONTROLLING_ZEITRAEUME.map(n => (
@@ -4762,6 +4803,12 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
         <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", marginBottom: 10 }}>
           {vollstaendig} von {zeilen.length} Unterlagen vollständig
         </div>
+        {austritt && (
+          <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: "0 0 12px", maxWidth: "74ch", lineHeight: 1.55 }}>
+            Die Betreuung ist beendet. Die Unterlagen bleiben massgebend — eine Kasse kann bis zu
+            fünf Jahre rückwirkend prüfen. Nachzubeschaffen ist nichts mehr.
+          </p>
+        )}
         <div className="flex flex-col" style={{ gap: 2 }}>
           {zeilen.map(z => {
             const f = farbe(z.zustand);
@@ -4774,11 +4821,16 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
                 <span style={{ flex: 1, minWidth: 220, fontSize: "var(--text-meta)", color: "var(--text-secondary)", lineHeight: 1.55 }}>
                   {z.befund}
                 </span>
-                <button type="button" onClick={() => nav(ansichtPfad(patient.id, z.ansicht))}
-                  className="ui-fokusring cursor-pointer inline-flex items-center"
-                  style={{ gap: 4, flexShrink: 0, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
-                  {z.verweis} <ChevronRight style={{ width: 11, height: 11 }} />
-                </button>
+                {/* Nach dem Austritt bleibt der Zustand stehen — eine
+                    Kassenkontrolle kann rückwirkend kommen. Was entfällt, ist
+                    die Aufforderung, Fehlendes jetzt noch zu beschaffen. */}
+                {!austritt && (
+                  <button type="button" onClick={() => nav(ansichtPfad(patient.id, z.ansicht))}
+                    className="ui-fokusring cursor-pointer inline-flex items-center"
+                    style={{ gap: 4, flexShrink: 0, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
+                    {z.verweis} <ChevronRight style={{ width: 11, height: 11 }} />
+                  </button>
+                )}
               </div>
             );
           })}
@@ -4892,6 +4944,7 @@ function AnnaLagebild({ patient }: { patient: Patient }) {
   const befunde = lagebild({
     patientId: patient.id, klvs, kostengutsprachen: kgs, mandatIds,
     kennzahlen, monat, pendenzen, stichtag: MANDAT_STICHTAG,
+    austritt: austrittVon(patient),
   });
 
   return (

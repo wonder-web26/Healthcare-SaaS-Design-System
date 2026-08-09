@@ -27,6 +27,7 @@ import { DataTable, type SpalteDef } from "./ui/DataTable";
 import { useEinsaetze, useErbrachteLeistungen, EINSATZ_BEZUGSMONAT } from "../../lib/einsaetze/store";
 import { useKlvVerordnungen } from "../../lib/klv/store";
 import { useMandate } from "../../lib/mandate/store";
+import { type Austritt, austrittVon } from "../../lib/patienten/austritt";
 import { useVerordnungen } from "../../lib/mandate/verordnungen-store";
 import { usePatienten } from "../../lib/patienten/store";
 import { MONATE } from "../../lib/einsaetze/einsaetze";
@@ -49,6 +50,8 @@ interface Zeile {
   /** Verrechenbare Minuten des Quartals, in dem der Monat liegt. */
   quartal: number;
   abschluss: Monatsabschluss | null;
+  /** Gesetzt, wenn die Person ausgetreten ist — der Monat bleibt trotzdem abzuschliessen. */
+  austritt: Austritt | null;
 }
 
 /** Überschrift eines Kopffelds — dieselbe Gestaltung wie in den übrigen Leisten. */
@@ -122,6 +125,7 @@ export function AbschlussListPage() {
         lage: abschlussLage(k.offen, k.abweichungOhneGrund, k.gemeldet !== null),
         quartal: quartalMinuten(id, zeitraum.jahr, zeitraum.monat, quellen),
         abschluss: getAbschluss(id, zeitraum.jahr, zeitraum.monat),
+        austritt: p ? austrittVon(p) : null,
       };
     });
   }, [einsaetze, leistungen, klvs, mandate, verordnungen, patienten, zeitraum, abschluesse]);
@@ -223,7 +227,20 @@ export function AbschlussListPage() {
 
   const spalten: SpalteDef<Zeile>[] = [
     { id: "patient", label: "Patient", anteil: 20, minCh: 22, align: "left", sortierbar: true,
-      render: z => <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{z.name}</span> },
+      /* Ein Monat mit Pflege ist abzuschliessen, auch nach dem Austritt. Die
+         Marke sagt nur, dass danach nichts mehr folgt — solange der Monat
+         offen ist. Ist er abgeschlossen, ist die Sache erledigt und die Marke
+         wäre nur noch Beiwerk. */
+      render: z => (
+        <span className="inline-flex items-baseline flex-wrap" style={{ gap: 6 }}>
+          <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{z.name}</span>
+          {z.austritt && !z.abschluss && (
+            <span style={{ padding: "1px 7px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--bg-secondary)", color: "var(--text-secondary)", border: "var(--border-thin) solid var(--border-default)", whiteSpace: "nowrap" }}>
+              ausgetreten am {z.austritt.datum}
+            </span>
+          )}
+        </span>
+      ) },
     /* Verrechenbar, gearbeitet und ihre Differenz stehen nebeneinander und
        werden nie zusammengefasst: das eine geht an die Kasse, das andere in
        den Lohn, und die Differenz erklärt, warum sie auseinandergehen. */

@@ -20,6 +20,7 @@ import { getKrankenkasseLabel } from "../stammdaten/krankenkassen";
 import { isoZuDate, anzeigeZuIso, jetztAnzeige } from "../datum";
 import { ENTLASSUNG_SONSTIGES } from "../stammdaten/entlassung";
 import { getMandate, aktualisiereMandat } from "../mandate/store";
+import { rhythmusBeenden } from "../rhythmus/engine";
 import { sdaSpracheLabel } from "../stammdaten/sda-sprache";
 
 /** Zeichen für "keine Pflegefachkraft zugewiesen" — Bestandskonvention. */
@@ -470,5 +471,9 @@ export function austrittErfassen(
   for (const m of getMandate(patientId)) {
     if (!m.ende.trim()) aktualisiereMandat(m.id, { ende: datum });
   }
+
+  // Der Betreuungsrhythmus endet. Offene Schritte entfallen mit Grund;
+  // erledigte bleiben unangetastet — sie sind Nachweis.
+  rhythmusBeenden("patient", patientId, `Patient ausgetreten am ${datum}`);
   return null;
 }

@@ -18,6 +18,7 @@ import { lpbAmZug, lpbStatusLabel } from "../stammdaten/lpb-status";
 import { wartetSeitTagen } from "../klv/warten";
 import { abgleichen } from "../klv/abgleich";
 import type { MonatsKennzahlen } from "../einsaetze/kontrolle";
+import { type Austritt, austrittText } from "../patienten/austritt";
 import { WOCHENTAGE_LANG, MONATE } from "../einsaetze/einsaetze";
 
 /** Wie ernst eine Aussage ist — bestimmt Band und Reihenfolge. */
@@ -64,6 +65,8 @@ export interface LagebildQuellen {
   /** Offene Pendenzen der Person: gesamt und davon überfällig. */
   pendenzen: { offen: number; ueberfaellig: number };
   stichtag: Date;
+  /** Gesetzt, sobald die Person ausgetreten ist. */
+  austritt: Austritt | null;
 }
 
 /** Wer am Zug ist, im Klartext — `lpbAmZug` gibt einen Code zurück. */
@@ -83,11 +86,31 @@ export function lagebild(q: LagebildQuellen): Befund[] {
   const befunde: Befund[] = [];
   const monatSuchteil = `?monat=${q.monat.jahr}-${String(q.monat.monat + 1).padStart(2, "0")}`;
 
+  /* ── Austritt ───────────────────────────────────────────────────────────
+     Nach dem Austritt schweigt das Lagebild über alles, was eine Handlung
+     verlangt: eine Wartezeit, die niemand mehr abwartet, eine Gutsprache, die
+     niemand mehr einholt, ein Abgleich gegen eine Bewilligung, nach der nicht
+     mehr gepflegt wird, ein Bericht, den niemand mehr schreibt.
+
+     Was bleibt, ist Vergangenes, das noch abzuschliessen ist: ungeprüfte
+     Einsätze, Tage ohne Einsatz im laufenden Monat, offene Pendenzen. Sie
+     betreffen einen Zeitraum, in dem gepflegt wurde, und der ist abzurechnen.
+
+     Der Austritt selbst steht zuoberst — er ordnet alles darunter ein. */
+  const ausgetreten = q.austritt !== null;
+  if (q.austritt) {
+    befunde.push({
+      id: "austritt", band: "belegt", rang: 0,
+      text: `Der Patient ist ${austrittText(q.austritt)}. Vergangenes bleibt abzuschliessen; Neues fällt nicht mehr an.`,
+      quelle: "Austritt", ansicht: "austritt",
+    });
+  }
+
   /* ── Leistungsplanungsblatt: wartet es, und bei wem? ── */
   const blatt = [...q.klvs]
     .filter(k => k.patientId === q.patientId && k.status !== "ersetzt")
     .sort((a, b) => b.version - a.version)[0] ?? null;
-  if (blatt) {
+  if (blatt && !ausgetreten) {
     const tage = wartetSeitTagen(blatt);
     if (tage !== null) {
       befunde.push({
@@ -103,7 +126,7 @@ export function lagebild(q: LagebildQuellen): Befund[] {
      zurückfordern — auch für erbrachte und ärztlich verordnete Leistungen. */
   const eigeneKgs = q.kostengutsprachen.filter(k => q.mandatIds.includes(k.mandatId));
   const luecke = offeneLuecke(eigeneKgs, q.stichtag);
-  if (luecke) {
+  if (luecke && !ausgetreten) {
     const tage = tageInklusive(luecke.von, q.stichtag);
     befunde.push({
       id: "kgs-luecke", band: "pruefen", rang: 10,
@@ -113,7 +136,7 @@ export function lagebild(q: LagebildQuellen): Befund[] {
   }
 
   /* ── Geplant gegen bewilligt ── */
-  if (blatt) {
+  if (blatt && !ausgetreten) {
     const a = abgleichen(blatt, eigeneKgs, q.stichtag);
     /* `differenz` steht in Stunden je Woche (bewilligt − geplant, negativ =
        zu viel geplant). Gerundet auf Minuten; unter einer Minute wird nichts
@@ -148,7 +171,7 @@ export function lagebild(q: LagebildQuellen): Befund[] {
       quelle: "Pflegekontrolle", ansicht: "pflegekontrolle", suchteil: monatSuchteil,
     });
   }
-  if (k.mitEinsatz > 0 && k.mitBericht < k.mitEinsatz) {
+  if (k.mitEinsatz > 0 && k.mitBericht < k.mitEinsatz && !ausgetreten) {
     befunde.push({
       id: "berichte", band: "belegt", rang: 60,
       text: `An ${k.mitEinsatz - k.mitBericht} von ${k.mitEinsatz} Tagen mit Einsatz fehlt der Pflegebericht.`,

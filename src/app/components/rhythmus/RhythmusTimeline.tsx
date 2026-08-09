@@ -9,6 +9,7 @@ import { DateField } from "../form/DateField";
 import {
   CheckCircle2,
   Circle,
+  MinusCircle,
   AlertTriangle,
   Clock,
   FileText,
@@ -55,6 +56,8 @@ const STATUS_CONFIG: Record<TicketStatus, { label: string; bg: string; text: str
   offen:       { label: "Offen",       bg: "var(--bg-secondary)",       text: "var(--text-secondary)",      icon: Circle },
   ueberfaellig:{ label: "Überfällig",  bg: "var(--status-warning-bg)",  text: "var(--status-warning-text)", icon: AlertTriangle },
   erledigt:    { label: "Erledigt",    bg: "var(--status-success-bg)",  text: "var(--status-success)",      icon: CheckCircle2 },
+  /* Entfallen ist kein Erfolg und kein Versäumnis — es bleibt still. */
+  entfallen:   { label: "Entfallen",   bg: "var(--bg-secondary)",       text: "var(--text-tertiary)",       icon: MinusCircle },
 };
 
 const TYP_ICON: Record<string, typeof GraduationCap> = {
