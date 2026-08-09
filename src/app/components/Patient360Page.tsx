@@ -85,6 +85,7 @@ import {
   Lock,
   ClipboardCheck,
   FolderOpen,
+  Building2,
 } from "lucide-react";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import {
@@ -104,7 +105,7 @@ import {
 import { wartetSeitTagen } from "../../lib/klv/warten";
 import { abgleichen, stunden } from "../../lib/klv/abgleich";
 import {
-  abweichungNachRichtung,
+  abweichungNachRichtung, einsatzDauer,
   aktuelleFassung, fruehereFassungen,
   hatAbweichung, WOCHENTAGE, WOCHENTAGE_LANG, MONATE,
   type Einsatz, type EinsatzUrheber, type ErbrachteLeistung, type Monatstag,
@@ -127,6 +128,13 @@ import { useAngehoerige } from "../../lib/angehoerige/store";
 import { sichtbareNotizen } from "../../lib/notizen/notizen";
 import { unifiedEntries } from "../../lib/mocks/service-desk-unified";
 import { useDokumente } from "../../lib/dokumente/store";
+import { useBeziehungen, beziehungBeenden } from "../../lib/beziehungen/store";
+import {
+  istAktiv as beziehungAktiv, personName, rolleLabel, rolleSeite, artLabel,
+  DIAGRAMM_MAX, type Beziehung,
+} from "../../lib/beziehungen/beziehungen";
+import { STATIONAERER_VERLAUF, FRUEHERE_EINGRIFFE } from "../../lib/patienten/vorgeschichte";
+import { MOCK_ARZT_DIAGNOSEN } from "../../lib/mocks/klinische-artefakte-mock";
 import {
   dokumenteVon, ordnerStand, ordnerZustand, ordnerDes, pflichtluecken,
   geprueftePflichttypen, gueltigBisText, istAbgelaufen, HERKUNFT_TEXT,
@@ -697,6 +705,7 @@ const ANSICHT_HAT_INHALT: Record<string, true> = {
   leistungsplanungsblatt: true, "verordnung-und-kostengutsprache": true,
   pflegekontrolle: true, dokumente: true, pendenzen: true, verlauf: true, controlling: true,
   ordnerstruktur: true, pflichtluecken: true,
+  stammdaten: true, vorgeschichte: true, diagnosen: true,
 };
 
 /** Ansichten, deren Umfang schon feststeht — sie nennen ihn statt zu schweigen. */
@@ -739,7 +748,10 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
           <TabUeberblick patient={patient} />
         </>
       );
-    case "beziehungen": return <AnsichtBeziehungen patient={patient} />;
+    case "stammdaten": return <AnsichtStammdaten patient={patient} />;
+    case "beziehungen": return <AnsichtBeziehungenNeu patient={patient} />;
+    case "vorgeschichte": return <AnsichtVorgeschichte patient={patient} />;
+    case "diagnosen": return <AnsichtDiagnosen patient={patient} />;
     case "mandate": return <AnsichtMandate patient={patient} />;
     case "interrai-hc": return <TabInterRAI patientId={patient.id} patientName={`${patient.nachname}, ${patient.vorname}`} navigate={navigate} />;
     case "atl": return <TabATL patient={patient} />;
@@ -763,106 +775,6 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
   }
 }
 
-/* ══════════════════════════════════════════
-   ANSICHT: Patient › Beziehungen
-
-   Übernimmt die Karte "Kontaktpersonen" aus dem früheren Überblick
-   unverändert — Angehörige/r und Notfallkontakt mit ihrem eigenen
-   Bearbeiten-Zweig, der weiterhin in den gemeinsamen Bestand schreibt.
-   ══════════════════════════════════════════ */
-function AnsichtBeziehungen({ patient }: { patient: Patient }) {
-  const [editingSection, setEditingSection] = useState<string | null>(null);
-
-  const origAngehName = patient.angehoeriger.split(" (")[0];
-  const origAngehRelation = patient.angehoeriger.match(/\(([^)]+)\)/)?.[1] || "";
-  const [angehName, setAngehName] = useState(origAngehName);
-  const [angehRelation, setAngehRelation] = useState(origAngehRelation);
-  const [angehTelefon, setAngehTelefon] = useState(patient.angehoerigerTelefon);
-  const [notfallName, setNotfallName] = useState(patient.notfallkontaktName);
-  const [notfallRelation, setNotfallRelation] = useState(patient.notfallkontaktBeziehung);
-  const [notfallTelefon, setNotfallTelefon] = useState(patient.notfallkontaktTelefon);
-  const [snapshot, setSnapshot] = useState<Record<string, string>>({});
-
-  const startEdit = () => {
-    setSnapshot({ angehName, angehRelation, angehTelefon, notfallName, notfallRelation, notfallTelefon });
-    setEditingSection("kontakt");
-  };
-
-  const cancelEdit = () => {
-    setAngehName(snapshot.angehName ?? angehName);
-    setAngehRelation(snapshot.angehRelation ?? angehRelation);
-    setAngehTelefon(snapshot.angehTelefon ?? angehTelefon);
-    setNotfallName(snapshot.notfallName ?? notfallName);
-    setNotfallRelation(snapshot.notfallRelation ?? notfallRelation);
-    setNotfallTelefon(snapshot.notfallTelefon ?? notfallTelefon);
-    setEditingSection(null);
-  };
-
-  /**
-   * Der Angehörige wird wieder in die im Bestand übliche Form
-   * "Name (Beziehung)" gebracht; der Notfallkontakt bleibt davon getrennt und
-   * behält seine eigenen drei Felder.
-   */
-  const saveEdit = () => {
-    const angehoerigerText = angehRelation.trim()
-      ? `${angehName.trim()} (${angehRelation.trim()})`
-      : angehName.trim();
-    aktualisierePatient(patient.id, {
-      angehoeriger: angehoerigerText,
-      angehoerigerTelefon: angehTelefon,
-      notfallkontaktName: notfallName,
-      notfallkontaktBeziehung: notfallRelation,
-      notfallkontaktTelefon: notfallTelefon,
-    });
-    setEditingSection(null);
-  };
-
-  return (
-    <div className="space-y-4">
-    {/* Kontaktpersonen */}
-    <PSectionCard
-      title="Kontaktpersonen"
-      icon={Users}
-      editable
-      editing={editingSection === "kontakt"}
-      onEdit={startEdit}
-      onCancel={cancelEdit}
-      onSave={saveEdit}
-    >
-      <div className="space-y-3">
-        <ContactRow
-          icon={Heart}
-          iconBg="bg-primary/[0.06]"
-          iconColor="text-primary/50"
-          name={angehName}
-          subtitle={angehRelation}
-          telefon={angehTelefon}
-          editing={editingSection === "kontakt"}
-          onNameChange={setAngehName}
-          onSubtitleChange={setAngehRelation}
-          onTelefonChange={setAngehTelefon}
-        />
-
-        <div className="border-t border-border-light" />
-
-        <ContactRow
-          icon={Phone}
-          iconBg="bg-error/[0.06]"
-          iconColor="text-error/50"
-          name={notfallName}
-          subtitle={notfallRelation}
-          subtitleColor="text-error/60"
-          telefon={notfallTelefon}
-          editing={editingSection === "kontakt"}
-          onNameChange={setNotfallName}
-          onSubtitleChange={setNotfallRelation}
-          onTelefonChange={setNotfallTelefon}
-        />
-      </div>
-    </PSectionCard>
-    </div>
-  );
-}
 
 /* ══════════════════════════════════════════
    TAB: ÜBERBLICK  — Inline Editable
@@ -973,71 +885,6 @@ function PSectionCard({
   );
 }
 
-/** Editable contact row */
-function ContactRow({
-  icon: Icon,
-  iconBg,
-  iconColor,
-  name,
-  subtitle,
-  subtitleColor,
-  telefon,
-  editing,
-  onNameChange,
-  onSubtitleChange,
-  onTelefonChange,
-}: {
-  icon: React.ElementType;
-  iconBg: string;
-  iconColor: string;
-  name: string;
-  subtitle: string;
-  subtitleColor?: string;
-  telefon: string;
-  editing: boolean;
-  onNameChange: (v: string) => void;
-  onSubtitleChange: (v: string) => void;
-  onTelefonChange: (v: string) => void;
-}) {
-  if (editing) {
-    return (
-      <div className="flex items-start gap-3">
-        <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0 mt-1`}>
-          <Icon className={`w-4 h-4 ${iconColor}`} />
-        </div>
-        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>Name</div>
-            <input value={name} onChange={(e) => onNameChange(e.target.value)} className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all" />
-          </div>
-          <div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>Beziehung</div>
-            <input value={subtitle} onChange={(e) => onSubtitleChange(e.target.value)} className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all" />
-          </div>
-          <div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>Telefon</div>
-            <input type="tel" value={telefon} onChange={(e) => onTelefonChange(e.target.value)} className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-center gap-3 min-h-[32px]">
-      <div className={`w-8 h-8 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
-        <Icon className={`w-4 h-4 ${iconColor}`} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-[13px] text-foreground" style={{ fontWeight: 450 }}>{name}</div>
-        <div className={`text-[11px] ${subtitleColor || "text-muted-foreground"}`}>{subtitle}</div>
-      </div>
-      <a href={`tel:${telefon}`} className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-primary transition-colors shrink-0" style={{ fontWeight: 400 }}>
-        <Phone className="w-3 h-3" />
-        {telefon}
-      </a>
-    </div>
-  );
-}
 
 function TabUeberblick({ patient }: { patient: Patient }) {
   const navigate = useNavigate();
@@ -1518,8 +1365,6 @@ function WorkflowSection({
 
 interface AllergieEntry { id: string; stoff: string; reaktion: string; schwere: "Schwer" | "Mittel" | "Leicht" }
 interface HilfsmittelEntry { id: string; label: string; detail: string }
-interface SpitalEntry { id: string; einrichtung: string; grund: string; von: string; bis: string; tage: number }
-interface OperationEntry { id: string; eingriff: string; datum: string }
 interface AnamneseEntry { id: string; text: string; datum: string; autor: string }
 
 function TabAnamnese({ patient }: { patient: Patient }) {
@@ -1545,17 +1390,6 @@ function TabAnamnese({ patient }: { patient: Patient }) {
   const [editK2, setEditK2] = useState(false);
   const [k2Snap, setK2Snap] = useState<{ a: AllergieEntry[]; h: HilfsmittelEntry[] } | null>(null);
 
-  /* ── Karte 3 — Stationärer Verlauf ── */
-  const [spital, setSpital] = useState<SpitalEntry[]>([
-    { id: "s1", einrichtung: "Kantonsspital Winterthur", grund: "Sturz — Oberschenkelprellung", von: "12.01.2026", bis: "15.01.2026", tage: 3 },
-    { id: "s2", einrichtung: "Universitätsspital Zürich", grund: "Diabetes-Einstellung", von: "28.11.2025", bis: "02.12.2025", tage: 4 },
-  ]);
-  const [ops, setOps] = useState<OperationEntry[]>([
-    { id: "o1", eingriff: "Hüft-TEP links", datum: "14.03.2019" },
-    { id: "o2", eingriff: "Appendektomie", datum: "08.06.1985" },
-  ]);
-  const [editK3, setEditK3] = useState(false);
-  const [k3Snap, setK3Snap] = useState<{ s: SpitalEntry[]; o: OperationEntry[] } | null>(null);
 
   /* ── Bereich B — Anamnese-Einträge ── */
   const initialText = `Herr ${patient.nachname} ist ein ${Math.floor(new Date().getFullYear() - 1958)}-jähriger Patient mit bekannter arterieller Hypertonie (seit 2018), Diabetes mellitus Typ 2 (seit 2020) und mittelgradiger depressiver Episode (seit 2024). Zustand nach Hüft-TEP links 2019 — seitdem eingeschränkte Mobilität mit Rollator im Innenbereich.
@@ -1765,92 +1599,10 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
           </div>
         </div>
 
-        {/* ── Karte 3: Stationärer Verlauf ── */}
-        <div className={`bg-card rounded-2xl border overflow-hidden transition-colors ${editK3 ? "border-primary/25 shadow-sm" : "border-border"}`}>
-          <div className="px-5 py-3.5 border-b border-border-light flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-primary" />
-            <h5 className="text-foreground flex-1">Stationärer Verlauf</h5>
-            {!editK3 ? (
-              <button onClick={() => { setK3Snap({ s: spital.map(x => ({...x})), o: ops.map(x => ({...x})) }); setEditK3(true); }} className={_editBtn} style={{ fontWeight: 450 }}>
-                <Pencil className="w-3 h-3" /> Bearbeiten
-              </button>
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => { if (k3Snap) { setSpital(k3Snap.s); setOps(k3Snap.o); } setEditK3(false); }} className={_cancelBtn} style={{ fontWeight: 450 }}>
-                  <X className="w-3 h-3" /> Abbrechen
-                </button>
-                <button onClick={() => setEditK3(false)} className={_saveBtn} style={{ fontWeight: 500 }}>
-                  <Check className="w-3 h-3" /> Speichern
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="p-5 space-y-3">
-            <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>Spitalaufenthalte</div>
-              <div className="space-y-2">
-                {spital.map((s) => (
-                  <div key={s.id} className="px-3 py-2.5 rounded-xl bg-background border border-border-light">
-                    {editK3 ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <input value={s.einrichtung} onChange={e => setSpital(prev => prev.map(x => x.id === s.id ? {...x, einrichtung: e.target.value} : x))} className={`${_input} flex-1`} placeholder="Einrichtung" />
-                          <button onClick={() => setSpital(prev => prev.filter(x => x.id !== s.id))} className="p-1 rounded-lg text-error/60 hover:text-error hover:bg-error/8 transition-colors shrink-0"><X className="w-3.5 h-3.5" /></button>
-                        </div>
-                        <input value={s.grund} onChange={e => setSpital(prev => prev.map(x => x.id === s.id ? {...x, grund: e.target.value} : x))} className={_input} placeholder="Grund" />
-                        <div className="grid grid-cols-3 gap-2">
-                          <input value={s.von} onChange={e => setSpital(prev => prev.map(x => x.id === s.id ? {...x, von: e.target.value} : x))} className={_input} placeholder="Von" />
-                          <input value={s.bis} onChange={e => setSpital(prev => prev.map(x => x.id === s.id ? {...x, bis: e.target.value} : x))} className={_input} placeholder="Bis" />
-                          <input type="number" value={s.tage} onChange={e => setSpital(prev => prev.map(x => x.id === s.id ? {...x, tage: +e.target.value || 0} : x))} className={_input} placeholder="Tage" />
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-start justify-between gap-2 mb-1">
-                          <span className="text-[12px] text-foreground" style={{ fontWeight: 500 }}>{s.einrichtung}</span>
-                          <span className="text-[10px] text-primary bg-primary/8 px-1.5 py-[1px] rounded-md shrink-0" style={{ fontWeight: 500 }}>{s.tage} Tage</span>
-                        </div>
-                        <div className="text-[11px] text-muted-foreground" style={{ fontWeight: 400 }}>{s.grund}</div>
-                        <div className="text-[10.5px] text-muted-foreground/70 mt-0.5" style={{ fontWeight: 400 }}>{s.von} – {s.bis}</div>
-                      </>
-                    )}
-                  </div>
-                ))}
-                {editK3 && (
-                  <button onClick={() => setSpital(prev => [...prev, { id: `s${Date.now()}`, einrichtung: "", grund: "", von: "", bis: "", tage: 0 }])} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary-hover pt-1 transition-colors cursor-pointer" style={{ fontWeight: 500 }}>
-                    <Plus className="w-3 h-3" /> Aufenthalt hinzufügen
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="pt-1 border-t border-border-light">
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>Operationen</div>
-              <div className="space-y-1.5">
-                {ops.map((op) => (
-                  <div key={op.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-background border border-border-light">
-                    {editK3 ? (
-                      <>
-                        <input value={op.eingriff} onChange={e => setOps(prev => prev.map(x => x.id === op.id ? {...x, eingriff: e.target.value} : x))} className={`${_input} flex-1`} placeholder="Eingriff" />
-                        <input value={op.datum} onChange={e => setOps(prev => prev.map(x => x.id === op.id ? {...x, datum: e.target.value} : x))} className={`${_input} w-28 shrink-0`} placeholder="Datum" />
-                        <button onClick={() => setOps(prev => prev.filter(x => x.id !== op.id))} className="p-1 rounded-lg text-error/60 hover:text-error hover:bg-error/8 transition-colors shrink-0"><X className="w-3.5 h-3.5" /></button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-[12px] text-foreground flex-1" style={{ fontWeight: 450 }}>{op.eingriff}</span>
-                        <span className="text-[11px] text-muted-foreground shrink-0" style={{ fontWeight: 400 }}>{op.datum}</span>
-                      </>
-                    )}
-                  </div>
-                ))}
-                {editK3 && (
-                  <button onClick={() => setOps(prev => [...prev, { id: `o${Date.now()}`, eingriff: "", datum: "" }])} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary-hover pt-1 transition-colors cursor-pointer" style={{ fontWeight: 500 }}>
-                    <Plus className="w-3 h-3" /> Operation hinzufügen
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Karte 3 „Stationärer Verlauf" ist nach Patient › Vorgeschichte
+            gewandert: die Anamnese ist eine Erhebung zum Aufnahmezeitpunkt,
+            ein Spitalaufenthalt ein Ereignis der Vorgeschichte. Allergien und
+            Hilfsmittel bleiben hier — sie sind Teil der Erhebung. */}
       </div>
 
       {/* ══ Bereich B — Anamnese ═══════════════ */}
@@ -3183,6 +2935,460 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   );
 }
 
+
+/* ══════════════════════════════════════════
+   GRUPPE PATIENT — Stammdaten, Beziehungen, Vorgeschichte, Diagnosen
+   ══════════════════════════════════════════ */
+
+function AnsichtStammdaten({ patient }: { patient: Patient }) {
+  const [feld, setFeld] = useState<Record<string, string>>({});
+  const [protokoll, setProtokoll] = useState<{ feld: string; wert: string; wann: string }[]>([]);
+  const wert = (k: keyof Patient) => feld[k] ?? String(patient[k] ?? "");
+
+  const schreiben = (k: string, label: string, v: string) => {
+    setFeld(f => ({ ...f, [k]: v }));
+    aktualisierePatient(patient.id, { [k]: v } as Partial<Patient>);
+    setProtokoll(p => [{ feld: label, wert: v, wann: jetztAnzeige() }, ...p].slice(0, 8));
+  };
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3" style={{ gap: "var(--space-4)" }}>
+      <div className="xl:col-span-2 space-y-4">
+        {/* ── Identität — gesperrt ──
+            Sie beschreibt den Zustand bei Eintritt und wurde im Abklärungs-
+            gespräch erhoben. Nachträglich zu ändern hiesse, die Erhebung zu
+            verändern statt eine neue zu machen. */}
+        <PSectionCard title="Identität" icon={Users}>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 11px", borderRadius: 10, background: "var(--bg-secondary)", marginBottom: 12 }}>
+            <Lock style={{ width: 13, height: 13, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 2 }} />
+            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", maxWidth: "74ch", lineHeight: 1.55 }}>
+              Aus dem abgeschlossenen Abklärungsgespräch übernommen. Diese Angaben beschreiben den
+              Zeitpunkt des Eintritts und sind hier nicht änderbar.
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "var(--space-4)" }}>
+            <PDataField label="Nachname" value={patient.nachname} />
+            <PDataField label="Vorname" value={patient.vorname} />
+            <PDataField label="Geburtsdatum" value={patient.geburtsdatum} />
+            <PDataField label="AHV-Nummer" value={<MaskedAhv ahv={patient.ahvNummer} />} />
+            <PDataField label="Aufnahmedatum" value={patient.aufnahmeDatum} />
+            <PDataField label="Kennung" value={patient.id} mono />
+          </div>
+        </PSectionCard>
+
+        <PSectionCard title="Kontakt" icon={MapPin}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "var(--space-4)" }}>
+            <StammFeld label="Adresse" wert={wert("adresse")} onSchreiben={v => schreiben("adresse", "Adresse", v)} />
+            <StammFeld label="Kanton" wert={wert("kanton")} onSchreiben={v => schreiben("kanton", "Kanton", v)} />
+            <StammFeld label="Sprache" wert={wert("sprache")} onSchreiben={v => schreiben("sprache", "Sprache", v)} />
+          </div>
+        </PSectionCard>
+
+        <PSectionCard title="Versicherung und Arzt" icon={Shield}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "var(--space-4)" }}>
+            <StammFeld label="Krankenkasse" wert={wert("krankenkasse")} onSchreiben={v => schreiben("krankenkasse", "Krankenkasse", v)} />
+            <StammFeld label="Kartennummer" wert={wert("kartennummer")} onSchreiben={v => schreiben("kartennummer", "Kartennummer", v)} />
+            <StammFeld label="BAG-Nummer" wert={wert("bagNr")} onSchreiben={v => schreiben("bagNr", "BAG-Nummer", v)} />
+            <StammFeld label="Hausarzt" wert={wert("hausarztName")} onSchreiben={v => schreiben("hausarztName", "Hausarzt", v)} />
+            <StammFeld label="Fachgebiet" wert={wert("hausarztFachgebiet")} onSchreiben={v => schreiben("hausarztFachgebiet", "Fachgebiet", v)} />
+            <StammFeld label="Telefon Hausarzt" wert={wert("hausarztTelefon")} onSchreiben={v => schreiben("hausarztTelefon", "Telefon Hausarzt", v)} />
+          </div>
+          {!wert("hausarztName").trim() && (
+            <div style={{ marginTop: 12, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", maxWidth: "74ch", lineHeight: 1.55 }}>
+              Kein Hausarzt erfasst. Ohne ihn kann keine ärztliche Verordnung eingeholt werden.
+            </div>
+          )}
+        </PSectionCard>
+      </div>
+
+      <div className="xl:col-span-1">
+        <PSectionCard title="Letzte Änderungen" icon={Clock}>
+          {protokoll.length === 0 ? (
+            <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0 }}>
+              In dieser Sitzung wurde noch kein Feld geändert.
+            </p>
+          ) : (
+            <div className="flex flex-col" style={{ gap: 7 }}>
+              {protokoll.map((e, i) => (
+                <div key={i}>
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-primary)" }}>
+                    {e.feld}: {e.wert || "—"}
+                  </div>
+                  <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                    {e.wann} · {AKTUELLE_FACHPERSON}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </PSectionCard>
+      </div>
+    </div>
+  );
+}
+
+/** Ein Feld, das direkt im Feld bearbeitet wird — ohne Bearbeitungsmodus. */
+function StammFeld({ label, wert, onSchreiben }: { label: string; wert: string; onSchreiben: (v: string) => void }) {
+  const [entwurf, setEntwurf] = useState(wert);
+  const [aktiv, setAktiv] = useState(false);
+  useEffect(() => { if (!aktiv) setEntwurf(wert); }, [wert, aktiv]);
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>{label}</div>
+      <input
+        value={entwurf}
+        onChange={e => setEntwurf(e.target.value)}
+        onFocus={() => setAktiv(true)}
+        onBlur={() => { setAktiv(false); if (entwurf !== wert) onSchreiben(entwurf); }}
+        aria-label={label}
+        className="ui-fokusring"
+        style={{ width: "100%", padding: "5px 8px", borderRadius: 8, fontFamily: "inherit", fontSize: "var(--text-small)",
+          color: "var(--text-primary)", background: "var(--bg-elevated)",
+          border: "var(--border-thin) solid var(--border-default)" }}
+      />
+    </div>
+  );
+}
+
+/* ── Beziehungen ─────────────────────────────────────────────────────────── */
+
+function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
+  const alle = useBeziehungen();
+  const angehoerige = useAngehoerige();
+  const mandate = useMandate();
+  const einsaetze = useEinsaetze();
+  const [beendetOffen, setBeendetOffen] = useState(false);
+  const [meldung, setMeldung] = useState("");
+
+  const eigene = alle.filter(b => b.patientId === patient.id);
+  const aktive = eigene.filter(beziehungAktiv);
+  const beendete = eigene.filter(b => !beziehungAktiv(b));
+  const nameVon = (k: string) => {
+    const a = angehoerige.find(x => x.id === k);
+    return a ? `${a.vorname} ${a.nachname}` : k;
+  };
+
+  /* Die abgerechnete Person steht am Mandat, nicht an der Beziehung. Hier
+     wird nur nachgeschlagen, um die Zeile zu kennzeichnen. */
+  const abgerechnet = new Set(mandate.filter(m => m.patientId === patient.id)
+    .map(m => m.abgerechneteAngehoerige).filter(Boolean));
+  const stundenJeWoche = (kennung: string) => {
+    const min = einsaetze
+      .filter(e => e.patientId === patient.id && e.zustand === "erbracht"
+        && e.erbrachtDurch.art === "angehoeriger" && e.erbrachtDurch.kennung === kennung)
+      .reduce((s, e) => s + einsatzDauer(e), 0);
+    /* Über den Bezugsmonat gemittelt — eine Wochenzahl aus einem Monat, nicht
+       aus einer beliebigen Spanne. */
+    return min / 60 / (31 / 7);
+  };
+
+  /* Trägt das Mandat eine Person ohne aktive Beziehung, ist eines von beiden
+     nicht gepflegt worden. Das blockiert nichts, aber es gehört gesagt. */
+  const ohneBeziehung = [...abgerechnet].filter(k =>
+    !aktive.some(b => b.person.art === "angehoeriger" && b.person.kennung === k));
+
+  const privat = aktive.filter(b => rolleSeite(b.rolle) === "privat");
+  const rechts = aktive.filter(b => rolleSeite(b.rolle) !== "privat");
+
+  return (
+    <div className="space-y-4">
+      {meldung && (
+        <div style={{ padding: "10px 12px", borderRadius: 10, background: "var(--status-info-bg)", fontSize: "var(--text-meta)", color: "var(--status-info)" }}>{meldung}</div>
+      )}
+
+      {aktive.length === 0 ? (
+        <PSectionCard title="Betreuungsnetz" icon={Users}>
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+            Für diesen Patienten ist keine Beziehung erfasst. Das Betreuungsnetz hält fest, wer
+            pflegt, wer Bezugsperson ist und wer im Notfall erreichbar sein muss.
+          </p>
+        </PSectionCard>
+      ) : (
+        <PSectionCard title="Betreuungsnetz" icon={Users}>
+          <Netzdiagramm patient={patient} privat={privat} rechts={rechts}
+            nameVon={nameVon} abgerechnet={abgerechnet} stundenJeWoche={stundenJeWoche} />
+        </PSectionCard>
+      )}
+
+      {ohneBeziehung.length > 0 && (
+        <div className="flex items-start" style={{ gap: 8, padding: "10px 12px", borderRadius: 10, background: "var(--status-warning-bg)" }}>
+          <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 2 }} />
+          <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", maxWidth: "74ch", lineHeight: 1.55 }}>
+            Über {ohneBeziehung.map(nameVon).join(", ")} wird abgerechnet, ohne dass eine aktive
+            Beziehung besteht. Entweder fehlt die Beziehung oder das Mandat verweist auf die falsche Person.
+          </span>
+        </div>
+      )}
+
+      <PSectionCard title={`Aktive Beziehungen (${aktive.length})`} icon={Users}>
+        {aktive.length === 0 ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0 }}>Keine aktive Beziehung.</p>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {aktive.map(b => (
+              <BeziehungsZeile key={b.id} b={b} nameVon={nameVon}
+                abgerechnet={b.person.art === "angehoeriger" && abgerechnet.has(b.person.kennung)}
+                onBeenden={() => {
+                  beziehungBeenden(b.id, alsAnzeigedatum(MANDAT_STICHTAG));
+                  setMeldung(`Beziehung beendet zum ${alsAnzeigedatum(MANDAT_STICHTAG)}. Sie bleibt unter „Beendet" sichtbar.`);
+                }} />
+            ))}
+          </div>
+        )}
+      </PSectionCard>
+
+      {beendete.length > 0 && (
+        <PSectionCard title={`Beendet (${beendete.length})`} icon={Clock}>
+          <button type="button" onClick={() => setBeendetOffen(o => !o)} className="ui-fokusring cursor-pointer"
+            style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            {beendetOffen ? "Einklappen" : `${beendete.length} beendete ${beendete.length === 1 ? "Beziehung" : "Beziehungen"} anzeigen`}
+          </button>
+          {beendetOffen && (
+            <div className="flex flex-col" style={{ gap: 2, marginTop: 8 }}>
+              {beendete.map(b => <BeziehungsZeile key={b.id} b={b} nameVon={nameVon} abgerechnet={false} />)}
+            </div>
+          )}
+        </PSectionCard>
+      )}
+    </div>
+  );
+}
+
+function BeziehungsZeile({ b, nameVon, abgerechnet, onBeenden }: {
+  b: Beziehung; nameVon: (k: string) => string; abgerechnet: boolean; onBeenden?: () => void;
+}) {
+  return (
+    <div className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+      <span style={{ width: 190, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+        {personName(b, nameVon)}
+      </span>
+      <span style={{ width: 160, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{rolleLabel(b.rolle)}</span>
+      <span style={{ width: 110, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>{artLabel(b.art)}</span>
+      <span style={{ width: 150, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+        seit {b.beginn}{b.ende && ` bis ${b.ende}`}
+      </span>
+      <div className="flex items-center flex-wrap" style={{ gap: 6, flex: 1, minWidth: 150 }}>
+        {abgerechnet && (
+          <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--brand-primary-light)", color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
+            abgerechnet
+          </span>
+        )}
+        {b.notfallkontakt && (
+          <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)", whiteSpace: "nowrap" }}>
+            Notfall
+          </span>
+        )}
+        {b.telefon && <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{b.telefon}</span>}
+      </div>
+      {onBeenden && (
+        <button type="button" onClick={onBeenden} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+          Beenden
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Das Betreuungsnetz als Diagramm.
+ *
+ * Privates Umfeld links, Behandelnde und Spitex rechts — die Trennung ist die
+ * Aussage: wer gehört zur Familie, wer zum System. Die abgerechnete Person
+ * trägt eine kräftige Linie mit ihren Wochenstunden, weil sie die einzige
+ * ist, deren Zeit in Rechnung geht.
+ */
+function Netzdiagramm({ patient, privat, rechts, nameVon, abgerechnet, stundenJeWoche }: {
+  patient: Patient;
+  privat: Beziehung[]; rechts: Beziehung[];
+  nameVon: (k: string) => string;
+  abgerechnet: Set<string>;
+  stundenJeWoche: (k: string) => number;
+}) {
+  const kuerzen = (liste: Beziehung[]) => liste.length + rechts.length + privat.length > DIAGRAMM_MAX
+    ? { gezeigt: liste.slice(0, Math.max(1, Math.floor(DIAGRAMM_MAX / 2))), rest: Math.max(0, liste.length - Math.max(1, Math.floor(DIAGRAMM_MAX / 2))) }
+    : { gezeigt: liste, rest: 0 };
+  const l = kuerzen(privat);
+  const r = kuerzen(rechts);
+
+  const knoten = (b: Beziehung, seite: "links" | "rechts") => {
+    const istAbg = b.person.art === "angehoeriger" && abgerechnet.has(b.person.kennung);
+    const std = istAbg && b.person.art === "angehoeriger" ? stundenJeWoche(b.person.kennung) : 0;
+    const extern = rolleSeite(b.rolle) === "extern";
+    return (
+      <div key={b.id} className="flex items-center" style={{ gap: 8, flexDirection: seite === "links" ? "row" : "row-reverse" }}>
+        <div style={{ padding: "6px 11px", borderRadius: 10, background: "var(--bg-elevated)",
+          border: istAbg ? "2px solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
+          textAlign: seite === "links" ? "right" : "left", minWidth: 0 }}>
+          <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>
+            {personName(b, nameVon)}
+          </div>
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+            {rolleLabel(b.rolle)}{b.art ? ` · ${artLabel(b.art)}` : ""}
+          </div>
+        </div>
+        {/* Linienstärke trägt die Aussage: kräftig = abgerechnet, dünn =
+            intern, gestrichelt = ausserhalb der Spitex. */}
+        <div style={{ width: 44, height: 0, flexShrink: 0,
+          borderTop: istAbg ? "2px solid var(--brand-primary)"
+            : extern ? "1px dashed var(--border-default)" : "1px solid var(--border-default)" }} />
+        {istAbg && (
+          <span style={{ fontSize: "var(--text-micro)", color: "var(--brand-primary)", fontWeight: 500, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+            {std.toFixed(1).replace(".", ",")} Std./Wo.
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex items-center flex-wrap lg:flex-nowrap" style={{ gap: 12, justifyContent: "center" }}>
+      {/* Linke Hälfte entfällt, wenn kein privates Umfeld erfasst ist. */}
+      {privat.length > 0 && (
+        <div className="flex flex-col" style={{ gap: 8, alignItems: "flex-end" }}>
+          {l.gezeigt.map(b => knoten(b, "links"))}
+          {l.rest > 0 && <Restknoten anzahl={l.rest} />}
+        </div>
+      )}
+      <div style={{ padding: "10px 16px", borderRadius: 12, background: "var(--brand-primary-light)", border: "var(--border-thin) solid var(--brand-primary)", textAlign: "center", flexShrink: 0 }}>
+        <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
+          {patient.nachname}, {patient.vorname}
+        </div>
+        <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Patient</div>
+      </div>
+      {rechts.length > 0 && (
+        <div className="flex flex-col" style={{ gap: 8, alignItems: "flex-start" }}>
+          {r.gezeigt.map(b => knoten(b, "rechts"))}
+          {r.rest > 0 && <Restknoten anzahl={r.rest} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Restknoten({ anzahl }: { anzahl: number }) {
+  return (
+    <div style={{ padding: "6px 11px", borderRadius: 10, background: "var(--bg-secondary)", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+      und {anzahl} weitere
+    </div>
+  );
+}
+
+/* ── Vorgeschichte ───────────────────────────────────────────────────────── */
+
+function AnsichtVorgeschichte({ patient }: { patient: Patient }) {
+  const stationaer = STATIONAERER_VERLAUF[patient.id] ?? [];
+  const eingriffe = FRUEHERE_EINGRIFFE[patient.id] ?? [];
+
+  return (
+    <div className="space-y-4">
+      <PSectionCard title="Spitalaufenthalte" icon={Building2}>
+        {stationaer.length === 0 ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+            Kein Spitalaufenthalt erfasst. Hier wird festgehalten, wann und weshalb der Patient
+            stationär behandelt wurde — bei einer Verlaufsbeurteilung ist das der erste Blick.
+          </p>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {stationaer.map(s => (
+              <div key={s.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <span style={{ width: 176, fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+                  {s.von} – {s.bis}
+                </span>
+                <span style={{ width: 60, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{s.tage} Tage</span>
+                <span style={{ width: 220, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{s.einrichtung}</span>
+                <span style={{ flex: 1, minWidth: 180, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{s.grund}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </PSectionCard>
+
+      <PSectionCard title="Frühere Behandlungen" icon={Stethoscope}>
+        {eingriffe.length === 0 ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch" }}>
+            Keine frühere Behandlung erfasst.
+          </p>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {eingriffe.map(o => (
+              <div key={o.id} className="flex items-baseline" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <span style={{ width: 100, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{o.datum}</span>
+                <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{o.eingriff}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </PSectionCard>
+    </div>
+  );
+}
+
+/* ── Diagnosen ───────────────────────────────────────────────────────────── */
+
+function AnsichtDiagnosen({ patient }: { patient: Patient }) {
+  const arzt = MOCK_ARZT_DIAGNOSEN.filter(d => d.patientId === patient.id);
+  const plan = MOCK_PFLEGEPLANUNGEN.find(p => p.patientId === patient.id) ?? null;
+  const pflege = plan?.pflegediagnosen ?? [];
+
+  return (
+    <div className="space-y-4">
+      {/* Getrennt, weil sie verschiedenen Systemen folgen: die ärztliche
+          Diagnose kommt aus dem ICD und von der Ärztin, die Pflegediagnose
+          aus NANDA und aus der Pflegeplanung. */}
+      <PSectionCard title="Ärztliche Diagnosen" icon={Stethoscope}>
+        {arzt.length === 0 ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch" }}>
+            Keine ärztliche Diagnose erfasst. Sie entstehen aus der Antwort der Ärztin auf die
+            Diagnoseanfrage.
+          </p>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {arzt.map(d => (
+              <div key={d.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <span style={{ width: 74, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{d.icdCode || "—"}</span>
+                <span style={{ flex: 1, minWidth: 200, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{d.bezeichnung}</span>
+                <span style={{ width: 240, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{d.quelle}</span>
+                <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap",
+                  background: d.status === "bestaetigt" ? "var(--status-success-bg)" : "var(--bg-secondary)",
+                  color: d.status === "bestaetigt" ? "var(--status-success-text)" : "var(--text-secondary)" }}>
+                  {d.status === "bestaetigt" ? "Bestätigt" : "Entwurf"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </PSectionCard>
+
+      <PSectionCard title="Pflegediagnosen" icon={ClipboardList}>
+        {pflege.length === 0 ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch" }}>
+            {plan
+              ? "Der Pflegeplan besteht, trägt aber keine Pflegediagnose."
+              : "Kein Pflegeplan angelegt — Pflegediagnosen entstehen dort."}
+          </p>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {pflege.map(d => (
+              <div key={d.id} style={{ padding: "9px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <div className="flex items-baseline flex-wrap" style={{ gap: 10 }}>
+                  <span style={{ width: 74, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{d.nandaCode || "—"}</span>
+                  <span style={{ flex: 1, minWidth: 200, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{d.titel}</span>
+                  <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                    {plan ? `Pflegeplan ${plan.id}` : ""}
+                  </span>
+                </div>
+                {d.begruendung && (
+                  <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: "4px 0 0", maxWidth: "74ch", lineHeight: 1.55 }}>{d.begruendung}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </PSectionCard>
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════
    GRUPPE DOSSIER — Ordnerstruktur, Dokumente, Pflichtlücken
