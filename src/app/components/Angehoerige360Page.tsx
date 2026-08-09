@@ -6,6 +6,7 @@ import {
   Mail,
   MapPin,
   FileText,
+  FolderOpen,
   Activity,
   Clock,
   User,
@@ -61,7 +62,13 @@ import {
   type AngehoerigerStatus,
 } from "./angehoerigeData";
 import { useAngehoerige, getAngehoerigen } from "../../lib/angehoerige/store";
-import { TabDokumenteGeneric, type DocFolder } from "./TabDokumente";
+import { useDokumente } from "../../lib/dokumente/store";
+import { MANDAT_STICHTAG } from "../../lib/mandate/store";
+import {
+  dokumenteVon, ordnerStand, ordnerDes, gueltigBisText, geprueftePflichttypen,
+  type DokumentReferenz,
+} from "../../lib/dokumente/dokumente";
+import { dokumenttyp, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { geschlechtLabel } from "../../lib/stammdaten/geschlecht";
 import { zivilstandLabel } from "../../lib/stammdaten/zivilstand";
 import { staatsangehoerigkeitLabel } from "../../lib/stammdaten/staatsangehoerigkeit";
@@ -522,8 +529,15 @@ function SectionCard({
 function TabUeberblick({ a }: { a: Angehoeriger }) {
   const st = statusConfig[a.status];
   const br = billingReadinessConfig[a.billingReadiness];
-  const uploadedDocs = a.dokumente.filter((d) => d.status === "hochgeladen").length;
-  const totalDocs = a.dokumente.length;
+  /* Aus dem Dokumentbestand, nicht mehr aus einer eigenen Liste am
+     Angehörigen: „vorhanden" ist jetzt, dass ein Dokument existiert, und
+     „gesamt" die Zahl der Pflichttypen — nicht die Länge einer Liste, die
+     auch Abwesenheiten führte. */
+  const alleDok = useDokumente();
+  const eigeneDok = dokumenteVon(alleDok, { art: "angehoeriger", kennung: a.id });
+  const pflichtDok = geprueftePflichttypen(dokumentKontextVon(a), "angehoeriger");
+  const uploadedDocs = eigeneDok.length;
+  const totalDocs = pflichtDok.length;
 
   /* ── Editing state ── */
   const [editingSection, setEditingSection] = useState<string | null>(null);
@@ -1166,128 +1180,80 @@ function ArbeitskontrolleHistorie({ a, kontrollen, navigate, onRefresh }: {
   );
 }
 
-/* ══════════════════════════════════════════
-   ANGEHÖRIGE FOLDER STRUCTURE
-   ══════════════════════════════════════════ */
-function getAngehoerigeFolders(): DocFolder[] {
-  return [
-    {
-      id: "personalien",
-      label: "Personalien",
-      files: [
-        { id: "ap01", name: "ID_Kopie.pdf", type: "PDF", version: "1.0", uploadedAt: "02.01.2026", uploadedBy: "System" },
-        { id: "ap02", name: "AHV_Bestaetigung.pdf", type: "PDF", version: "1.0", uploadedAt: "02.01.2026", uploadedBy: "K. Meier" },
-        { id: "ap03", name: "Foto_Angehoeriger.jpg", type: "JPG", version: "1.0", uploadedAt: "03.01.2026", uploadedBy: "K. Meier" },
-        { id: "ap04", name: "Aufenthaltsbewilligung.pdf", type: "PDF", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "System" },
-      ],
-    },
-    {
-      id: "sozialversicherungen",
-      label: "Sozialversicherungen",
-      files: [
-        { id: "as01", name: "BVG_Anmeldung.pdf", type: "PDF", version: "1.0", uploadedAt: "10.01.2026", uploadedBy: "HR-Abteilung" },
-        { id: "as02", name: "UVG_Police.pdf", type: "PDF", version: "1.0", uploadedAt: "10.01.2026", uploadedBy: "HR-Abteilung" },
-        { id: "as03", name: "Quellensteuer_Verfuegung.pdf", type: "PDF", version: "1.0", uploadedAt: "12.01.2026", uploadedBy: "System" },
-      ],
-    },
-    {
-      id: "vertraege",
-      label: "Verträge",
-      children: [
-        {
-          id: "vertraege_aktuell",
-          label: "Aktuell",
-          files: [
-            { id: "av01", name: "Arbeitsvertrag_2026.pdf", type: "PDF", version: "1.0", uploadedAt: "01.01.2026", uploadedBy: "S. Weber" },
-            { id: "av02", name: "Datenschutzerklaerung.pdf", type: "PDF", version: "1.0", uploadedAt: "01.01.2026", uploadedBy: "System" },
-            { id: "av03", name: "Geheimhaltungsvereinbarung.pdf", type: "PDF", version: "1.0", uploadedAt: "01.01.2026", uploadedBy: "System" },
-          ],
-        },
-        {
-          id: "vertraege_archiv",
-          label: "Archiv",
-          files: [],
-        },
-      ],
-      files: [],
-    },
-    {
-      id: "kinderzulagen",
-      label: "Kinderzulagen",
-      files: [
-        { id: "ak01", name: "Familienbuchlein.pdf", type: "PDF", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "K. Meier" },
-        { id: "ak02", name: "Kinderzulage_Antrag.pdf", type: "PDF", version: "1.0", uploadedAt: "08.01.2026", uploadedBy: "K. Meier" },
-        { id: "ak03", name: "FAK_Bestätigung.pdf", type: "PDF", version: "1.0", uploadedAt: "15.01.2026", uploadedBy: "System" },
-      ],
-    },
-    {
-      id: "bankdaten",
-      label: "Bankdaten",
-      files: [
-        { id: "ab01", name: "Bankkarte_Scan.jpg", type: "JPG", version: "1.0", uploadedAt: "03.01.2026", uploadedBy: "K. Meier" },
-        { id: "ab02", name: "IBAN_Bestaetigung.pdf", type: "PDF", version: "1.0", uploadedAt: "10.01.2026", uploadedBy: "System" },
-      ],
-    },
-    {
-      id: "partner",
-      label: "Partner",
-      files: [
-        { id: "apt01", name: "Partner_Krankenkassenkarte.jpg", type: "JPG", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "K. Meier" },
-        { id: "apt02", name: "Partner_Ausweis.pdf", type: "PDF", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "K. Meier" },
-      ],
-    },
-    {
-      id: "schulungen",
-      label: "Schulungen & SRK",
-      children: [
-        {
-          id: "schulungen_zertifikate",
-          label: "Zertifikate",
-          files: [
-            { id: "az01", name: "SRK_Basismodul_Zertifikat.pdf", type: "PDF", version: "1.0", uploadedAt: "15.01.2026", uploadedBy: "S. Weber" },
-            { id: "az02", name: "Medlink_Schulung_Nachweis.pdf", type: "PDF", version: "1.0", uploadedAt: "20.01.2026", uploadedBy: "System" },
-          ],
-        },
-        {
-          id: "schulungen_anmeldungen",
-          label: "Anmeldungen",
-          files: [
-            { id: "az03", name: "SRK_Aufbaumodul_Anmeldung.pdf", type: "PDF", version: "1.0", uploadedAt: "28.02.2026", uploadedBy: "K. Meier" },
-          ],
-        },
-      ],
-      files: [],
-    },
-    {
-      id: "lohnabrechnungen",
-      label: "Lohnabrechnungen",
-      files: [
-        { id: "al01", name: "Lohnabrechnung_Jan_2026.pdf", type: "PDF", version: "1.0", uploadedAt: "31.01.2026", uploadedBy: "System" },
-        { id: "al02", name: "Lohnabrechnung_Feb_2026.pdf", type: "PDF", version: "1.0", uploadedAt: "28.02.2026", uploadedBy: "System" },
-      ],
-    },
-    {
-      id: "sonstige",
-      label: "Sonstige Dokumente",
-      files: [
-        { id: "asd01", name: "Krankenkassenkarte.jpg", type: "JPG", version: "1.0", uploadedAt: "02.01.2026", uploadedBy: "K. Meier" },
-        { id: "asd02", name: "Notfallkontakt_Info.docx", type: "DOCX", version: "1.0", uploadedAt: "15.02.2026", uploadedBy: "K. Meier" },
-      ],
-    },
-  ];
-}
 
 /* ══════════════════════════════════════════
    TAB: DOKUMENTE (uses shared component)
    ══════════════════════════════════════════ */
+/**
+ * Dokumente der angehörigen Person — dasselbe Modell wie beim Patienten.
+ *
+ * Vorher gab `getAngehoerigeFolders()` für jede Person dieselben erfundenen
+ * Dateien zurück. Jetzt kommen die Ordner aus dem Typkatalog und die
+ * Dokumente aus dem Bestand.
+ */
 function TabDokumenteAngehoerige({ a }: { a: Angehoeriger }) {
-  const folders = getAngehoerigeFolders();
+  const alle = useDokumente();
+  const ref: DokumentReferenz = { art: "angehoeriger", kennung: a.id };
+  const eigene = dokumenteVon(alle, ref);
+  const kontext = dokumentKontextVon(a);
+  const staende = ordnerStand(alle, ref, kontext, MANDAT_STICHTAG);
+
   return (
-    <TabDokumenteGeneric
-      rootLabel={`${a.nachname}_${a.vorname}`}
-      folders={folders}
-    />
+    <div className="space-y-4">
+      <SectionCard title="Ordner" icon={FolderOpen}>
+        <div className="flex flex-col" style={{ gap: 2 }}>
+          {staende.map(o => (
+            <div key={o.ordner} className="flex items-center flex-wrap" style={{ gap: 10, padding: "7px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+              <span style={{ width: 150, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{o.ordner}</span>
+              <span style={{ width: 74, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                {o.dokumente.length} {o.dokumente.length === 1 ? "Dokument" : "Dokumente"}
+              </span>
+              {o.fehlend.length > 0 && (
+                <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>{o.fehlend.join(", ")} fehlt</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title={`Dokumente (${eigene.length})`} icon={FileText}>
+        {eigene.length === 0 ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0 }}>
+            Für diese Person liegt kein Dokument ab.
+          </p>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {eigene.map(d => {
+              const typ = dokumenttyp(d.typCode);
+              const bis = gueltigBisText(d);
+              return (
+                <div key={d.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                  <span style={{ width: 190, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{typ?.label ?? d.typCode}</span>
+                  <span style={{ flex: 1, minWidth: 170, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{d.bezeichnung}</span>
+                  <span style={{ width: 90, fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{d.ausgestelltAm}</span>
+                  <span style={{ width: 110, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>{bis ? `gültig bis ${bis}` : "ohne Ablauf"}</span>
+                  <span style={{ width: 150, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{ordnerDes(d)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SectionCard>
+    </div>
   );
+}
+
+/** Dokumentkontext aus der erfassten Person — dieselben Bedingungen wie im Onboarding. */
+function dokumentKontextVon(a: Angehoeriger): DokumentKontext {
+  return {
+    partnerErforderlich: a.zivilstand === "verheiratet" || a.zivilstand === "eingetragene_partnerschaft",
+    hatKinder: (a.kinder?.length ?? 0) > 0,
+    kinderzulagenUeberSpitex: a.kinderzulagenUeberSpitex === "ja",
+    unterhaltspflicht: (a.kinder?.length ?? 0) > 0,
+    zertifikatDeutschVorhanden: a.zertifikatVorhanden === "ja",
+    srkZertifikatVorhanden: a.srkZertifikatVorhanden === "ja",
+    assistenzbeitragJa: false,
+  };
 }
 
 /* ══════════════════════════════════════════

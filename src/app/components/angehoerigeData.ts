@@ -209,13 +209,6 @@ export interface Angehoeriger extends AngehoerigerErhebung {
   pflegefachkraftInitialen: string;
   monatsSchritt: MonatsSchritt;
   /** Betrieblich: welche Dokumente einer Person vorliegen. Zustand wie Stempeltage. */
-  dokumente: AngehoerigerDokument[];
-}
-
-export interface AngehoerigerDokument {
-  name: string;
-  status: "hochgeladen" | "fehlend" | "abgelaufen";
-  datum: string;
 }
 
 /* ── Qualifikation config ────────────────── */
@@ -354,12 +347,6 @@ export const angehoerigeSeed: Angehoeriger[] = [
       label: "Mikroschulung",
       faellig: "05.03.2026",
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.09.2025" },
-      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "02.09.2025" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "hochgeladen", datum: "03.09.2025" },
-      { name: "SRK-Pflegehelfer-Zertifikat", status: "hochgeladen", datum: "10.09.2025" },
-    ],
   },
   {
     id: "A-2026-0102",
@@ -442,11 +429,6 @@ export const angehoerigeSeed: Angehoeriger[] = [
       label: "Mikroschulung",
       faellig: "03.03.2026",
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.11.2025" },
-      { name: "Krankenkassenkarte", status: "fehlend", datum: "—" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "fehlend", datum: "—" },
-    ],
   },
   {
     id: "A-2026-0103",
@@ -536,14 +518,6 @@ export const angehoerigeSeed: Angehoeriger[] = [
       label: "Alle Schritte erledigt",
       abgeschlossen: true,
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.03.2025" },
-      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "02.03.2025" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "hochgeladen", datum: "04.03.2025" },
-      { name: "Ausweis Partner", status: "hochgeladen", datum: "06.03.2025" },
-      { name: "Familienbüchlein", status: "hochgeladen", datum: "06.03.2025" },
-      { name: "Sprachzertifikat Deutsch", status: "hochgeladen", datum: "08.03.2025" },
-    ],
   },
   {
     id: "A-2026-0104",
@@ -629,13 +603,6 @@ export const angehoerigeSeed: Angehoeriger[] = [
       label: "Regelkontrolle",
       faellig: "02.03.2026",
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.06.2024" },
-      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "02.06.2024" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "hochgeladen", datum: "03.06.2024" },
-      { name: "SRK-Pflegehelfer-Zertifikat", status: "hochgeladen", datum: "20.06.2024" },
-      { name: "Familienbüchlein", status: "hochgeladen", datum: "05.06.2024" },
-    ],
   },
   {
     id: "A-2026-0105",
@@ -721,11 +688,6 @@ export const angehoerigeSeed: Angehoeriger[] = [
       faellig: "04.03.2026",
       ueberfaellig: true,
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "16.01.2025" },
-      { name: "Krankenkassenkarte", status: "abgelaufen", datum: "16.01.2025" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "hochgeladen", datum: "17.01.2025" },
-    ],
   },
   {
     id: "A-2026-0106",
@@ -809,12 +771,6 @@ export const angehoerigeSeed: Angehoeriger[] = [
       faellig: "02.03.2026",
       ueberfaellig: true,
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.02.2026" },
-      { name: "Krankenkassenkarte", status: "fehlend", datum: "—" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "fehlend", datum: "—" },
-      { name: "SRK-Pflegehelfer-Zertifikat", status: "hochgeladen", datum: "05.02.2026" },
-    ],
   },
   {
     id: "A-2026-0107",
@@ -903,12 +859,6 @@ export const angehoerigeSeed: Angehoeriger[] = [
       label: "Kundenfeedback",
       faellig: "06.03.2026",
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.09.2024" },
-      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "02.09.2024" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "hochgeladen", datum: "03.09.2024" },
-      { name: "Familienbüchlein", status: "hochgeladen", datum: "06.09.2024" },
-    ],
   },
   {
     id: "A-2026-0108",
@@ -995,11 +945,6 @@ export const angehoerigeSeed: Angehoeriger[] = [
       faellig: "01.03.2026",
       ueberfaellig: true,
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.12.2025" },
-      { name: "Krankenkassenkarte", status: "fehlend", datum: "—" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "fehlend", datum: "—" },
-    ],
   },
   {
     id: "A-2026-0109",
@@ -1082,12 +1027,6 @@ export const angehoerigeSeed: Angehoeriger[] = [
       label: "Mikroschulung",
       faellig: "05.03.2026",
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.04.2024" },
-      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "02.04.2024" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "hochgeladen", datum: "03.04.2024" },
-      { name: "SRK-Pflegehelfer-Zertifikat", status: "hochgeladen", datum: "28.04.2024" },
-    ],
   },
   {
     id: "A-2026-0110",
@@ -1174,13 +1113,6 @@ export const angehoerigeSeed: Angehoeriger[] = [
       label: "Alle Schritte erledigt",
       abgeschlossen: true,
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.07.2023" },
-      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "02.07.2023" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "hochgeladen", datum: "04.07.2023" },
-      { name: "Ausweis Partner", status: "hochgeladen", datum: "06.07.2023" },
-      { name: "Familienbüchlein", status: "hochgeladen", datum: "06.07.2023" },
-    ],
   },
   {
     id: "A-2026-0111",
@@ -1261,11 +1193,6 @@ export const angehoerigeSeed: Angehoeriger[] = [
       label: "Fallbesprechung",
       faellig: "03.03.2026",
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.10.2025" },
-      { name: "Krankenkassenkarte", status: "fehlend", datum: "—" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "fehlend", datum: "—" },
-    ],
   },
   {
     id: "A-2026-0112",
@@ -1355,12 +1282,5 @@ export const angehoerigeSeed: Angehoeriger[] = [
       label: "Arbeitskontrolle",
       faellig: "04.03.2026",
     },
-    dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.08.2025" },
-      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "02.08.2025" },
-      { name: "Bankkarte / IBAN-Nachweis", status: "hochgeladen", datum: "04.08.2025" },
-      { name: "Ausweis Partner", status: "hochgeladen", datum: "06.08.2025" },
-      { name: "Familienbüchlein", status: "hochgeladen", datum: "07.08.2025" },
-    ],
   },
 ];

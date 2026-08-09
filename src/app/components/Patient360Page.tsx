@@ -84,6 +84,7 @@ import {
   ChevronLeft,
   Lock,
   ClipboardCheck,
+  FolderOpen,
 } from "lucide-react";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import {
@@ -94,7 +95,6 @@ import {
 } from "./patientData";
 import { usePatienten, getPatient, aktualisierePatient, tageBisReAssessment } from "../../lib/patienten/store";
 import { StatusModal } from "./StatusModal";
-import { TabDokumente } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
 import {
@@ -126,6 +126,13 @@ import { useAlleNotizen } from "../../lib/notizen/store";
 import { useAngehoerige } from "../../lib/angehoerige/store";
 import { sichtbareNotizen } from "../../lib/notizen/notizen";
 import { unifiedEntries } from "../../lib/mocks/service-desk-unified";
+import { useDokumente } from "../../lib/dokumente/store";
+import {
+  dokumenteVon, ordnerStand, ordnerZustand, ordnerDes, pflichtluecken,
+  geprueftePflichttypen, gueltigBisText, istAbgelaufen, HERKUNFT_TEXT,
+  type Dokument, type DokumentReferenz, type OrdnerStand,
+} from "../../lib/dokumente/dokumente";
+import { dokumenttyp, ordnerFuer, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { useAbschluesse } from "../../lib/abschluss/store";
 import { pruefzustandLabel } from "../../lib/stammdaten/einsatz";
 import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
@@ -689,6 +696,7 @@ const ANSICHT_HAT_INHALT: Record<string, true> = {
   pflegeplan: true, vitalwerte: true, betreuungsrhythmus: true,
   leistungsplanungsblatt: true, "verordnung-und-kostengutsprache": true,
   pflegekontrolle: true, dokumente: true, pendenzen: true, verlauf: true, controlling: true,
+  ordnerstruktur: true, pflichtluecken: true,
 };
 
 /** Ansichten, deren Umfang schon feststeht — sie nennen ihn statt zu schweigen. */
@@ -743,7 +751,9 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "verordnung-und-kostengutsprache": return <AnsichtVerordnung patient={patient} />;
     case "pflegekontrolle": return <AnsichtPflegekontrolle patient={patient} />;
     case "controlling": return <AnsichtControlling patient={patient} />;
-    case "dokumente": return <TabDokumente patient={patient} />;
+    case "ordnerstruktur": return <AnsichtOrdnerstruktur patient={patient} />;
+    case "dokumente": return <AnsichtDokumente patient={patient} />;
+    case "pflichtluecken": return <AnsichtPflichtluecken patient={patient} />;
     case "pendenzen": return <TabTickets tickets={tickets} navigate={navigate} />;
     case "verlauf": return <TabHistorie patient={patient} />;
     default:
@@ -3175,6 +3185,182 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
 
 
 /* ══════════════════════════════════════════
+   GRUPPE DOSSIER — Ordnerstruktur, Dokumente, Pflichtlücken
+
+   Ein Modell für Patienten und Angehörige: der Typkatalog führt, der Ordner
+   folgt aus der Kategorie des Typs. Die früheren `getPatientFolders()` und
+   `getAngehoerigeFolders()` gaben für jede Person dieselben erfundenen
+   Dateien zurück und kannten weder Pflicht noch Gültigkeit.
+   ══════════════════════════════════════════ */
+
+/**
+ * Der Dokumentkontext eines Patienten.
+ *
+ * Alle Bedingungen ausser IMMER betreffen Angehörigentypen — beim Patienten
+ * gibt es weder Partner noch Kinderzulagen im Dokumentsinn. Sie stehen
+ * trotzdem hier, damit die Prüfung dieselbe Funktion nutzt wie bei den
+ * Angehörigen und nicht eine zweite mit anderer Auslassung.
+ */
+const PATIENT_DOK_KONTEXT_360: DokumentKontext = {
+  partnerErforderlich: false, hatKinder: false, kinderzulagenUeberSpitex: false,
+  unterhaltspflicht: false, zertifikatDeutschVorhanden: false,
+  srkZertifikatVorhanden: false, assistenzbeitragJa: false,
+};
+
+const DOK_REF = (patientId: string): DokumentReferenz => ({ art: "patient", kennung: patientId });
+
+function AnsichtOrdnerstruktur({ patient }: { patient: Patient }) {
+  const alle = useDokumente();
+  const staende = ordnerStand(alle, DOK_REF(patient.id), PATIENT_DOK_KONTEXT_360, MANDAT_STICHTAG);
+  const gesamt = staende.reduce((s, o) => s + o.dokumente.length, 0);
+
+  const marke = (o: OrdnerStand) => {
+    const z = ordnerZustand(o);
+    if (z === "abgelaufen") return { text: `${o.abgelaufen.length} abgelaufen`, bg: "var(--status-warning-bg)", fg: "var(--status-warning-text)" };
+    if (z === "pflicht_fehlt") return { text: `${o.fehlend.length} Pflichtdokument${o.fehlend.length === 1 ? " fehlt" : "e fehlen"}`, bg: "var(--status-warning-bg)", fg: "var(--status-warning-text)" };
+    if (z === "leer") return { text: "leer", bg: "var(--bg-secondary)", fg: "var(--text-tertiary)" };
+    return { text: "vollständig", bg: "var(--status-success-bg)", fg: "var(--status-success-text)" };
+  };
+
+  return (
+    <PSectionCard title="Ordnerstruktur" icon={FolderOpen}>
+      <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: "0 0 12px", maxWidth: "74ch", lineHeight: 1.55 }}>
+        Die Ordner folgen den Dokumenttypen und sind nicht frei anlegbar — die Struktur ist eine
+        Vorgabe der Organisation. {gesamt === 0
+          ? "Für diesen Patienten liegt bisher kein Dokument ab."
+          : `${gesamt} ${gesamt === 1 ? "Dokument" : "Dokumente"} abgelegt.`}
+      </p>
+      <div className="flex flex-col" style={{ gap: 2 }}>
+        {staende.map(o => {
+          const m = marke(o);
+          return (
+            <div key={o.ordner} className="flex items-center flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+              <FolderOpen style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
+              <span style={{ width: 150, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{o.ordner}</span>
+              <span style={{ width: 70, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                {o.dokumente.length} {o.dokumente.length === 1 ? "Dokument" : "Dokumente"}
+              </span>
+              <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: m.bg, color: m.fg, whiteSpace: "nowrap" }}>
+                {m.text}
+              </span>
+              {o.fehlend.length > 0 && (
+                <span style={{ flex: 1, minWidth: 200, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{o.fehlend.join(", ")}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </PSectionCard>
+  );
+}
+
+function AnsichtDokumente({ patient }: { patient: Patient }) {
+  const alle = useDokumente();
+  const eigene = dokumenteVon(alle, DOK_REF(patient.id));
+  const [ordner, setOrdner] = useState<string | null>(null);
+  const ordnerListe = ordnerFuer("patient");
+  const gezeigt = ordner ? eigene.filter(d => ordnerDes(d) === ordner) : eigene;
+
+  return (
+    <PSectionCard title="Dokumente" icon={FileText}>
+      {eigene.length === 0 ? (
+        /* Keine leere Tabelle: ein Kopf über nichts sähe aus wie ein Fehler.
+           Und es liegt tatsächlich nichts ab — im Onboarding wurde für diesen
+           Patienten kein Dokument erfasst. */
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+          Für diesen Patienten liegt kein Dokument ab. Erfasst wird im Onboarding; was dort
+          hochgeladen wird, erscheint hier.
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center flex-wrap" style={{ gap: 6, marginBottom: 12 }}>
+            <DokFilterChip aktiv={ordner === null} label="Alle" anzahl={eigene.length} onClick={() => setOrdner(null)} />
+            {ordnerListe.map(o => (
+              <DokFilterChip key={o} aktiv={ordner === o} label={o}
+                anzahl={eigene.filter(d => ordnerDes(d) === o).length} onClick={() => setOrdner(o)} />
+            ))}
+          </div>
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {gezeigt.map(d => <DokumentZeile key={d.id} dokument={d} />)}
+          </div>
+        </>
+      )}
+    </PSectionCard>
+  );
+}
+
+function DokFilterChip({ aktiv, label, anzahl, onClick }: { aktiv: boolean; label: string; anzahl: number; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="ui-fokusring cursor-pointer inline-flex items-center"
+      style={{ gap: 6, padding: "4px 11px", borderRadius: "var(--radius-pill)", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
+        background: aktiv ? "var(--brand-primary-light)" : "var(--bg-elevated)",
+        border: aktiv ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
+        color: aktiv ? "var(--brand-primary)" : "var(--text-primary)" }}>
+      {label}
+      <span style={{ fontVariantNumeric: "tabular-nums", color: aktiv ? "var(--brand-primary)" : "var(--text-tertiary)" }}>{anzahl}</span>
+    </button>
+  );
+}
+
+/** Eine Dokumentzeile — für Patienten und Angehörige dieselbe. */
+function DokumentZeile({ dokument: d }: { dokument: Dokument }) {
+  const typ = dokumenttyp(d.typCode);
+  const bis = gueltigBisText(d);
+  const abgelaufen = istAbgelaufen(d, MANDAT_STICHTAG);
+  return (
+    <div className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+      <span style={{ width: 190, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{typ?.label ?? d.typCode}</span>
+      <span style={{ flex: 1, minWidth: 180, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{d.bezeichnung}</span>
+      <span style={{ width: 86, fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{d.ausgestelltAm}</span>
+      <span style={{ width: 110, fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: abgelaufen ? "var(--status-warning-text)" : "var(--text-tertiary)" }}>
+        {/* Ohne hinterlegte Gültigkeitsdauer steht dort nichts — keine
+            Behauptung über eine Gültigkeit, die niemand kennt. */}
+        {bis ? (abgelaufen ? `abgelaufen ${bis}` : `gültig bis ${bis}`) : "ohne Ablauf"}
+      </span>
+      <span style={{ width: 170, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{HERKUNFT_TEXT[d.herkunft]}</span>
+      <span style={{ width: 90, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{d.erfasstVon}</span>
+    </div>
+  );
+}
+
+function AnsichtPflichtluecken({ patient }: { patient: Patient }) {
+  const nav = useNavigate();
+  const alle = useDokumente();
+  const luecken = pflichtluecken(alle, DOK_REF(patient.id), PATIENT_DOK_KONTEXT_360, MANDAT_STICHTAG);
+  const geprueft = geprueftePflichttypen(PATIENT_DOK_KONTEXT_360, "patient");
+
+  return (
+    <PSectionCard title="Pflichtlücken" icon={AlertTriangle}>
+      {luecken.length === 0 ? (
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+          Kein Pflichtdokument fehlt. Geprüft wurden: {geprueft.join(", ")}.
+        </p>
+      ) : (
+        <div className="flex flex-col" style={{ gap: 2 }}>
+          {luecken.map(l => (
+            <div key={l.typCode} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "9px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+              <span style={{ width: 190, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{l.label}</span>
+              <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)", whiteSpace: "nowrap" }}>
+                {l.abgelaufenSeit ? `abgelaufen ${l.abgelaufenSeit}` : "fehlt"}
+              </span>
+              <span style={{ flex: 1, minWidth: 200, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{l.begruendung}</span>
+              <span style={{ width: 110, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Ordner {l.ordner}</span>
+              {/* Erfasst wird im Onboarding — dorthin führt der Verweis, nicht
+                  in eine Ablage, in der nichts entstehen kann. */}
+              <button type="button" onClick={() => nav("/onboarding")}
+                className="ui-fokusring cursor-pointer inline-flex items-center"
+                style={{ gap: 4, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
+                Onboarding <ChevronRight style={{ width: 11, height: 11 }} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </PSectionCard>
+  );
+}
+
+/* ══════════════════════════════════════════
    ANSICHT: Controlling — hält das Dossier einer Kontrolle stand?
 
    Bei einer Kassenkontrolle verlangt der Versicherer die Unterlagen der
@@ -3194,6 +3380,7 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
   const verordnungen = useVerordnungen();
   const kgs = useKostengutsprachen();
   const angehoerige = useAngehoerige();
+  const alleDokumente = useDokumente();
   const [monate, setMonate] = useState(3);
 
   const zeitraum = zeitraumMonate(EINSATZ_BEZUGSMONAT.getFullYear(), EINSATZ_BEZUGSMONAT.getMonth(), monate);
@@ -3237,6 +3424,10 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
     kostengutsprachen: kgs.filter(k => mandatIds.includes(k.mandatId)),
     pflegediagnosen: plan ? plan.pflegediagnosen.length : null,
     jeMonat, abgerechnete, rhythmus,
+    dokumentluecken: {
+      fehlend: pflichtluecken(alleDokumente, DOK_REF(patient.id), PATIENT_DOK_KONTEXT_360, MANDAT_STICHTAG).map(l => l.label),
+      abgelegt: dokumenteVon(alleDokumente, DOK_REF(patient.id)).length,
+    },
   });
 
   /* ── Teil 2: Massnahme gegen Dokumentation ──

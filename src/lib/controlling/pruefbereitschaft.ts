@@ -85,6 +85,8 @@ export interface PruefQuellen {
   abgerechnete: Angehoeriger[];
   /** Rhythmusschritte der abgerechneten Angehörigen: fällig im Zeitraum. */
   rhythmus: { faellig: number; ueberfaellig: number };
+  /** Fehlende oder abgelaufene Pflichtdokumente des Patienten. */
+  dokumentluecken: { fehlend: string[]; abgelegt: number };
 }
 
 /**
@@ -193,7 +195,23 @@ export function pruefbereitschaft(q: PruefQuellen): PruefZeile[] {
     });
   }
 
-  /* ── 7 · Betreuungsrhythmus ── */
+  /* ── 7 · Dokumentenablage ──
+     Seit die Dokumente am Patienten hängen und nicht mehr am
+     Onboarding-Formular, ist die Vollständigkeit prüfbar. Dass sie heute bei
+     jedem Patienten „fehlt" ergibt, ist keine Schwäche der Prüfung, sondern
+     ihr Befund: es liegt nichts ab. */
+  zeilen.push({
+    id: "dokumente", unterlage: "Vollständigkeit der Dokumentenablage",
+    zustand: q.dokumentluecken.fehlend.length === 0 ? "vollstaendig"
+      : q.dokumentluecken.abgelegt === 0 ? "fehlt" : "lueckenhaft",
+    befund: q.dokumentluecken.fehlend.length === 0 ? ""
+      : q.dokumentluecken.abgelegt === 0
+        ? `Kein Dokument abgelegt. Fehlend: ${q.dokumentluecken.fehlend.join(", ")}.`
+        : `${q.dokumentluecken.fehlend.length} von ${q.dokumentluecken.fehlend.length + q.dokumentluecken.abgelegt} Pflichtdokumenten fehlen: ${q.dokumentluecken.fehlend.join(", ")}.`,
+    ansicht: "pflichtluecken", verweis: "Pflichtlücken",
+  });
+
+  /* ── 8 · Betreuungsrhythmus ── */
   zeilen.push({
     id: "rhythmus", unterlage: "Betreuungsrhythmus eingehalten",
     zustand: q.rhythmus.faellig === 0 ? "fehlt" : q.rhythmus.ueberfaellig === 0 ? "vollstaendig" : "lueckenhaft",
@@ -214,7 +232,6 @@ export function pruefbereitschaft(q: PruefQuellen): PruefZeile[] {
  * gelesen werden.
  */
 export const NICHT_BEURTEILBAR_CONTROLLING = [
-  "Vollständigkeit der Dokumentenablage — Dokumentstände liegen am Onboarding-Fall, nicht am Patienten.",
   "Der Inhalt der Pflegeberichte — geprüft wird, ob einer vorliegt, nicht ob er trägt.",
   "Medikationsdokumentation — es besteht kein Medikationsmodell im Cockpit.",
   "Die im Vertrag zugesagte Kadenz der Betreuung (zweiwöchentlich telefonisch, monatlicher Besuch) — die Rhythmusvorlage kennt Monatsschritte, aber keine zweiwöchentliche Kontaktpflicht.",
