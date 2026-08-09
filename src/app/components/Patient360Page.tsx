@@ -133,7 +133,10 @@ import {
   istAktiv as beziehungAktiv, personName, rolleLabel, rolleSeite, artLabel,
   DIAGRAMM_MAX, type Beziehung,
 } from "../../lib/beziehungen/beziehungen";
-import { STATIONAERER_VERLAUF, FRUEHERE_EINGRIFFE } from "../../lib/patienten/vorgeschichte";
+import {
+  useVorgeschichte, aufenthaltSichern, eingriffSichern, tageZwischen,
+  type Spitalaufenthalt, type FruehererEingriff,
+} from "../../lib/patienten/vorgeschichte";
 import { MOCK_ARZT_DIAGNOSEN } from "../../lib/mocks/klinische-artefakte-mock";
 import {
   dokumenteVon, ordnerStand, ordnerZustand, ordnerDes, pflichtluecken,
@@ -2940,24 +2943,129 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
    GRUPPE PATIENT — Stammdaten, Beziehungen, Vorgeschichte, Diagnosen
    ══════════════════════════════════════════ */
 
+/**
+ * Stammdaten — lesen, dann ausdrücklich bearbeiten.
+ *
+ * Vorher sahen alle Felder immer wie Eingaben aus und schrieben beim
+ * Verlassen des Feldes. In einem Dossier, das bei einer Kassenkontrolle
+ * geprüft wird, darf eine Änderung nicht beiläufig entstehen: sie braucht
+ * einen Klick, der sie will, und einen zweiten, der sie bestätigt.
+ */
 function AnsichtStammdaten({ patient }: { patient: Patient }) {
-  const [feld, setFeld] = useState<Record<string, string>>({});
+  /* Nur eine Karte gleichzeitig — zwei offene Formulare mit je eigenem
+     Abbrechen liessen nicht mehr erkennen, was zu welchem gehört. */
+  const [offen, setOffen] = useState<string | null>(null);
+  const [entwurf, setEntwurf] = useState<Record<string, string>>({});
   const [protokoll, setProtokoll] = useState<{ feld: string; wert: string; wann: string }[]>([]);
-  const wert = (k: keyof Patient) => feld[k] ?? String(patient[k] ?? "");
+  const [frage, setFrage] = useState<string | null>(null);
 
-  const schreiben = (k: string, label: string, v: string) => {
-    setFeld(f => ({ ...f, [k]: v }));
-    aktualisierePatient(patient.id, { [k]: v } as Partial<Patient>);
-    setProtokoll(p => [{ feld: label, wert: v, wann: jetztAnzeige() }, ...p].slice(0, 8));
+  const wert = (k: keyof Patient) => String(patient[k] ?? "");
+  const feld = (k: keyof Patient) => entwurf[k] ?? wert(k);
+
+  const KARTEN: Record<string, { k: keyof Patient; label: string }[]> = {
+    kontakt: [
+      { k: "adresse", label: "Adresse" },
+      { k: "kanton", label: "Kanton" },
+      { k: "sprache", label: "Sprache" },
+    ],
+    versicherung: [
+      { k: "krankenkasse", label: "Krankenkasse" },
+      { k: "kartennummer", label: "Kartennummer" },
+      { k: "bagNr", label: "BAG-Nummer" },
+      { k: "hausarztName", label: "Hausarzt" },
+      { k: "hausarztFachgebiet", label: "Fachgebiet" },
+      { k: "hausarztTelefon", label: "Telefon Hausarzt" },
+    ],
   };
 
+  const geaendert = Object.entries(entwurf).some(([k, v]) => v !== wert(k as keyof Patient));
+
+  const sichern = (karte: string) => {
+    const felder = KARTEN[karte];
+    const neu: Partial<Patient> = {};
+    const eintraege: typeof protokoll = [];
+    const jetzt = jetztAnzeige();
+    for (const f of felder) {
+      const v = entwurf[f.k];
+      if (v !== undefined && v !== wert(f.k)) {
+        (neu as Record<string, string>)[f.k] = v;
+        eintraege.push({ feld: f.label, wert: v, wann: jetzt });
+      }
+    }
+    if (Object.keys(neu).length > 0) {
+      aktualisierePatient(patient.id, neu);
+      setProtokoll(p => [...eintraege, ...p].slice(0, 8));
+    }
+    setEntwurf({});
+    setOffen(null);
+  };
+
+  const abbrechen = () => { setEntwurf({}); setOffen(null); setFrage(null); };
+
+  /* Wer die Ansicht mit offenen Änderungen verlässt, wird gefragt — sonst
+     verschwände die Arbeit ohne Hinweis. Zwei Wege hinaus: die Navigation
+     (abgefangen am Klick weiter unten) und das Schliessen des Fensters. */
+  useEffect(() => {
+    if (!offen || !geaendert) return;
+    const warnen = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    /* Die Seitennavigation liegt ausserhalb dieser Ansicht — der Listener
+       muss deshalb am Dokument hängen und in der Erfassungsphase greifen,
+       bevor der Router die Ansicht wechselt. */
+    const abfangen = (e: MouseEvent) => {
+      const ziel = (e.target as HTMLElement | null)?.closest("a,button");
+      /* Die Karten selbst und der Frage-Dialog sind ausgenommen — sonst
+         liesse sich der Dialog nicht mehr schliessen, den er auslöst. */
+      if (!ziel || ziel.closest("[data-stammkarte]") || ziel.closest("[data-verlassen-frage]")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setFrage("Ansicht wechseln");
+    };
+    window.addEventListener("beforeunload", warnen);
+    document.addEventListener("click", abfangen, true);
+    return () => {
+      window.removeEventListener("beforeunload", warnen);
+      document.removeEventListener("click", abfangen, true);
+    };
+  }, [offen, geaendert]);
+
+  const karte = (id: string, titel: string, icon: React.ElementType) => (
+    <PSectionCard
+      title={titel} icon={icon}
+      editable={offen === null || offen === id}
+      editing={offen === id}
+      onEdit={() => { setOffen(id); setEntwurf({}); }}
+      onSave={() => sichern(id)}
+      onCancel={abbrechen}
+    >
+      {offen === id && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 11px", borderRadius: 10, background: "var(--status-info-bg)", marginBottom: 12 }}>
+          <Info style={{ width: 13, height: 13, color: "var(--status-info)", flexShrink: 0, marginTop: 2 }} />
+          <span style={{ fontSize: "var(--text-meta)", color: "var(--status-info)", maxWidth: "74ch", lineHeight: 1.55 }}>
+            Wird bearbeitet. Änderungen werden erst beim Sichern übernommen und mit Person und
+            Zeitpunkt protokolliert.
+          </span>
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "var(--space-4)" }}>
+        {KARTEN[id].map(f => (
+          <StammFeld key={String(f.k)} label={f.label} wert={feld(f.k)} bearbeiten={offen === id}
+            onAendern={v => setEntwurf(e => ({ ...e, [f.k]: v }))} />
+        ))}
+      </div>
+      {id === "versicherung" && offen !== id && !wert("hausarztName").trim() && (
+        <div style={{ marginTop: 12, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", maxWidth: "74ch", lineHeight: 1.55 }}>
+          Kein Hausarzt erfasst. Ohne ihn kann keine ärztliche Verordnung eingeholt werden.
+        </div>
+      )}
+    </PSectionCard>
+  );
+
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3" style={{ gap: "var(--space-4)" }}>
-      <div className="xl:col-span-2 space-y-4">
-        {/* ── Identität — gesperrt ──
-            Sie beschreibt den Zustand bei Eintritt und wurde im Abklärungs-
-            gespräch erhoben. Nachträglich zu ändern hiesse, die Erhebung zu
-            verändern statt eine neue zu machen. */}
+    <div className="grid grid-cols-1 xl:grid-cols-3" style={{ gap: "var(--space-4)" }}
+>
+      <div className="xl:col-span-2 space-y-4" data-stammkarte>
+        {/* Identität bleibt gesperrt: sie beschreibt den Zustand bei Eintritt
+            und wurde im Abklärungsgespräch erhoben. */}
         <PSectionCard title="Identität" icon={Users}>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 11px", borderRadius: 10, background: "var(--bg-secondary)", marginBottom: 12 }}>
             <Lock style={{ width: 13, height: 13, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 2 }} />
@@ -2976,29 +3084,8 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
           </div>
         </PSectionCard>
 
-        <PSectionCard title="Kontakt" icon={MapPin}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "var(--space-4)" }}>
-            <StammFeld label="Adresse" wert={wert("adresse")} onSchreiben={v => schreiben("adresse", "Adresse", v)} />
-            <StammFeld label="Kanton" wert={wert("kanton")} onSchreiben={v => schreiben("kanton", "Kanton", v)} />
-            <StammFeld label="Sprache" wert={wert("sprache")} onSchreiben={v => schreiben("sprache", "Sprache", v)} />
-          </div>
-        </PSectionCard>
-
-        <PSectionCard title="Versicherung und Arzt" icon={Shield}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "var(--space-4)" }}>
-            <StammFeld label="Krankenkasse" wert={wert("krankenkasse")} onSchreiben={v => schreiben("krankenkasse", "Krankenkasse", v)} />
-            <StammFeld label="Kartennummer" wert={wert("kartennummer")} onSchreiben={v => schreiben("kartennummer", "Kartennummer", v)} />
-            <StammFeld label="BAG-Nummer" wert={wert("bagNr")} onSchreiben={v => schreiben("bagNr", "BAG-Nummer", v)} />
-            <StammFeld label="Hausarzt" wert={wert("hausarztName")} onSchreiben={v => schreiben("hausarztName", "Hausarzt", v)} />
-            <StammFeld label="Fachgebiet" wert={wert("hausarztFachgebiet")} onSchreiben={v => schreiben("hausarztFachgebiet", "Fachgebiet", v)} />
-            <StammFeld label="Telefon Hausarzt" wert={wert("hausarztTelefon")} onSchreiben={v => schreiben("hausarztTelefon", "Telefon Hausarzt", v)} />
-          </div>
-          {!wert("hausarztName").trim() && (
-            <div style={{ marginTop: 12, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", maxWidth: "74ch", lineHeight: 1.55 }}>
-              Kein Hausarzt erfasst. Ohne ihn kann keine ärztliche Verordnung eingeholt werden.
-            </div>
-          )}
-        </PSectionCard>
+        {karte("kontakt", "Kontakt", MapPin)}
+        {karte("versicherung", "Versicherung und Arzt", Shield)}
       </div>
 
       <div className="xl:col-span-1">
@@ -3011,41 +3098,59 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
             <div className="flex flex-col" style={{ gap: 7 }}>
               {protokoll.map((e, i) => (
                 <div key={i}>
-                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-primary)" }}>
-                    {e.feld}: {e.wert || "—"}
-                  </div>
-                  <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-                    {e.wann} · {AKTUELLE_FACHPERSON}
-                  </div>
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-primary)" }}>{e.feld}: {e.wert || "—"}</div>
+                  <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{e.wann} · {AKTUELLE_FACHPERSON}</div>
                 </div>
               ))}
             </div>
           )}
         </PSectionCard>
       </div>
+
+      {frage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "color-mix(in srgb, var(--text-primary) 40%, transparent)", padding: 16 }}
+          role="dialog" aria-modal="true" aria-label="Änderungen verwerfen" data-verlassen-frage>
+          <div style={{ width: "100%", maxWidth: 420, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", padding: "var(--space-6)" }}>
+            <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-semibold)", marginBottom: 8 }}>Änderungen verwerfen?</div>
+            <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 16, lineHeight: 1.6 }}>
+              In dieser Karte sind Änderungen offen, die noch nicht gesichert wurden. Verlassen Sie
+              die Ansicht, gehen sie verloren.
+            </p>
+            <div className="flex items-center justify-end" style={{ gap: 10 }}>
+              <button type="button" onClick={() => setFrage(null)} className="ui-fokusring cursor-pointer"
+                style={{ background: "none", border: "none", padding: "6px 10px", fontFamily: "inherit", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+                Weiter bearbeiten
+              </button>
+              <AppButton variant="sekundaer" onClick={abbrechen}>Verwerfen</AppButton>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-/** Ein Feld, das direkt im Feld bearbeitet wird — ohne Bearbeitungsmodus. */
-function StammFeld({ label, wert, onSchreiben }: { label: string; wert: string; onSchreiben: (v: string) => void }) {
-  const [entwurf, setEntwurf] = useState(wert);
-  const [aktiv, setAktiv] = useState(false);
-  useEffect(() => { if (!aktiv) setEntwurf(wert); }, [wert, aktiv]);
+/** Ein Feld — im Lesezustand Text, im Bearbeitenzustand Eingabe. */
+function StammFeld({ label, wert, bearbeiten, onAendern }: {
+  label: string; wert: string; bearbeiten: boolean; onAendern: (v: string) => void;
+}) {
+  if (!bearbeiten) {
+    return (
+      <div>
+        <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>{label}</div>
+        <div style={{ fontSize: "var(--text-small)", color: wert.trim() ? "var(--text-primary)" : "var(--text-tertiary)", minHeight: 19 }}>
+          {wert.trim() || "nicht erfasst"}
+        </div>
+      </div>
+    );
+  }
   return (
     <div>
       <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>{label}</div>
-      <input
-        value={entwurf}
-        onChange={e => setEntwurf(e.target.value)}
-        onFocus={() => setAktiv(true)}
-        onBlur={() => { setAktiv(false); if (entwurf !== wert) onSchreiben(entwurf); }}
-        aria-label={label}
-        className="ui-fokusring"
+      <input value={wert} onChange={e => onAendern(e.target.value)} aria-label={label} className="ui-fokusring"
         style={{ width: "100%", padding: "5px 8px", borderRadius: 8, fontFamily: "inherit", fontSize: "var(--text-small)",
-          color: "var(--text-primary)", background: "var(--bg-elevated)",
-          border: "var(--border-thin) solid var(--border-default)" }}
-      />
+          color: "var(--text-primary)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }} />
     </div>
   );
 }
@@ -3193,11 +3298,27 @@ function BeziehungsZeile({ b, nameVon, abgerechnet, onBeenden }: {
 /**
  * Das Betreuungsnetz als Diagramm.
  *
- * Privates Umfeld links, Behandelnde und Spitex rechts — die Trennung ist die
- * Aussage: wer gehört zur Familie, wer zum System. Die abgerechnete Person
- * trägt eine kräftige Linie mit ihren Wochenstunden, weil sie die einzige
- * ist, deren Zeit in Rechnung geht.
+ * Festes Raster aus drei Spalten: privates Umfeld links, der Patient in der
+ * Mitte, Spitex und Behandelnde rechts. Die Trennung ist die Aussage — wer
+ * gehört zur Familie, wer zum System.
+ *
+ * Die Linien laufen von Knotenkante zu Knotenkante, nicht als Stummel neben
+ * dem Knoten: eine Linie, die im Leerraum endet, verbindet nichts und
+ * behauptet trotzdem eine Verbindung. Gezeichnet wird deshalb in einem SVG
+ * über dem Raster, dessen Koordinaten aus denselben Konstanten stammen wie
+ * die Kästen.
  */
+
+/* Ein Raster statt gemessener Positionen: die Höhen stehen fest, damit die
+   Linien sie kennen, ohne das Layout auszumessen. */
+const NETZ = {
+  spalte: 210,
+  mitte: 190,
+  knotenH: 46,
+  abstand: 16,
+  luecke: 84,
+} as const;
+
 function Netzdiagramm({ patient, privat, rechts, nameVon, abgerechnet, stundenJeWoche }: {
   patient: Patient;
   privat: Beziehung[]; rechts: Beziehung[];
@@ -3205,71 +3326,126 @@ function Netzdiagramm({ patient, privat, rechts, nameVon, abgerechnet, stundenJe
   abgerechnet: Set<string>;
   stundenJeWoche: (k: string) => number;
 }) {
-  const kuerzen = (liste: Beziehung[]) => liste.length + rechts.length + privat.length > DIAGRAMM_MAX
-    ? { gezeigt: liste.slice(0, Math.max(1, Math.floor(DIAGRAMM_MAX / 2))), rest: Math.max(0, liste.length - Math.max(1, Math.floor(DIAGRAMM_MAX / 2))) }
-    : { gezeigt: liste, rest: 0 };
-  const l = kuerzen(privat);
-  const r = kuerzen(rechts);
+  /* Ab acht aktiven Beziehungen wird zusammengefasst — darüber kreuzen sich
+     die Linien, und die kräftige zur abgerechneten Person geht darin unter.
+     Zusammengefasst werden die nicht pflegenden und die externen; die
+     pflegende Person bleibt immer einzeln sichtbar. */
+  const gesamt = privat.length + rechts.length;
+  const kuerzen = (liste: Beziehung[], behalten: (b: Beziehung) => boolean) => {
+    if (gesamt <= DIAGRAMM_MAX) return { gezeigt: liste, rest: 0 };
+    const fest = liste.filter(behalten);
+    return { gezeigt: fest, rest: liste.length - fest.length };
+  };
+  const l = kuerzen(privat, b => b.rolle === "pflegende_angehoerige");
+  const r = kuerzen(rechts, b => rolleSeite(b.rolle) === "intern");
 
-  const knoten = (b: Beziehung, seite: "links" | "rechts") => {
+  const zeilen = Math.max(l.gezeigt.length + (l.rest > 0 ? 1 : 0), r.gezeigt.length + (r.rest > 0 ? 1 : 0), 1);
+  const hoehe = zeilen * NETZ.knotenH + (zeilen - 1) * NETZ.abstand;
+  const breite = NETZ.spalte * 2 + NETZ.mitte + NETZ.luecke * 2;
+
+  /* Je Spalte um die Patientenzeile zentriert: bei zwei Knoten stehen sie
+     ober- und unterhalb, bei einem auf gleicher Höhe. */
+  const mittelY = hoehe / 2;
+  const yVon = (i: number, n: number) =>
+    mittelY - ((n - 1) / 2) * (NETZ.knotenH + NETZ.abstand) + i * (NETZ.knotenH + NETZ.abstand);
+
+  const linksX = 0;
+  const mitteX = NETZ.spalte + NETZ.luecke;
+  const rechtsX = mitteX + NETZ.mitte + NETZ.luecke;
+
+  const kasten = (b: Beziehung, x: number, y: number, seite: "links" | "rechts") => {
     const istAbg = b.person.art === "angehoeriger" && abgerechnet.has(b.person.kennung);
-    const std = istAbg && b.person.art === "angehoeriger" ? stundenJeWoche(b.person.kennung) : 0;
-    const extern = rolleSeite(b.rolle) === "extern";
     return (
-      <div key={b.id} className="flex items-center" style={{ gap: 8, flexDirection: seite === "links" ? "row" : "row-reverse" }}>
-        <div style={{ padding: "6px 11px", borderRadius: 10, background: "var(--bg-elevated)",
+      <foreignObject key={b.id} x={x} y={y} width={NETZ.spalte} height={NETZ.knotenH}>
+        <div style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "center",
+          padding: "5px 10px", borderRadius: 10, background: "var(--bg-elevated)", boxSizing: "border-box",
           border: istAbg ? "2px solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
-          textAlign: seite === "links" ? "right" : "left", minWidth: 0 }}>
-          <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>
+          textAlign: seite === "links" ? "right" : "left" }}>
+          <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {personName(b, nameVon)}
           </div>
-          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
-            {rolleLabel(b.rolle)}{b.art ? ` · ${artLabel(b.art)}` : ""}
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {rolleLabel(b.rolle)}
+            {/* Bei privaten Rollen gehört die Verwandtschaft dazu; fehlt sie,
+                wird das gesagt statt eine leere Stelle zu lassen. */}
+            {rolleSeite(b.rolle) === "privat" && ` · ${b.art ? artLabel(b.art) : "Verwandtschaft nicht erfasst"}`}
           </div>
         </div>
-        {/* Linienstärke trägt die Aussage: kräftig = abgerechnet, dünn =
-            intern, gestrichelt = ausserhalb der Spitex. */}
-        <div style={{ width: 44, height: 0, flexShrink: 0,
-          borderTop: istAbg ? "2px solid var(--brand-primary)"
-            : extern ? "1px dashed var(--border-default)" : "1px solid var(--border-default)" }} />
-        {istAbg && (
-          <span style={{ fontSize: "var(--text-micro)", color: "var(--brand-primary)", fontWeight: 500, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-            {std.toFixed(1).replace(".", ",")} Std./Wo.
-          </span>
-        )}
-      </div>
+      </foreignObject>
     );
   };
 
-  return (
-    <div className="flex items-center flex-wrap lg:flex-nowrap" style={{ gap: 12, justifyContent: "center" }}>
-      {/* Linke Hälfte entfällt, wenn kein privates Umfeld erfasst ist. */}
-      {privat.length > 0 && (
-        <div className="flex flex-col" style={{ gap: 8, alignItems: "flex-end" }}>
-          {l.gezeigt.map(b => knoten(b, "links"))}
-          {l.rest > 0 && <Restknoten anzahl={l.rest} />}
-        </div>
-      )}
-      <div style={{ padding: "10px 16px", borderRadius: 12, background: "var(--brand-primary-light)", border: "var(--border-thin) solid var(--brand-primary)", textAlign: "center", flexShrink: 0 }}>
-        <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
-          {patient.nachname}, {patient.vorname}
-        </div>
-        <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Patient</div>
-      </div>
-      {rechts.length > 0 && (
-        <div className="flex flex-col" style={{ gap: 8, alignItems: "flex-start" }}>
-          {r.gezeigt.map(b => knoten(b, "rechts"))}
-          {r.rest > 0 && <Restknoten anzahl={r.rest} />}
-        </div>
-      )}
-    </div>
-  );
-}
+  const linie = (b: Beziehung, y: number, seite: "links" | "rechts") => {
+    const istAbg = b.person.art === "angehoeriger" && abgerechnet.has(b.person.kennung);
+    const extern = rolleSeite(b.rolle) === "extern";
+    const [x1, x2] = seite === "links"
+      ? [linksX + NETZ.spalte, mitteX]
+      : [mitteX + NETZ.mitte, rechtsX];
+    const yM = y + NETZ.knotenH / 2;
+    const std = istAbg && b.person.art === "angehoeriger" ? stundenJeWoche(b.person.kennung) : 0;
+    return (
+      <g key={`l-${b.id}`}>
+        <line x1={x1} y1={yM} x2={x2} y2={mittelY + NETZ.knotenH / 2}
+          stroke={istAbg ? "var(--brand-primary)" : "var(--border-default)"}
+          strokeWidth={istAbg ? 2 : 1}
+          strokeDasharray={extern ? "4 3" : undefined} />
+        {istAbg && (
+          <text x={(x1 + x2) / 2} y={(yM + mittelY + NETZ.knotenH / 2) / 2 - 5} textAnchor="middle"
+            style={{ fontSize: 10, fill: "var(--brand-primary)", fontWeight: 500 }}>
+            {std.toFixed(1).replace(".", ",")} Std./Wo.
+          </text>
+        )}
+      </g>
+    );
+  };
 
-function Restknoten({ anzahl }: { anzahl: number }) {
+  const restknoten = (x: number, y: number, anzahl: number, seite: "links" | "rechts") => (
+    <g key={`rest-${seite}`}>
+      <line x1={seite === "links" ? x + NETZ.spalte : x} y1={y + NETZ.knotenH / 2}
+        x2={seite === "links" ? mitteX : mitteX + NETZ.mitte} y2={mittelY + NETZ.knotenH / 2}
+        stroke="var(--border-default)" strokeWidth={1} strokeDasharray="4 3" />
+      <foreignObject x={x} y={y} width={NETZ.spalte} height={NETZ.knotenH}>
+        <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: seite === "links" ? "flex-end" : "flex-start",
+          padding: "5px 10px", borderRadius: 10, background: "var(--bg-secondary)", boxSizing: "border-box",
+          fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+          {anzahl} weitere Beteiligte
+        </div>
+      </foreignObject>
+    </g>
+  );
+
   return (
-    <div style={{ padding: "6px 11px", borderRadius: 10, background: "var(--bg-secondary)", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
-      und {anzahl} weitere
+    <div style={{ overflowX: "auto" }}>
+      {/* Überschriften über den Bereichen — ohne sie bräuchte es eine Legende. */}
+      <div style={{ display: "grid", gridTemplateColumns: `${NETZ.spalte}px ${NETZ.luecke}px ${NETZ.mitte}px ${NETZ.luecke}px ${NETZ.spalte}px`, width: breite, marginBottom: 6 }}>
+        <div style={{ fontSize: "var(--text-micro)", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)", textAlign: "right" }}>
+          {privat.length > 0 ? "Privates Umfeld" : ""}
+        </div>
+        <div /><div /><div />
+        <div style={{ fontSize: "var(--text-micro)", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)" }}>
+          {rechts.length > 0 ? "Spitex und Behandelnde" : ""}
+        </div>
+      </div>
+      <svg width={breite} height={hoehe} style={{ display: "block", overflow: "visible" }} role="img"
+        aria-label={`Betreuungsnetz mit ${gesamt} aktiven Beziehungen`}>
+        {l.gezeigt.map((b, i) => linie(b, yVon(i, l.gezeigt.length + (l.rest > 0 ? 1 : 0)), "links"))}
+        {r.gezeigt.map((b, i) => linie(b, yVon(i, r.gezeigt.length + (r.rest > 0 ? 1 : 0)), "rechts"))}
+        {l.gezeigt.map((b, i) => kasten(b, linksX, yVon(i, l.gezeigt.length + (l.rest > 0 ? 1 : 0)), "links"))}
+        {r.gezeigt.map((b, i) => kasten(b, rechtsX, yVon(i, r.gezeigt.length + (r.rest > 0 ? 1 : 0)), "rechts"))}
+        {l.rest > 0 && restknoten(linksX, yVon(l.gezeigt.length, l.gezeigt.length + 1), l.rest, "links")}
+        {r.rest > 0 && restknoten(rechtsX, yVon(r.gezeigt.length, r.gezeigt.length + 1), r.rest, "rechts")}
+        {/* Der Patient als einzige dunkle Fläche — die Mitte ist keine Rolle
+            unter anderen. */}
+        <foreignObject x={mitteX} y={mittelY} width={NETZ.mitte} height={NETZ.knotenH}>
+          <div style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
+            padding: "5px 10px", borderRadius: 12, background: "var(--brand-primary)", boxSizing: "border-box" }}>
+            <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-on-dark)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
+              {patient.nachname}, {patient.vorname}
+            </div>
+            <div style={{ fontSize: "var(--text-micro)", color: "var(--text-on-dark)", opacity: 0.85 }}>Patient</div>
+          </div>
+        </foreignObject>
+      </svg>
     </div>
   );
 }
@@ -3277,27 +3453,45 @@ function Restknoten({ anzahl }: { anzahl: number }) {
 /* ── Vorgeschichte ───────────────────────────────────────────────────────── */
 
 function AnsichtVorgeschichte({ patient }: { patient: Patient }) {
-  const stationaer = STATIONAERER_VERLAUF[patient.id] ?? [];
-  const eingriffe = FRUEHERE_EINGRIFFE[patient.id] ?? [];
+  const { aufenthalte, eingriffe } = useVorgeschichte(patient.id);
+  /* Eine Kennung, die gerade bearbeitet wird — "" heisst „neu", null heisst
+     „nichts offen". Nur ein Formular gleichzeitig je Abschnitt. */
+  const [aOffen, setAOffen] = useState<string | null>(null);
+  const [eOffen, setEOffen] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
       <PSectionCard title="Spitalaufenthalte" icon={Building2}>
-        {stationaer.length === 0 ? (
+        {aOffen === null && (
+          <button type="button" onClick={() => setAOffen("")} className="ui-fokusring cursor-pointer inline-flex items-center"
+            style={{ gap: 5, marginBottom: 12, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            <Plus style={{ width: 13, height: 13 }} /> Aufenthalt erfassen
+          </button>
+        )}
+        {aOffen === "" && (
+          <AufenthaltFormular patientId={patient.id} eintrag={null} onFertig={() => setAOffen(null)} />
+        )}
+        {aufenthalte.length === 0 && aOffen === null ? (
           <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
             Kein Spitalaufenthalt erfasst. Hier wird festgehalten, wann und weshalb der Patient
             stationär behandelt wurde — bei einer Verlaufsbeurteilung ist das der erste Blick.
           </p>
         ) : (
           <div className="flex flex-col" style={{ gap: 2 }}>
-            {stationaer.map(s => (
+            {aufenthalte.map(s => aOffen === s.id ? (
+              <div key={s.id} style={{ paddingTop: 8, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <AufenthaltFormular patientId={patient.id} eintrag={s} onFertig={() => setAOffen(null)} />
+              </div>
+            ) : (
               <div key={s.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
-                <span style={{ width: 176, fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
-                  {s.von} – {s.bis}
-                </span>
+                <span style={{ width: 176, fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{s.von} – {s.bis}</span>
                 <span style={{ width: 60, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{s.tage} Tage</span>
                 <span style={{ width: 220, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{s.einrichtung}</span>
-                <span style={{ flex: 1, minWidth: 180, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{s.grund}</span>
+                <span style={{ flex: 1, minWidth: 160, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{s.grund}</span>
+                <button type="button" onClick={() => setAOffen(s.id)} className="ui-fokusring cursor-pointer"
+                  style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+                  Bearbeiten
+                </button>
               </div>
             ))}
           </div>
@@ -3305,21 +3499,119 @@ function AnsichtVorgeschichte({ patient }: { patient: Patient }) {
       </PSectionCard>
 
       <PSectionCard title="Frühere Behandlungen" icon={Stethoscope}>
-        {eingriffe.length === 0 ? (
+        {eOffen === null && (
+          <button type="button" onClick={() => setEOffen("")} className="ui-fokusring cursor-pointer inline-flex items-center"
+            style={{ gap: 5, marginBottom: 12, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            <Plus style={{ width: 13, height: 13 }} /> Behandlung erfassen
+          </button>
+        )}
+        {eOffen === "" && <EingriffFormular patientId={patient.id} eintrag={null} onFertig={() => setEOffen(null)} />}
+        {eingriffe.length === 0 && eOffen === null ? (
           <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch" }}>
             Keine frühere Behandlung erfasst.
           </p>
         ) : (
           <div className="flex flex-col" style={{ gap: 2 }}>
-            {eingriffe.map(o => (
+            {eingriffe.map(o => eOffen === o.id ? (
+              <div key={o.id} style={{ paddingTop: 8, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <EingriffFormular patientId={patient.id} eintrag={o} onFertig={() => setEOffen(null)} />
+              </div>
+            ) : (
               <div key={o.id} className="flex items-baseline" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
                 <span style={{ width: 100, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{o.datum}</span>
-                <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{o.eingriff}</span>
+                <span style={{ flex: 1, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{o.eingriff}</span>
+                <button type="button" onClick={() => setEOffen(o.id)} className="ui-fokusring cursor-pointer"
+                  style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+                  Bearbeiten
+                </button>
               </div>
             ))}
           </div>
         )}
       </PSectionCard>
+    </div>
+  );
+}
+
+/** Das Formular erscheint an Ort — kein Dialog, damit der Zusammenhang bleibt. */
+function AufenthaltFormular({ patientId, eintrag, onFertig }: {
+  patientId: string; eintrag: Spitalaufenthalt | null; onFertig: () => void;
+}) {
+  const [von, setVon] = useState(eintrag?.von ?? "");
+  const [bis, setBis] = useState(eintrag?.bis ?? "");
+  const [klinik, setKlinik] = useState(eintrag?.einrichtung ?? "");
+  const [grund, setGrund] = useState(eintrag?.grund ?? "");
+  const vollstaendig = von.trim() && bis.trim() && klinik.trim();
+
+  return (
+    <div style={{ padding: "12px 14px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" style={{ gap: 12, marginBottom: 10 }}>
+        <FormFeld label="Von" wert={von} platzhalter="TT.MM.JJJJ" onAendern={setVon} />
+        <FormFeld label="Bis" wert={bis} platzhalter="TT.MM.JJJJ" onAendern={setBis} />
+        <div className="sm:col-span-2">
+          <FormFeld label="Klinik" wert={klinik} platzhalter="z. B. Kantonsspital Winterthur" onAendern={setKlinik} />
+        </div>
+      </div>
+      <FormFeld label="Grund und Verlauf" wert={grund} platzhalter="Weshalb der Aufenthalt, wie er verlief" onAendern={setGrund} />
+      {von.trim() && bis.trim() && (
+        <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
+          {/* Die Dauer wird gerechnet, nicht erfasst — zwei Angaben, die
+              einander widersprechen können, sind eine zu viel. */}
+          Dauer: {tageZwischen(von, bis)} Tage
+        </div>
+      )}
+      <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
+        <AppButton variant="sekundaer" onClick={() => {
+          if (!vollstaendig) return;
+          aufenthaltSichern(patientId, { id: eintrag?.id ?? "", einrichtung: klinik, grund, von, bis });
+          onFertig();
+        }}>Sichern</AppButton>
+        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EingriffFormular({ patientId, eintrag, onFertig }: {
+  patientId: string; eintrag: FruehererEingriff | null; onFertig: () => void;
+}) {
+  const [datum, setDatum] = useState(eintrag?.datum ?? "");
+  const [text, setText] = useState(eintrag?.eingriff ?? "");
+  return (
+    <div style={{ padding: "12px 14px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-4" style={{ gap: 12 }}>
+        <FormFeld label="Datum" wert={datum} platzhalter="TT.MM.JJJJ" onAendern={setDatum} />
+        <div className="sm:col-span-3">
+          <FormFeld label="Bezeichnung" wert={text} platzhalter="z. B. Hüft-TEP links" onAendern={setText} />
+        </div>
+      </div>
+      <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
+        <AppButton variant="sekundaer" onClick={() => {
+          if (!datum.trim() || !text.trim()) return;
+          eingriffSichern(patientId, { id: eintrag?.id ?? "", datum, eingriff: text });
+          onFertig();
+        }}>Sichern</AppButton>
+        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FormFeld({ label, wert, platzhalter, onAendern }: {
+  label: string; wert: string; platzhalter?: string; onAendern: (v: string) => void;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>{label}</div>
+      <input value={wert} onChange={e => onAendern(e.target.value)} placeholder={platzhalter} aria-label={label} className="ui-fokusring"
+        style={{ width: "100%", padding: "6px 9px", borderRadius: 8, fontFamily: "inherit", fontSize: "var(--text-small)",
+          color: "var(--text-primary)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }} />
     </div>
   );
 }
