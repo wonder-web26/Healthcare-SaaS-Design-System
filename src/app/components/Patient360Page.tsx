@@ -88,6 +88,7 @@ import {
   Building2,
   Home,
   Landmark,
+  Search,
 } from "lucide-react";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import {
@@ -223,7 +224,9 @@ const PATIENT_NAV: GruppeDef[] = [
   ] },
   { schluessel: "pflege", label: "Pflege", ansichten: [
     { schluessel: "pflegeplan", label: "Pflegeplan" },
-    { schluessel: "beobachtungen", label: "Beobachtungen" },
+    /* „Pflegebericht" ist, was erfasst wird — zwei Wörter für dieselbe
+       Sache erzeugen zwei Vorstellungen davon, was hineingehört. */
+    { schluessel: "pflegeberichte", label: "Pflegeberichte" },
     { schluessel: "vitalwerte", label: "Vitalwerte" },
     { schluessel: "wunddokumentation", label: "Wunddokumentation" },
     { schluessel: "betreuungsrhythmus", label: "Betreuungsrhythmus" },
@@ -714,7 +717,7 @@ const ANSICHT_HAT_INHALT: Record<string, true> = {
   leistungsplanungsblatt: true, "verordnung-und-kostengutsprache": true,
   pflegekontrolle: true, dokumente: true, pendenzen: true, verlauf: true, controlling: true,
   ordnerstruktur: true, pflichtluecken: true,
-  stammdaten: true, vorgeschichte: true, diagnosen: true,
+  stammdaten: true, vorgeschichte: true, diagnosen: true, pflegeberichte: true,
 };
 
 /** Ansichten, deren Umfang schon feststeht — sie nennen ihn statt zu schweigen. */
@@ -771,6 +774,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "leistungsplanungsblatt": return <TabKLV patientId={patient.id} />;
     case "verordnung-und-kostengutsprache": return <AnsichtVerordnung patient={patient} />;
     case "pflegekontrolle": return <AnsichtPflegekontrolle patient={patient} />;
+    case "pflegeberichte": return <AnsichtPflegeberichte patient={patient} />;
     case "controlling": return <AnsichtControlling patient={patient} />;
     case "ordnerstruktur": return <AnsichtOrdnerstruktur patient={patient} />;
     case "dokumente": return <AnsichtDokumente patient={patient} />;
@@ -4094,6 +4098,343 @@ function AnsichtPflichtluecken({ patient }: { patient: Patient }) {
       )}
     </PSectionCard>
   );
+}
+
+/* ══════════════════════════════════════════
+   ANSICHT: Pflege › Pflegeberichte
+
+   KEIN NEUES OBJEKT. Was die angehörige Person täglich schreibt, hängt als
+   Fassung am Einsatz. Ein zweites Dokumentationsobjekt wäre eine parallele
+   Variante desselben Inhalts — genau das Muster, das im Produkt mehrfach
+   aufgeräumt wurde. Diese Ansicht liest `berichtFassungen` und schreibt
+   nichts.
+
+   Der Kalender der Pflegekontrolle zeigt, OB ein Bericht existiert. Hier
+   steht, was darin steht — im Volltext, weil das der Ort ist, an dem Prosa
+   gelesen wird. Bei einer Kassenkontrolle werden die Verlaufsberichte der
+   letzten drei Monate verlangt.
+   ══════════════════════════════════════════ */
+
+const BERICHT_ZEITRAEUME = [3, 6, 12];
+
+interface Berichtszeile {
+  art: "bericht";
+  einsatz: Einsatz;
+  tag: Monatstag;
+  fassung: Berichtfassung;
+}
+
+interface Lueckenzeile {
+  art: "luecke";
+  von: Monatstag;
+  bis: Monatstag;
+  anzahl: number;
+}
+
+function AnsichtPflegeberichte({ patient }: { patient: Patient }) {
+  const nav = useNavigate();
+  const einsaetze = useEinsaetze();
+  const leistungen = useErbrachteLeistungen();
+  const klvs = useKlvVerordnungen();
+  const mandate = useMandate();
+  const verordnungen = useVerordnungen();
+  const [monate, setMonate] = useState(3);
+  const [urheber, setUrheber] = useState<string | null>(null);
+  const [suche, setSuche] = useState("");
+  const [nurAbweichung, setNurAbweichung] = useState(false);
+
+  const zeitraum = zeitraumMonate(EINSATZ_BEZUGSMONAT.getFullYear(), EINSATZ_BEZUGSMONAT.getMonth(), monate);
+  const quellen = { einsaetze, leistungen, klvs, mandate, verordnungen };
+  /* Dieselbe Rechnung wie in Pflegekontrolle, Überblick und Controlling —
+     die Abweichung eines Tages stammt nicht aus einer zweiten Quelle. */
+  const jeMonat = zeitraum.monate.map(m => monatsKennzahlen(patient.id, m.jahr, m.monat, quellen));
+  const alleTage = jeMonat.flatMap(k => k.tage);
+
+  /* Neueste zuerst. Ein Tag kann mehrere Einsätze tragen; jeder mit Bericht
+     ist ein eigener Eintrag. */
+  const mitBericht: Berichtszeile[] = [...alleTage].reverse().flatMap(t =>
+    t.einsaetze
+      .map(e => ({ e, f: aktuelleFassung(e) }))
+      .filter((x): x is { e: Einsatz; f: Berichtfassung } => x.f !== null)
+      .map(x => ({ art: "bericht" as const, einsatz: x.e, tag: t, fassung: x.f })));
+
+  const urheberListe = [...new Set(mitBericht.map(b => b.fassung.von))];
+  const suchtext = suche.trim().toLowerCase();
+
+  const gefiltert = mitBericht.filter(b => {
+    if (urheber && b.fassung.von !== urheber) return false;
+    if (nurAbweichung && b.tag.abweichung === 0) return false;
+    if (suchtext && !b.fassung.text.toLowerCase().includes(suchtext)) return false;
+    return true;
+  });
+  const filterAktiv = urheber !== null || nurAbweichung || suchtext !== "";
+
+  /* Lückenzeilen nur im vollständigen Verlauf: gefiltert bezögen sie sich auf
+     eine Auswahl und behaupteten Lücken, die keine sind. */
+  const zeilen: (Berichtszeile | Lueckenzeile)[] = [];
+  if (!filterAktiv) {
+    /* Nur Tage MIT Einsatz. Ein Tag ohne Einsatz ist keine Berichtslücke,
+       sondern ein fehlender Einsatz — der gehört in die Pflegekontrolle. */
+    const chronologisch = alleTage.filter(t => t.einsaetze.length > 0);
+    let lauf: Monatstag[] = [];
+    const schliessen = () => {
+      if (lauf.length > 0) zeilen.push({ art: "luecke", von: lauf[0], bis: lauf[lauf.length - 1], anzahl: lauf.length });
+      lauf = [];
+    };
+    /* Rückwärts durchlaufen, damit die Reihenfolge der neuesten zuerst
+       entspricht; die Spannen werden dabei vorwärts benannt. */
+    for (let i = chronologisch.length - 1; i >= 0; i--) {
+      const t = chronologisch[i];
+      if (t.hatBericht) {
+        schliessen();
+        t.einsaetze.forEach(e => {
+          const f = aktuelleFassung(e);
+          if (f) zeilen.push({ art: "bericht", einsatz: e, tag: t, fassung: f });
+        });
+      } else {
+        lauf.unshift(t);
+      }
+    }
+    schliessen();
+  } else {
+    zeilen.push(...gefiltert);
+  }
+
+  const tageMitEinsatz = alleTage.filter(t => t.einsaetze.length > 0).length;
+  const zuruecksetzen = () => { setUrheber(null); setSuche(""); setNurAbweichung(false); };
+
+  return (
+    <div className="space-y-4">
+      {/* ── Kopfzeile ── */}
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "12px 18px" }}>
+        <div className="flex items-center flex-wrap" style={{ gap: 12 }}>
+          <div>
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Zeitraum</div>
+            <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)" }}>{zeitraumText(zeitraum)}</div>
+            <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+              {mitBericht.length} {mitBericht.length === 1 ? "Bericht" : "Berichte"} an {tageMitEinsatz} Tagen mit Einsatz
+            </div>
+          </div>
+          <div className="flex items-center" style={{ gap: 6, marginLeft: "auto" }}>
+            {BERICHT_ZEITRAEUME.map(n => (
+              <button key={n} type="button" onClick={() => setMonate(n)} className="ui-fokusring cursor-pointer"
+                style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)",
+                  background: monate === n ? "var(--brand-primary-light)" : "var(--bg-elevated)",
+                  border: monate === n ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
+                  color: monate === n ? "var(--brand-primary)" : "var(--text-primary)" }}>
+                {n} Monate
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Filter ── */}
+      {mitBericht.length > 0 && (
+        <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
+          <div className="flex items-center" style={{ flex: "1 1 220px", maxWidth: 300, gap: "var(--space-2)", padding: "7px 14px", borderRadius: 8, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
+            <Search style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
+            <input value={suche} onChange={e => setSuche(e.target.value)} placeholder="Im Berichtstext suchen"
+              aria-label="Im Berichtstext suchen" className="flex-1 bg-transparent outline-none"
+              style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", minWidth: 0 }} />
+            {suche && (
+              <button onClick={() => setSuche("")} className="cursor-pointer shrink-0" style={{ background: "transparent", border: "none" }} aria-label="Suche leeren">
+                <X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} />
+              </button>
+            )}
+          </div>
+          <BerichtChip aktiv={urheber === null} label="Alle Urheber" onClick={() => setUrheber(null)} />
+          {urheberListe.map(u => (
+            <BerichtChip key={u} aktiv={urheber === u} label={urheberName2(u)}
+              anzahl={mitBericht.filter(b => b.fassung.von === u).length} onClick={() => setUrheber(u)} />
+          ))}
+          <BerichtChip aktiv={nurAbweichung} label="Nur mit Abweichung"
+            anzahl={mitBericht.filter(b => b.tag.abweichung !== 0).length}
+            onClick={() => setNurAbweichung(v => !v)} />
+        </div>
+      )}
+
+      {/* ── Verlauf ── */}
+      {tageMitEinsatz === 0 ? (
+        <PSectionCard title="Pflegeberichte" icon={FileText}>
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+            Im Zeitraum ist kein Einsatz erfasst. Ohne Einsatz entsteht kein Bericht — geschrieben
+            wird er bei der Erfassung durch die pflegende Person.
+          </p>
+        </PSectionCard>
+      ) : mitBericht.length === 0 ? (
+        <PSectionCard title="Pflegeberichte" icon={FileText}>
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+            An {tageMitEinsatz} {tageMitEinsatz === 1 ? "Tag" : "Tagen"} mit Einsatz liegt kein Bericht vor.
+            Der Verlauf ist damit für diesen Zeitraum leer.
+          </p>
+        </PSectionCard>
+      ) : filterAktiv && gefiltert.length === 0 ? (
+        <PSectionCard title="Pflegeberichte" icon={FileText}>
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 0 10px", maxWidth: "74ch" }}>
+            Kein Bericht entspricht der Auswahl
+            {suchtext && ` — gesucht nach „${suche.trim()}"`}
+            {urheber && ` — Urheber ${urheberName2(urheber)}`}
+            {nurAbweichung && " — nur Tage mit Abweichung"}.
+          </p>
+          <button type="button" onClick={zuruecksetzen} className="ui-fokusring cursor-pointer"
+            style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            Filter zurücksetzen
+          </button>
+        </PSectionCard>
+      ) : (
+        <Verlauf zeilen={zeilen} suchtext={suchtext} patientId={patient.id} nav={nav} />
+      )}
+    </div>
+  );
+}
+
+function BerichtChip({ aktiv, label, anzahl, onClick }: { aktiv: boolean; label: string; anzahl?: number; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="ui-fokusring cursor-pointer inline-flex items-center"
+      style={{ gap: 6, padding: "6px 12px", borderRadius: "var(--radius-pill)", fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)",
+        background: aktiv ? "var(--brand-primary-light)" : "var(--bg-elevated)",
+        border: aktiv ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
+        color: aktiv ? "var(--brand-primary)" : "var(--text-primary)", whiteSpace: "nowrap" }}>
+      {label}
+      {anzahl !== undefined && <span style={{ fontVariantNumeric: "tabular-nums", color: aktiv ? "var(--brand-primary)" : "var(--text-tertiary)" }}>{anzahl}</span>}
+    </button>
+  );
+}
+
+/** Kennung oder Name des Urhebers auflösen — Angehörige tragen eine Kennung. */
+function urheberName2(v: string): string {
+  const a = getAngehoerige().find(x => x.id === v);
+  return a ? `${a.vorname} ${a.nachname}` : v;
+}
+
+function Verlauf({ zeilen, suchtext, patientId, nav }: {
+  zeilen: (Berichtszeile | Lueckenzeile)[]; suchtext: string; patientId: string;
+  nav: (p: string) => void;
+}) {
+  /* Nach Monat gruppiert: ein Verlauf über drei Monate ohne Zwischenüberschrift
+     liest sich als eine einzige Strecke. */
+  const gruppen: { monat: string; zeilen: (Berichtszeile | Lueckenzeile)[] }[] = [];
+  for (const z of zeilen) {
+    const t = z.art === "bericht" ? z.tag : z.bis;
+    const m = `${MONATE[monatVon(t.datum)]} ${jahrVon(t.datum)}`;
+    const letzte = gruppen[gruppen.length - 1];
+    if (letzte && letzte.monat === m) letzte.zeilen.push(z);
+    else gruppen.push({ monat: m, zeilen: [z] });
+  }
+
+  return (
+    <div className="flex flex-col" style={{ gap: 16 }}>
+      {gruppen.map(g => (
+        <div key={g.monat}>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 8 }}>{g.monat}</div>
+          <div className="flex flex-col" style={{ gap: 8 }}>
+            {g.zeilen.map((z, i) => z.art === "luecke" ? (
+              /* Ohne diese Zeilen läse sich der Verlauf durchgehend, obwohl er
+                 es nicht ist — und genau das prüft eine Kasse. */
+              <div key={`l-${i}`} className="flex items-center" style={{ gap: 8, padding: "6px 14px", borderRadius: 10, background: "var(--bg-secondary)" }}>
+                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                  {z.anzahl === 1
+                    ? `${z.von.nummer}. ${MONATE[monatVon(z.von.datum)]}`
+                    : `${z.von.nummer}. bis ${z.bis.nummer}. ${MONATE[monatVon(z.bis.datum)]}`}
+                  {" · "}kein Bericht
+                  {z.anzahl > 1 && ` (${z.anzahl} Tage)`}
+                </span>
+              </div>
+            ) : (
+              <BerichtKarte key={z.einsatz.id} z={z} suchtext={suchtext} patientId={patientId} nav={nav} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function monatVon(datum: string): number { return Number(datum.slice(3, 5)) - 1; }
+function jahrVon(datum: string): number { return Number(datum.slice(6)); }
+
+function BerichtKarte({ z, suchtext, patientId, nav }: {
+  z: Berichtszeile; suchtext: string; patientId: string; nav: (p: string) => void;
+}) {
+  const [fassungenOffen, setFassungenOffen] = useState(false);
+  const frueher = fruehereFassungen(z.einsatz);
+  const monat = `${jahrVon(z.tag.datum)}-${String(monatVon(z.tag.datum) + 1).padStart(2, "0")}`;
+
+  return (
+    <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "12px 16px" }}>
+      <div className="flex items-baseline flex-wrap" style={{ gap: 10, marginBottom: 8 }}>
+        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>
+          {z.tag.nummer}. {MONATE[monatVon(z.tag.datum)]}
+        </span>
+        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>{WOCHENTAGE_LANG[z.tag.wochentag]}</span>
+        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{urheberName2(z.fassung.von)}</span>
+        <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{z.fassung.am}</span>
+        {/* Die Abweichung des Tages steht daneben, nicht im Text: sie ist
+            gerechnet, der Text ist geschrieben. */}
+        {z.tag.abweichung !== 0 && (
+          <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap",
+            background: z.tag.abweichung > 0 ? "var(--status-info-bg)" : "var(--status-warning-bg)",
+            color: z.tag.abweichung > 0 ? "var(--status-info)" : "var(--status-warning-text)" }}>
+            {z.tag.abweichung > 0 ? "+" : "−"}{Math.abs(Math.round(z.tag.abweichung))} Min.
+          </span>
+        )}
+        <button type="button" onClick={() => nav(`${ansichtPfad(patientId, "pflegekontrolle")}?monat=${monat}`)}
+          className="ui-fokusring cursor-pointer inline-flex items-center"
+          style={{ gap: 4, marginLeft: "auto", background: "none", border: "none", padding: 0, fontFamily: "inherit",
+            fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
+          Zum Tag <ChevronRight style={{ width: 11, height: 11 }} />
+        </button>
+      </div>
+
+      {/* Volltext, kein Abschneiden — das ist der Ort, an dem Prosa gelesen
+          wird. Lesespalte auf 74 Zeichen begrenzt. */}
+      <div style={{ maxWidth: "74ch" }}>
+        {z.fassung.text.split("\n").filter(a => a.trim()).map((absatz, i) => (
+          <p key={i} style={{ fontSize: "var(--text-meta)", color: "var(--text-primary)", lineHeight: 1.65, margin: i === 0 ? 0 : "8px 0 0" }}>
+            {hervorheben(absatz, suchtext)}
+          </p>
+        ))}
+      </div>
+
+      {frueher.length > 0 && (
+        <div style={{ marginTop: 10, paddingTop: 8, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+            Zuletzt geändert am {z.fassung.am} durch {urheberName2(z.fassung.von)}
+          </div>
+          <button type="button" onClick={() => setFassungenOffen(o => !o)} className="ui-fokusring cursor-pointer"
+            style={{ background: "none", border: "none", padding: 0, marginTop: 4, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            {fassungenOffen ? "Frühere Fassungen ausblenden" : `${frueher.length} frühere ${frueher.length === 1 ? "Fassung" : "Fassungen"} anzeigen`}
+          </button>
+          {fassungenOffen && (
+            <div className="flex flex-col" style={{ gap: 8, marginTop: 8 }}>
+              {frueher.map((f, i) => <FruehereFassung key={i} fassung={f} />)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Treffer im Text sichtbar machen, ohne den Text zu verändern. */
+function hervorheben(text: string, suchtext: string): React.ReactNode {
+  if (!suchtext) return text;
+  const teile: React.ReactNode[] = [];
+  const unten = text.toLowerCase();
+  let i = 0, n = 0;
+  while (i < text.length) {
+    const treffer = unten.indexOf(suchtext, i);
+    if (treffer < 0) { teile.push(text.slice(i)); break; }
+    if (treffer > i) teile.push(text.slice(i, treffer));
+    teile.push(
+      <mark key={n++} style={{ background: "var(--brand-primary-light)", color: "var(--text-primary)", borderRadius: 3, padding: "0 1px" }}>
+        {text.slice(treffer, treffer + suchtext.length)}
+      </mark>,
+    );
+    i = treffer + suchtext.length;
+  }
+  return teile;
 }
 
 /* ══════════════════════════════════════════
