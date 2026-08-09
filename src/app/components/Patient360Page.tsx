@@ -86,6 +86,8 @@ import {
   ClipboardCheck,
   FolderOpen,
   Building2,
+  Home,
+  Landmark,
 } from "lucide-react";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import {
@@ -115,7 +117,7 @@ import {
   useEinsaetze, useErbrachteLeistungen, einsatzBestaetigen, einsatzRueckfrage, berichtSchreiben,
   EINSATZ_BEZUGSMONAT,
 } from "../../lib/einsaetze/store";
-import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung } from "../../types/klinische-artefakte";
+import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung, type AerztlicheDiagnose, type ArztDiagnoseStatus, type VorschlagStatus } from "../../types/klinische-artefakte";
 import { TAKT_MINUTEN, MINDESTWERT_EINSATZ, type Monatsabrechnung } from "../../lib/abrechnung/leistungsarten";
 import { monatsKennzahlen } from "../../lib/einsaetze/kontrolle";
 import { lagebild, NICHT_BEURTEILBAR, GEPRUEFT_WURDE } from "../../lib/lagebild/lagebild";
@@ -137,7 +139,11 @@ import {
   useVorgeschichte, aufenthaltSichern, eingriffSichern, tageZwischen,
   type Spitalaufenthalt, type FruehererEingriff,
 } from "../../lib/patienten/vorgeschichte";
-import { MOCK_ARZT_DIAGNOSEN } from "../../lib/mocks/klinische-artefakte-mock";
+import { patientfeldLabel } from "../../lib/stammdaten/patientfelder";
+import {
+  useArztDiagnosen, usePflegediagnosen, arztDiagnoseSichern, pflegediagnoseSichern,
+  type PflegediagnoseEintrag,
+} from "../../lib/diagnosen/store";
 import {
   dokumenteVon, ordnerStand, ordnerZustand, ordnerDes, pflichtluecken,
   geprueftePflichttypen, gueltigBisText, istAbgelaufen, HERKUNFT_TEXT,
@@ -2962,21 +2968,61 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
   const wert = (k: keyof Patient) => String(patient[k] ?? "");
   const feld = (k: keyof Patient) => entwurf[k] ?? wert(k);
 
-  const KARTEN: Record<string, { k: keyof Patient; label: string }[]> = {
+  /* Sechs Karten statt drei — der Zuschnitt folgt dem, was das
+     Abklärungsgespräch erhebt. „Sozialversicherung und Steuern" steht nicht
+     im ursprünglichen Rahmen: die Bezüge beschreiben die Person, nicht ihre
+     Versicherung, und zehn Felder in einer Karte wären keine Übersicht mehr.
+     Eine Karte „Vertretung" fehlt, weil Vorsorgeauftrag, Beistandschaft und
+     Patientenverfügung im Gespräch nicht erhoben werden — drei leere Felder
+     wären eine Behauptung. */
+  const KARTEN: Record<string, { k: keyof Patient; label: string; anzeige?: (v: string) => string }[]> = {
     kontakt: [
       { k: "adresse", label: "Adresse" },
       { k: "kanton", label: "Kanton" },
+      { k: "telefon", label: "Telefon" },
+      { k: "email", label: "E-Mail" },
       { k: "sprache", label: "Sprache" },
+      { k: "spracheAndere", label: "Sprache, andere" },
+      { k: "uebersetzerNotwendig", label: "Übersetzer notwendig", anzeige: patientfeldLabel.jaNein },
+    ],
+    wohnsituation: [
+      { k: "wohnsituation", label: "Wohnform", anzeige: patientfeldLabel.wohnsituation },
+      { k: "formZusammenleben", label: "Zusammenleben", anzeige: patientfeldLabel.zusammenleben },
+      { k: "neuZusammenlebend", label: "Neu zusammenlebend", anzeige: patientfeldLabel.jaNein },
+      { k: "etage", label: "Etage" },
+      { k: "liftVorhanden", label: "Lift", anzeige: patientfeldLabel.jaNein },
+      { k: "treppen", label: "Treppen" },
+      { k: "personenImHaushalt", label: "Personen im Haushalt" },
     ],
     versicherung: [
       { k: "krankenkasse", label: "Krankenkasse" },
       { k: "kartennummer", label: "Kartennummer" },
       { k: "bagNr", label: "BAG-Nummer" },
+      { k: "zusatzversicherungKasse", label: "Zusatzversicherung" },
+      { k: "weitereVersicherung", label: "Weitere Versicherung" },
+    ],
+    arzt: [
       { k: "hausarztName", label: "Hausarzt" },
       { k: "hausarztFachgebiet", label: "Fachgebiet" },
-      { k: "hausarztTelefon", label: "Telefon Hausarzt" },
+      { k: "hausarztTelefon", label: "Telefon" },
+      { k: "hausarztEmail", label: "E-Mail" },
+      { k: "spezialAerzte", label: "Spezialärzte" },
+    ],
+    sozial: [
+      { k: "sozialamtKontakt", label: "Kontakt zum Sozialamt" },
+      { k: "sozialamtKontaktDetail", label: "Detail" },
+      { k: "ivBezug", label: "IV-Bezug" },
+      { k: "ivBezugProzent", label: "IV-Grad" },
+      { k: "hilflosenentschaedigung", label: "Hilflosenentschädigung" },
+      { k: "assistenzbeitrag", label: "Assistenzbeitrag" },
+      { k: "quellensteuerHinweise", label: "Hinweise zur Quellensteuer" },
     ],
   };
+
+  /* Eine Karte, in der kein einziges Feld erhoben ist, sagt nichts — und die
+     Felder stehen bei den bestehenden Patienten alle leer, weil die Übernahme
+     erst für neue Abschlüsse greift. */
+  const hatInhalt = (id: string) => KARTEN[id].some(f => wert(f.k).trim() !== "");
 
   const geaendert = Object.entries(entwurf).some(([k, v]) => v !== wert(k as keyof Patient));
 
@@ -3049,10 +3095,10 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "var(--space-4)" }}>
         {KARTEN[id].map(f => (
           <StammFeld key={String(f.k)} label={f.label} wert={feld(f.k)} bearbeiten={offen === id}
-            onAendern={v => setEntwurf(e => ({ ...e, [f.k]: v }))} />
+            anzeige={f.anzeige} onAendern={v => setEntwurf(e => ({ ...e, [f.k]: v }))} />
         ))}
       </div>
-      {id === "versicherung" && offen !== id && !wert("hausarztName").trim() && (
+      {id === "arzt" && offen !== id && !wert("hausarztName").trim() && (
         <div style={{ marginTop: 12, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", maxWidth: "74ch", lineHeight: 1.55 }}>
           Kein Hausarzt erfasst. Ohne ihn kann keine ärztliche Verordnung eingeholt werden.
         </div>
@@ -3079,13 +3125,25 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
             <PDataField label="Vorname" value={patient.vorname} />
             <PDataField label="Geburtsdatum" value={patient.geburtsdatum} />
             <PDataField label="AHV-Nummer" value={<MaskedAhv ahv={patient.ahvNummer} />} />
+            <PDataField label="Geschlecht" value={patientfeldLabel.geschlecht(patient.geschlecht) || "nicht erfasst"} />
+            <PDataField label="Zivilstand" value={patientfeldLabel.zivilstand(patient.zivilstand) || "nicht erfasst"} />
+            <PDataField label="Staatsangehörigkeit" value={patientfeldLabel.staatsangehoerigkeit(patient.staatsangehoerigkeit) || "nicht erfasst"} />
+            <PDataField label="Heimatort" value={patient.heimatort || "nicht erfasst"} />
+            <PDataField label="Aufenthaltsstatus" value={patientfeldLabel.aufenthaltsstatus(patient.aufenthaltsstatus) || "nicht erfasst"} />
+            {/* Bei Sterbebegleitung und Ernährung fachlich erheblich — ein im
+                Gespräch erfragtes Feld, das danach verschwindet, ist schlimmer
+                als eines ohne Auswertung. */}
+            <PDataField label="Konfession" value={patientfeldLabel.konfession(patient.konfession) || "nicht erfasst"} />
             <PDataField label="Aufnahmedatum" value={patient.aufnahmeDatum} />
             <PDataField label="Kennung" value={patient.id} mono />
           </div>
         </PSectionCard>
 
         {karte("kontakt", "Kontakt", MapPin)}
-        {karte("versicherung", "Versicherung und Arzt", Shield)}
+        {hatInhalt("wohnsituation") && karte("wohnsituation", "Wohnsituation", Home)}
+        {karte("versicherung", "Versicherung", Shield)}
+        {karte("arzt", "Ärztliche Betreuung", Stethoscope)}
+        {hatInhalt("sozial") && karte("sozial", "Sozialversicherung und Steuern", Landmark)}
       </div>
 
       <div className="xl:col-span-1">
@@ -3132,15 +3190,19 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
 }
 
 /** Ein Feld — im Lesezustand Text, im Bearbeitenzustand Eingabe. */
-function StammFeld({ label, wert, bearbeiten, onAendern }: {
-  label: string; wert: string; bearbeiten: boolean; onAendern: (v: string) => void;
+function StammFeld({ label, wert, bearbeiten, anzeige, onAendern }: {
+  label: string; wert: string; bearbeiten: boolean;
+  /** Löst einen Code in Klartext auf; fehlt sie, steht der Wert selbst da. */
+  anzeige?: (v: string) => string;
+  onAendern: (v: string) => void;
 }) {
   if (!bearbeiten) {
+    const text = anzeige ? anzeige(wert) : wert;
     return (
       <div>
         <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>{label}</div>
-        <div style={{ fontSize: "var(--text-small)", color: wert.trim() ? "var(--text-primary)" : "var(--text-tertiary)", minHeight: 19 }}>
-          {wert.trim() || "nicht erfasst"}
+        <div style={{ fontSize: "var(--text-small)", color: text.trim() ? "var(--text-primary)" : "var(--text-tertiary)", minHeight: 19 }}>
+          {text.trim() || "nicht erfasst"}
         </div>
       </div>
     );
@@ -3340,12 +3402,19 @@ function Netzdiagramm({ patient, privat, rechts, nameVon, abgerechnet, stundenJe
   const r = kuerzen(rechts, b => rolleSeite(b.rolle) === "intern");
 
   const zeilen = Math.max(l.gezeigt.length + (l.rest > 0 ? 1 : 0), r.gezeigt.length + (r.rest > 0 ? 1 : 0), 1);
-  const hoehe = zeilen * NETZ.knotenH + (zeilen - 1) * NETZ.abstand;
+  /* Die Höhe folgt der Knotenzahl. Der Rand oben und unten trägt die
+     Linienbeschriftung, die über den obersten Knoten hinausragen kann —
+     ohne ihn schnitte das SVG sie ab, und mit `overflow: visible` zeichnete
+     sie über die Kartengrenze hinaus. Genau das war der Fehler: das SVG war
+     46 px hoch, die Knoten standen bei y = 23 bis 131, und die Karte mass
+     nur das SVG. */
+  const rand = 14;
+  const hoehe = zeilen * NETZ.knotenH + (zeilen - 1) * NETZ.abstand + rand * 2;
   const breite = NETZ.spalte * 2 + NETZ.mitte + NETZ.luecke * 2;
 
   /* Je Spalte um die Patientenzeile zentriert: bei zwei Knoten stehen sie
      ober- und unterhalb, bei einem auf gleicher Höhe. */
-  const mittelY = hoehe / 2;
+  const mittelY = (hoehe - NETZ.knotenH) / 2;
   const yVon = (i: number, n: number) =>
     mittelY - ((n - 1) / 2) * (NETZ.knotenH + NETZ.abstand) + i * (NETZ.knotenH + NETZ.abstand);
 
@@ -3426,7 +3495,7 @@ function Netzdiagramm({ patient, privat, rechts, nameVon, abgerechnet, stundenJe
           {rechts.length > 0 ? "Spitex und Behandelnde" : ""}
         </div>
       </div>
-      <svg width={breite} height={hoehe} style={{ display: "block", overflow: "visible" }} role="img"
+      <svg width={breite} height={hoehe} style={{ display: "block" }} role="img"
         aria-label={`Betreuungsnetz mit ${gesamt} aktiven Beziehungen`}>
         {l.gezeigt.map((b, i) => linie(b, yVon(i, l.gezeigt.length + (l.rest > 0 ? 1 : 0)), "links"))}
         {r.gezeigt.map((b, i) => linie(b, yVon(i, r.gezeigt.length + (r.rest > 0 ? 1 : 0)), "rechts"))}
@@ -3542,18 +3611,33 @@ function AufenthaltFormular({ patientId, eintrag, onFertig }: {
   const [klinik, setKlinik] = useState(eintrag?.einrichtung ?? "");
   const [grund, setGrund] = useState(eintrag?.grund ?? "");
   const vollstaendig = von.trim() && bis.trim() && klinik.trim();
+  /* Ein Bis vor dem Von ist kein Zeitraum. Der Datumsbaustein prüft jedes
+     Feld für sich; ihre Reihenfolge kann nur die Aufrufstelle prüfen. */
+  const reihenfolgeFalsch = von.trim() !== "" && bis.trim() !== "" && tageZwischen(von, bis) === 0
+    && von !== bis;
 
   return (
     <div style={{ padding: "12px 14px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" style={{ gap: 12, marginBottom: 10 }}>
-        <FormFeld label="Von" wert={von} platzhalter="TT.MM.JJJJ" onAendern={setVon} />
-        <FormFeld label="Bis" wert={bis} platzhalter="TT.MM.JJJJ" onAendern={setBis} />
+        {/* Der bestehende Baustein prüft die Eingabe und nimmt „09102020"
+            nicht an. `wertFormat="display"` lässt die Speicherform des
+            Bestands unverändert — ein Eingriff quer durch alle Module wäre
+            für vier Felder nicht verhältnismässig. */}
+        <DateField label="Von" value={von} wertFormat="display" bereich="past"
+          onChange={v => setVon(typeof v === "string" ? v : "")} />
+        <DateField label="Bis" value={bis} wertFormat="display" bereich="past"
+          onChange={v => setBis(typeof v === "string" ? v : "")} />
         <div className="sm:col-span-2">
           <FormFeld label="Klinik" wert={klinik} platzhalter="z. B. Kantonsspital Winterthur" onAendern={setKlinik} />
         </div>
       </div>
       <FormFeld label="Grund und Verlauf" wert={grund} platzhalter="Weshalb der Aufenthalt, wie er verlief" onAendern={setGrund} />
-      {von.trim() && bis.trim() && (
+      {reihenfolgeFalsch && (
+        <div style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 6 }}>
+          Das Bis-Datum liegt vor dem Von-Datum.
+        </div>
+      )}
+      {von.trim() && bis.trim() && !reihenfolgeFalsch && (
         <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
           {/* Die Dauer wird gerechnet, nicht erfasst — zwei Angaben, die
               einander widersprechen können, sind eine zu viel. */}
@@ -3562,7 +3646,7 @@ function AufenthaltFormular({ patientId, eintrag, onFertig }: {
       )}
       <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
         <AppButton variant="sekundaer" onClick={() => {
-          if (!vollstaendig) return;
+          if (!vollstaendig || reihenfolgeFalsch) return;
           aufenthaltSichern(patientId, { id: eintrag?.id ?? "", einrichtung: klinik, grund, von, bis });
           onFertig();
         }}>Sichern</AppButton>
@@ -3583,7 +3667,8 @@ function EingriffFormular({ patientId, eintrag, onFertig }: {
   return (
     <div style={{ padding: "12px 14px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
       <div className="grid grid-cols-1 sm:grid-cols-4" style={{ gap: 12 }}>
-        <FormFeld label="Datum" wert={datum} platzhalter="TT.MM.JJJJ" onAendern={setDatum} />
+        <DateField label="Datum" value={datum} wertFormat="display" bereich="past"
+          onChange={v => setDatum(typeof v === "string" ? v : "")} />
         <div className="sm:col-span-3">
           <FormFeld label="Bezeichnung" wert={text} platzhalter="z. B. Hüft-TEP links" onAendern={setText} />
         </div>
@@ -3619,9 +3704,11 @@ function FormFeld({ label, wert, platzhalter, onAendern }: {
 /* ── Diagnosen ───────────────────────────────────────────────────────────── */
 
 function AnsichtDiagnosen({ patient }: { patient: Patient }) {
-  const arzt = MOCK_ARZT_DIAGNOSEN.filter(d => d.patientId === patient.id);
+  const arzt = useArztDiagnosen().filter(d => d.patientId === patient.id);
+  const pflege = usePflegediagnosen().filter(d => d.patientId === patient.id);
   const plan = MOCK_PFLEGEPLANUNGEN.find(p => p.patientId === patient.id) ?? null;
-  const pflege = plan?.pflegediagnosen ?? [];
+  const [aOffen, setAOffen] = useState<string | null>(null);
+  const [pOffen, setPOffen] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
@@ -3629,23 +3716,38 @@ function AnsichtDiagnosen({ patient }: { patient: Patient }) {
           Diagnose kommt aus dem ICD und von der Ärztin, die Pflegediagnose
           aus NANDA und aus der Pflegeplanung. */}
       <PSectionCard title="Ärztliche Diagnosen" icon={Stethoscope}>
-        {arzt.length === 0 ? (
+        {aOffen === null && (
+          <button type="button" onClick={() => setAOffen("")} className="ui-fokusring cursor-pointer inline-flex items-center"
+            style={{ gap: 5, marginBottom: 12, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            <Plus style={{ width: 13, height: 13 }} /> Diagnose erfassen
+          </button>
+        )}
+        {aOffen === "" && <ArztDiagnoseFormular patientId={patient.id} eintrag={null} onFertig={() => setAOffen(null)} />}
+        {arzt.length === 0 && aOffen === null ? (
           <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch" }}>
             Keine ärztliche Diagnose erfasst. Sie entstehen aus der Antwort der Ärztin auf die
-            Diagnoseanfrage.
+            Diagnoseanfrage — hier lassen sie sich auch von Hand nachtragen.
           </p>
         ) : (
           <div className="flex flex-col" style={{ gap: 2 }}>
-            {arzt.map(d => (
+            {arzt.map(d => aOffen === d.id ? (
+              <div key={d.id} style={{ paddingTop: 8, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <ArztDiagnoseFormular patientId={patient.id} eintrag={d} onFertig={() => setAOffen(null)} />
+              </div>
+            ) : (
               <div key={d.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
                 <span style={{ width: 74, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{d.icdCode || "—"}</span>
-                <span style={{ flex: 1, minWidth: 200, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{d.bezeichnung}</span>
-                <span style={{ width: 240, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{d.quelle}</span>
+                <span style={{ flex: 1, minWidth: 180, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{d.bezeichnung}</span>
+                <span style={{ width: 230, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{d.quelle}</span>
                 <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap",
                   background: d.status === "bestaetigt" ? "var(--status-success-bg)" : "var(--bg-secondary)",
                   color: d.status === "bestaetigt" ? "var(--status-success-text)" : "var(--text-secondary)" }}>
                   {d.status === "bestaetigt" ? "Bestätigt" : "Entwurf"}
                 </span>
+                <button type="button" onClick={() => setAOffen(d.id)} className="ui-fokusring cursor-pointer"
+                  style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+                  Bearbeiten
+                </button>
               </div>
             ))}
           </div>
@@ -3653,7 +3755,14 @@ function AnsichtDiagnosen({ patient }: { patient: Patient }) {
       </PSectionCard>
 
       <PSectionCard title="Pflegediagnosen" icon={ClipboardList}>
-        {pflege.length === 0 ? (
+        {pOffen === null && (
+          <button type="button" onClick={() => setPOffen("")} className="ui-fokusring cursor-pointer inline-flex items-center"
+            style={{ gap: 5, marginBottom: 12, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            <Plus style={{ width: 13, height: 13 }} /> Diagnose erfassen
+          </button>
+        )}
+        {pOffen === "" && <PflegediagnoseFormular patientId={patient.id} eintrag={null} hatPlan={plan !== null} onFertig={() => setPOffen(null)} />}
+        {pflege.length === 0 && pOffen === null ? (
           <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch" }}>
             {plan
               ? "Der Pflegeplan besteht, trägt aber keine Pflegediagnose."
@@ -3661,14 +3770,22 @@ function AnsichtDiagnosen({ patient }: { patient: Patient }) {
           </p>
         ) : (
           <div className="flex flex-col" style={{ gap: 2 }}>
-            {pflege.map(d => (
+            {pflege.map(d => pOffen === d.id ? (
+              <div key={d.id} style={{ paddingTop: 8, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <PflegediagnoseFormular patientId={patient.id} eintrag={d} hatPlan={plan !== null} onFertig={() => setPOffen(null)} />
+              </div>
+            ) : (
               <div key={d.id} style={{ padding: "9px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
                 <div className="flex items-baseline flex-wrap" style={{ gap: 10 }}>
                   <span style={{ width: 74, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{d.nandaCode || "—"}</span>
-                  <span style={{ flex: 1, minWidth: 200, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{d.titel}</span>
+                  <span style={{ flex: 1, minWidth: 180, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{d.titel}</span>
                   <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-                    {plan ? `Pflegeplan ${plan.id}` : ""}
+                    {d.ohnePlanVermerk || (plan ? `Pflegeplan ${plan.id}` : "")}
                   </span>
+                  <button type="button" onClick={() => setPOffen(d.id)} className="ui-fokusring cursor-pointer"
+                    style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+                    Bearbeiten
+                  </button>
                 </div>
                 {d.begruendung && (
                   <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: "4px 0 0", maxWidth: "74ch", lineHeight: 1.55 }}>{d.begruendung}</p>
@@ -3678,6 +3795,127 @@ function AnsichtDiagnosen({ patient }: { patient: Patient }) {
           </div>
         )}
       </PSectionCard>
+    </div>
+  );
+}
+
+function ArztDiagnoseFormular({ patientId, eintrag, onFertig }: {
+  patientId: string; eintrag: AerztlicheDiagnose | null; onFertig: () => void;
+}) {
+  const [bez, setBez] = useState(eintrag?.bezeichnung ?? "");
+  const [icd, setIcd] = useState(eintrag?.icdCode ?? "");
+  const [datum, setDatum] = useState("");
+  const [aerztin, setAerztin] = useState(eintrag?.quelle ?? "");
+  const [status, setStatus] = useState<ArztDiagnoseStatus>(eintrag?.status ?? "entwurf");
+
+  return (
+    <div style={{ padding: "12px 14px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" style={{ gap: 12, marginBottom: 10 }}>
+        <div className="sm:col-span-2">
+          <FormFeld label="Bezeichnung" wert={bez} platzhalter="z. B. Arterielle Hypertonie" onAendern={setBez} />
+        </div>
+        <FormFeld label="ICD-Code" wert={icd} platzhalter="z. B. I10" onAendern={setIcd} />
+        <DateField label="Diagnosedatum" value={datum} wertFormat="display" bereich="past"
+          onChange={v => setDatum(typeof v === "string" ? v : "")} />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12 }}>
+        <FormFeld label="Verordnende Ärztin" wert={aerztin} platzhalter="z. B. Dr. med. Peter Frei" onAendern={setAerztin} />
+        <div>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Status</div>
+          <div className="flex items-center" style={{ gap: 6 }}>
+            {(["entwurf", "bestaetigt"] as ArztDiagnoseStatus[]).map(w => (
+              <button key={w} type="button" onClick={() => setStatus(w)} className="ui-fokusring cursor-pointer"
+                style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
+                  background: status === w ? "var(--brand-primary-light)" : "var(--bg-elevated)",
+                  border: status === w ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
+                  color: status === w ? "var(--brand-primary)" : "var(--text-primary)" }}>
+                {w === "entwurf" ? "Entwurf" : "Bestätigt"}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
+        <AppButton variant="sekundaer" onClick={() => {
+          if (!bez.trim()) return;
+          /* Die Herkunft hält fest, wer und wann — sonst liesse sich später
+             nicht sagen, ob die Diagnose von der Ärztin kam oder hier
+             nachgetragen wurde. */
+          const quelle = eintrag && aerztin === eintrag.quelle
+            ? eintrag.quelle
+            : `${aerztin.trim() || "Ohne Ärztin"}${datum.trim() ? `, ${datum}` : ""} · nachgetragen von ${AKTUELLE_FACHPERSON}`;
+          arztDiagnoseSichern(patientId, {
+            id: eintrag?.id ?? "", icdCode: icd, bezeichnung: bez, quelle, status,
+          });
+          onFertig();
+        }}>Sichern</AppButton>
+        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PflegediagnoseFormular({ patientId, eintrag, hatPlan, onFertig }: {
+  patientId: string; eintrag: PflegediagnoseEintrag | null; hatPlan: boolean; onFertig: () => void;
+}) {
+  const [nanda, setNanda] = useState(eintrag?.nandaCode ?? "");
+  const [titel, setTitel] = useState(eintrag?.titel ?? "");
+  const [begruendung, setBegruendung] = useState(eintrag?.begruendung ?? "");
+  const [status, setStatus] = useState<VorschlagStatus>(eintrag?.status ?? "vorschlag");
+
+  return (
+    <div style={{ padding: "12px 14px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
+      {/* Die Pflegediagnose entsteht eigentlich im Pflegeplan. Ohne Plan wird
+          sie trotzdem erfasst — mit einem Vermerk, damit später erkennbar
+          bleibt, dass sie ausserhalb entstanden ist. */}
+      {!hatPlan && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 11px", borderRadius: 10, background: "var(--status-warning-bg)", marginBottom: 10 }}>
+          <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 2 }} />
+          <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", maxWidth: "74ch", lineHeight: 1.55 }}>
+            Für diesen Patienten besteht kein Pflegeplan. Pflegediagnosen entstehen dort — diese
+            wird trotzdem erfasst und trägt den Vermerk „ausserhalb des Pflegeplans erfasst".
+          </span>
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-4" style={{ gap: 12, marginBottom: 10 }}>
+        <FormFeld label="NANDA-Nummer" wert={nanda} platzhalter="z. B. 00155" onAendern={setNanda} />
+        <div className="sm:col-span-3">
+          <FormFeld label="Bezeichnung" wert={titel} platzhalter="z. B. Sturzgefahr" onAendern={setTitel} />
+        </div>
+      </div>
+      <FormFeld label="Begründung" wert={begruendung} platzhalter="Woran die Diagnose festgemacht wird" onAendern={setBegruendung} />
+      <div style={{ marginTop: 10 }}>
+        <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Status</div>
+        <div className="flex items-center" style={{ gap: 6 }}>
+          {(["vorschlag", "akzeptiert", "abgelehnt"] as VorschlagStatus[]).map(w => (
+            <button key={w} type="button" onClick={() => setStatus(w)} className="ui-fokusring cursor-pointer"
+              style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
+                background: status === w ? "var(--brand-primary-light)" : "var(--bg-elevated)",
+                border: status === w ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
+                color: status === w ? "var(--brand-primary)" : "var(--text-primary)" }}>
+              {w === "vorschlag" ? "Vorschlag" : w === "akzeptiert" ? "Akzeptiert" : "Abgelehnt"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
+        <AppButton variant="sekundaer" onClick={() => {
+          if (!titel.trim()) return;
+          pflegediagnoseSichern(patientId, {
+            id: eintrag?.id ?? "", nandaCode: nanda, titel, begruendung, status,
+            bezugCap: eintrag?.bezugCap ?? null, icdIds: eintrag?.icdIds ?? [],
+            ohnePlanVermerk: eintrag?.ohnePlanVermerk || (hatPlan ? "" : "Ausserhalb des Pflegeplans erfasst"),
+          });
+          onFertig();
+        }}>Sichern</AppButton>
+        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
     </div>
   );
 }

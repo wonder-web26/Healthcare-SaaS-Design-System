@@ -48,6 +48,52 @@ export interface Patient {
   hausarztName: string;
   hausarztFachgebiet: string;
   hausarztTelefon: string;
+  /* ── Aus dem Abklärungsgespräch, bisher nicht übergeben ──────────────────
+     28 Angaben wurden im Gespräch erhoben und kamen nie beim Patienten an.
+     Sie stehen jetzt hier; gefüllt werden sie beim Abschluss eines
+     Onboardings. Für die bestehenden Patienten bleiben sie leer — erfundene
+     Werte wären schlimmer als ein erklärter Leerzustand. */
+  /** BB2 — Code aus lib/stammdaten/geschlecht. */
+  geschlecht: string;
+  /** BB12 — Code aus lib/stammdaten/staatsangehoerigkeit. */
+  staatsangehoerigkeit: string;
+  heimatort: string;
+  /** BB4 — Code aus lib/stammdaten/zivilstand. */
+  zivilstand: string;
+  aufenthaltsstatus: string;
+  /** Bei Sterbebegleitung und Ernährung fachlich erheblich. */
+  konfession: string;
+  /** Im Gespräch erhoben, hatte bisher kein Ziel am Patienten. */
+  telefon: string;
+  email: string;
+  /** BB13 Code 21 — Sprache als Freitext, wenn der Katalog sie nicht kennt. */
+  spracheAndere: string;
+  /** BB14 — Code aus lib/stammdaten/sda-ja-nein. */
+  uebersetzerNotwendig: string;
+  /** BB7b — Kassen-Code der Zusatzversicherung. Nicht aus der Grundversicherung abgeleitet. */
+  zusatzversicherungKasse: string;
+  /** BB7c — Invaliden-, Unfall- oder Militärversicherung als Freitext. */
+  weitereVersicherung: string;
+  hausarztEmail: string;
+  spezialAerzte: string;
+  /** BB9 — Code aus lib/stammdaten/sda-wohnsituation. */
+  wohnsituation: string;
+  /** BB10a — Code aus lib/stammdaten/sda-zusammenleben. */
+  formZusammenleben: string;
+  /** BB10b — Code aus lib/stammdaten/sda-ja-nein. */
+  neuZusammenlebend: string;
+  etage: string;
+  liftVorhanden: string;
+  treppen: string;
+  personenImHaushalt: string;
+  sozialamtKontakt: string;
+  sozialamtKontaktDetail: string;
+  ivBezug: string;
+  ivBezugProzent: string;
+  hilflosenentschaedigung: string;
+  /** PA-01 — IV-Assistenzbeitrag. */
+  assistenzbeitrag: string;
+  quellensteuerHinweise: string;
   /* ── Notfallkontakt — eigene Person, unabhängig vom Angehörigen ── */
   notfallkontaktName: string;
   notfallkontaktTelefon: string;
@@ -242,6 +288,34 @@ export const patientenSeed: Patient[] = [
     medlinkSync: "synced",
     krankenkasse: "Groupe Mutuel",
     /* ── Prozessstatus / Workflow ──────────── */
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    sozialamtKontaktDetail: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
     prozessStatus: {
       naechsteAufgabe: "Dokumentation überprüfen",
       faelligDatum: "01.03.2026",
@@ -284,6 +358,34 @@ export const patientenSeed: Patient[] = [
     medlinkSync: "pending",
     krankenkasse: "CSS",
     /* ── Prozessstatus / Workflow ──────────── */
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    sozialamtKontaktDetail: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
     prozessStatus: {
       naechsteAufgabe: "Kostengutsprache einholen",
       faelligDatum: "25.02.2026",
@@ -326,6 +428,34 @@ export const patientenSeed: Patient[] = [
     medlinkSync: "synced",
     krankenkasse: "Helsana",
     /* ── Prozessstatus / Workflow ──────────── */
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    sozialamtKontaktDetail: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
     prozessStatus: {
       naechsteAufgabe: "Re-Assessment durchführen",
       faelligDatum: "15.04.2026",
@@ -368,6 +498,34 @@ export const patientenSeed: Patient[] = [
     medlinkSync: "synced",
     krankenkasse: "Groupe Mutuel",
     /* ── Prozessstatus / Workflow ──────────── */
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    sozialamtKontaktDetail: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
     prozessStatus: null,
   },
   {
@@ -406,6 +564,34 @@ export const patientenSeed: Patient[] = [
     medlinkSync: "error",
     krankenkasse: "Swica",
     /* ── Prozessstatus / Workflow ──────────── */
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    sozialamtKontaktDetail: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
     prozessStatus: {
       naechsteAufgabe: "Kostengutsprache einholen",
       faelligDatum: "28.02.2026",
@@ -448,6 +634,34 @@ export const patientenSeed: Patient[] = [
     medlinkSync: "pending",
     krankenkasse: "Sanitas",
     /* ── Prozessstatus / Workflow ──────────── */
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    sozialamtKontaktDetail: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
     prozessStatus: {
       naechsteAufgabe: "Bedarfsmeldung erstellen",
       faelligDatum: "25.02.2026",
@@ -490,6 +704,34 @@ export const patientenSeed: Patient[] = [
     medlinkSync: "synced",
     krankenkasse: "Visana",
     /* ── Prozessstatus / Workflow ──────────── */
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    sozialamtKontaktDetail: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
     prozessStatus: {
       naechsteAufgabe: "Re-Assessment planen",
       faelligDatum: "28.03.2026",
@@ -532,6 +774,34 @@ export const patientenSeed: Patient[] = [
     medlinkSync: "error",
     krankenkasse: "KPT",
     /* ── Prozessstatus / Workflow ──────────── */
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    sozialamtKontaktDetail: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
     prozessStatus: {
       naechsteAufgabe: "Arztbericht einholen",
       faelligDatum: "28.02.2026",
@@ -574,6 +844,34 @@ export const patientenSeed: Patient[] = [
     medlinkSync: "synced",
     krankenkasse: "CSS",
     /* ── Prozessstatus / Workflow ──────────── */
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    sozialamtKontaktDetail: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
     prozessStatus: null,
   },
   {
@@ -612,6 +910,34 @@ export const patientenSeed: Patient[] = [
     medlinkSync: "synced",
     krankenkasse: "Concordia",
     /* ── Prozessstatus / Workflow ──────────── */
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    sozialamtKontaktDetail: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
     prozessStatus: {
       naechsteAufgabe: "Bewilligung prüfen",
       faelligDatum: "10.03.2026",

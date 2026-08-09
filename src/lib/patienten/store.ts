@@ -128,6 +128,39 @@ export interface PatientStammdatenEingabe {
   notfallkontaktName: string;
   notfallkontaktTelefon: string;
   notfallkontaktBeziehung: string;
+  /* ── Bisher nicht übergeben ──────────────────────────────────────────────
+     28 Angaben, die das Abklärungsgespräch erhebt und die nie beim Patienten
+     ankamen. Sie standen im Formular und blieben dort. */
+  geschlecht: string;
+  staatsangehoerigkeit: string;
+  heimatort: string;
+  zivilstand: string;
+  aufenthaltsstatus: string;
+  konfession: string;
+  telefon: string;
+  email: string;
+  spracheAndere: string;
+  uebersetzerNotwendig: string;
+  zusatzversicherungKasse: string;
+  weitereVersicherung: string;
+  hausarztEmail: string;
+  spezialAerzte: string;
+  wohnsituation: string;
+  formZusammenleben: string;
+  neuZusammenlebend: string;
+  etage: string;
+  liftVorhanden: string;
+  treppen: string;
+  personenImHaushalt: string;
+  sozialamtKontakt: string;
+  sozialamtKontaktDetail: string;
+  ivBezug: string;
+  ivBezugProzent: string;
+  hilflosenentschaedigung: string;
+  assistenzbeitrag: string;
+  quellensteuerHinweise: string;
+  /** SP-03 — BAG-Nr. der Kasse. Das Feld bestand am Patienten und blieb leer. */
+  bagNr: string;
 }
 
 /** Der Angehörige kommt aus der Verknüpfung, nicht aus dem Notfallkontakt. */
@@ -172,7 +205,8 @@ function stammdatenAbbilden(
   "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "adresse" | "krankenkasse" | "aufnahmeDatum" |
   "kartennummer" | "hausarztName" | "hausarztTelefon" | "sprache" |
   "notfallkontaktName" | "notfallkontaktTelefon" | "notfallkontaktBeziehung" |
-  "angehoeriger" | "angehoerigerTelefon"> {
+  "angehoeriger" | "angehoerigerTelefon" | "bagNr" |
+  "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "zusatzversicherungKasse" | "weitereVersicherung" | "hausarztEmail" | "spezialAerzte" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "sozialamtKontakt" | "sozialamtKontaktDetail" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
   return {
     vorname: eingabe.vorname,
     nachname: eingabe.name,
@@ -188,6 +222,35 @@ function stammdatenAbbilden(
     kartennummer: eingabe.kartennummer,
     hausarztName: eingabe.hausarztName,
     hausarztTelefon: eingabe.hausarztTelefon,
+    geschlecht: eingabe.geschlecht,
+    staatsangehoerigkeit: eingabe.staatsangehoerigkeit,
+    heimatort: eingabe.heimatort,
+    zivilstand: eingabe.zivilstand,
+    aufenthaltsstatus: eingabe.aufenthaltsstatus,
+    konfession: eingabe.konfession,
+    telefon: eingabe.telefon,
+    email: eingabe.email,
+    spracheAndere: eingabe.spracheAndere,
+    uebersetzerNotwendig: eingabe.uebersetzerNotwendig,
+    zusatzversicherungKasse: eingabe.zusatzversicherungKasse,
+    weitereVersicherung: eingabe.weitereVersicherung,
+    hausarztEmail: eingabe.hausarztEmail,
+    spezialAerzte: eingabe.spezialAerzte,
+    wohnsituation: eingabe.wohnsituation,
+    formZusammenleben: eingabe.formZusammenleben,
+    neuZusammenlebend: eingabe.neuZusammenlebend,
+    etage: eingabe.etage,
+    liftVorhanden: eingabe.liftVorhanden,
+    treppen: eingabe.treppen,
+    personenImHaushalt: eingabe.personenImHaushalt,
+    sozialamtKontakt: eingabe.sozialamtKontakt,
+    sozialamtKontaktDetail: eingabe.sozialamtKontaktDetail,
+    ivBezug: eingabe.ivBezug,
+    ivBezugProzent: eingabe.ivBezugProzent,
+    hilflosenentschaedigung: eingabe.hilflosenentschaedigung,
+    assistenzbeitrag: eingabe.assistenzbeitrag,
+    quellensteuerHinweise: eingabe.quellensteuerHinweise,
+    bagNr: eingabe.bagNr,
     notfallkontaktName: eingabe.notfallkontaktName,
     notfallkontaktTelefon: eingabe.notfallkontaktTelefon,
     notfallkontaktBeziehung: eingabe.notfallkontaktBeziehung,
@@ -235,6 +298,34 @@ export function erfassePatientImOnboarding(
     leistungsart: "",
     letzterBesuch: "",
     hausarztFachgebiet: "",
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    sozialamtKontaktDetail: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
     bagNr: "",
     abrechnungsStatus: abrechnungsStatusZu("im_onboarding"),
     reAssessmentFrist: null,
