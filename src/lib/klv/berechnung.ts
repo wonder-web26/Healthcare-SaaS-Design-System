@@ -71,6 +71,21 @@ export function tagessollMinuten(positionen: KLVLeistung[]): number {
 }
 
 /**
+ * Wie oft eine Position in einem Monat erwartet wird.
+ *
+ * Wochenrhythmen werden über die Länge des Monats hochgerechnet, nicht über
+ * eine feste Vier — ein Monat hat 4.3 bis 4.4 Wochen, und bei 3×/Woche macht
+ * das über den Monat einen ganzen Einsatz Unterschied.
+ */
+export function erwarteteAnzahlImMonat(l: KLVLeistung, tageImMonat: number): number {
+  const wochen = tageImMonat / 7;
+  if (l.einheit === "m") return l.anzahl;
+  if (l.einheit === "w") return Math.round(l.anzahl * wochen);
+  if (l.einheit.startsWith("t")) return Math.round(l.anzahl * tageProWoche(l.einheit) * wochen);
+  return 0;
+}
+
+/**
  * Verordnete Häufigkeit als ein Ausdruck.
  *
  * `anzahl` und Einheit nebeneinander zu setzen ergibt bei der Regelmenge 1

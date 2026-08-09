@@ -83,6 +83,7 @@ import {
   HeartPulse,
   ChevronLeft,
   Lock,
+  ClipboardCheck,
 } from "lucide-react";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import {
@@ -117,7 +118,12 @@ import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeist
 import { TAKT_MINUTEN, MINDESTWERT_EINSATZ, type Monatsabrechnung } from "../../lib/abrechnung/leistungsarten";
 import { monatsKennzahlen } from "../../lib/einsaetze/kontrolle";
 import { lagebild, NICHT_BEURTEILBAR, GEPRUEFT_WURDE } from "../../lib/lagebild/lagebild";
+import {
+  pruefbereitschaft, zeitraumMonate, zeitraumText, zaehleVollstaendig,
+  NICHT_BEURTEILBAR_CONTROLLING, type Zustand,
+} from "../../lib/controlling/pruefbereitschaft";
 import { useAlleNotizen } from "../../lib/notizen/store";
+import { useAngehoerige } from "../../lib/angehoerige/store";
 import { sichtbareNotizen } from "../../lib/notizen/notizen";
 import { unifiedEntries } from "../../lib/mocks/service-desk-unified";
 import { useAbschluesse } from "../../lib/abschluss/store";
@@ -125,7 +131,7 @@ import { pruefzustandLabel } from "../../lib/stammdaten/einsatz";
 import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
 import {
   hProWoche, berechneSummen, einheitLabel,
-  istTaeglich, haeufigkeitText,
+  istTaeglich, haeufigkeitText, istPeriodisch, erwarteteAnzahlImMonat,
 } from "../../lib/klv/berechnung";
 import { toast } from "sonner";
 import { useRecording } from "../recording/RecordingContext";
@@ -682,7 +688,7 @@ const ANSICHT_HAT_INHALT: Record<string, true> = {
   ueberblick: true, beziehungen: true, mandate: true, "interrai-hc": true, atl: true, anamnese: true,
   pflegeplan: true, vitalwerte: true, betreuungsrhythmus: true,
   leistungsplanungsblatt: true, "verordnung-und-kostengutsprache": true,
-  pflegekontrolle: true, dokumente: true, pendenzen: true, verlauf: true,
+  pflegekontrolle: true, dokumente: true, pendenzen: true, verlauf: true, controlling: true,
 };
 
 /** Ansichten, deren Umfang schon feststeht — sie nennen ihn statt zu schweigen. */
@@ -736,6 +742,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "leistungsplanungsblatt": return <TabKLV patientId={patient.id} />;
     case "verordnung-und-kostengutsprache": return <AnsichtVerordnung patient={patient} />;
     case "pflegekontrolle": return <AnsichtPflegekontrolle patient={patient} />;
+    case "controlling": return <AnsichtControlling patient={patient} />;
     case "dokumente": return <TabDokumente patient={patient} />;
     case "pendenzen": return <TabTickets tickets={tickets} navigate={navigate} />;
     case "verlauf": return <TabHistorie patient={patient} />;
@@ -3166,6 +3173,235 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   );
 }
 
+
+/* ══════════════════════════════════════════
+   ANSICHT: Controlling — hält das Dossier einer Kontrolle stand?
+
+   Bei einer Kassenkontrolle verlangt der Versicherer die Unterlagen der
+   letzten drei Monate; bei Kaufmann sind das rund neunzig Berichte und ein
+   bis zwei Wochen Arbeit, nachträglich zusammengesucht. Diese Ansicht
+   beantwortet die Frage vorher.
+   ══════════════════════════════════════════ */
+
+const CONTROLLING_ZEITRAEUME = [3, 6, 12];
+
+function AnsichtControlling({ patient }: { patient: Patient }) {
+  const nav = useNavigate();
+  const einsaetze = useEinsaetze();
+  const leistungen = useErbrachteLeistungen();
+  const klvs = useKlvVerordnungen();
+  const mandate = useMandate();
+  const verordnungen = useVerordnungen();
+  const kgs = useKostengutsprachen();
+  const angehoerige = useAngehoerige();
+  const [monate, setMonate] = useState(3);
+
+  const zeitraum = zeitraumMonate(EINSATZ_BEZUGSMONAT.getFullYear(), EINSATZ_BEZUGSMONAT.getMonth(), monate);
+  const mandatIds = mandate.filter(m => m.patientId === patient.id).map(m => m.id);
+  const blatt = [...klvs].filter(k => k.patientId === patient.id && k.status !== "ersetzt")
+    .sort((a, b) => b.version - a.version)[0] ?? null;
+
+  /* Eine Rechnung, drei Orte: dieselbe Funktion speist Pflegekontrolle,
+     Überblick und diese Ansicht. */
+  const quellen = { einsaetze, leistungen, klvs, mandate, verordnungen };
+  const jeMonat = zeitraum.monate.map(m => monatsKennzahlen(patient.id, m.jahr, m.monat, quellen));
+
+  /* Über wen wurde im Zeitraum abgerechnet? Die Einsätze sagen es — sie
+     tragen die Kennung der angehörigen Person, die geleistet hat. */
+  const kennungen = new Set(
+    jeMonat.flatMap(k => k.tage).flatMap(t => t.einsaetze)
+      .map(e => (e.erbrachtDurch.art === "angehoeriger" ? e.erbrachtDurch.kennung : ""))
+      .filter(Boolean));
+  const abgerechnete = angehoerige.filter(a => kennungen.has(a.id));
+
+  /* Rhythmusschritte der abgerechneten Angehörigen, fällig im Zeitraum. */
+  const rhythmusEintraege = unifiedEntries.filter(e =>
+    e.quelle === "rhythmus" && e.personBezug.art === "angehoeriger" && kennungen.has(e.personBezug.kennung)
+    && e.faellig !== null && (() => {
+      const d = ausAnzeigedatum(isoZuAnzeige(e.faellig!));
+      return d !== null && d >= zeitraum.von && d <= zeitraum.bis;
+    })());
+  const rhythmus = {
+    faellig: rhythmusEintraege.length,
+    ueberfaellig: rhythmusEintraege.filter(e => {
+      if (e.status === "erledigt") return false;
+      const d = ausAnzeigedatum(isoZuAnzeige(e.faellig!));
+      return d !== null && d < MANDAT_STICHTAG;
+    }).length,
+  };
+
+  const plan = MOCK_PFLEGEPLANUNGEN.find(p => p.patientId === patient.id) ?? null;
+  const zeilen = pruefbereitschaft({
+    patientId: patient.id, zeitraum, blatt,
+    verordnungen: verordnungen.filter(v => mandatIds.includes(v.mandatId)),
+    kostengutsprachen: kgs.filter(k => mandatIds.includes(k.mandatId)),
+    pflegediagnosen: plan ? plan.pflegediagnosen.length : null,
+    jeMonat, abgerechnete, rhythmus,
+  });
+
+  /* ── Teil 2: Massnahme gegen Dokumentation ──
+     Erwartete Anzahl im Zeitraum aus der verordneten Häufigkeit; erbrachte
+     aus den erfassten Leistungen. */
+  const positionen = (blatt?.leistungspositionen ?? []).filter(istPeriodisch);
+  const alleLeistungen = jeMonat.flatMap(k => k.tage).flatMap(t => t.einsaetze)
+    .filter(e => e.zustand === "erbracht")
+    .flatMap(e => leistungen.filter(l => l.einsatzId === e.id && l.erbracht));
+  const abgleich = positionen.map(pos => {
+    const erwartet = zeitraum.monate.reduce(
+      (s, m) => s + erwarteteAnzahlImMonat(pos, new Date(m.jahr, m.monat + 1, 0).getDate()), 0);
+    const erbracht = alleLeistungen.filter(l => l.positionId === pos.id).length;
+    return { pos, erwartet, erbracht, fehlend: Math.max(0, erwartet - erbracht) };
+  });
+  const einsaetzeImZeitraum = jeMonat.reduce((s, k) => s + k.einsaetzeGesamt, 0);
+  const leereMonate = jeMonat
+    .map((k, i) => ({ k, m: zeitraum.monate[i] }))
+    .filter(x => x.k.einsaetzeGesamt === 0)
+    .map(x => `${MONATE[x.m.monat]} ${x.m.jahr}`);
+
+  const vollstaendig = zaehleVollstaendig(zeilen);
+  const farbe = (z: Zustand) => z === "vollstaendig"
+    ? { bg: "var(--status-success-bg)", fg: "var(--status-success-text)", text: "vollständig" }
+    : z === "lueckenhaft"
+      ? { bg: "var(--status-warning-bg)", fg: "var(--status-warning-text)", text: "lückenhaft" }
+      : { bg: "var(--status-danger-bg)", fg: "var(--status-danger)", text: "fehlt" };
+
+  /* Ohne Mandat oder ohne Blatt fehlt die Abrechnungsgrundlage — dann sieben
+     rote Zeilen zu zeigen, behauptete Versäumnisse, wo nur nichts angelegt
+     ist. Eine Kasse prüft, was abgerechnet wurde; ohne Grundlage wurde
+     nichts abgerechnet. */
+  if (mandatIds.length === 0 || !blatt) {
+    return (
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "16px 18px" }}>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+          {mandatIds.length === 0
+            ? "Für diesen Patienten besteht kein Mandat. "
+            : "Für diesen Patienten besteht kein aktives Leistungsplanungsblatt. "}
+          Ohne Abrechnungsgrundlage gibt es nichts, was eine Kasse prüfen könnte — und nichts, was
+          hier als fehlend zu melden wäre.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* ── Kopfzeile: Zeitraum ── */}
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "12px 18px" }}>
+        <div className="flex items-center flex-wrap" style={{ gap: 12 }}>
+          <div>
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Geprüfter Zeitraum</div>
+            <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)" }}>{zeitraumText(zeitraum)}</div>
+          </div>
+          <div className="flex items-center" style={{ gap: 6, marginLeft: "auto" }}>
+            {CONTROLLING_ZEITRAEUME.map(n => (
+              <button key={n} type="button" onClick={() => setMonate(n)}
+                className="ui-fokusring cursor-pointer"
+                style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)",
+                  background: monate === n ? "var(--brand-primary-light)" : "var(--bg-elevated)",
+                  border: monate === n ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
+                  color: monate === n ? "var(--brand-primary)" : "var(--text-primary)" }}>
+                {n} Monate
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Teil 1: Prüfbereitschaft ── */}
+      <PSectionCard title="Prüfbereitschaft" icon={ClipboardCheck}>
+        {/* Kein Punktesystem: eine Kontrolle bestehen heisst nicht achtzig
+            Prozent, sondern dass jede verlangte Unterlage vorliegt. */}
+        <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", marginBottom: 10 }}>
+          {vollstaendig} von {zeilen.length} Unterlagen vollständig
+        </div>
+        <div className="flex flex-col" style={{ gap: 2 }}>
+          {zeilen.map(z => {
+            const f = farbe(z.zustand);
+            return (
+              <div key={z.id} className="flex items-start flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <span style={{ width: 250, flexShrink: 0, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{z.unterlage}</span>
+                <span style={{ flexShrink: 0, padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap", background: f.bg, color: f.fg }}>
+                  {f.text}
+                </span>
+                <span style={{ flex: 1, minWidth: 220, fontSize: "var(--text-meta)", color: "var(--text-secondary)", lineHeight: 1.55 }}>
+                  {z.befund}
+                </span>
+                <button type="button" onClick={() => nav(ansichtPfad(patient.id, z.ansicht))}
+                  className="ui-fokusring cursor-pointer inline-flex items-center"
+                  style={{ gap: 4, flexShrink: 0, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)", whiteSpace: "nowrap" }}>
+                  {z.verweis} <ChevronRight style={{ width: 11, height: 11 }} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </PSectionCard>
+
+      {/* ── Teil 2: Massnahme gegen Dokumentation ── */}
+      <PSectionCard title="Verordnet gegen dokumentiert" icon={ListChecks}>
+        <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: "0 0 12px", maxWidth: "74ch", lineHeight: 1.55 }}>
+          Das ist der Abgleich, den die Kasse maschinell macht: eine verordnete und nie erbrachte
+          Position ist der Befund, der eine Rückforderung auslöst. Geprüft wird die Anzahl im
+          Zeitraum, nicht der einzelne Tag — das Blatt verordnet Häufigkeiten und keinen
+          Wochentagsplan.
+        </p>
+        {!blatt ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0 }}>
+            Kein aktives Leistungsplanungsblatt — es gibt keine verordnete Position, gegen die sich
+            etwas abgleichen liesse.
+          </p>
+        ) : einsaetzeImZeitraum === 0 ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--status-warning-text)", margin: 0, maxWidth: "74ch" }}>
+            Im Zeitraum ist kein einziger Einsatz erfasst. Damit ist keine der {positionen.length} verordneten
+            Positionen dokumentiert — das ist ein Befund über die Erfassung, nicht über einzelne Positionen.
+          </p>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {/* Monate ganz ohne Erfassung erklären die Unterschreitungen
+                darunter — ohne diesen Satz läse sich jede Zeile als Lücke in
+                der einzelnen Position statt als fehlende Erfassung. */}
+            {leereMonate.length > 0 && (
+              <p style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", margin: "0 0 10px", maxWidth: "74ch", lineHeight: 1.55 }}>
+                In {leereMonate.join(", ")} ist kein Einsatz erfasst. Die Unterschreitungen unten
+                folgen daraus und betreffen nicht die einzelne Position.
+              </p>
+            )}
+            <div className="flex items-baseline" style={{ gap: 10, paddingBottom: 5 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-micro)", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Position</span>
+              <span style={{ width: 92, textAlign: "right", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Verordnet</span>
+              <span style={{ width: 68, textAlign: "right", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Erwartet</span>
+              <span style={{ width: 68, textAlign: "right", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Erbracht</span>
+              <span style={{ width: 140, fontSize: "var(--text-micro)", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Zustand</span>
+            </div>
+            {abgleich.map(a => (
+              <div key={a.pos.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "7px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <span style={{ flex: 1, minWidth: 200, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
+                  <span style={{ color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", marginRight: 7 }}>{a.pos.klvNummer}</span>
+                  {a.pos.bezeichnung}
+                </span>
+                <span style={{ width: 92, textAlign: "right", fontSize: "var(--text-meta)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{haeufigkeitText(a.pos)}</span>
+                <span style={{ width: 68, textAlign: "right", fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>{a.erwartet}</span>
+                <span style={{ width: 68, textAlign: "right", fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums" }}>{a.erbracht}</span>
+                <span style={{ width: 140, fontSize: "var(--text-meta)", color: a.fehlend > 0 ? "var(--status-warning-text)" : "var(--status-success-text)", whiteSpace: "nowrap" }}>
+                  {a.fehlend > 0 ? `unterschritten um ${a.fehlend}` : "gedeckt"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </PSectionCard>
+
+      {/* ── Teil 3: Was nicht beurteilbar ist ── */}
+      <PSectionCard title="Nicht beurteilbar" icon={Info}>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+          {NICHT_BEURTEILBAR_CONTROLLING.map((t, i) => (
+            <li key={i} style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", lineHeight: 1.6, maxWidth: "74ch", marginBottom: 4 }}>{t}</li>
+          ))}
+        </ul>
+      </PSectionCard>
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════
    Annas Lagebild
