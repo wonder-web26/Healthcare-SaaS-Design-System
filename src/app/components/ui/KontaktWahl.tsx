@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { InlineSelect } from "./InlineSelect";
 import { FormFeld } from "./FormFeld";
 import { useKontakte, kontaktSichern } from "../../../lib/kontakte/store";
@@ -34,13 +34,50 @@ export function KontaktWahl({ wert, onWahl, zugehoerigkeitLabel = "Zugehörigkei
   const [zugehoerigkeit, setZugehoerigkeit] = useState("");
   const [telefon, setTelefon] = useState("");
   const [fehler, setFehler] = useState("");
+  /* Was gewählt war, bevor der Anlegeteil aufging. Wer versehentlich darauf
+     klickt und abbricht, bekommt seinen Kontakt zurück. */
+  const [vorher, setVorher] = useState<string>(wert);
+  const bereich = useRef<HTMLDivElement>(null);
+
+  const felderLeeren = () => {
+    setName(""); setVorname(""); setTyp(""); setZugehoerigkeit(""); setTelefon(""); setFehler("");
+  };
+
+  const abbrechen = () => {
+    setModus(vorher);
+    onWahl(vorher);
+    /* Teilweise Eingetragenes geht ohne Rückfrage verloren. Bei fünf Feldern
+       wäre eine Warnung überzogen — anders als bei den Stammdaten, wo ein
+       Abbruch einunddreissig Felder verwirft und darum nachfragt. */
+    felderLeeren();
+  };
 
   const waehlen = (v: string) => {
+    if (v === NEU) setVorher(modus === NEU ? vorher : modus);
     setModus(v);
     /* Erst beim Anlegen entsteht die Kennung — bis dahin meldet die Wahl
-       "keiner", damit niemand auf einen Kontakt verweist, den es nicht gibt. */
+       "keiner", damit niemand auf einen Kontakt verweist, den es nicht gibt.
+       Die Wahl eines bestehenden Eintrags schliesst den Anlegeteil damit
+       ebenfalls; das war schon vorher so. */
     onWahl(v === NEU ? "" : v);
+    if (v !== NEU) felderLeeren();
   };
+
+  /* Escape wirkt wie Abbrechen — der Griff, den man ohne Nachdenken sucht.
+     Der Listener hängt am Bereich, nicht am Dokument: sonst schlösse er auch
+     dort, wo niemand ihn erwartet. */
+  useEffect(() => {
+    if (modus !== NEU) return;
+    const el = bereich.current;
+    if (!el) return;
+    const taste = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      abbrechen();
+    };
+    el.addEventListener("keydown", taste);
+    return () => el.removeEventListener("keydown", taste);
+  });
 
   const anlegen = () => {
     if (!name.trim()) { setFehler("Bitte den Namen erfassen."); return; }
@@ -49,9 +86,10 @@ export function KontaktWahl({ wert, onWahl, zugehoerigkeitLabel = "Zugehörigkei
       id: "", name: name.trim(), vorname: vorname.trim(), typ: typ as Kontakt["typ"],
       zugehoerigkeit: zugehoerigkeit.trim(), telefon: telefon.trim(), email: "", bemerkung: "",
     });
-    setFehler("");
     setModus(k.id);
     onWahl(k.id);
+    setVorher(k.id);
+    felderLeeren();
   };
 
   return (
@@ -65,7 +103,8 @@ export function KontaktWahl({ wert, onWahl, zugehoerigkeitLabel = "Zugehörigkei
           ]} />
       </div>
       {modus === NEU && (
-        <div style={{ marginTop: 10, padding: "12px 14px", borderRadius: 10, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
+        <div ref={bereich} tabIndex={-1}
+          style={{ marginTop: 10, padding: "12px 14px", borderRadius: 10, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
           <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", marginBottom: 10 }}>Neuer Kontakt</div>
           <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12 }}>
             <FormFeld label="Name" wert={name} platzhalter="Nachname oder Institution" onAendern={setName} />
@@ -80,11 +119,17 @@ export function KontaktWahl({ wert, onWahl, zugehoerigkeitLabel = "Zugehörigkei
           {fehler && (
             <div role="alert" style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 8 }}>{fehler}</div>
           )}
-          <button type="button" onClick={anlegen} className="ui-fokusring cursor-pointer"
-            style={{ marginTop: 10, padding: "5px 14px", borderRadius: "var(--radius-pill)", fontFamily: "inherit", fontSize: "var(--text-small)",
-              fontWeight: "var(--weight-medium)", background: "var(--brand-primary-light)", border: "var(--border-thin) solid var(--brand-primary)", color: "var(--brand-primary)" }}>
-            Kontakt anlegen
-          </button>
+          <div className="flex items-center" style={{ gap: 12, marginTop: 10 }}>
+            <button type="button" onClick={anlegen} className="ui-fokusring cursor-pointer"
+              style={{ padding: "5px 14px", borderRadius: "var(--radius-pill)", fontFamily: "inherit", fontSize: "var(--text-small)",
+                fontWeight: "var(--weight-medium)", background: "var(--brand-primary-light)", border: "var(--border-thin) solid var(--brand-primary)", color: "var(--brand-primary)" }}>
+              Kontakt anlegen
+            </button>
+            <button type="button" onClick={abbrechen} className="ui-fokusring cursor-pointer"
+              style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+              Abbrechen
+            </button>
+          </div>
         </div>
       )}
     </div>
