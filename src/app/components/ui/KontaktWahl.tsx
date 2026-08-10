@@ -38,6 +38,14 @@ export function KontaktWahl({ wert, onWahl, zugehoerigkeitLabel = "Zugehörigkei
   /* Was gewählt war, bevor der Anlegeteil aufging. Wer versehentlich darauf
      klickt und abbricht, bekommt seinen Kontakt zurück. */
   const [vorher, setVorher] = useState<string>(wert);
+  /* Der Suchtext im Augenblick der Wahl — er wird zum Anfangswert des
+     Namensfelds. Nicht zerlegt: welcher Teil Vor- und welcher Nachname ist,
+     weiss nur, wer ihn getippt hat.
+     Als Ref, nicht als Zustand: die Auswahl meldet ihn im selben Klick, in
+     dem sie die Wahl meldet. Über den Zustand gelesen käme im selben
+     Durchlauf noch der vorherige Wert an — das Feld hinkte einen Schritt
+     hinterher. */
+  const suchtext = useRef("");
   const bereich = useRef<HTMLDivElement>(null);
 
   const felderLeeren = () => {
@@ -51,10 +59,14 @@ export function KontaktWahl({ wert, onWahl, zugehoerigkeitLabel = "Zugehörigkei
        wäre eine Warnung überzogen — anders als bei den Stammdaten, wo ein
        Abbruch einunddreissig Felder verwirft und darum nachfragt. */
     felderLeeren();
+    suchtext.current = "";
   };
 
   const waehlen = (v: string) => {
-    if (v === NEU) setVorher(modus === NEU ? vorher : modus);
+    if (v === NEU) {
+      setVorher(modus === NEU ? vorher : modus);
+      setName(suchtext.current.trim());
+    }
     setModus(v);
     /* Erst beim Anlegen entsteht die Kennung — bis dahin meldet die Wahl
        "keiner", damit niemand auf einen Kontakt verweist, den es nicht gibt.
@@ -107,6 +119,7 @@ export function KontaktWahl({ wert, onWahl, zugehoerigkeitLabel = "Zugehörigkei
         placeholder={platzhalter}
         searchPlaceholder="Name oder Zugehörigkeit suchen…"
         keineTrefferText="Kein Kontakt gefunden."
+        onSuchtext={t => { suchtext.current = t; }}
         options={[
           ...kontakte.map(k => ({
             value: k.id,

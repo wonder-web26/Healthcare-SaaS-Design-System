@@ -38,9 +38,17 @@ interface ComboboxProps {
   disabled?: boolean;
   /** Steht über den Immer-Einträgen, wenn die Suche sonst nichts findet. */
   keineTrefferText?: string;
+  /**
+   * Der Suchtext im Augenblick der Wahl, bevor er geleert wird.
+   *
+   * Wer nach „peter frei" sucht, nichts findet und dann anlegt, hat den
+   * Namen bereits getippt. Ihn ein zweites Mal zu verlangen wäre eine
+   * Zumutung ohne Grund.
+   */
+  onSuchtext?: (text: string) => void;
 }
 
-export function Combobox({ label, required, error, success, hint, steuerelementMaxBreite, value, onChange, options, placeholder = "Bitte wählen", searchPlaceholder = "Suchen…", disabled, keineTrefferText }: ComboboxProps) {
+export function Combobox({ label, required, error, success, hint, steuerelementMaxBreite, value, onChange, options, placeholder = "Bitte wählen", searchPlaceholder = "Suchen…", disabled, keineTrefferText, onSuchtext }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
   const [search, setSearch] = useState("");
@@ -116,7 +124,7 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
     if (e.key === "Escape") { setOpen(false); setSearch(""); }
     if (e.key === "ArrowDown") { e.preventDefault(); setFocusIdx(i => Math.min(i + 1, flatFiltered.length - 1)); }
     if (e.key === "ArrowUp") { e.preventDefault(); setFocusIdx(i => Math.max(i - 1, 0)); }
-    if (e.key === "Enter" && focusIdx >= 0 && focusIdx < flatFiltered.length) { e.preventDefault(); onChange(flatFiltered[focusIdx].value); setOpen(false); setSearch(""); }
+    if (e.key === "Enter" && focusIdx >= 0 && focusIdx < flatFiltered.length) { e.preventDefault(); onSuchtext?.(search); onChange(flatFiltered[focusIdx].value); setOpen(false); setSearch(""); }
   };
 
   return (
@@ -198,7 +206,7 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
                         <button
                           key={opt.value}
                           type="button"
-                          onClick={() => { onChange(opt.value); setOpen(false); setSearch(""); }}
+                          onClick={() => { onSuchtext?.(search); onChange(opt.value); setOpen(false); setSearch(""); }}
                           onMouseEnter={() => setFocusIdx(globalIdx)}
                           className="w-full text-left flex items-center cursor-pointer transition-colors"
                           style={{
