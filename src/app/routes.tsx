@@ -16,6 +16,7 @@ import { PflegeplanungArbeitsbereich } from "./components/PflegeplanungArbeitsbe
 import { KLVArbeitsbereich } from "./components/KLVArbeitsbereich";
 import { KlvListPage } from "./components/KlvListPage";
 import { AbschlussListPage } from "./components/AbschlussListPage";
+import { KontaktePage } from "./components/KontaktePage";
 import { SchulungsnachweisPage } from "./components/schulung/SchulungsnachweisPage";
 import { ArbeitskontrollePage } from "./components/arbeitskontrolle/ArbeitskontrollePage";
 import { InterraiNeuPage } from "./components/interrai-neu/InterraiNeuPage";
@@ -42,6 +43,7 @@ export const router = createBrowserRouter([
       { path: "patienten/:patientId/:gruppe", Component: Patient360Page },
       { path: "patienten/:patientId/:gruppe/:ansicht", Component: Patient360Page },
       { path: "angehoerige", Component: AngehoerigePage },
+      { path: "kontakte", Component: KontaktePage },
       { path: "angehoerige/:angehoerigerIdOrNew", Component: Angehoerige360Page },
       { path: "onboarding", Component: OnboardingListPage },
       { path: "onboarding/neu", Component: OnboardingPage },

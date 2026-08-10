@@ -62,9 +62,6 @@ export interface Patient {
   kartennummer: string;
   /** SP-03: BAG-Nr. der Kasse */
   bagNr: string;
-  hausarztName: string;
-  hausarztFachgebiet: string;
-  hausarztTelefon: string;
   /* ── Aus dem Abklärungsgespräch, bisher nicht übergeben ──────────────────
      28 Angaben wurden im Gespräch erhoben und kamen nie beim Patienten an.
      Sie stehen jetzt hier; gefüllt werden sie beim Abschluss eines
@@ -327,9 +324,6 @@ export const patientenSeed: Patient[] = [
     aufnahmeDatum: "12.01.2026",
     letzterBesuch: "31.07.2026",
     sprache: "Schweizerdeutsch",
-    hausarztName: "",
-    hausarztFachgebiet: "",
-    hausarztTelefon: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "abrechenbar",
     reAssessmentFrist: "2026-09-03",
@@ -400,9 +394,6 @@ export const patientenSeed: Patient[] = [
     aufnahmeDatum: "20.02.2026",
     letzterBesuch: "—",
     sprache: "Schweizerdeutsch",
-    hausarztName: "",
-    hausarztFachgebiet: "",
-    hausarztTelefon: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "in_vorbereitung",
     reAssessmentFrist: null,
@@ -473,9 +464,6 @@ export const patientenSeed: Patient[] = [
     aufnahmeDatum: "03.09.2025",
     letzterBesuch: "28.07.2026",
     sprache: "Italienisch",
-    hausarztName: "",
-    hausarztFachgebiet: "",
-    hausarztTelefon: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "abrechenbar",
     reAssessmentFrist: "2026-09-18",
@@ -546,9 +534,6 @@ export const patientenSeed: Patient[] = [
     aufnahmeDatum: "15.06.2025",
     letzterBesuch: "14.07.2026",
     sprache: "Schweizerdeutsch",
-    hausarztName: "",
-    hausarztFachgebiet: "",
-    hausarztTelefon: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "gekuendigt",
     reAssessmentFrist: null,
@@ -615,9 +600,6 @@ export const patientenSeed: Patient[] = [
     aufnahmeDatum: "28.07.2025",
     letzterBesuch: "27.07.2026",
     sprache: "Schweizerdeutsch",
-    hausarztName: "",
-    hausarztFachgebiet: "",
-    hausarztTelefon: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "nicht_abrechenbar",
     reAssessmentFrist: null,
@@ -688,9 +670,6 @@ export const patientenSeed: Patient[] = [
     aufnahmeDatum: "22.02.2026",
     letzterBesuch: "—",
     sprache: "Türkisch",
-    hausarztName: "",
-    hausarztFachgebiet: "",
-    hausarztTelefon: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "in_vorbereitung",
     reAssessmentFrist: null,
@@ -761,9 +740,6 @@ export const patientenSeed: Patient[] = [
     aufnahmeDatum: "01.11.2025",
     letzterBesuch: "30.07.2026",
     sprache: "Schweizerdeutsch",
-    hausarztName: "",
-    hausarztFachgebiet: "",
-    hausarztTelefon: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "abrechenbar",
     reAssessmentFrist: "2026-09-03",
@@ -834,9 +810,6 @@ export const patientenSeed: Patient[] = [
     aufnahmeDatum: "05.04.2025",
     letzterBesuch: "25.07.2026",
     sprache: "Französisch",
-    hausarztName: "",
-    hausarztFachgebiet: "",
-    hausarztTelefon: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "nicht_abrechenbar",
     reAssessmentFrist: null,
@@ -907,9 +880,6 @@ export const patientenSeed: Patient[] = [
     aufnahmeDatum: "18.12.2025",
     letzterBesuch: "02.08.2026",
     sprache: "Schweizerdeutsch",
-    hausarztName: "",
-    hausarztFachgebiet: "",
-    hausarztTelefon: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "abrechenbar",
     reAssessmentFrist: "2026-10-03",
@@ -976,9 +946,6 @@ export const patientenSeed: Patient[] = [
     aufnahmeDatum: "10.10.2025",
     letzterBesuch: "28.07.2026",
     sprache: "Portugiesisch",
-    hausarztName: "",
-    hausarztFachgebiet: "",
-    hausarztTelefon: "",
     /* ── Extended fields ──────────────────── */
     abrechnungsStatus: "abrechenbar",
     reAssessmentFrist: "2026-09-18",

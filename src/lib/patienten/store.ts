@@ -129,8 +129,6 @@ export interface PatientStammdatenEingabe {
   /** Code aus der Kassen-Picklist; der Bestand hält den Klartextnamen. */
   krankenkasse: string;
   kartennummer: string;
-  hausarztName: string;
-  hausarztTelefon: string;
   /* ── Bisher nicht übergeben ──────────────────────────────────────────────
      28 Angaben, die das Abklärungsgespräch erhebt und die nie beim Patienten
      ankamen. Sie standen im Formular und blieben dort. */
@@ -207,7 +205,7 @@ function stammdatenAbbilden(
   angehoeriger: AngehoerigerVerknuepfung | null,
 ): Pick<Patient,
   "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "adresse" | "krankenkasse" | "aufnahmeDatum" |
-  "kartennummer" | "hausarztName" | "hausarztTelefon" | "sprache" |
+  "kartennummer" | "sprache" |
   "angehoeriger" | "angehoerigerTelefon" | "bagNr" |
   "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "zusatzversicherungKasse" | "weitereVersicherung" | "hausarztEmail" | "spezialAerzte" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "sozialamtKontakt" | "sozialamtKontaktDetail" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
   return {
@@ -223,8 +221,6 @@ function stammdatenAbbilden(
     adresse: adresseZusammensetzen(eingabe.adresseStrasse, eingabe.adressePlz, eingabe.adresseOrt),
     krankenkasse: eingabe.krankenkasse ? getKrankenkasseLabel(eingabe.krankenkasse) : "",
     kartennummer: eingabe.kartennummer,
-    hausarztName: eingabe.hausarztName,
-    hausarztTelefon: eingabe.hausarztTelefon,
     geschlecht: eingabe.geschlecht,
     staatsangehoerigkeit: eingabe.staatsangehoerigkeit,
     heimatort: eingabe.heimatort,
@@ -297,7 +293,6 @@ export function erfassePatientImOnboarding(
     pflegefachkraftInitialen: NICHT_ZUGEWIESEN,
     leistungsart: "",
     letzterBesuch: "",
-    hausarztFachgebiet: "",
     geschlecht: "",
     staatsangehoerigkeit: "",
     heimatort: "",

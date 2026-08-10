@@ -113,10 +113,11 @@ export function zugehoerigkeitLabel(rolle: string): string {
 export type PersonBezug =
   | { art: "angehoeriger"; kennung: string }
   | { art: "mitarbeitende"; name: string }
-  /* Ärzte haben im Cockpit keinen Personendatensatz: Personaladministration
-     ausserhalb der Spitex liegt ausserhalb des Produktumfangs. Sie erscheinen
-     als Name, ohne Verweis — statt einen Datensatz zu erfinden. */
-  | { art: "ohne_datensatz"; name: string };
+  /* Dritte Personen — Ärztinnen, Beistände, Kontaktpersonen von
+     Sozialdiensten — liegen im Kontaktbestand. Vorher stand hier nur ein
+     Name ohne Verweis; derselbe Arzt kam damit so oft vor, wie er Patienten
+     hatte. */
+  | { art: "kontakt"; kennung: string };
 
 export interface Beziehung {
   id: string;
@@ -132,14 +133,9 @@ export interface Beziehung {
   notfallkontakt: boolean;
   auskunftsberechtigt: boolean;
   telefon: string;
-  /**
-   * Wo die Person hingehört — Fachgebiet, Stelle, Behörde.
-   *
-   * Nur bei externen Rollen belegt. Vorher lag das Fachgebiet des Hausarzts
-   * in `bemerkung`; sobald ein zweiter externer Verwender dazukam, hätten
-   * zwei verschiedene Aussagen im selben Feld gestanden.
-   */
-  zugehoerigkeit: string;
+  /* Die Zugehörigkeit — Fachgebiet, Stelle, Behörde — steht seit der
+     Einführung des Kontaktobjekts am Kontakt. Sie beschreibt die Person,
+     nicht ihr Verhältnis zu diesem Patienten. */
   /** Nur bei der Rolle `beistand`; leer = nicht bekannt. */
   vertretungsart: VertretungsartCode | "";
   bemerkung: string;
@@ -149,8 +145,23 @@ export function istAktiv(b: Beziehung): boolean {
   return b.ende.trim() === "";
 }
 
-export function personName(b: Beziehung, nameVon: (kennung: string) => string): string {
-  return b.person.art === "angehoeriger" ? nameVon(b.person.kennung) : b.person.name;
+/**
+ * Name der Person einer Beziehung.
+ *
+ * Zwei Auflöser, weil zwei Bestände dahinterstehen: angehörige Personen und
+ * Kontakte. Mitarbeitende tragen ihren Namen unmittelbar — für sie gibt es
+ * im Cockpit keinen eigenen Bestand.
+ */
+export function personName(
+  b: Beziehung,
+  nameVon: (kennung: string) => string,
+  kontaktVon: (kennung: string) => string = k => k,
+): string {
+  switch (b.person.art) {
+    case "angehoeriger": return nameVon(b.person.kennung);
+    case "kontakt": return kontaktVon(b.person.kennung);
+    default: return b.person.name;
+  }
 }
 
 /**
@@ -161,69 +172,6 @@ export function personName(b: Beziehung, nameVon: (kennung: string) => string): 
  */
 export const DIAGRAMM_MAX = 8;
 
-/* ══════════════════════════════════════════
-   ABGELEITETE BEZIEHUNG — DER HAUSARZT
-   ══════════════════════════════════════════ */
-
-/** Kennung der abgeleiteten Hausarzt-Beziehung eines Patienten. */
-export function hausarztBeziehungId(patientId: string): string {
-  return `HA-${patientId}`;
-}
-
-/**
- * Der Hausarzt als Beziehung — abgeleitet, nicht gespeichert.
- *
- * Er steht in den Stammdaten, und dort gehört er hin: er ist eine Angabe zum
- * Patienten, kein eigener Datensatz. Würde die Beziehung zusätzlich im
- * Bestand liegen, gäbe es zwei Quellen für dieselbe Aussage, und die
- * zweite ginge beim ersten Ändern des Feldes falsch. Darum wird sie bei
- * jedem Lesen aus dem Feld gebildet: ändert sich der Name, ändert sich die
- * Beziehung; wird er entfernt, verschwindet sie.
- *
- * Folgerichtig ist sie **nicht beendbar**. Das Modell beendet, statt zu
- * löschen — aber ein Enddatum liesse sich nirgends hinschreiben, und der
- * nächste Lesevorgang bildete die Beziehung neu. Die Ansicht sagt das,
- * statt einen Knopf anzubieten, der nichts bewirkt.
- *
- * Das Fachgebiet steht in `zugehoerigkeit` — dem Feld, das bei externen
- * Rollen sagt, wo jemand hingehört.
- *
- * `beginn` bleibt leer. Wann jemand Hausarzt wurde, steht nirgends; ein
- * Datum zu setzen hiesse, es zu erfinden.
- */
-export function hausarztBeziehung(p: {
-  id: string; hausarztName: string; hausarztTelefon: string; hausarztFachgebiet: string;
-}): Beziehung | null {
-  const name = p.hausarztName.trim();
-  if (!name) return null;
-  return {
-    id: hausarztBeziehungId(p.id),
-    patientId: p.id,
-    person: { art: "ohne_datensatz", name },
-    rolle: "hausarzt",
-    art: "",
-    beginn: "",
-    ende: "",
-    notfallkontakt: false,
-    auskunftsberechtigt: false,
-    telefon: p.hausarztTelefon.trim(),
-    zugehoerigkeit: p.hausarztFachgebiet.trim(),
-    vertretungsart: "",
-    bemerkung: "",
-  };
-}
-
-/**
- * Spezialärzte bleiben aussen vor — bekannte Lücke.
- *
- * `spezialAerzte` steht am Patienten als Freitext und trägt oft mehrere
- * Namen in einer Zeile. Daraus Knoten zu bilden hiesse, an Kommas zu raten:
- * „Dr. Meier, Kardiologie" wären zwei Namen statt einer Person mit Fach.
- * Erfasst gehörten sie als eigene Angaben, je Person mit Name, Fachgebiet
- * und Telefon — dann folgte die Beziehung daraus wie beim Hausarzt.
- */
 export const SPEZIALAERZTE_LUECKE =
   "Spezialärzte stehen als Freitext am Patienten und erscheinen nicht im Netz.";
 
-/** Vermerk an der abgeleiteten Zeile — im Wortlaut, damit er nur einmal steht. */
-export const ABGELEITET_VERMERK = "aus den Stammdaten";
