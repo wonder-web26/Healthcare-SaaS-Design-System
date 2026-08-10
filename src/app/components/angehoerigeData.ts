@@ -925,7 +925,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     externerEintritt: "",
     bvgAnbindungGewuenscht: "",
     funktion: "ph_ohne_srk",
-    eintrittsdatum: "01.12.2025",
+    eintrittsdatum: "01.04.2025",
     stundenlohn: "29.50",
     ferienanspruchWochen: "4.0",
     bankname: "Migros Bank",

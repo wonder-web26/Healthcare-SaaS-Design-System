@@ -2055,16 +2055,23 @@ function AnsichtMandate({ patient }: { patient: Patient }) {
   const ueberschneidend = m2Ueberschneidungen(alle, MANDAT_STICHTAG);
 
   if (aktive.length === 0) {
+    /* Nach einem Austritt ist kein Mandat mehr anzulegen — es gäbe nichts
+       mehr abzurechnen. Die beendeten bleiben sichtbar: eine Kasse kann
+       rückwirkend prüfen. */
+    const austritt = austrittVon(patient);
     return (
       <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-6)" }}>
         <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Mandate</h3>
         <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 6, maxWidth: 560 }}>
-          Noch kein Mandat erfasst. Ohne Abrechnungsbeziehung lässt sich weder
-          eine Finanzierung noch eine Verordnung zuordnen.
+          {austritt
+            ? `Die Betreuung ist beendet — ${austrittText(austritt)}. Ein neues Mandat entsteht hier nicht mehr.`
+            : "Noch kein Mandat erfasst. Ohne Abrechnungsbeziehung lässt sich weder eine Finanzierung noch eine Verordnung zuordnen."}
         </p>
-        <div style={{ marginTop: 14 }}>
-          <AppButton variant="primaer" icon={Plus}>Mandat erfassen</AppButton>
-        </div>
+        {!austritt && (
+          <div style={{ marginTop: 14 }}>
+            <AppButton variant="primaer" icon={Plus}>Mandat erfassen</AppButton>
+          </div>
+        )}
         {beendete.length > 0 && <div style={{ marginTop: 16 }}><MandatBeendete mandate={beendete} /></div>}
       </div>
     );
@@ -4354,7 +4361,13 @@ function AnsichtPflegeberichte({ patient }: { patient: Patient }) {
   const [suche, setSuche] = useState("");
   const [nurAbweichung, setNurAbweichung] = useState(false);
 
-  const zeitraum = zeitraumMonate(EINSATZ_BEZUGSMONAT.getFullYear(), EINSATZ_BEZUGSMONAT.getMonth(), monate);
+  /* Der Verlauf endet beim Austritt, wie das Controlling: nach ihm wurde
+     nicht mehr gepflegt, und ein Zeitraum, der Monate ohne Pflege einschliesst,
+     verwässert die Zahl darunter („N Berichte an M Tagen mit Einsatz"). */
+  const austritt = austrittVon(patient);
+  const ende = (austritt && austrittsMonat(austritt))
+    ?? { jahr: EINSATZ_BEZUGSMONAT.getFullYear(), monat: EINSATZ_BEZUGSMONAT.getMonth() };
+  const zeitraum = zeitraumMonate(ende.jahr, ende.monat, monate);
   const quellen = { einsaetze, leistungen, klvs, mandate, verordnungen };
   /* Dieselbe Rechnung wie in Pflegekontrolle, Überblick und Controlling —
      die Abweichung eines Tages stammt nicht aus einer zweiten Quelle. */
@@ -4425,6 +4438,11 @@ function AnsichtPflegeberichte({ patient }: { patient: Patient }) {
             <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
               {mitBericht.length} {mitBericht.length === 1 ? "Bericht" : "Berichte"} an {tageMitEinsatz} Tagen mit Einsatz
             </div>
+            {austritt && (
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                Betreuung beendet — {austrittText(austritt)}
+              </div>
+            )}
           </div>
           <div className="flex items-center" style={{ gap: 6, marginLeft: "auto" }}>
             {BERICHT_ZEITRAEUME.map(n => (
