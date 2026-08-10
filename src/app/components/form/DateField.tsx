@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Calendar as CalendarIcon, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { de } from "date-fns/locale";
+import { gegenwart } from "../../../lib/gegenwart";
 import { addMonths, subMonths } from "date-fns";
 import { useNavigation } from "react-day-picker";
 import { Popover, PopoverAnchor, PopoverTrigger, PopoverContent } from "../ui/popover";
@@ -74,7 +75,10 @@ function maskiere(raw: string): string {
 
 function plausibilitaet(d: Date, bereich: DatumBereich): string | null {
   if (d.getFullYear() < 1900) return "Jahr vor 1900 — bitte prüfen.";
-  const heute = new Date();
+  /* Die Grenze zwischen Vergangenheit und Zukunft ist die fachliche
+     Gegenwart, nicht die Uhr des Rechners: sonst nimmt das Feld ein Datum
+     an, das der Schreibweg dahinter als Zukunft zurückweist. */
+  const heute = gegenwart();
   const nurTag = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const nurHeute = new Date(heute.getFullYear(), heute.getMonth(), heute.getDate()).getTime();
   if (bereich === "past" && nurTag > nurHeute) return "Datum liegt in der Zukunft.";
@@ -193,7 +197,7 @@ export function DateField({
     setSelected(null); setText(""); setError(null); emitIfChanged(null);
   };
 
-  const heute = new Date();
+  const heute = gegenwart();
   const jahr = heute.getFullYear();
   const zeigeHeute = bereich !== "past"; // nur "past" schliesst den Stichtag aus
   const vonJahr = 1900;
@@ -276,7 +280,7 @@ export function DateField({
           selected={selected ?? undefined}
           onSelect={waehleImKalender}
           month={undefined}
-          defaultMonth={selected ?? (bereich === "past" ? new Date(jahr - 30, 0) : new Date())}
+          defaultMonth={selected ?? (bereich === "past" ? new Date(jahr - 30, 0) : gegenwart())}
           components={{ Caption: macheKalenderKopf(vonJahr, bisJahr) }}
           classNames={{
             day: "size-9 p-0 font-normal rounded-md hover:bg-accent hover:text-accent-foreground",
@@ -309,7 +313,7 @@ export function DateField({
           {zeigeHeute && (
             <button
               type="button"
-              onClick={() => waehleImKalender(new Date())}
+              onClick={() => waehleImKalender(gegenwart())}
               style={{
                 flex: 1, minHeight: 44, padding: "0 10px", borderRadius: "var(--radius-card)",
                 background: "transparent", border: "none", cursor: "pointer", textAlign: "center",

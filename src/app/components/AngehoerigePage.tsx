@@ -8,10 +8,11 @@ import { leerZuletzt } from "../../lib/sortierung";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
 import { AuswahlDropdown } from "./ui/AuswahlDropdown";
 import { ListenGeruest } from "./ui/ListenGeruest";
+import { gegenwart, GEGENWART_ISO } from "../../lib/gegenwart";
 
-/* ── Bezugsdatum (Mock-Demo): Ableitungen laufen gegen diesen Stichtag; der
-   Monatsschritt trägt seine Überfälligkeit als vorberechnetes Feld. ── */
-const BEZUGSDATUM = new Date(2026, 2, 3); // 03.03.2026
+/* ── Ableitungen laufen gegen die Gegenwart; der Monatsschritt trägt seine
+   Überfälligkeit als vorberechnetes Feld. ── */
+const BEZUGSDATUM = gegenwart();
 
 /* ── Zugehörigkeit (Segmentumschalter): "Meine" = angemeldete Benutzerin. ── */
 type Segment = "alle" | "meine";
@@ -315,7 +316,7 @@ export function AngehoerigePage() {
               sort={sort ?? undefined}
               onSort={toggleSort}
               karteTitel={nameZelle}
-              fusszeile={<><span>{filtered.length} von {angehoerige.length} Angehörigen</span><span>Stand: {isoZuAnzeige("2026-03-03")}</span></>}
+              fusszeile={<><span>{filtered.length} von {angehoerige.length} Angehörigen</span><span>Stand: {isoZuAnzeige(GEGENWART_ISO)}</span></>}
               leerText="Keine Angehörigen mit diesen Filtern."
             />
           )}

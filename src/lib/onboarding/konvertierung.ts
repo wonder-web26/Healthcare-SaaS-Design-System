@@ -18,6 +18,7 @@ import { getKlvVerordnungen } from "../klv/store";
 import { getPersonByOnboardingId, updatePersonZustand } from "../interrai/store";
 import { schliessePatientOnboardingAb } from "../patienten/store";
 import { schliesseAngehoerigenOnboardingAb } from "../angehoerige/store";
+import { GEGENWART, GEGENWART_ISO } from "../gegenwart";
 
 export interface KonvertierungsErgebnis {
   patientId: string;
@@ -126,7 +127,7 @@ export function konvertiereOnboarding(
     const ed = angehoerigenDaten.eintrittsdatum;
     const ankerAng = ed && /^\d{2}\.\d{2}\.\d{4}$/.test(ed)
       ? `${ed.slice(6, 10)}-${ed.slice(3, 5)}-${ed.slice(0, 2)}`
-      : (ed && /^\d{4}-\d{2}-\d{2}$/.test(ed) ? ed : new Date().toISOString().slice(0, 10));
+      : (ed && /^\d{4}-\d{2}-\d{2}$/.test(ed) ? ed : GEGENWART_ISO);
     generiereRhythmusTickets("angehoeriger", angehoerigerId, angehoerigenDaten.name, ankerAng, angehoerigenDaten.pflegefachkraft);
     anzahlNeuAngehoeriger = getTicketsFuerSubjekt("angehoeriger", angehoerigerId).length;
   }
@@ -168,8 +169,10 @@ export function konvertiereOnboarding(
 
   // Aufenthaltsstatus B: Pendenz fuer offene Bewilligungs-Aufgaben
   if (angehoerigenDaten?.aufenthaltsstatus === "B") {
-    const heute = new Date().toISOString().slice(0, 10);
-    const faellig = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+    /* Fachliche Daten der Pendenz — an der Gegenwart, nicht an der Uhr. */
+    const heute = GEGENWART_ISO;
+    const faellig = new Date(GEGENWART.getFullYear(), GEGENWART.getMonth(), GEGENWART.getDate() + 14)
+      .toISOString().slice(0, 10);
     const bestehend = workflowTasks.find(
       t => t.typ === "AUSWEIS_B_ANMELDUNG" && t.betroffenePerson.name === angehoerigenDaten.name && t.status === "offen"
     );
@@ -192,8 +195,10 @@ export function konvertiereOnboarding(
 
   // BVG: Bei freiwilliger Anbindung Pendenz an Buchhaltung
   if (angehoerigenDaten?.bvgAnbindungGewuenscht) {
-    const heute = new Date().toISOString().slice(0, 10);
-    const faellig = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+    /* Fachliche Daten der Pendenz — an der Gegenwart, nicht an der Uhr. */
+    const heute = GEGENWART_ISO;
+    const faellig = new Date(GEGENWART.getFullYear(), GEGENWART.getMonth(), GEGENWART.getDate() + 14)
+      .toISOString().slice(0, 10);
     const bestehend = workflowTasks.find(
       t => t.titel.includes("BVG-Anbindung") && t.betroffenePerson.name === angehoerigenDaten.name && t.status === "offen"
     );

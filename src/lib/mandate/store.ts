@@ -14,9 +14,16 @@ import { patientenSeed } from "../../app/components/patientData";
 import { KRANKENKASSEN } from "../stammdaten/krankenkassen";
 import { angehoerigeSeed } from "../../app/components/angehoerigeData";
 import type { Mandat } from "./mandate";
+import { gegenwart } from "../gegenwart";
 
-/** Stichtag der Mock-Demo — dieselbe Vorgabe wie in den Listen. */
-export const MANDAT_STICHTAG = new Date(2026, 6, 31); // 31.07.2026
+/**
+ * Stichtag der Mandate, Verordnungen, Gutsprachen und Dokumente.
+ *
+ * Früher der 31.07.2026 und damit ein eigener Bezug neben dem der Listen.
+ * Jetzt dieselbe Gegenwart wie überall; die Wartezeiten und Lücken werden
+ * dadurch um vier Tage länger, weil die Gegenwart vier Tage später liegt.
+ */
+export const MANDAT_STICHTAG = gegenwart();
 
 /**
  * Anzeigename der Kasse am Patienten → Schlüssel der Werteliste. Gespeichert

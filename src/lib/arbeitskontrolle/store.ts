@@ -9,6 +9,7 @@
 
 import { BEURTEILUNGSBLOECKE } from "./kriterien";
 import { getOrgEinstellungen } from "../stammdaten/org-einstellungen";
+import { GEGENWART_ISO } from "../gegenwart";
 
 /* ══════════════════════════════════════════
    TYPEN
@@ -115,7 +116,7 @@ export function erstelleKontrolle(
     fallfuehrendeName,
     patientId: patientId ?? null,
     patientName: patientName ?? null,
-    kontrollDatum: new Date().toISOString().slice(0, 10),
+    kontrollDatum: GEGENWART_ISO,
     art,
     bloecke: leereBlockBewertungen(),
     verbesserungen: "",

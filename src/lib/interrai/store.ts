@@ -16,7 +16,7 @@ import {
   evaluateSkipLogic,
   getItem,
 } from "./instrument";
-import { dateZuIso } from "../datum";
+import { GEGENWART_ISO } from "../gegenwart";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -405,7 +405,7 @@ export function abschliessenAssessment(assessmentId: string, person: string): nu
   // renderer (previously written as dd.MM.yyyy via toLocaleDateString, which a
   // type=date control sanitised to empty).
   if (a.answers["S2b"] == null || a.answers["S2b"] === "") {
-    a.answers["S2b"] = dateZuIso(new Date());
+    a.answers["S2b"] = GEGENWART_ISO;
   }
 
   // Discard all remaining unconfirmed suggestions

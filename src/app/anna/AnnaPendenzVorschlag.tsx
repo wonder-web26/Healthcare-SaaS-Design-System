@@ -5,6 +5,7 @@ import type { UnifiedEntry } from "../../lib/mocks/service-desk-unified";
 import { personName } from "../../lib/mocks/personen-aufloesung";
 import { useCurrentRole } from "../auth";
 import { toast } from "sonner";
+import { GEGENWART } from "../../lib/gegenwart";
 
 /* ══════════════════════════════════════════
    HELPERS
@@ -42,7 +43,7 @@ function generateMockVorschlag(entry: UnifiedEntry): string {
     let text = fillTemplate(typDef.annaPromptTemplate, entry);
     // Add overdue warning if applicable
     if (entry.faellig) {
-      const today = new Date("2026-03-03");
+      const today = GEGENWART;
       const due = new Date(entry.faellig);
       const daysOverdue = Math.round((today.getTime() - due.getTime()) / 86400000);
       if (daysOverdue > 0) {

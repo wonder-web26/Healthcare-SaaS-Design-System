@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { FormField } from "./FormField";
+import { GEGENWART, gegenwart } from "../../../lib/gegenwart";
 
 interface DatePickerProps {
   label: string;
@@ -42,10 +43,12 @@ function getDaysInMonth(year: number, month: number): Date[] {
 export function DatePicker({ label, required, error, success, hint, value, onChange, placeholder = "TT.MM.JJJJ", minDate, maxDate, disabled }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [viewMonth, setViewMonth] = useState(() => value ? value.getMonth() : new Date().getMonth());
-  const [viewYear, setViewYear] = useState(() => value ? value.getFullYear() : new Date().getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => value ? value.getMonth() : GEGENWART.getMonth());
+  const [viewYear, setViewYear] = useState(() => value ? value.getFullYear() : GEGENWART.getFullYear());
   const ref = useRef<HTMLDivElement>(null);
-  const today = useMemo(() => new Date(), []);
+  /* „Heute" im Kalender ist die fachliche Gegenwart — sonst markiert der
+     Kalender einen anderen Tag als den, gegen den gerechnet wird. */
+  const today = useMemo(() => gegenwart(), []);
 
   useEffect(() => {
     if (!open) return;

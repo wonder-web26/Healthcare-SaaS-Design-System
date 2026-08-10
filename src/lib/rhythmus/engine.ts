@@ -14,6 +14,7 @@ import {
   type RhythmusEntitaet,
   type RhythmusVorlage,
 } from "./vorlage";
+import { GEGENWART_ISO } from "../gegenwart";
 
 /* ══════════════════════════════════════════
    TYPEN
@@ -103,8 +104,15 @@ function addOffset(isoDate: string, monate: number, tage: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Fachliches Heute — Grundlage für Fälligkeit und Überfälligkeit.
+ *
+ * Nicht die Uhr: die Fälligkeiten entstehen aus Mockdaten, die relativ zur
+ * Gegenwart liegen. `erledigtAm` und `geaendertAm` bleiben davon unberührt,
+ * das sind Bedienprotokolle.
+ */
 function heute(): string {
-  return new Date().toISOString().slice(0, 10);
+  return GEGENWART_ISO;
 }
 
 /* ══════════════════════════════════════════

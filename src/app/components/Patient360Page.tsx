@@ -102,6 +102,7 @@ import { usePatienten, getPatient, aktualisierePatient, tageBisReAssessment,
   austrittErfassen, AUSTRITT_FEHLERTEXT, type AustrittFehler } from "../../lib/patienten/store";
 import { ENTLASSUNG_NACH, ENTLASSUNG_SONSTIGES, entlassungNachLabel } from "../../lib/stammdaten/entlassung";
 import { austrittVon, austrittText, monatNachAustritt, austrittsMonat } from "../../lib/patienten/austritt";
+import { GEGENWART, gegenwart } from "../../lib/gegenwart";
 import { StatusModal } from "./StatusModal";
 import { DetailNavigation } from "./DetailNavigation";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
@@ -490,10 +491,10 @@ interface Ticket {
 
 function getTickets(_patientId: string): Ticket[] {
   return [
-    { id: "SD-2026-0391", subject: "Kostengutsprache abgelaufen — Erneuerung nötig", status: "offen", priority: "hoch", created: "24.02.2026", assignedTo: "Maria Keller", category: "Abrechnung" },
-    { id: "SD-2026-0378", subject: "Medikamentenplan aktualisieren nach Arztbesuch", status: "in_bearbeitung", priority: "mittel", created: "20.02.2026", assignedTo: "Sandra Weber", category: "Pflege" },
-    { id: "SD-2026-0355", subject: "Angehörigen-Zugang zu Patientenportal einrichten", status: "erledigt", priority: "niedrig", created: "15.02.2026", assignedTo: "System", category: "IT" },
-    { id: "SD-2026-0342", subject: "Schlüsselübergabe dokumentieren", status: "erledigt", priority: "niedrig", created: "10.02.2026", assignedTo: "K. Meier", category: "Administration" },
+    { id: "SD-2026-0391", subject: "Kostengutsprache abgelaufen — Erneuerung nötig", status: "offen", priority: "hoch", created: "28.07.2026", assignedTo: "Maria Keller", category: "Abrechnung" },
+    { id: "SD-2026-0378", subject: "Medikamentenplan aktualisieren nach Arztbesuch", status: "in_bearbeitung", priority: "mittel", created: "24.07.2026", assignedTo: "Sandra Weber", category: "Pflege" },
+    { id: "SD-2026-0355", subject: "Angehörigen-Zugang zu Patientenportal einrichten", status: "erledigt", priority: "niedrig", created: "19.07.2026", assignedTo: "System", category: "IT" },
+    { id: "SD-2026-0342", subject: "Schlüsselübergabe dokumentieren", status: "erledigt", priority: "niedrig", created: "14.07.2026", assignedTo: "K. Meier", category: "Administration" },
   ];
 }
 
@@ -510,16 +511,16 @@ interface HistoryEntry {
 
 function getHistorie(_patientId: string): HistoryEntry[] {
   return [
-    { id: "h1", date: "26.02.2026", time: "14:32", user: "Sandra Weber", action: "Dokument hochgeladen", detail: "Pflegevertrag – digital signiert", type: "dokument" },
-    { id: "h2", date: "26.02.2026", time: "11:15", user: "System", action: "MedLink Synchronisation", detail: "Daten erfolgreich synchronisiert", type: "system" },
-    { id: "h3", date: "25.02.2026", time: "16:40", user: "Sandra Weber", action: "Besuch dokumentiert", detail: "Regelmässiger Pflegebesuch — Vitalzeichen erfasst", type: "workflow" },
-    { id: "h4", date: "24.02.2026", time: "09:20", user: "Maria Keller", action: "Ticket erstellt", detail: "SD-2026-0391: Kostengutsprache abgelaufen", type: "ticket" },
-    { id: "h5", date: "22.02.2026", time: "13:55", user: "Kathrin Meier", action: "Pflegeplan aktualisiert", detail: "Version 3 erstellt und gespeichert", type: "dokument" },
-    { id: "h6", date: "20.02.2026", time: "10:30", user: "Sandra Weber", action: "Workflow-Schritt abgeschlossen", detail: "Schritt 12: Medikamente erfasst", type: "workflow" },
-    { id: "h7", date: "18.02.2026", time: "14:10", user: "Laura Brunner", action: "InterRai Assessment", detail: "Assessment durchgeführt und dokumentiert", type: "workflow" },
-    { id: "h8", date: "15.02.2026", time: "09:00", user: "System", action: "Status geändert", detail: "Status → Aktiv (Abrechenbar)", type: "status" },
-    { id: "h9", date: "12.02.2026", time: "16:20", user: "Sandra Weber", action: "Abrechnungsstatus aktualisiert", detail: "Kostengutsprache bestätigt durch KK", type: "abrechnung" },
-    { id: "h10", date: "10.02.2026", time: "11:45", user: "K. Meier", action: "Ticket geschlossen", detail: "SD-2026-0342: Schlüsselübergabe", type: "ticket" },
+    { id: "h1", date: "30.07.2026", time: "14:32", user: "Sandra Weber", action: "Dokument hochgeladen", detail: "Pflegevertrag – digital signiert", type: "dokument" },
+    { id: "h2", date: "30.07.2026", time: "11:15", user: "System", action: "MedLink Synchronisation", detail: "Daten erfolgreich synchronisiert", type: "system" },
+    { id: "h3", date: "29.07.2026", time: "16:40", user: "Sandra Weber", action: "Besuch dokumentiert", detail: "Regelmässiger Pflegebesuch — Vitalzeichen erfasst", type: "workflow" },
+    { id: "h4", date: "28.07.2026", time: "09:20", user: "Maria Keller", action: "Ticket erstellt", detail: "SD-2026-0391: Kostengutsprache abgelaufen", type: "ticket" },
+    { id: "h5", date: "26.07.2026", time: "13:55", user: "Kathrin Meier", action: "Pflegeplan aktualisiert", detail: "Version 3 erstellt und gespeichert", type: "dokument" },
+    { id: "h6", date: "24.07.2026", time: "10:30", user: "Sandra Weber", action: "Workflow-Schritt abgeschlossen", detail: "Schritt 12: Medikamente erfasst", type: "workflow" },
+    { id: "h7", date: "22.07.2026", time: "14:10", user: "Laura Brunner", action: "InterRai Assessment", detail: "Assessment durchgeführt und dokumentiert", type: "workflow" },
+    { id: "h8", date: "19.07.2026", time: "09:00", user: "System", action: "Status geändert", detail: "Status → Aktiv (Abrechenbar)", type: "status" },
+    { id: "h9", date: "16.07.2026", time: "16:20", user: "Sandra Weber", action: "Abrechnungsstatus aktualisiert", detail: "Kostengutsprache bestätigt durch KK", type: "abrechnung" },
+    { id: "h10", date: "14.07.2026", time: "11:45", user: "K. Meier", action: "Ticket geschlossen", detail: "SD-2026-0342: Schlüsselübergabe", type: "ticket" },
   ];
 }
 
@@ -1206,9 +1207,9 @@ function isoToChDate(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
-/** Check if ISO date is before today */
+/** Liegt das Datum vor der Gegenwart? */
 function isOverdue(iso: string): boolean {
-  return new Date(iso) < new Date(new Date().toDateString());
+  return new Date(iso) < GEGENWART;
 }
 
 function buildWorkflowTasks(steps: ProcessStep[], prefix: string): WorkflowTask[] {
@@ -6262,7 +6263,7 @@ function LpbKopf({ v, onNeueVersion }: { v: KLVVerordnung; onNeueVersion: () => 
   const gesperrt = istGesperrt(v);
   const naechster = lpbNaechster(v.status);
   const amZug = lpbAmZug(v.status);
-  const tage = wartetSeitTagen(v, new Date());
+  const tage = wartetSeitTagen(v, gegenwart());
   const [meldung, setMeldung] = useState("");
 
   const weiter = () => {
@@ -6404,7 +6405,7 @@ function TabKLV({ patientId }: { patientId: string }) {
   const klvs = useKlvVerordnungen().filter(k => k.patientId === patientId);
   /* Aktiv ist die nicht ersetzte Fassung mit der höchsten Version. */
   const current = [...klvs].filter(k => k.status !== "ersetzt").sort((a, b) => b.version - a.version)[0] || klvs[0];
-  const daysUntil = current?.endDatum ? (() => { const [d, m, y] = current.endDatum!.split("."); return Math.round((new Date(+y, +m - 1, +d).getTime() - new Date("2026-03-03").getTime()) / 86400000); })() : null;
+  const daysUntil = current?.endDatum ? (() => { const [d, m, y] = current.endDatum!.split("."); return Math.round((new Date(+y, +m - 1, +d).getTime() - GEGENWART.getTime()) / 86400000); })() : null;
   const katBg = (k: string) => k === "a" ? "var(--status-info-bg)" : k === "b" ? "var(--status-warning-bg)" : "var(--status-success-bg)";
   const katColor = (k: string) => k === "a" ? "var(--status-info)" : k === "b" ? "var(--status-warning-text)" : "var(--status-success-text)";
   type KlvPos = NonNullable<typeof current>["leistungspositionen"][number];
@@ -6453,7 +6454,7 @@ function TabKLV({ patientId }: { patientId: string }) {
   const handleCreateKLV = () => {
     const newId = `KLV-${Date.now()}`;
     const patientName = current?.patientName || klvs[0]?.patientName || "Patient";
-    const heute = formatAnzeige(new Date());
+    const heute = formatAnzeige(gegenwart());
 
     // Format dates from ISO to dd.mm.yyyy for display
     const formatDate = (iso: string) => { if (!iso) return null; const [y, m, d] = iso.split("-"); return `${d}.${m}.${y}`; };

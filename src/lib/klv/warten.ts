@@ -10,6 +10,7 @@
  * gespeicherter Wert könnte davon abweichen.
  */
 import type { KLVVerordnung } from "../../types/klinische-artefakte";
+import { gegenwart } from "../gegenwart";
 import { lpbAmZug, type AmZug } from "../stammdaten/lpb-status";
 
 /**
@@ -27,12 +28,12 @@ export const WARTEFRIST_TAGE = 14;
 /**
  * Tage seit dem Wechsel in den aktuellen Zustand; null ohne lesbaren Eintrag.
  *
- * Bezug ist der echte heutige Tag, nicht das Bezugsdatum der Mock-Listen: die
- * Protokolleinträge werden beim Wechsel mit der echten Uhr gestempelt. Ein
- * eingefrorenes Bezugsdatum gegen einen lebenden Zeitstempel zu rechnen würde
- * für jeden frischen Wechsel eine negative Wartezeit ergeben.
+ * Bezug ist die fachliche Gegenwart. Wann ein Blatt zur Kasse ging, steht auf
+ * der Bedarfsmeldung und begründet die Wartezeit — es ist eine fachliche
+ * Angabe, kein Bedienprotokoll. Ein Zustandswechsel zur Laufzeit stempelt
+ * darum ebenfalls die Gegenwart; so entsteht keine negative Wartezeit.
  */
-export function wartetSeitTagen(v: KLVVerordnung, heute: Date = new Date()): number | null {
+export function wartetSeitTagen(v: KLVVerordnung, heute: Date = gegenwart()): number | null {
   const letzter = [...v.statusProtokoll].reverse().find(e => e.status === v.status);
   if (!letzter) return null;
   const m = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(letzter.zeitpunkt);
@@ -61,7 +62,7 @@ export interface WartendesBlatt {
  * `lpbAmZug` gibt dafür null zurück. Blätter ohne lesbaren Protokolleintrag
  * bleiben aussen vor, statt mit einer geratenen Zahl zu erscheinen.
  */
-export function wartendeBlaetter(alle: KLVVerordnung[], heute: Date = new Date()): WartendesBlatt[] {
+export function wartendeBlaetter(alle: KLVVerordnung[], heute: Date = gegenwart()): WartendesBlatt[] {
   const aus: WartendesBlatt[] = [];
   for (const v of alle) {
     const amZug = lpbAmZug(v.status);

@@ -13,8 +13,9 @@ import { useCurrentRole } from "../auth";
 import { AnnaPendenzVorschlag } from "../anna/AnnaPendenzVorschlag";
 import { AnnaDemoMockModal } from "../anna/AnnaDemoMockModal";
 import { toast } from "sonner";
+import { GEGENWART_ISO } from "../../lib/gegenwart";
 
-const TODAY = "2026-03-03";
+const TODAY = GEGENWART_ISO;
 
 /* ══════════════════════════════════════════
    HELPERS

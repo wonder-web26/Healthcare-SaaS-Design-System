@@ -20,6 +20,7 @@
  */
 
 import { workflowTasks, type WorkflowTask } from "../mocks/workflow-tasks";
+import { GEGENWART, GEGENWART_ISO } from "../gegenwart";
 
 /** Ergebnis der SP-07-Pruefung */
 export interface QuellensteuerErgebnis {
@@ -102,8 +103,12 @@ export function verwalteQuellensteuerPendenz(
     // Idempotent: nur erstellen wenn keine offene vorhanden
     if (bestehend) return;
 
-    const heute = new Date().toISOString().slice(0, 10);
-    const faellig = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+    /* Erstellt und fällig sind fachliche Daten der Pendenz, keine
+       Bedienprotokolle — sie liegen an der Gegenwart, damit die neue Pendenz
+       in denselben Listen erscheint wie die bestehenden. */
+    const heute = GEGENWART_ISO;
+    const faellig = new Date(GEGENWART.getFullYear(), GEGENWART.getMonth(), GEGENWART.getDate() + 14)
+      .toISOString().slice(0, 10);
 
     const neuePendenz: WorkflowTask = {
       id: `W-QST-${Date.now()}`,

@@ -9,6 +9,7 @@
  */
 
 import type { DokumentBedingung } from "../stammdaten/dokumenttypen";
+import { GEGENWART_ISO } from "../gegenwart";
 
 /* ══════════════════════════════════════════
    TYPEN
@@ -159,7 +160,7 @@ export function vorlageVersionieren(
     entitaet,
     version: neueVersion,
     status: "aktiv",
-    gueltigAb: new Date().toISOString().slice(0, 10),
+    gueltigAb: GEGENWART_ISO,
     ankerDatum: ankerDatum ?? aktive?.ankerDatum ?? "eintrittsdatum",
     schritte,
   };

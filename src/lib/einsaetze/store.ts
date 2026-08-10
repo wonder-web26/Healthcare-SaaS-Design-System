@@ -21,9 +21,16 @@ import { useSyncExternalStore } from "react";
 import type { Einsatz, ErbrachteLeistung, EinsatzUrheber } from "./einsaetze";
 import { istUnveraenderbar } from "./einsaetze";
 import { istMonatAbgeschlossen } from "../abschluss/store";
+import { BEZUGSMONAT } from "../gegenwart";
 
-/** Bezugsmonat der Mock-Demo: Juli 2026. Startwert der Zeitraumschaltung. */
-export const EINSATZ_BEZUGSMONAT = new Date(2026, 6, 1);
+/**
+ * Startmonat der Zeitraumschaltung: der letzte vollständige Monat.
+ *
+ * Abgeschlossen und abgerechnet wird ein Monat, wenn er vorbei ist — an der
+ * Gegenwart (4.8.2026) ist das der Juli. Abgeleitet, nicht gesetzt: sonst
+ * stünde neben der Gegenwart ein zweiter Bezug.
+ */
+export const EINSATZ_BEZUGSMONAT = BEZUGSMONAT;
 
 const VERA: EinsatzUrheber = { art: "angehoeriger", kennung: "A-2026-0101" };
 const KARL: EinsatzUrheber = { art: "angehoeriger", kennung: "A-2026-0109" };

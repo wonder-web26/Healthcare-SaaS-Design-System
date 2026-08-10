@@ -18,6 +18,7 @@ import { useSyncExternalStore } from "react";
 import { type Patient, type PatientStatus, type AbrechnungsStatus, patientenSeed } from "../../app/components/patientData";
 import { getKrankenkasseLabel } from "../stammdaten/krankenkassen";
 import { isoZuDate, anzeigeZuIso, jetztAnzeige } from "../datum";
+import { GEGENWART_ISO } from "../gegenwart";
 import { ENTLASSUNG_SONSTIGES } from "../stammdaten/entlassung";
 import { getMandate, aktualisiereMandat } from "../mandate/store";
 import { rhythmusBeenden } from "../rhythmus/engine";
@@ -27,11 +28,13 @@ import { sdaSpracheLabel } from "../stammdaten/sda-sprache";
 export const NICHT_ZUGEWIESEN = "—";
 
 /**
- * Mock-Stichtag des Prototyps (CLAUDE.md: 03.03.2026). Alle Fristrechnungen am
- * Patienten laufen dagegen, nie gegen new Date() — damit sind sie ohne
- * Rendering nachrechenbar.
+ * Fristrechnungen am Patienten laufen gegen die Gegenwart, nie gegen
+ * new Date() — damit sind sie ohne Rendering nachrechenbar.
+ *
+ * Der Name bleibt, damit die Aufrufstellen unverändert lesen; der Wert kommt
+ * jetzt aus lib/gegenwart.
  */
-export const PATIENTEN_BEZUGSDATUM_ISO = "2026-03-03";
+export const PATIENTEN_BEZUGSDATUM_ISO = GEGENWART_ISO;
 
 /**
  * Tage vom Bezugsdatum bis zur Re-Assessment-Frist. null = keine Frist

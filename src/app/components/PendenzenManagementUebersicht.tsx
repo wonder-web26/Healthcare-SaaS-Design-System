@@ -2,8 +2,9 @@ import { useMemo } from "react";
 import { ClipboardList, AlertTriangle, Calendar, CheckCircle2, List, Plus } from "lucide-react";
 import { getUnifiedEntries, entryTitle, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
+import { GEGENWART_ISO } from "../../lib/gegenwart";
 
-const TODAY = "2026-03-03";
+const TODAY = GEGENWART_ISO;
 
 function daysFromToday(iso: string | null): number | null {
   if (!iso) return null;

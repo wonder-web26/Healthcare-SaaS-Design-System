@@ -8,11 +8,12 @@ import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
 import { AuswahlDropdown } from "./ui/AuswahlDropdown";
 import { ListenGeruest } from "./ui/ListenGeruest";
 import { type OnboardingFall as OnboardingCase, onboardingFaelle as cases } from "../../lib/onboarding/faelle";
+import { gegenwart } from "../../lib/gegenwart";
 
-/* ── Bezugsdatum (Mock-Demo, entspricht der Vorgabe): alle Ableitungen laufen
-   gegen diesen Stichtag statt gegen new Date(), damit die Liste deterministisch
-   ist. Die reinen Funktionen erhalten ihn als Parameter. ── */
-const BEZUGSDATUM = new Date(2026, 6, 31); // 31.07.2026
+/* ── Alle Ableitungen laufen gegen die Gegenwart statt gegen new Date(), damit
+   die Liste deterministisch ist. Die reinen Funktionen erhalten sie als
+   Parameter. ── */
+const BEZUGSDATUM = gegenwart();
 
 /* Fälle + OnboardingCase-Typ liegen jetzt in lib/onboarding/faelle.ts (geteilte
    Quelle für Liste und Assistent). Hier nur noch importiert (siehe oben). */

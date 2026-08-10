@@ -68,6 +68,7 @@ import { InlineSelect } from "./ui/InlineSelect";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
+import { GEGENWART_ISO } from "../../lib/gegenwart";
 import { sdaVerlangtInterrai } from "../../lib/stammdaten/sda-einschaetzung-situation";
 import { INTERRAI_SCHRITTE } from "../../lib/rhythmus/vorlage";
 import { SectionAccordion, SektionBadge } from "./ui/SectionAccordion";
@@ -751,7 +752,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
                 // Patient-Workflow: Tickets ab Aufnahmedatum (= heute im Onboarding-Kontext)
                 // Triage nach BB16: verlangt der Wert keine Abklärung, fallen die
                 // beiden interRAI-Schritte weg — kein offener Schritt, keine Aufgabe.
-                generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, new Date().toISOString().slice(0, 10), undefined,
+                generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, GEGENWART_ISO, undefined,
                   sdaVerlangtInterrai(data.einschaetzungSituation) ? undefined : INTERRAI_SCHRITTE);
                 return <RhythmusTimeline subjektTyp="patient" subjektId={onboardingId} />;
               })()

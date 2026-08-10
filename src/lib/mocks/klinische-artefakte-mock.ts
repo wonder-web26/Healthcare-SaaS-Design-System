@@ -10,6 +10,7 @@
  */
 import type { InterRAIAssessment, InterRAIItem, AnnaKonfidenz, CapResult, OutcomeScale, Pflegeplanung, Pflegediagnose, Massnahme, Pflegeziel, KLVVerordnung, KLVLeistung, KLVEinheit, WorkflowPlan, WorkflowSchritt, AerztlicheDiagnose } from "../../types/klinische-artefakte";
 import type { KlvWerCode } from "../stammdaten/klv-wer";
+import { GEGENWART } from "../gegenwart";
 
 /* ══════════════════════════════════════════
    DEMO ITEMS (30 items, A–S)
@@ -298,9 +299,9 @@ const WORKFLOW_VERANTWORTLICHE = [
   "Sandra Weber", "Kathrin Meier", "System", "Sandra Weber", "HR-Abteilung",
 ];
 const WORKFLOW_FAELLIG = [
-  "2026-01-15", "2026-01-17", "2026-01-20", "2026-01-22", "2026-01-25",
-  "2026-01-28", "2026-01-30", "2026-02-03", "2026-02-05", "2026-02-08",
-  "2026-02-10", "2026-02-12", "2026-02-15", "2026-02-20", "2026-02-28",
+  "2026-06-18", "2026-06-20", "2026-06-23", "2026-06-25", "2026-06-28",
+  "2026-07-01", "2026-07-03", "2026-07-07", "2026-07-09", "2026-07-12",
+  "2026-07-14", "2026-07-16", "2026-07-19", "2026-07-24", "2026-08-01",
 ];
 
 function buildSchritte(doneCount: number): WorkflowSchritt[] {
@@ -316,7 +317,7 @@ function buildSchritte(doneCount: number): WorkflowSchritt[] {
       dueDateDisplay: `${d}.${m}.${y}`,
       assignee: WORKFLOW_VERANTWORTLICHE[i],
       completedAt: isDone ? `${d}.${m}.${y}, 09:00` : null,
-      overdue: !isDone && new Date(iso) < new Date("2026-03-03"),
+      overdue: !isDone && new Date(iso) < GEGENWART,
     };
   });
 }
@@ -336,14 +337,14 @@ const HUBER_WORKFLOW: WorkflowPlan = {
 // Angehöriger Monatsschritte
 const ANGEH_SCHRITTE_LABELS = ["Regelkontrolle", "Mikroschulung", "Fallbesprechung", "Arbeitskontrolle", "Mikroschulung", "Kundenfeedback", "SRK-Prüfung Anmeldung"];
 const ANGEH_VERANTWORTLICHE = ["Sandra Weber", "Sandra Weber", "Team", "Sandra Weber", "Sandra Weber", "Patient/Angehörige", "HR-Abteilung"];
-const ANGEH_FAELLIG = ["2026-02-05", "2026-02-10", "2026-02-15", "2026-02-20", "2026-02-25", "2026-02-28", "2026-03-05"];
+const ANGEH_FAELLIG = ["2026-07-09", "2026-07-14", "2026-07-19", "2026-07-24", "2026-07-29", "2026-08-01", "2026-08-06"];
 
 function buildAngehSchritte(doneCount: number): WorkflowSchritt[] {
   return ANGEH_SCHRITTE_LABELS.map((label, i) => {
     const isDone = i < doneCount;
     const iso = ANGEH_FAELLIG[i];
     const [y, m, d] = iso.split("-");
-    return { nr: i + 1, label, status: isDone ? "abgeschlossen" : "offen", dueDate: iso, dueDateDisplay: `${d}.${m}.${y}`, assignee: ANGEH_VERANTWORTLICHE[i], completedAt: isDone ? `${d}.${m}.${y}, 09:00` : null, overdue: !isDone && new Date(iso) < new Date("2026-03-03") };
+    return { nr: i + 1, label, status: isDone ? "abgeschlossen" : "offen", dueDate: iso, dueDateDisplay: `${d}.${m}.${y}`, assignee: ANGEH_VERANTWORTLICHE[i], completedAt: isDone ? `${d}.${m}.${y}, 09:00` : null, overdue: !isDone && new Date(iso) < GEGENWART };
   });
 }
 
@@ -365,8 +366,8 @@ const ANGEH_OB_VERANTW = [
   "K. Meier", "M. Keller", "HR-System", "S. Weber", "IT-System", "S. Weber",
 ];
 const ANGEH_OB_FAELLIG = [
-  "2026-01-05", "2026-01-07", "2026-01-08", "2026-01-10", "2026-01-12", "2026-01-14", "2026-01-14",
-  "2026-01-15", "2026-01-18", "2026-01-20", "2026-01-22", "2026-01-25", "2026-01-28",
+  "2026-06-08", "2026-06-10", "2026-06-11", "2026-06-13", "2026-06-15", "2026-06-17", "2026-06-17",
+  "2026-06-18", "2026-06-21", "2026-06-23", "2026-06-25", "2026-06-28", "2026-07-01",
 ];
 
 function buildAngehOBSchritte(doneCount: number): WorkflowSchritt[] {
@@ -374,7 +375,7 @@ function buildAngehOBSchritte(doneCount: number): WorkflowSchritt[] {
     const isDone = i < doneCount;
     const iso = ANGEH_OB_FAELLIG[i];
     const [y, m, d] = iso.split("-");
-    return { nr: i + 1, label, status: isDone ? "abgeschlossen" : "offen", dueDate: iso, dueDateDisplay: `${d}.${m}.${y}`, assignee: ANGEH_OB_VERANTW[i], completedAt: isDone ? `${d}.${m}.${y}, 09:00` : null, overdue: !isDone && new Date(iso) < new Date("2026-03-03") };
+    return { nr: i + 1, label, status: isDone ? "abgeschlossen" : "offen", dueDate: iso, dueDateDisplay: `${d}.${m}.${y}`, assignee: ANGEH_OB_VERANTW[i], completedAt: isDone ? `${d}.${m}.${y}, 09:00` : null, overdue: !isDone && new Date(iso) < GEGENWART };
   });
 }
 

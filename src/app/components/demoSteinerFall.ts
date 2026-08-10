@@ -74,7 +74,7 @@ export const demoSteinerPatient: PatientFormData = {
   // der den Fall angemeldet hat, und BB16 die somatische Situation — beides passt
   // zur Anamnese (Gangunsicherheit, Diabetes, Herzinsuffizienz).
   eroeffnungsgrund: "1",
-  dossierEroeffnetAm: "18.02.2026",
+  dossierEroeffnetAm: "22.07.2026",
   anmeldendeInstitution: "1",
   anmeldendePersonName: "Dr. med. R. Lüthi",
   anmeldendePersonFunktion: "Hausarzt",

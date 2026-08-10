@@ -13,10 +13,9 @@ import { anzeigeZuIso, isoZuAnzeige } from "../../lib/datum";
 import { leerZuletzt, datumKey } from "../../lib/sortierung";
 import { toast } from "sonner";
 
-/* ── Bezugsdatum (Mock-Demo): alle Ableitungen laufen gegen diesen Stichtag statt
-   gegen new Date(), damit die Liste deterministisch ist. 03.03.2026 ist der in
-   CLAUDE.md festgelegte Mock-Stichtag; die Fälligkeitsdaten der Patienten sind
-   darauf ausgerichtet. Die reinen Funktionen erhalten ihn als Parameter. ── */
+/* ── Alle Ableitungen laufen gegen die Gegenwart statt gegen new Date(), damit
+   die Liste deterministisch ist; die Fälligkeitsdaten der Patienten liegen
+   relativ zu ihr. Die reinen Funktionen erhalten sie als Parameter. ── */
 const BEZUGSDATUM_ISO = PATIENTEN_BEZUGSDATUM_ISO;
 
 /* ── Zugehörigkeit (Segmentumschalter, genau eine Auswahl) ──

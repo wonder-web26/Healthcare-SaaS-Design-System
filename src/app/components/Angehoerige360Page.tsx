@@ -64,6 +64,7 @@ import {
 import { useAngehoerige, getAngehoerigen } from "../../lib/angehoerige/store";
 import { useDokumente } from "../../lib/dokumente/store";
 import { MANDAT_STICHTAG } from "../../lib/mandate/store";
+import { gegenwart, GEGENWART_ISO } from "../../lib/gegenwart";
 import {
   dokumenteVon, ordnerStand, ordnerDes, gueltigBisText, geprueftePflichttypen,
   type DokumentReferenz,
@@ -214,9 +215,9 @@ interface Ticket {
 
 function getTickets(): Ticket[] {
   return [
-    { id: "SD-2026-0401", subject: "Bankdaten fehlen — Lohnauszahlung blockiert", status: "offen", priority: "hoch", created: "26.02.2026", assignedTo: "K. Meier", category: "HR" },
-    { id: "SD-2026-0395", subject: "SRK-Anmeldung ausstehend", status: "in_bearbeitung", priority: "mittel", created: "22.02.2026", assignedTo: "S. Weber", category: "Ausbildung" },
-    { id: "SD-2026-0380", subject: "Krankenkassenkarte nachreichen", status: "erledigt", priority: "niedrig", created: "18.02.2026", assignedTo: "K. Meier", category: "Dokumente" },
+    { id: "SD-2026-0401", subject: "Bankdaten fehlen — Lohnauszahlung blockiert", status: "offen", priority: "hoch", created: "30.07.2026", assignedTo: "K. Meier", category: "HR" },
+    { id: "SD-2026-0395", subject: "SRK-Anmeldung ausstehend", status: "in_bearbeitung", priority: "mittel", created: "26.07.2026", assignedTo: "S. Weber", category: "Ausbildung" },
+    { id: "SD-2026-0380", subject: "Krankenkassenkarte nachreichen", status: "erledigt", priority: "niedrig", created: "22.07.2026", assignedTo: "K. Meier", category: "Dokumente" },
   ];
 }
 
@@ -233,8 +234,8 @@ const stempelDaten: StempelEntry[] = [
 interface SozialversicherungEntry { kategorie: string; status: "aktiv" | "ausstehend" | "abgelaufen"; gueltigBis: string; details: string; }
 const sozialversicherungDaten: SozialversicherungEntry[] = [
   { kategorie: "AHV / IV", status: "aktiv", gueltigBis: "—", details: "Beiträge aktuell" },
-  { kategorie: "BVG (Pensionskasse)", status: "aktiv", gueltigBis: "31.12.2026", details: "Angemeldet seit 01.01.2026" },
-  { kategorie: "UVG (Unfallversicherung)", status: "aktiv", gueltigBis: "31.12.2026", details: "Suva — Police aktiv" },
+  { kategorie: "BVG (Pensionskasse)", status: "aktiv", gueltigBis: "03.06.2027", details: "Angemeldet seit 01.01.2026" },
+  { kategorie: "UVG (Unfallversicherung)", status: "aktiv", gueltigBis: "03.06.2027", details: "Suva — Police aktiv" },
   { kategorie: "KTG (Krankentaggeld)", status: "ausstehend", gueltigBis: "—", details: "Antrag in Bearbeitung" },
   { kategorie: "Quellensteuer", status: "aktiv", gueltigBis: "—", details: "Tarif gemäss HR-Daten" },
 ];
@@ -249,16 +250,16 @@ interface HistoryEntry {
 
 function getHistorie(): HistoryEntry[] {
   return [
-    { id: "h1", date: "01.03.2026", time: "09:15", user: "K. Meier", action: "Stempelkontrolle durchgeführt", detail: "Februar — 18/22 Tage erfasst", type: "workflow" },
-    { id: "h2", date: "28.02.2026", time: "14:30", user: "System", action: "Lohnlauf ausgelöst", detail: "Monatslohn Februar 2026 berechnet", type: "system" },
-    { id: "h3", date: "26.02.2026", time: "16:20", user: "K. Meier", action: "Dokument hochgeladen", detail: "Krankenkassenkarte — Scan verifiziert", type: "dokument" },
-    { id: "h4", date: "24.02.2026", time: "11:00", user: "S. Weber", action: "Mikroschulung abgeschlossen", detail: "Modul: Grundpflege — bestanden", type: "workflow" },
-    { id: "h5", date: "22.02.2026", time: "10:45", user: "K. Meier", action: "Ticket erstellt", detail: "SD-2026-0395: SRK-Anmeldung ausstehend", type: "ticket" },
-    { id: "h6", date: "20.02.2026", time: "09:30", user: "S. Weber", action: "Regelkontrolle durchgeführt", detail: "Arbeitszeiterfassung geprüft — OK", type: "workflow" },
-    { id: "h7", date: "18.02.2026", time: "14:10", user: "K. Meier", action: "Bankdaten aktualisiert", detail: "IBAN geändert auf neues Konto", type: "hr" },
-    { id: "h8", date: "15.02.2026", time: "08:45", user: "System", action: "BVG-Anmeldung bestätigt", detail: "Pensionskasse aktiv ab 01.01.2026", type: "system" },
-    { id: "h9", date: "10.02.2026", time: "16:00", user: "S. Weber", action: "Status geändert", detail: "Status → Aktiv", type: "status" },
-    { id: "h10", date: "05.02.2026", time: "11:30", user: "K. Meier", action: "Onboarding Schritt abgeschlossen", detail: "Schritt 8: Bankdaten verifiziert", type: "workflow" },
+    { id: "h1", date: "02.08.2026", time: "09:15", user: "K. Meier", action: "Stempelkontrolle durchgeführt", detail: "Februar — 18/22 Tage erfasst", type: "workflow" },
+    { id: "h2", date: "01.08.2026", time: "14:30", user: "System", action: "Lohnlauf ausgelöst", detail: "Monatslohn Februar 2026 berechnet", type: "system" },
+    { id: "h3", date: "30.07.2026", time: "16:20", user: "K. Meier", action: "Dokument hochgeladen", detail: "Krankenkassenkarte — Scan verifiziert", type: "dokument" },
+    { id: "h4", date: "28.07.2026", time: "11:00", user: "S. Weber", action: "Mikroschulung abgeschlossen", detail: "Modul: Grundpflege — bestanden", type: "workflow" },
+    { id: "h5", date: "26.07.2026", time: "10:45", user: "K. Meier", action: "Ticket erstellt", detail: "SD-2026-0395: SRK-Anmeldung ausstehend", type: "ticket" },
+    { id: "h6", date: "24.07.2026", time: "09:30", user: "S. Weber", action: "Regelkontrolle durchgeführt", detail: "Arbeitszeiterfassung geprüft — OK", type: "workflow" },
+    { id: "h7", date: "22.07.2026", time: "14:10", user: "K. Meier", action: "Bankdaten aktualisiert", detail: "IBAN geändert auf neues Konto", type: "hr" },
+    { id: "h8", date: "19.07.2026", time: "08:45", user: "System", action: "BVG-Anmeldung bestätigt", detail: "Pensionskasse aktiv ab 01.01.2026", type: "system" },
+    { id: "h9", date: "14.07.2026", time: "16:00", user: "S. Weber", action: "Status geändert", detail: "Status → Aktiv", type: "status" },
+    { id: "h10", date: "09.07.2026", time: "11:30", user: "K. Meier", action: "Onboarding Schritt abgeschlossen", detail: "Schritt 8: Bankdaten verifiziert", type: "workflow" },
   ];
 }
 
@@ -401,7 +402,7 @@ export function Angehoerige360Page() {
 
         {/* Anna HR-Zusammenfassung */}
         <div style={{ marginTop: 12 }}>
-          <AnnaAngehoerigeSummary angehoeriger={a} detail={{ funktion: a.funktion, eintrittsdatum: a.eintrittsdatum, stundenlohn: a.stundenlohn, aufenthaltsstatus: a.aufenthaltsstatus, srkAmpel: srkAmpel(a, new Date(2026, 2, 3)), srkFrist: srkFristAnzeige(a.eintrittsdatum) }} />
+          <AnnaAngehoerigeSummary angehoeriger={a} detail={{ funktion: a.funktion, eintrittsdatum: a.eintrittsdatum, stundenlohn: a.stundenlohn, aufenthaltsstatus: a.aufenthaltsstatus, srkAmpel: srkAmpel(a, gegenwart()), srkFrist: srkFristAnzeige(a.eintrittsdatum) }} />
         </div>
       </div>
 
@@ -1094,7 +1095,7 @@ function ArbeitskontrolleHistorie({ a, kontrollen, navigate, onRefresh }: {
   const parts = a.eintrittsdatum?.split(".") ?? [];
   const isoEintritt = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : undefined;
   const naechsteFaellig = getNaechsteFaelligkeit(a.id, isoEintritt);
-  const heute = new Date().toISOString().slice(0, 10);
+  const heute = GEGENWART_ISO;
   const istUeberfaellig = naechsteFaellig ? naechsteFaellig < heute : false;
   const hatOffene = kontrollen.some(k => k.status === "in_bearbeitung");
 
@@ -1359,7 +1360,7 @@ function TableStempel() {
       tageProWoche: 5,
       minutenA: 90,
       minutenB: 30,
-      gueltigAb: "01.01.2026",
+      gueltigAb: "04.06.2026",
       gueltigBis: "–",
       status: "aktiv",
     },
@@ -1369,8 +1370,8 @@ function TableStempel() {
       tageProWoche: 5,
       minutenA: 60,
       minutenB: 30,
-      gueltigAb: "01.07.2025",
-      gueltigBis: "31.12.2025",
+      gueltigAb: "02.12.2025",
+      gueltigBis: "03.06.2026",
       status: "abgelaufen",
     },
     {
@@ -1379,8 +1380,8 @@ function TableStempel() {
       tageProWoche: 3,
       minutenA: 40,
       minutenB: 20,
-      gueltigAb: "15.01.2025",
-      gueltigBis: "30.06.2025",
+      gueltigAb: "18.06.2025",
+      gueltigBis: "01.12.2025",
       status: "abgelaufen",
     },
   ]);
@@ -2227,7 +2228,7 @@ function TableSozial({ a }: { a: Angehoeriger }) {
 }
 
 function TableQualifikation({ a }: { a: Angehoeriger }) {
-  const TODAY = new Date(2026, 2, 3); // March 3, 2026
+  const TODAY = gegenwart();
 
   /* ── Date helpers ── */
   const parseDe = (d: string): Date | null => {
