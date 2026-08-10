@@ -91,9 +91,13 @@ export function RhythmusTimeline({ subjektTyp, subjektId, aktuellerBenutzer = "S
         <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
           <Clock style={{ width: 22, height: 22, color: "var(--text-tertiary)" }} />
         </div>
-        <div style={{ fontSize: "var(--text-body)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 6 }}>Kein Betreuungs-Rhythmus</div>
-        <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", maxWidth: 320, margin: "0 auto" }}>
-          Der Betreuungs-Rhythmus wird automatisch generiert, sobald das Subjekt aktiv wird.
+        <div style={{ fontSize: "var(--text-body)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 6 }}>Kein Betreuungsrhythmus</div>
+        {/* Die Bedingung ausdrücklich nennen: „wird automatisch generiert"
+            liess offen, worauf jemand wartet. */}
+        <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", maxWidth: 380, margin: "0 auto", lineHeight: 1.6 }}>
+          {subjektTyp === "angehoeriger"
+            ? "Er entsteht mit der Anstellung — also beim Abschluss des Onboardings, sobald ein Eintrittsdatum erfasst ist. Vom Öffnen dieses Dossiers entsteht er nicht."
+            : "Er entsteht beim Abschluss des Onboardings, sobald ein Aufnahmedatum erfasst ist. Vom Öffnen dieses Dossiers entsteht er nicht."}
         </div>
       </div>
     );

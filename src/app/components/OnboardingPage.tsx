@@ -44,7 +44,7 @@ import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
 import { fallById, patientRef, angehoerigerRef, patientAnzeigeName, angehoerigerAnzeigeName } from "../../lib/onboarding/faelle";
 import { NotizSpur } from "./notizen/NotizSpur";
 import { type NotizReferenz } from "../../lib/notizen/notizen";
-import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient, seedDemoRhythmus } from "./demoSteinerFall";
+import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient } from "./demoSteinerFall";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { qualifikationAusFunktion } from "../../lib/stammdaten/funktionen";
@@ -275,7 +275,6 @@ export function OnboardingPage() {
 
   // Demo-Fall: Rhythmus-/Workflow-Aufgaben vorbelegen (idempotent), ohne Umweg
   // über den Patienten-Schritt.
-  useEffect(() => { if (caseId === DEMO_FALL_ID) seedDemoRhythmus(); }, [caseId]);
   const [step2Valid, setStep2Valid] = useState(false);
 
   /* ── Ein Bestand, ein Objekt ────────────────────────────────────────────────

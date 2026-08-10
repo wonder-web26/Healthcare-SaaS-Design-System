@@ -171,7 +171,7 @@ import { DateField } from "./form/DateField";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { ItemRow } from "./ui/ItemRow";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
-import { generiereRhythmusTickets, getTicketsFuerSubjekt } from "../../lib/rhythmus/engine";
+import { getTicketsFuerSubjekt } from "../../lib/rhythmus/engine";
 import { getNachweiseFuerPatient } from "../../lib/schulung/nachweis-store";
 import "../../lib/schulung/demo-seed";
 import { BezugspersonFeld } from "./BezugspersonFeld";
@@ -603,16 +603,10 @@ function Patient360Inhalt() {
     );
   }
 
-  /* WF-02: Patient-Rhythmus-Tickets generieren (idempotent).
-     Für ausgetretene Patienten wird kein Rhythmus mehr angelegt — sonst
-     erzeugte allein das Öffnen des Dossiers Pendenzen an einem Fall, an dem
-     nichts mehr zu tun ist. Bereits bestehende Instanzen bleiben; die Engine
-     kennt keinen Weg, eine Instanz zu beenden (siehe lib/rhythmus/engine.ts). */
-  if (patient.aufnahmeDatum && patient.status !== "ausgetreten") {
-    const parts = patient.aufnahmeDatum.split(".");
-    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : patient.aufnahmeDatum;
-    generiereRhythmusTickets("patient", patient.id, `${patient.nachname}, ${patient.vorname}`, isoAnker, patient.pflegefachkraft);
-  }
+  /* Hier entsteht nichts. Der Betreuungsrhythmus wird beim Abschluss des
+     Onboardings angelegt (lib/onboarding/konvertierung.ts), der Startbestand
+     im Seed (lib/rhythmus/seed.ts). Das Dossier liest nur — sonst hinge die
+     Zahl der Pendenzen davon ab, wer welches Dossier zuletzt geöffnet hat. */
 
   /* Unbekannte Zustandswerte fallen nicht ins Leere: jede Zuordnung hat einen
      Rückfall, damit ein neuer Wert die Seite nicht abstürzen lässt. */

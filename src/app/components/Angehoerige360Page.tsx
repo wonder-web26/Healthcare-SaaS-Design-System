@@ -78,7 +78,6 @@ import { DetailNavigation } from "./DetailNavigation";
 import { AnnaAngehoerigeSummary } from "../anna/AnnaAngehoerigeSummary";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { DateField } from "./form/DateField";
-import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
 import { getNachweiseFuerAngehoeriger } from "../../lib/schulung/nachweis-store";
 import { getKontrollenFuerAngehoeriger, erstelleKontrolle, getNaechsteFaelligkeit, type KontrolleArt } from "../../lib/arbeitskontrolle/store";
 import { exportiereArbeitskontrollePDF } from "../../lib/arbeitskontrolle/pdf-export";
@@ -304,13 +303,9 @@ export function Angehoerige360Page() {
   }
 
 
-  // WF-01: Rhythmus-Tickets generieren (idempotent) wenn aktiv + eintrittsdatum gesetzt
-  if (a.status === "aktiv" && a.eintrittsdatum) {
-    // eintrittsdatum ist im Format "DD.MM.YYYY" → ISO konvertieren
-    const parts = a.eintrittsdatum.split(".");
-    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : a.eintrittsdatum;
-    generiereRhythmusTickets("angehoeriger", a.id, `${a.vorname} ${a.nachname}`, isoAnker, a.pflegefachkraft);
-  }
+  /* Hier entsteht nichts — siehe lib/rhythmus/seed.ts. Der Rhythmus einer
+     angehörigen Person entsteht mit ihrer Anstellung, nicht mit dem Öffnen
+     ihres Dossiers. */
 
   const st = statusConfig[a.status];
   const br = billingReadinessConfig[a.billingReadiness];
