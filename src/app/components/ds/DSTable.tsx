@@ -33,7 +33,7 @@ const statusCfg: Record<Status, { label: string; bg: string; text: string; dot: 
 };
 
 const rows: DSTableZeile[] = [
-  { id: "P-0041", name: "Müller, Anna", ahv: "756.1234.5678.90", ort: "Zürich", status: "aktiv", leistung: "Pflege HKP", betreuer: "S. Weber" },
+  { id: "P-0041", name: "Muster, Anna", ahv: "756.1234.5678.90", ort: "Zürich", status: "aktiv", leistung: "Pflege HKP", betreuer: "S. Weber" },
   { id: "P-0042", name: "Schmid, Thomas", ahv: "756.9876.5432.10", ort: "Oerlikon", status: "onboarding", leistung: "Hauswirtschaft", betreuer: "K. Meier" },
   { id: "P-0043", name: "Weber, Maria", ahv: "756.1111.2222.33", ort: "Seebach", status: "aktiv", leistung: "Pflege A", betreuer: "L. Brunner" },
   { id: "P-0044", name: "Fischer, Klaus", ahv: "756.4444.5555.66", ort: "Affoltern", status: "gekuendigt", leistung: "Beratung", betreuer: "M. Keller" },

@@ -730,6 +730,7 @@ const ANSICHT_HAT_INHALT: Record<string, true> = {
   pflegekontrolle: true, dokumente: true, pendenzen: true, verlauf: true, controlling: true,
   ordnerstruktur: true, pflichtluecken: true,
   stammdaten: true, vorgeschichte: true, diagnosen: true, pflegeberichte: true,
+  austritt: true,
 };
 
 /** Ansichten, deren Umfang schon feststeht — sie nennen ihn statt zu schweigen. */

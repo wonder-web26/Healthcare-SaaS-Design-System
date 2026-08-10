@@ -92,7 +92,7 @@ export function DSForms() {
         {/* Inputs */}
         <div className="bg-card rounded-2xl border border-border p-6 space-y-5">
           <h5>Texteingaben</h5>
-          <InputField label="Patientenname" placeholder="z.B. Müller, Anna" required />
+          <InputField label="Patientenname" placeholder="z.B. Muster, Anna" required />
           <InputField label="Suche" placeholder="Suchen…" icon={Search} />
           <InputField label="Geburtsdatum" placeholder="TT.MM.JJJJ" icon={Calendar} />
           <InputField label="AHV-Nummer" placeholder="756.XXXX.XXXX.XX" hint="13-stellige Versichertennummer" />
