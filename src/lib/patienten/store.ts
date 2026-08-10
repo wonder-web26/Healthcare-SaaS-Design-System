@@ -154,7 +154,6 @@ export interface PatientStammdatenEingabe {
   treppen: string;
   personenImHaushalt: string;
   sozialamtKontakt: string;
-  sozialamtKontaktDetail: string;
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
@@ -207,7 +206,7 @@ function stammdatenAbbilden(
   "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "adresse" | "krankenkasse" | "aufnahmeDatum" |
   "kartennummer" | "sprache" |
   "angehoeriger" | "angehoerigerTelefon" | "bagNr" |
-  "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "zusatzversicherungKasse" | "weitereVersicherung" | "hausarztEmail" | "spezialAerzte" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "sozialamtKontakt" | "sozialamtKontaktDetail" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
+  "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "zusatzversicherungKasse" | "weitereVersicherung" | "hausarztEmail" | "spezialAerzte" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "sozialamtKontakt" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
   return {
     vorname: eingabe.vorname,
     nachname: eingabe.name,
@@ -243,7 +242,6 @@ function stammdatenAbbilden(
     treppen: eingabe.treppen,
     personenImHaushalt: eingabe.personenImHaushalt,
     sozialamtKontakt: eingabe.sozialamtKontakt,
-    sozialamtKontaktDetail: eingabe.sozialamtKontaktDetail,
     ivBezug: eingabe.ivBezug,
     ivBezugProzent: eingabe.ivBezugProzent,
     hilflosenentschaedigung: eingabe.hilflosenentschaedigung,
@@ -315,7 +313,6 @@ export function erfassePatientImOnboarding(
     treppen: "",
     personenImHaushalt: "",
     sozialamtKontakt: "",
-    sozialamtKontaktDetail: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",

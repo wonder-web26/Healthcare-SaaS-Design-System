@@ -1170,7 +1170,11 @@ export function OnboardingPage() {
                       bvgAnbindungGewuenscht: angehoerigerData.bvgAnbindungGewuenscht === "ja",
                       qualifikation: qualifikationAusFunktion(angehoerigerData.funktion),
                       eintrittsdatum: angehoerigerData.eintrittsdatum,
-                    }, ausloeser);
+                    }, ausloeser, {
+                      notfallkontaktId: patientData.notfallkontaktId,
+                      notfallkontaktVerwandtschaft: patientData.notfallkontaktVerwandtschaft,
+                      sozialdienstId: patientData.sozialamtKontakt === "ja" ? patientData.sozialamtKontaktId : "",
+                    });
 
                     // Qualifizierte Erfolgsmeldung
                     const a = ergebnis.konvertierteArtefakte;

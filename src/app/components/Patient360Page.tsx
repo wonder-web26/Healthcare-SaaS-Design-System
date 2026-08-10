@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
 import { useParams, useNavigate } from "react-router";
 import { InlineSelect } from "./ui/InlineSelect";
+import { FormFeld } from "./ui/FormFeld";
+import { KontaktWahl } from "./ui/KontaktWahl";
 import { KRANKENKASSEN_OPTIONS, getKrankenkasseLabel } from "../../lib/stammdaten/krankenkassen";
 import {
   MANDATSART_OPTIONS, GESETZESGRUNDLAGE_OPTIONS, MANDATSGRUND_OPTIONS,
@@ -137,7 +139,7 @@ import { sichtbareNotizen } from "../../lib/notizen/notizen";
 import { unifiedEntries } from "../../lib/mocks/service-desk-unified";
 import { useDokumente } from "../../lib/dokumente/store";
 import { useBeziehungen, beziehungBeenden, beziehungSichern } from "../../lib/beziehungen/store";
-import { useKontakte, kontaktSichern, getKontakt } from "../../lib/kontakte/store";
+import { useKontakte } from "../../lib/kontakte/store";
 import { kontaktName, type Kontakt } from "../../lib/kontakte/kontakte";
 import { KONTAKTTYP_OPTIONS, kontakttypLabel } from "../../lib/stammdaten/kontakttypen";
 import {
@@ -3077,7 +3079,6 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
     ],
     sozial: [
       { k: "sozialamtKontakt", label: "Kontakt zum Sozialamt" },
-      { k: "sozialamtKontaktDetail", label: "Detail" },
       { k: "ivBezug", label: "IV-Bezug" },
       { k: "ivBezugProzent", label: "IV-Grad" },
       { k: "hilflosenentschaedigung", label: "Hilflosenentschädigung" },
@@ -3512,13 +3513,15 @@ function BeziehungFormular({ patientId, eintrag, personen, kontakte, onFertig }:
   kontakte: Kontakt[];
   onFertig: () => void;
 }) {
-  const NEU = "__neu__";
+  const KONTAKT = "__kontakt__";
   const anfangsWahl = eintrag
     ? (eintrag.person.art === "angehoeriger" ? `a:${eintrag.person.kennung}`
       : eintrag.person.art === "mitarbeitende" ? `m:${eintrag.person.name}`
-      : `k:${eintrag.person.kennung}`)
+      : KONTAKT)
     : "";
   const [wahl, setWahl] = useState(anfangsWahl);
+  const [kontaktWahl, setKontaktWahl] = useState(
+    eintrag?.person.art === "kontakt" ? eintrag.person.kennung : "");
   const [rolle, setRolle] = useState<string>(eintrag?.rolle ?? "");
   const [art, setArt] = useState<string>(eintrag?.art ?? "");
   const [vertretungsart, setVertretungsart] = useState<string>(eintrag?.vertretungsart ?? "");
@@ -3529,35 +3532,18 @@ function BeziehungFormular({ patientId, eintrag, personen, kontakte, onFertig }:
   const [auskunft, setAuskunft] = useState(eintrag?.auskunftsberechtigt ?? false);
   const [bemerkung, setBemerkung] = useState(eintrag?.bemerkung ?? "");
   const [fehler, setFehler] = useState("");
-  /* Neuer Kontakt an Ort — wer einen Beistand erfasst, soll dafür die
-     Ansicht nicht verlassen müssen. Vier Angaben genügen; alles Weitere
-     steht in der Kontaktliste. */
-  const [neuName, setNeuName] = useState("");
-  const [neuVorname, setNeuVorname] = useState("");
-  const [neuTyp, setNeuTyp] = useState("");
-  const [neuZugehoerigkeit, setNeuZugehoerigkeit] = useState("");
-  const [neuTelefon, setNeuTelefon] = useState("");
 
   const seite = rolle ? rolleSeite(rolle) : null;
-  const istNeu = wahl === NEU;
 
   const sichern = () => {
     if (!rolle) { setFehler("Bitte eine Rolle wählen."); return; }
     if (!wahl) { setFehler("Bitte eine Person wählen."); return; }
     let person: PersonBezug;
-    if (istNeu) {
-      if (!neuName.trim()) { setFehler("Bitte den Namen des Kontakts erfassen."); return; }
-      if (!neuTyp) { setFehler("Bitte den Typ des Kontakts wählen."); return; }
-      const k = kontaktSichern({
-        id: "", name: neuName.trim(), vorname: neuVorname.trim(),
-        typ: neuTyp as Kontakt["typ"], zugehoerigkeit: neuZugehoerigkeit.trim(),
-        telefon: neuTelefon.trim(), email: "", bemerkung: "",
-      });
-      person = { art: "kontakt", kennung: k.id };
+    if (wahl === KONTAKT) {
+      if (!kontaktWahl) { setFehler("Bitte einen Kontakt wählen oder anlegen."); return; }
+      person = { art: "kontakt", kennung: kontaktWahl };
     } else if (wahl.startsWith("a:")) {
       person = { art: "angehoeriger", kennung: wahl.slice(2) };
-    } else if (wahl.startsWith("k:")) {
-      person = { art: "kontakt", kennung: wahl.slice(2) };
     } else {
       person = { art: "mitarbeitende", name: wahl.slice(2) };
     }
@@ -3595,15 +3581,23 @@ function BeziehungFormular({ patientId, eintrag, personen, kontakte, onFertig }:
   return (
     <div style={{ padding: "14px 16px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: 12 }}>
+        {/* Personen mit Datensatz — angehörige Personen und Mitarbeitende —
+            stehen zur Auswahl; dritte Personen kommen aus dem Kontaktbestand
+            über denselben Baustein wie im Abklärungsgespräch. */}
         <div>
           <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Person</div>
           <InlineSelect value={wahl} onChange={setWahl} platzhalter="Bitte wählen"
             options={[
               ...personen.map(p => ({ value: p.wert, label: p.label })),
-              ...kontakte.map(k => ({ value: `k:${k.id}`, label: `${kontaktName(k)} (${kontakttypLabel(k.typ)})` })),
-              { value: NEU, label: "Neuen Kontakt erfassen" },
+              { value: KONTAKT, label: "Kontakt (dritte Person)" },
             ]} />
         </div>
+        {wahl === KONTAKT && (
+          <div className="sm:col-span-2">
+            <KontaktWahl wert={kontaktWahl} onWahl={setKontaktWahl} label="Kontakt"
+              zugehoerigkeitLabel={rolle ? zugehoerigkeitLabel(rolle) : "Zugehörigkeit"} />
+          </div>
+        )}
         <div>
           <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Rolle</div>
           <InlineSelect value={rolle} onChange={setRolle} platzhalter="Bitte wählen"
@@ -3629,22 +3623,6 @@ function BeziehungFormular({ patientId, eintrag, personen, kontakte, onFertig }:
           onChange={v => setEnde(typeof v === "string" ? v : "")} />
         <FormFeld label="Telefon" wert={telefon} platzhalter="+41 44 000 00 00" onAendern={setTelefon} />
       </div>
-
-      {istNeu && (
-        <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 10, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
-          <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", marginBottom: 10 }}>Neuer Kontakt</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: 12 }}>
-            <FormFeld label="Name" wert={neuName} platzhalter="Nachname oder Institution" onAendern={setNeuName} />
-            <FormFeld label="Vorname" wert={neuVorname} onAendern={setNeuVorname} />
-            <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Typ</div>
-              <InlineSelect value={neuTyp} onChange={setNeuTyp} platzhalter="Bitte wählen" options={KONTAKTTYP_OPTIONS} />
-            </div>
-            <FormFeld label={rolle ? zugehoerigkeitLabel(rolle) : "Zugehörigkeit"} wert={neuZugehoerigkeit} onAendern={setNeuZugehoerigkeit} />
-            <FormFeld label="Telefon des Kontakts" wert={neuTelefon} onAendern={setNeuTelefon} />
-          </div>
-        </div>
-      )}
 
       <div style={{ marginTop: 12 }}>
         <FormFeld label="Bemerkung" wert={bemerkung} platzhalter="Freiwillig" onAendern={setBemerkung} />
@@ -4064,18 +4042,6 @@ function EingriffFormular({ patientId, eintrag, onFertig }: {
   );
 }
 
-function FormFeld({ label, wert, platzhalter, onAendern }: {
-  label: string; wert: string; platzhalter?: string; onAendern: (v: string) => void;
-}) {
-  return (
-    <div>
-      <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>{label}</div>
-      <input value={wert} onChange={e => onAendern(e.target.value)} placeholder={platzhalter} aria-label={label} className="ui-fokusring"
-        style={{ width: "100%", padding: "6px 9px", borderRadius: 8, fontFamily: "inherit", fontSize: "var(--text-small)",
-          color: "var(--text-primary)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }} />
-    </div>
-  );
-}
 
 /* ── Austritt ────────────────────────────────────────────────────────────── */
 

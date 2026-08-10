@@ -19,6 +19,38 @@ import { getPersonByOnboardingId, updatePersonZustand } from "../interrai/store"
 import { schliessePatientOnboardingAb } from "../patienten/store";
 import { schliesseAngehoerigenOnboardingAb } from "../angehoerige/store";
 import { GEGENWART, GEGENWART_ISO } from "../gegenwart";
+import { getBeziehungen, beziehungSichern } from "../beziehungen/store";
+import type { Beziehung } from "../beziehungen/beziehungen";
+import { formatAnzeige } from "../datum";
+
+/**
+ * Eine im Gespräch gewählte Person wird zur Beziehung.
+ *
+ * Ist dieselbe Person bereits über eine andere Beziehung erfasst — etwa als
+ * pflegende Angehörige —, erhält diese das Merkmal, statt dass eine zweite
+ * Zeile entsteht. Zwei Zeilen zu derselben Person sagten nicht mehr, sondern
+ * weniger: welche gilt?
+ */
+function beziehungAusOnboarding(
+  patientId: string,
+  kontaktId: string,
+  rolle: Beziehung["rolle"],
+  beginn: string,
+  zusatz: { art?: string; notfallkontakt?: boolean },
+): void {
+  const bestehend = getBeziehungen(patientId).find(
+    b => b.person.art === "kontakt" && b.person.kennung === kontaktId && !b.ende.trim());
+  if (bestehend) {
+    if (zusatz.notfallkontakt) beziehungSichern({ ...bestehend, notfallkontakt: true });
+    return;
+  }
+  beziehungSichern({
+    id: "", patientId, person: { art: "kontakt", kennung: kontaktId },
+    rolle, art: (zusatz.art ?? "") as Beziehung["art"], vertretungsart: "",
+    beginn, ende: "", notfallkontakt: zusatz.notfallkontakt ?? false,
+    auskunftsberechtigt: false, telefon: "", bemerkung: "",
+  });
+}
 
 export interface KonvertierungsErgebnis {
   patientId: string;
@@ -56,6 +88,8 @@ export function konvertiereOnboarding(
   angehoerigenDaten?: { name: string; quellensteuerpflichtig: boolean; aufenthaltsstatus: string; bvgAnbindungGewuenscht: boolean; qualifikation?: string; eintrittsdatum?: string; pflegefachkraft?: string },
   /** Auslösende Person für das Aufteilungs-Ereignisprotokoll (sofern bekannt). */
   ausloeser?: { id: string; name: string },
+  /** Im Abklärungsgespräch gewählte dritte Personen. */
+  kontakte?: { notfallkontaktId: string; notfallkontaktVerwandtschaft: string; sozialdienstId: string },
 ): KonvertierungsErgebnis {
   // 1. Der Patient existiert bereits (er entsteht mit dem Schritt "Patient").
   //    Der Abschluss kopiert nichts und erzeugt nichts — er wechselt nur den
@@ -130,6 +164,20 @@ export function konvertiereOnboarding(
       : (ed && /^\d{4}-\d{2}-\d{2}$/.test(ed) ? ed : GEGENWART_ISO);
     generiereRhythmusTickets("angehoeriger", angehoerigerId, angehoerigenDaten.name, ankerAng, angehoerigenDaten.pflegefachkraft);
     anzahlNeuAngehoeriger = getTicketsFuerSubjekt("angehoeriger", angehoerigerId).length;
+  }
+
+  /* Die im Gespräch gewählten Kontakte werden zu Beziehungen am Patienten.
+     Vorher standen sie als Freitext im Formular und landeten nirgends. */
+  if (patientId && kontakte) {
+    const heute = formatAnzeige(GEGENWART);
+    if (kontakte.notfallkontaktId) {
+      beziehungAusOnboarding(patientId, kontakte.notfallkontaktId, "weitere", heute, {
+        art: kontakte.notfallkontaktVerwandtschaft, notfallkontakt: true,
+      });
+    }
+    if (kontakte.sozialdienstId) {
+      beziehungAusOnboarding(patientId, kontakte.sozialdienstId, "sozialdienst", heute, {});
+    }
   }
 
   // Aufteilung als Ereignis festhalten (GeKoZH Nr. 8 — nachweisrelevant).

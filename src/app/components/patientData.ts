@@ -101,7 +101,6 @@ export interface Patient {
   treppen: string;
   personenImHaushalt: string;
   sozialamtKontakt: string;
-  sozialamtKontaktDetail: string;
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
@@ -355,7 +354,6 @@ export const patientenSeed: Patient[] = [
     treppen: "",
     personenImHaushalt: "",
     sozialamtKontakt: "",
-    sozialamtKontaktDetail: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -425,7 +423,6 @@ export const patientenSeed: Patient[] = [
     treppen: "",
     personenImHaushalt: "",
     sozialamtKontakt: "",
-    sozialamtKontaktDetail: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -495,7 +492,6 @@ export const patientenSeed: Patient[] = [
     treppen: "",
     personenImHaushalt: "",
     sozialamtKontakt: "",
-    sozialamtKontaktDetail: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -565,7 +561,6 @@ export const patientenSeed: Patient[] = [
     treppen: "",
     personenImHaushalt: "",
     sozialamtKontakt: "",
-    sozialamtKontaktDetail: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -631,7 +626,6 @@ export const patientenSeed: Patient[] = [
     treppen: "",
     personenImHaushalt: "",
     sozialamtKontakt: "",
-    sozialamtKontaktDetail: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -701,7 +695,6 @@ export const patientenSeed: Patient[] = [
     treppen: "",
     personenImHaushalt: "",
     sozialamtKontakt: "",
-    sozialamtKontaktDetail: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -771,7 +764,6 @@ export const patientenSeed: Patient[] = [
     treppen: "",
     personenImHaushalt: "",
     sozialamtKontakt: "",
-    sozialamtKontaktDetail: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -841,7 +833,6 @@ export const patientenSeed: Patient[] = [
     treppen: "",
     personenImHaushalt: "",
     sozialamtKontakt: "",
-    sozialamtKontaktDetail: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -911,7 +902,6 @@ export const patientenSeed: Patient[] = [
     treppen: "",
     personenImHaushalt: "",
     sozialamtKontakt: "",
-    sozialamtKontaktDetail: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -977,7 +967,6 @@ export const patientenSeed: Patient[] = [
     treppen: "",
     personenImHaushalt: "",
     sozialamtKontakt: "",
-    sozialamtKontaktDetail: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",

@@ -68,6 +68,7 @@ import { InlineSelect } from "./ui/InlineSelect";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
+import { getKontakt } from "../../lib/kontakte/store";
 import { GEGENWART_ISO } from "../../lib/gegenwart";
 import { sdaVerlangtInterrai } from "../../lib/stammdaten/sda-einschaetzung-situation";
 import { INTERRAI_SCHRITTE } from "../../lib/rhythmus/vorlage";
@@ -107,6 +108,13 @@ export type PatientScanFile = ScanFile;
 export interface SdaProtokollEintrag {
   benutzer: string;
   zeitpunkt: string;
+}
+
+/** Trägt der gewählte Kontakt eine Nummer? Ersetzt die frühere Formatprüfung
+    auf dem Freitextfeld — die Nummer steht jetzt am Kontakt. */
+function istKontaktMitTelefon(kennung: string): boolean {
+  if (!kennung) return false;
+  return (getKontakt(kennung)?.telefon ?? "").trim() !== "";
 }
 
 export interface PatientFormData {
@@ -157,9 +165,12 @@ export interface PatientFormData {
   adresseStrasse: string;
   adressePlz: string;
   adresseOrt: string;
-  notfallkontaktName: string;
-  notfallkontaktTelefon: string;
-  notfallkontaktBeziehung: string;
+  /* Der Notfallkontakt ist eine dritte Person und steht im Kontaktbestand.
+     Erfasst wird die Kennung, nie der Name — ändert sich der Name am
+     Kontakt, ändert er sich überall mit. Die Verwandtschaft bleibt hier:
+     sie beschreibt das Verhältnis zu diesem Patienten, nicht die Person. */
+  notfallkontaktId: string;
+  notfallkontaktVerwandtschaft: string;
   spezialAerzte: string;
   /** SP-03: umbenannt von "versicherungsNr" zu "kartennummer" */
   kartennummer: string;
@@ -178,7 +189,8 @@ export interface PatientFormData {
 
   /* Tab 2 – Steuer & Sozialversicherungen */
   sozialamtKontakt: string;
-  sozialamtKontaktDetail: string;
+  /** Kennung des Kontakts beim Sozialdienst; ersetzt den früheren Freitext. */
+  sozialamtKontaktId: string;
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
@@ -292,9 +304,8 @@ export const emptyPatientForm: PatientFormData = {
   adresseStrasse: "",
   adressePlz: "",
   adresseOrt: "",
-  notfallkontaktName: "",
-  notfallkontaktTelefon: "",
-  notfallkontaktBeziehung: "",
+  notfallkontaktId: "",
+  notfallkontaktVerwandtschaft: "",
   spezialAerzte: "",
   kartennummer: "",
   bagNr: "",
@@ -305,7 +316,7 @@ export const emptyPatientForm: PatientFormData = {
   uebersetzerNotwendig: "",
 
   sozialamtKontakt: "nein",
-  sozialamtKontaktDetail: "",
+  sozialamtKontaktId: "",
   ivBezug: "nein",
   ivBezugProzent: "",
   hilflosenentschaedigung: "nein",
@@ -420,8 +431,10 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
         filled(data.adresseStrasse),
         filled(data.adressePlz),
         filled(data.adresseOrt),
-        filled(data.notfallkontaktName),
-        isValidPhone(data.notfallkontaktTelefon),
+        /* Derselbe Pflichtstatus wie zuvor, nur an der neuen Speicherform:
+           ein gewählter Kontakt und eine Nummer daran. */
+        filled(data.notfallkontaktId),
+        istKontaktMitTelefon(data.notfallkontaktId),
       ];
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
@@ -432,7 +445,7 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
         filled(data.hilflosenentschaedigung),
         filled(data.konfession),
       ];
-      if (data.sozialamtKontakt === "ja") checks.push(filled(data.sozialamtKontaktDetail));
+      if (data.sozialamtKontakt === "ja") checks.push(filled(data.sozialamtKontaktId));
       if (data.ivBezug === "ja") checks.push(filled(data.ivBezugProzent));
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
