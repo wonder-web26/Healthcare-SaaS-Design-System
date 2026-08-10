@@ -576,11 +576,22 @@ function Patient360Inhalt() {
   useLayoutEffect(() => {
     const el = kopfRef.current;
     if (!el) return;
-    const messen = () => setKopfHoehe(el.getBoundingClientRect().height);
+    /* Die Höhe geht zusätzlich als CSS-Variable hinaus: eine Ansicht mit
+       eigener klebender Leiste muss wissen, wo der Dossierkopf endet, und
+       eine Eigenschaft erspart es, die Zahl durch dreissig Ansichten zu
+       reichen, die sie nicht brauchen. */
+    const messen = () => {
+      const h = el.getBoundingClientRect().height;
+      setKopfHoehe(h);
+      document.documentElement.style.setProperty("--dossier-kopf", `${h}px`);
+    };
     messen();
     const ro = new ResizeObserver(messen);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--dossier-kopf");
+    };
   }, []);
 
   // Blättern läuft über den sichtbaren Bestand; das Dossier selbst ist auch für
@@ -880,7 +891,12 @@ function PSectionCard({
             Bearbeiten
           </button>
         )}
-        {editing && (
+        {/* Knöpfe nur, wo es Handler gibt. Die Stammdaten führen den
+            Bearbeiten-Zustand für die ganze Ansicht und übergeben `editing`
+            allein für die Hervorhebung — eine Karte ohne onSave/onCancel
+            trägt darum auch keine Knöpfe. Für alle übrigen Verwender, die
+            beide Handler übergeben, ändert sich nichts. */}
+        {editing && (onSave || onCancel) && (
           <div className="flex items-center gap-1.5">
             <button
               onClick={onCancel}
@@ -3004,9 +3020,11 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
  * einen Klick, der sie will, und einen zweiten, der sie bestätigt.
  */
 function AnsichtStammdaten({ patient }: { patient: Patient }) {
-  /* Nur eine Karte gleichzeitig — zwei offene Formulare mit je eigenem
-     Abbrechen liessen nicht mehr erkennen, was zu welchem gehört. */
-  const [offen, setOffen] = useState<string | null>(null);
+  /* Ein Modus für die ganze Ansicht. Vorher trug jede Karte ihren eigenen
+     Knopf und es durfte nur eine offen sein; wer Angaben aus drei Karten
+     nachführte, klickte neunmal. Der Umfang ungesicherter Änderungen ist
+     jetzt die Ansicht — das übliche Mass für ein Formular. */
+  const [bearbeiten, setBearbeiten] = useState(false);
   const [entwurf, setEntwurf] = useState<Record<string, string>>({});
   const [protokoll, setProtokoll] = useState<{ feld: string; wert: string; wann: string }[]>([]);
   const [frage, setFrage] = useState<string | null>(null);
@@ -3072,16 +3090,19 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
 
   const geaendert = Object.entries(entwurf).some(([k, v]) => v !== wert(k as keyof Patient));
 
-  const sichern = (karte: string) => {
-    const felder = KARTEN[karte];
+  /* Ein Zug über alle Karten. Je geändertem Feld ein Protokolleintrag —
+     dieselbe Körnung wie vorher, nur nicht mehr je Karte getrennt. */
+  const sichern = () => {
     const neu: Partial<Patient> = {};
     const eintraege: typeof protokoll = [];
     const jetzt = jetztAnzeige();
-    for (const f of felder) {
-      const v = entwurf[f.k];
-      if (v !== undefined && v !== wert(f.k)) {
-        (neu as Record<string, string>)[f.k] = v;
-        eintraege.push({ feld: f.label, wert: v, wann: jetzt });
+    for (const felder of Object.values(KARTEN)) {
+      for (const f of felder) {
+        const v = entwurf[f.k];
+        if (v !== undefined && v !== wert(f.k)) {
+          (neu as Record<string, string>)[f.k] = v;
+          eintraege.push({ feld: f.label, wert: v, wann: jetzt });
+        }
       }
     }
     if (Object.keys(neu).length > 0) {
@@ -3089,16 +3110,16 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
       setProtokoll(p => [...eintraege, ...p].slice(0, 8));
     }
     setEntwurf({});
-    setOffen(null);
+    setBearbeiten(false);
   };
 
-  const abbrechen = () => { setEntwurf({}); setOffen(null); setFrage(null); };
+  const abbrechen = () => { setEntwurf({}); setBearbeiten(false); setFrage(null); };
 
   /* Wer die Ansicht mit offenen Änderungen verlässt, wird gefragt — sonst
      verschwände die Arbeit ohne Hinweis. Zwei Wege hinaus: die Navigation
      (abgefangen am Klick weiter unten) und das Schliessen des Fensters. */
   useEffect(() => {
-    if (!offen || !geaendert) return;
+    if (!bearbeiten || !geaendert) return;
     const warnen = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     /* Die Seitennavigation liegt ausserhalb dieser Ansicht — der Listener
        muss deshalb am Dokument hängen und in der Erfassungsphase greifen,
@@ -3118,33 +3139,18 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
       window.removeEventListener("beforeunload", warnen);
       document.removeEventListener("click", abfangen, true);
     };
-  }, [offen, geaendert]);
+  }, [bearbeiten, geaendert]);
 
+  /* Die Karte trägt keinen Knopf mehr — der Modus gehört der Ansicht. */
   const karte = (id: string, titel: string, icon: React.ElementType) => (
-    <PSectionCard
-      title={titel} icon={icon}
-      editable={offen === null || offen === id}
-      editing={offen === id}
-      onEdit={() => { setOffen(id); setEntwurf({}); }}
-      onSave={() => sichern(id)}
-      onCancel={abbrechen}
-    >
-      {offen === id && (
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 11px", borderRadius: 10, background: "var(--status-info-bg)", marginBottom: 12 }}>
-          <Info style={{ width: 13, height: 13, color: "var(--status-info)", flexShrink: 0, marginTop: 2 }} />
-          <span style={{ fontSize: "var(--text-meta)", color: "var(--status-info)", maxWidth: "74ch", lineHeight: 1.55 }}>
-            Wird bearbeitet. Änderungen werden erst beim Sichern übernommen und mit Person und
-            Zeitpunkt protokolliert.
-          </span>
-        </div>
-      )}
+    <PSectionCard title={titel} icon={icon} editing={bearbeiten}>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "var(--space-4)" }}>
         {KARTEN[id].map(f => (
-          <StammFeld key={String(f.k)} label={f.label} wert={feld(f.k)} bearbeiten={offen === id}
+          <StammFeld key={String(f.k)} label={f.label} wert={feld(f.k)} bearbeiten={bearbeiten}
             anzeige={f.anzeige} onAendern={v => setEntwurf(e => ({ ...e, [f.k]: v }))} />
         ))}
       </div>
-      {id === "arzt" && offen !== id && !wert("hausarztName").trim() && (
+      {id === "arzt" && !bearbeiten && !wert("hausarztName").trim() && (
         <div style={{ marginTop: 12, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", maxWidth: "74ch", lineHeight: 1.55 }}>
           Kein Hausarzt erfasst. Ohne ihn kann keine ärztliche Verordnung eingeholt werden.
         </div>
@@ -3153,9 +3159,54 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
   );
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3" style={{ gap: "var(--space-4)" }}
->
-      <div className="xl:col-span-2 space-y-4" data-stammkarte>
+    <div className="space-y-4" data-stammkarte>
+      {/* ── Kopf der Ansicht: ein Knopf für alle Karten ──
+          Klebend nur im Bearbeiten-Modus: die Ansicht ist sechs Karten hoch,
+          und wer unten etwas ändert, muss Speichern erreichen, ohne nach oben
+          zu rollen. Im Lesezustand hat eine mitlaufende Leiste keinen Zweck
+          und nähme nur Platz. Der Versatz kommt aus der Höhe des
+          Dossierkopfs, der seinerseits stehen bleibt. */}
+      <div style={{
+        position: bearbeiten ? "sticky" : "static",
+        top: bearbeiten ? "var(--dossier-kopf, 0px)" : undefined,
+        zIndex: 15,
+        background: "var(--bg-elevated)",
+        border: "var(--border-thin) solid var(--border-default)",
+        borderRadius: "var(--radius-card)",
+        padding: "10px 18px",
+      }}>
+        <div className="flex items-center flex-wrap" style={{ gap: 12 }}>
+          <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+            Stammdaten
+          </h3>
+          {bearbeiten && (
+            <span style={{ fontSize: "var(--text-meta)", color: "var(--status-info)", maxWidth: "62ch", lineHeight: 1.5 }}>
+              Wird bearbeitet. Änderungen werden erst beim Sichern übernommen und mit Person und
+              Zeitpunkt protokolliert.
+            </span>
+          )}
+          <div className="flex items-center" style={{ gap: 10, marginLeft: "auto" }}>
+            {bearbeiten ? (
+              <>
+                <button type="button" onClick={abbrechen} className="ui-fokusring cursor-pointer inline-flex items-center"
+                  style={{ gap: 5, background: "none", border: "none", padding: "4px 8px", fontFamily: "inherit", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+                  <X style={{ width: 13, height: 13 }} /> Abbrechen
+                </button>
+                <AppButton variant="sekundaer" icon={Check} onClick={sichern}>Speichern</AppButton>
+              </>
+            ) : (
+              <button type="button" onClick={() => { setBearbeiten(true); setEntwurf({}); }}
+                className="ui-fokusring cursor-pointer inline-flex items-center"
+                style={{ gap: 5, background: "none", border: "none", padding: "4px 8px", fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--brand-primary)" }}>
+                <Pencil style={{ width: 13, height: 13 }} /> Bearbeiten
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3" style={{ gap: "var(--space-4)" }}>
+      <div className="xl:col-span-2 space-y-4">
         {/* Identität bleibt gesperrt: sie beschreibt den Zustand bei Eintritt
             und wurde im Abklärungsgespräch erhoben. */}
         <PSectionCard title="Identität" icon={Users}>
@@ -3210,6 +3261,7 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
           )}
         </PSectionCard>
       </div>
+      </div>
 
       {frage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center"
@@ -3218,8 +3270,8 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
           <div style={{ width: "100%", maxWidth: 420, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", padding: "var(--space-6)" }}>
             <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-semibold)", marginBottom: 8 }}>Änderungen verwerfen?</div>
             <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 16, lineHeight: 1.6 }}>
-              In dieser Karte sind Änderungen offen, die noch nicht gesichert wurden. Verlassen Sie
-              die Ansicht, gehen sie verloren.
+              In dieser Ansicht sind Änderungen offen, die noch nicht gesichert wurden. Verlassen
+              Sie sie, gehen sie verloren.
             </p>
             <div className="flex items-center justify-end" style={{ gap: 10 }}>
               <button type="button" onClick={() => setFrage(null)} className="ui-fokusring cursor-pointer"
