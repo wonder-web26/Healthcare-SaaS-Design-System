@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { InlineSelect } from "./InlineSelect";
+import { Combobox } from "../form/Combobox";
 import { FormFeld } from "./FormFeld";
 import { useKontakte, kontaktSichern } from "../../../lib/kontakte/store";
 import { kontaktName, type Kontakt } from "../../../lib/kontakte/kontakte";
@@ -94,14 +95,26 @@ export function KontaktWahl({ wert, onWahl, zugehoerigkeitLabel = "Zugehörigkei
 
   return (
     <div>
-      <div>
-        <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>{label}</div>
-        <InlineSelect value={modus} onChange={waehlen} platzhalter={platzhalter}
-          options={[
-            ...kontakte.map(k => ({ value: k.id, label: `${kontaktName(k)} (${kontakttypLabel(k.typ)})` })),
-            { value: NEU, label: "Neuen Kontakt erfassen" },
-          ]} />
-      </div>
+      {/* Auswahlfeld MIT Suche: bei zwei Kontakten ist eine Liste dasselbe wie
+          eine Suche, bei zweihundert nicht mehr — und zweihundert sind es,
+          sobald jede Gemeinde ihren Sozialdienst beisteuert. Der Baustein ist
+          derselbe wie bei der Nationalität; gesucht wird über Name, Vorname
+          und Zugehörigkeit, wie in der Kontaktliste. */}
+      <Combobox
+        label={label}
+        value={modus || null}
+        onChange={v => waehlen(v ?? "")}
+        placeholder={platzhalter}
+        searchPlaceholder="Name oder Zugehörigkeit suchen…"
+        keineTrefferText="Kein Kontakt gefunden."
+        options={[
+          ...kontakte.map(k => ({
+            value: k.id,
+            label: `${kontaktName(k)} (${kontakttypLabel(k.typ)})`,
+            suchtext: k.zugehoerigkeit,
+          })),
+          { value: NEU, label: "Neuen Kontakt erfassen", immer: true },
+        ]} />
       {modus === NEU && (
         <div ref={bereich} tabIndex={-1}
           style={{ marginTop: 10, padding: "12px 14px", borderRadius: 10, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
