@@ -6,7 +6,7 @@ import { useState } from "react";
 import { User, Users, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, Languages, ChevronDown, ChevronUp, CheckCircle2, FileText } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { KontaktWahl } from "../ui/KontaktWahl";
-import { BEZIEHUNGSART } from "../../../lib/beziehungen/beziehungen";
+import { BEZIEHUNGSART, VERTRETUNGSART } from "../../../lib/beziehungen/beziehungen";
 import { FELD_MAX, katalogFeldBreite } from "./feldbreiten";
 import { TextInput } from "./TextInput";
 import { TextareaInput } from "./TextareaInput";
@@ -239,6 +239,34 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
           </div>
         </div>
       )}
+      {/* Gesetzliche Vertretung — auf demselben Reiter wie der Sozialdienst:
+          beides sind formale Zuständigkeiten Dritter, nicht persönliches
+          Umfeld. Derselbe Aufbau: Schalter, dann Kontaktwahl. */}
+      <div style={{ marginTop: "var(--space-4)" }} className="grid grid-cols-1 md:grid-cols-2">
+        <SegmentedControl label="Gesetzliche Vertretung besteht?" required
+          value={data.gesetzlicheVertretung} onChange={v => onUpdate("gesetzlicheVertretung", v)} options={JA_NEIN} />
+      </div>
+      {data.gesetzlicheVertretung === "ja" && (
+        <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
+          <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+            <div style={{ maxWidth: FELD_MAX.mittel }}>
+              <KontaktWahl label="Vertretende Person" wert={data.vertretungKontaktId}
+                onWahl={v => onUpdate("vertretungKontaktId", v)} zugehoerigkeitLabel="Behörde" />
+            </div>
+            <div style={{ maxWidth: FELD_MAX.mittel }}>
+              <FormSelect label="Art der Vertretung" required value={data.vertretungsart || null}
+                onChange={v => onUpdate("vertretungsart", v || "")}
+                options={VERTRETUNGSART.map(v => ({ value: v.code, label: v.label }))}
+                placeholder="Bitte wählen"
+                /* Dieser Reiter führt keinen Berührt-Zustand; der Fehler
+                   erscheint, sobald der Schalter auf Ja steht und die Art
+                   fehlt — wie bei den übrigen Feldern dieses Reiters. */
+                error={!filled(data.vertretungsart) ? "Pflichtfeld" : undefined} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {data.ivBezug === "ja" && (
         <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
           <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="IV-Bezug" required value={data.ivBezugProzent} onChange={v => onUpdate("ivBezugProzent", v)} suffix="%" placeholder="z.B. 100" /></div>

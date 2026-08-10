@@ -86,14 +86,21 @@ nicht erhoben — es bleibt leer, bis es dort ergänzt wird.
 ## Erkannte Lücken
 
 Angaben, die klinisch zählen und im Abklärungsgespräch **nicht erhoben**
-werden. Eine Karte „Vertretung" wäre heute leer; drei leere Felder wären eine
-Behauptung, deshalb erscheint sie nicht.
+werden.
+
+**Geschlossen:** Die gesetzliche Vertretung wird seit dem Vertretungslauf im
+Reiter „Steuer & Sozialversicherungen" erhoben — ein Ja/Nein-Schalter, bei
+„ja" eine Kontaktwahl und die Art der Vertretung aus `VERTRETUNGSART`
+(Vorsorgeauftrag · Beistandschaft · Vertretung bei medizinischen Massnahmen ·
+Art nicht bekannt). Beim Abschluss entsteht daraus eine Beziehung mit der
+Rolle `beistand`; sie wird nicht mit einer bestehenden Beziehung derselben
+Person zusammengeführt, weil eine Beiständin etwas anderes ist als eine
+Tochter. Damit decken Vorsorgeauftrag und Beistandschaft ihre eigene Zeile
+ab; sie stehen unten nicht mehr.
 
 | Fehlt | Warum es zählt |
 |---|---|
-| **Vorsorgeauftrag** | Wer entscheidet, wenn der Patient es nicht mehr kann. Bei jeder Einwilligung erheblich. |
-| **Beistandschaft** | Ob eine erwachsenenschutzrechtliche Massnahme besteht und welchen Umfang sie hat. Betrifft Vertragsfähigkeit und Abrechnung. |
-| **Patientenverfügung** | Ob eine besteht und wo sie liegt. Bei Verschlechterung die erste Frage. |
+| **Patientenverfügung** | Ob eine besteht und wo sie liegt. Bei Verschlechterung die erste Frage. Die Vertretungsart deckt sie nicht ab: eine Verfügung ist ein Dokument, keine Person. |
 | `hausarztFachgebiet` | Besteht am Patienten, wird im Gespräch nicht erfragt. |
 | Mobiltelefon getrennt vom Festnetz | Das Gespräch erhebt ein Telefonfeld; für die Erreichbarkeit unterwegs wäre die Trennung nützlich. |
 | PLZ und Ort getrennt | Am Patienten steht nur die zusammengesetzte Adresse. Für Auswertungen nach Gemeinde müsste sie zerlegt werden. |

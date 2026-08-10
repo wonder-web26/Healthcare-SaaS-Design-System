@@ -1174,6 +1174,8 @@ export function OnboardingPage() {
                       notfallkontaktId: patientData.notfallkontaktId,
                       notfallkontaktVerwandtschaft: patientData.notfallkontaktVerwandtschaft,
                       sozialdienstId: patientData.sozialamtKontakt === "ja" ? patientData.sozialamtKontaktId : "",
+                      vertretungKontaktId: patientData.gesetzlicheVertretung === "ja" ? patientData.vertretungKontaktId : "",
+                      vertretungsart: patientData.vertretungsart,
                     });
 
                     // Qualifizierte Erfolgsmeldung

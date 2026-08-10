@@ -191,6 +191,14 @@ export interface PatientFormData {
   sozialamtKontakt: string;
   /** Kennung des Kontakts beim Sozialdienst; ersetzt den früheren Freitext. */
   sozialamtKontaktId: string;
+  /* Gesetzliche Vertretung — im SDA-Standard V1.3 nicht vorgesehen, aber
+     fachlich die schwerste der offenen Fragen: wer einwilligt, wenn die
+     Person es nicht mehr kann. Bei Demenz und Hochaltrigkeit keine
+     Nebenfrage. */
+  gesetzlicheVertretung: string;
+  vertretungKontaktId: string;
+  /** Code aus VERTRETUNGSART; die Liste besteht seit dem Beziehungslauf. */
+  vertretungsart: string;
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
@@ -317,6 +325,9 @@ export const emptyPatientForm: PatientFormData = {
 
   sozialamtKontakt: "nein",
   sozialamtKontaktId: "",
+  gesetzlicheVertretung: "",
+  vertretungKontaktId: "",
+  vertretungsart: "",
   ivBezug: "nein",
   ivBezugProzent: "",
   hilflosenentschaedigung: "nein",
@@ -442,11 +453,18 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
       const checks = [
         filled(data.sozialamtKontakt),
         filled(data.ivBezug),
+        filled(data.gesetzlicheVertretung),
         filled(data.hilflosenentschaedigung),
         filled(data.konfession),
       ];
       if (data.sozialamtKontakt === "ja") checks.push(filled(data.sozialamtKontaktId));
       if (data.ivBezug === "ja") checks.push(filled(data.ivBezugProzent));
+      /* Bei „ja" beides: eine Vertretung ohne Person und ohne Art wäre eine
+         Behauptung ohne Inhalt. */
+      if (data.gesetzlicheVertretung === "ja") {
+        checks.push(filled(data.vertretungKontaktId));
+        checks.push(filled(data.vertretungsart));
+      }
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
     case "wohnen": {

@@ -106,7 +106,7 @@ export const demoSteinerPatient: PatientFormData = {
   spracheCode: "1",
   spracheAndere: "",
   uebersetzerNotwendig: "0",
-  sozialamtKontakt: "nein", sozialamtKontaktId: "", ivBezug: "nein", hilflosenentschaedigung: "ja", assistenzbeitrag: "nein",
+  sozialamtKontakt: "nein", sozialamtKontaktId: "", gesetzlicheVertretung: "", vertretungKontaktId: "", vertretungsart: "", ivBezug: "nein", hilflosenentschaedigung: "ja", assistenzbeitrag: "nein",
   konfession: "evangelisch_reformiert",
   groesse: "174", gewicht: "78", gewichtsverlust: "nein", brille: "ja", hoergeraet: "ja",
   chronischeErkrankungen: "Arterielle Hypertonie, Diabetes mellitus Typ 2, beginnende Herzinsuffizienz (NYHA II)",
