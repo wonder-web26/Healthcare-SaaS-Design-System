@@ -139,7 +139,8 @@ import { useDokumente } from "../../lib/dokumente/store";
 import { useBeziehungen, beziehungBeenden } from "../../lib/beziehungen/store";
 import {
   istAktiv as beziehungAktiv, personName, rolleLabel, rolleSeite, artLabel,
-  DIAGRAMM_MAX, type Beziehung,
+  DIAGRAMM_MAX, hausarztBeziehung, ABGELEITET_VERMERK, SPEZIALAERZTE_LUECKE,
+  type Beziehung,
 } from "../../lib/beziehungen/beziehungen";
 import {
   useVorgeschichte, aufenthaltSichern, eingriffSichern, tageZwischen,
@@ -3083,10 +3084,13 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
     ],
   };
 
-  /* Eine Karte, in der kein einziges Feld erhoben ist, sagt nichts — und die
-     Felder stehen bei den bestehenden Patienten alle leer, weil die Übernahme
-     erst für neue Abschlüsse greift. */
-  const hatInhalt = (id: string) => KARTEN[id].some(f => wert(f.k).trim() !== "");
+  /* Eine Karte, in der kein einziges Feld erhoben ist, sagt im Lesezustand
+     nichts — und die Felder stehen bei den bestehenden Patienten alle leer,
+     weil die Übernahme erst für neue Abschlüsse greift.
+     Im Bearbeiten-Modus erscheint sie trotzdem: sonst wären ihre Felder über
+     die Oberfläche nie erreichbar, und eine leere Karte liesse sich nie
+     füllen. */
+  const zeigen = (id: string) => bearbeiten || KARTEN[id].some(f => wert(f.k).trim() !== "");
 
   const geaendert = Object.entries(entwurf).some(([k, v]) => v !== wert(k as keyof Patient));
 
@@ -3237,10 +3241,10 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
         </PSectionCard>
 
         {karte("kontakt", "Kontakt", MapPin)}
-        {hatInhalt("wohnsituation") && karte("wohnsituation", "Wohnsituation", Home)}
+        {zeigen("wohnsituation") && karte("wohnsituation", "Wohnsituation", Home)}
         {karte("versicherung", "Versicherung", Shield)}
         {karte("arzt", "Ärztliche Betreuung", Stethoscope)}
-        {hatInhalt("sozial") && karte("sozial", "Sozialversicherung und Steuern", Landmark)}
+        {zeigen("sozial") && karte("sozial", "Sozialversicherung und Steuern", Landmark)}
       </div>
 
       <div className="xl:col-span-1">
@@ -3326,7 +3330,10 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
   const [meldung, setMeldung] = useState("");
 
   const eigene = alle.filter(b => b.patientId === patient.id);
-  const aktive = eigene.filter(beziehungAktiv);
+  /* Der Hausarzt wird bei jedem Lesen aus den Stammdaten gebildet, nicht aus
+     dem Bestand gelesen — eine Quelle, kein zweiter Ort, der veralten kann. */
+  const hausarzt = hausarztBeziehung(patient);
+  const aktive = [...eigene.filter(beziehungAktiv), ...(hausarzt ? [hausarzt] : [])];
   const beendete = eigene.filter(b => !beziehungAktiv(b));
   const nameVon = (k: string) => {
     const a = angehoerige.find(x => x.id === k);
@@ -3375,6 +3382,17 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
         </PSectionCard>
       )}
 
+      {patient.spezialAerzte.trim() !== "" && (
+        <div className="flex items-start" style={{ gap: 8, padding: "10px 12px", borderRadius: 10, background: "var(--bg-secondary)" }}>
+          <Info style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 2 }} />
+          <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", maxWidth: "74ch", lineHeight: 1.55 }}>
+            {SPEZIALAERZTE_LUECKE} Erfasst ist: „{patient.spezialAerzte.trim()}". Ein Freitext mit
+            mehreren Namen lässt sich nicht verlässlich zerlegen; je Person erfasst, folgte die
+            Beziehung daraus wie beim Hausarzt.
+          </span>
+        </div>
+      )}
+
       {ohneBeziehung.length > 0 && (
         <div className="flex items-start" style={{ gap: 8, padding: "10px 12px", borderRadius: 10, background: "var(--status-warning-bg)" }}>
           <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 2 }} />
@@ -3393,7 +3411,10 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
             {aktive.map(b => (
               <BeziehungsZeile key={b.id} b={b} nameVon={nameVon}
                 abgerechnet={b.person.art === "angehoeriger" && abgerechnet.has(b.person.kennung)}
-                onBeenden={() => {
+                /* Die abgeleitete Zeile trägt keinen Beenden-Knopf: sie folgt
+                   dem Feld, und ein Enddatum hätte keinen Ort. */
+                vermerk={b.id === hausarzt?.id ? ABGELEITET_VERMERK : undefined}
+                onBeenden={b.id === hausarzt?.id ? undefined : () => {
                   beziehungBeenden(b.id, alsAnzeigedatum(MANDAT_STICHTAG));
                   setMeldung(`Beziehung beendet zum ${alsAnzeigedatum(MANDAT_STICHTAG)}. Sie bleibt unter „Beendet" sichtbar.`);
                 }} />
@@ -3419,8 +3440,10 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
   );
 }
 
-function BeziehungsZeile({ b, nameVon, abgerechnet, onBeenden }: {
+function BeziehungsZeile({ b, nameVon, abgerechnet, onBeenden, vermerk }: {
   b: Beziehung; nameVon: (k: string) => string; abgerechnet: boolean; onBeenden?: () => void;
+  /** Steht anstelle des Zeitraums, wenn die Beziehung abgeleitet ist. */
+  vermerk?: string;
 }) {
   return (
     <div className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
@@ -3429,8 +3452,8 @@ function BeziehungsZeile({ b, nameVon, abgerechnet, onBeenden }: {
       </span>
       <span style={{ width: 160, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{rolleLabel(b.rolle)}</span>
       <span style={{ width: 110, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>{artLabel(b.art)}</span>
-      <span style={{ width: 150, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
-        seit {b.beginn}{b.ende && ` bis ${b.ende}`}
+      <span style={{ width: 150, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: vermerk ? undefined : "tabular-nums" }}>
+        {vermerk ?? `seit ${b.beginn}${b.ende ? ` bis ${b.ende}` : ""}`}
       </span>
       <div className="flex items-center flex-wrap" style={{ gap: 6, flex: 1, minWidth: 150 }}>
         {abgerechnet && (
@@ -3536,6 +3559,9 @@ function Netzdiagramm({ patient, privat, rechts, nameVon, abgerechnet, stundenJe
             {/* Bei privaten Rollen gehört die Verwandtschaft dazu; fehlt sie,
                 wird das gesagt statt eine leere Stelle zu lassen. */}
             {rolleSeite(b.rolle) === "privat" && ` · ${b.art ? artLabel(b.art) : "Verwandtschaft nicht erfasst"}`}
+            {/* Bei den externen steht dort das Fachgebiet, sofern erfasst —
+                „Hausarzt" allein sagt weniger als „Hausarzt · Kardiologie". */}
+            {rolleSeite(b.rolle) === "extern" && b.bemerkung && ` · ${b.bemerkung}`}
           </div>
         </div>
       </foreignObject>

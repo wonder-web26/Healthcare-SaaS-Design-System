@@ -105,3 +105,68 @@ export function personName(b: Beziehung, nameVon: (kennung: string) => string): 
  * die kräftige Linie zur abgerechneten Person nicht mehr.
  */
 export const DIAGRAMM_MAX = 8;
+
+/* ══════════════════════════════════════════
+   ABGELEITETE BEZIEHUNG — DER HAUSARZT
+   ══════════════════════════════════════════ */
+
+/** Kennung der abgeleiteten Hausarzt-Beziehung eines Patienten. */
+export function hausarztBeziehungId(patientId: string): string {
+  return `HA-${patientId}`;
+}
+
+/**
+ * Der Hausarzt als Beziehung — abgeleitet, nicht gespeichert.
+ *
+ * Er steht in den Stammdaten, und dort gehört er hin: er ist eine Angabe zum
+ * Patienten, kein eigener Datensatz. Würde die Beziehung zusätzlich im
+ * Bestand liegen, gäbe es zwei Quellen für dieselbe Aussage, und die
+ * zweite ginge beim ersten Ändern des Feldes falsch. Darum wird sie bei
+ * jedem Lesen aus dem Feld gebildet: ändert sich der Name, ändert sich die
+ * Beziehung; wird er entfernt, verschwindet sie.
+ *
+ * Folgerichtig ist sie **nicht beendbar**. Das Modell beendet, statt zu
+ * löschen — aber ein Enddatum liesse sich nirgends hinschreiben, und der
+ * nächste Lesevorgang bildete die Beziehung neu. Die Ansicht sagt das,
+ * statt einen Knopf anzubieten, der nichts bewirkt.
+ *
+ * Das Fachgebiet steht in `bemerkung`: die Beziehung kennt kein eigenes Feld
+ * dafür, und eine Bemerkung ist genau das — eine Ergänzung zur Person.
+ *
+ * `beginn` bleibt leer. Wann jemand Hausarzt wurde, steht nirgends; ein
+ * Datum zu setzen hiesse, es zu erfinden.
+ */
+export function hausarztBeziehung(p: {
+  id: string; hausarztName: string; hausarztTelefon: string; hausarztFachgebiet: string;
+}): Beziehung | null {
+  const name = p.hausarztName.trim();
+  if (!name) return null;
+  return {
+    id: hausarztBeziehungId(p.id),
+    patientId: p.id,
+    person: { art: "ohne_datensatz", name },
+    rolle: "hausarzt",
+    art: "",
+    beginn: "",
+    ende: "",
+    notfallkontakt: false,
+    auskunftsberechtigt: false,
+    telefon: p.hausarztTelefon.trim(),
+    bemerkung: p.hausarztFachgebiet.trim(),
+  };
+}
+
+/**
+ * Spezialärzte bleiben aussen vor — bekannte Lücke.
+ *
+ * `spezialAerzte` steht am Patienten als Freitext und trägt oft mehrere
+ * Namen in einer Zeile. Daraus Knoten zu bilden hiesse, an Kommas zu raten:
+ * „Dr. Meier, Kardiologie" wären zwei Namen statt einer Person mit Fach.
+ * Erfasst gehörten sie als eigene Angaben, je Person mit Name, Fachgebiet
+ * und Telefon — dann folgte die Beziehung daraus wie beim Hausarzt.
+ */
+export const SPEZIALAERZTE_LUECKE =
+  "Spezialärzte stehen als Freitext am Patienten und erscheinen nicht im Netz.";
+
+/** Vermerk an der abgeleiteten Zeile — im Wortlaut, damit er nur einmal steht. */
+export const ABGELEITET_VERMERK = "aus den Stammdaten";
