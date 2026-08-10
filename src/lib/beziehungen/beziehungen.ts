@@ -30,6 +30,7 @@ export const BEZIEHUNGSROLLE = [
   { code: "hausarzt", label: "Hausarzt", seite: "extern" },
   { code: "spezialarzt", label: "Spezialarzt", seite: "extern" },
   { code: "beistand", label: "Beistand", seite: "extern" },
+  { code: "sozialdienst", label: "Sozialdienst", seite: "extern" },
   { code: "weitere", label: "Weitere", seite: "privat" },
 ] as const;
 
@@ -64,6 +65,50 @@ export function artLabel(code: string): string {
   return BEZIEHUNGSART.find(a => a.code === code)?.label ?? "";
 }
 
+/**
+ * Art der Vertretung — nur bei der Rolle `beistand`.
+ *
+ * ACHTUNG, UNGEPRÜFTE SETZUNG. Ob diese vier Werte das schweizerische
+ * Erwachsenenschutzrecht (ZGB Art. 360 ff.) richtig abbilden, ist nicht
+ * belegt. Vorsorgeauftrag, Beistandschaft und Vertretung bei medizinischen
+ * Massnahmen sind dort verschiedene Rechtsinstitute mit verschiedenen
+ * Voraussetzungen, und die Beistandschaft zerfällt ihrerseits in mehrere
+ * Formen. Eine fachliche Prüfung steht aus; bis dahin ist die Liste eine
+ * Arbeitsannahme und keine Rechtsgrundlage.
+ */
+export const VERTRETUNGSART = [
+  { code: "vorsorgeauftrag", label: "Vorsorgeauftrag" },
+  { code: "beistandschaft", label: "Beistandschaft" },
+  { code: "medizinische_massnahmen", label: "Vertretung bei medizinischen Massnahmen" },
+  { code: "unbekannt", label: "Art nicht bekannt" },
+] as const;
+
+export type VertretungsartCode = typeof VERTRETUNGSART[number]["code"];
+
+export function vertretungsartLabel(code: string): string {
+  /* Ohne Angabe steht „Art nicht bekannt" — eine leere Stelle liesse offen,
+     ob niemand es weiss oder niemand gefragt hat. */
+  return VERTRETUNGSART.find(v => v.code === code)?.label ?? "Art nicht bekannt";
+}
+
+/**
+ * Wie die Zugehörigkeit bei einer externen Rolle heisst.
+ *
+ * Dieselbe Angabe, je nach Rolle anders benannt: eine Ärztin hat ein
+ * Fachgebiet, ein Sozialdienst eine Stelle, ein Beistand eine Behörde.
+ * Ein gemeinsames Feld mit einer Beschriftung je Rolle — statt dreier
+ * Felder, von denen zwei immer leer stünden.
+ */
+export function zugehoerigkeitLabel(rolle: string): string {
+  switch (rolle) {
+    case "hausarzt":
+    case "spezialarzt": return "Fachgebiet";
+    case "sozialdienst": return "Stelle";
+    case "beistand": return "Behörde";
+    default: return "Zugehörigkeit";
+  }
+}
+
 /** Wer die Person ist — angehörige Person, Mitarbeitende, oder nur ein Name. */
 export type PersonBezug =
   | { art: "angehoeriger"; kennung: string }
@@ -87,6 +132,16 @@ export interface Beziehung {
   notfallkontakt: boolean;
   auskunftsberechtigt: boolean;
   telefon: string;
+  /**
+   * Wo die Person hingehört — Fachgebiet, Stelle, Behörde.
+   *
+   * Nur bei externen Rollen belegt. Vorher lag das Fachgebiet des Hausarzts
+   * in `bemerkung`; sobald ein zweiter externer Verwender dazukam, hätten
+   * zwei verschiedene Aussagen im selben Feld gestanden.
+   */
+  zugehoerigkeit: string;
+  /** Nur bei der Rolle `beistand`; leer = nicht bekannt. */
+  vertretungsart: VertretungsartCode | "";
   bemerkung: string;
 }
 
@@ -130,8 +185,8 @@ export function hausarztBeziehungId(patientId: string): string {
  * nächste Lesevorgang bildete die Beziehung neu. Die Ansicht sagt das,
  * statt einen Knopf anzubieten, der nichts bewirkt.
  *
- * Das Fachgebiet steht in `bemerkung`: die Beziehung kennt kein eigenes Feld
- * dafür, und eine Bemerkung ist genau das — eine Ergänzung zur Person.
+ * Das Fachgebiet steht in `zugehoerigkeit` — dem Feld, das bei externen
+ * Rollen sagt, wo jemand hingehört.
  *
  * `beginn` bleibt leer. Wann jemand Hausarzt wurde, steht nirgends; ein
  * Datum zu setzen hiesse, es zu erfinden.
@@ -152,7 +207,9 @@ export function hausarztBeziehung(p: {
     notfallkontakt: false,
     auskunftsberechtigt: false,
     telefon: p.hausarztTelefon.trim(),
-    bemerkung: p.hausarztFachgebiet.trim(),
+    zugehoerigkeit: p.hausarztFachgebiet.trim(),
+    vertretungsart: "",
+    bemerkung: "",
   };
 }
 

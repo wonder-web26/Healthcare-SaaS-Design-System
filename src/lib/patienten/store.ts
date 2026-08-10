@@ -131,9 +131,6 @@ export interface PatientStammdatenEingabe {
   kartennummer: string;
   hausarztName: string;
   hausarztTelefon: string;
-  notfallkontaktName: string;
-  notfallkontaktTelefon: string;
-  notfallkontaktBeziehung: string;
   /* ── Bisher nicht übergeben ──────────────────────────────────────────────
      28 Angaben, die das Abklärungsgespräch erhebt und die nie beim Patienten
      ankamen. Sie standen im Formular und blieben dort. */
@@ -211,7 +208,6 @@ function stammdatenAbbilden(
 ): Pick<Patient,
   "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "adresse" | "krankenkasse" | "aufnahmeDatum" |
   "kartennummer" | "hausarztName" | "hausarztTelefon" | "sprache" |
-  "notfallkontaktName" | "notfallkontaktTelefon" | "notfallkontaktBeziehung" |
   "angehoeriger" | "angehoerigerTelefon" | "bagNr" |
   "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "zusatzversicherungKasse" | "weitereVersicherung" | "hausarztEmail" | "spezialAerzte" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "sozialamtKontakt" | "sozialamtKontaktDetail" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
   return {
@@ -258,9 +254,6 @@ function stammdatenAbbilden(
     assistenzbeitrag: eingabe.assistenzbeitrag,
     quellensteuerHinweise: eingabe.quellensteuerHinweise,
     bagNr: eingabe.bagNr,
-    notfallkontaktName: eingabe.notfallkontaktName,
-    notfallkontaktTelefon: eingabe.notfallkontaktTelefon,
-    notfallkontaktBeziehung: eingabe.notfallkontaktBeziehung,
     angehoeriger: angehoerigerAnzeige(angehoeriger),
     angehoerigerTelefon: angehoeriger?.telefon ?? "",
   };

@@ -136,11 +136,12 @@ import { useAngehoerige } from "../../lib/angehoerige/store";
 import { sichtbareNotizen } from "../../lib/notizen/notizen";
 import { unifiedEntries } from "../../lib/mocks/service-desk-unified";
 import { useDokumente } from "../../lib/dokumente/store";
-import { useBeziehungen, beziehungBeenden } from "../../lib/beziehungen/store";
+import { useBeziehungen, beziehungBeenden, beziehungSichern } from "../../lib/beziehungen/store";
 import {
   istAktiv as beziehungAktiv, personName, rolleLabel, rolleSeite, artLabel,
   DIAGRAMM_MAX, hausarztBeziehung, ABGELEITET_VERMERK, SPEZIALAERZTE_LUECKE,
-  type Beziehung,
+  BEZIEHUNGSROLLE, BEZIEHUNGSART, VERTRETUNGSART, vertretungsartLabel,
+  zugehoerigkeitLabel, type Beziehung, type PersonBezug,
 } from "../../lib/beziehungen/beziehungen";
 import {
   useVorgeschichte, aufenthaltSichern, eingriffSichern, tageZwischen,
@@ -3328,6 +3329,8 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
   const einsaetze = useEinsaetze();
   const [beendetOffen, setBeendetOffen] = useState(false);
   const [meldung, setMeldung] = useState("");
+  /* "" = neu, Kennung = ändern, null = geschlossen. */
+  const [formular, setFormular] = useState<string | null>(null);
 
   const eigene = alle.filter(b => b.patientId === patient.id);
   /* Der Hausarzt wird bei jedem Lesen aus den Stammdaten gebildet, nicht aus
@@ -3339,6 +3342,16 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
     const a = angehoerige.find(x => x.id === k);
     return a ? `${a.vorname} ${a.nachname}` : k;
   };
+
+  /* Zur Auswahl stehen alle Personen mit Datensatz: angehörige Personen aus
+     dem Bestand, Mitarbeitende aus den bereits erfassten Beziehungen. Alles
+     Übrige wird als Name ohne Datensatz erfasst. */
+  const personen = [
+    ...angehoerige.map(a => ({ wert: `a:${a.id}`, label: `${a.vorname} ${a.nachname}` })),
+    ...[...new Set(alle.filter(b => b.person.art === "mitarbeitende")
+      .map(b => (b.person as { name: string }).name))]
+      .sort().map(n => ({ wert: `m:${n}`, label: `${n} (Spitex)` })),
+  ];
 
   /* Die abgerechnete Person steht am Mandat, nicht an der Beziehung. Hier
      wird nur nachgeschlagen, um die Zeile zu kennzeichnen. */
@@ -3364,6 +3377,18 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
 
   return (
     <div className="space-y-4">
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "10px 18px" }}>
+        <div className="flex items-center flex-wrap" style={{ gap: 12 }}>
+          <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Beziehungen</h3>
+          {formular === null && (
+            <button type="button" onClick={() => setFormular("")} className="ui-fokusring cursor-pointer inline-flex items-center"
+              style={{ gap: 5, marginLeft: "auto", background: "none", border: "none", padding: "4px 8px", fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--brand-primary)" }}>
+              <Plus style={{ width: 13, height: 13 }} /> Beziehung erfassen
+            </button>
+          )}
+        </div>
+      </div>
+
       {meldung && (
         <div style={{ padding: "10px 12px", borderRadius: 10, background: "var(--status-info-bg)", fontSize: "var(--text-meta)", color: "var(--status-info)" }}>{meldung}</div>
       )}
@@ -3374,6 +3399,11 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
             Für diesen Patienten ist keine Beziehung erfasst. Das Betreuungsnetz hält fest, wer
             pflegt, wer Bezugsperson ist und wer im Notfall erreichbar sein muss.
           </p>
+          {formular === null && (
+            <div style={{ marginTop: 12 }}>
+              <AppButton variant="sekundaer" icon={Plus} onClick={() => setFormular("")}>Beziehung erfassen</AppButton>
+            </div>
+          )}
         </PSectionCard>
       ) : (
         <PSectionCard title="Betreuungsnetz" icon={Users}>
@@ -3404,6 +3434,15 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
       )}
 
       <PSectionCard title={`Aktive Beziehungen (${aktive.length})`} icon={Users}>
+        {formular !== null && (
+          <BeziehungFormular
+            key={formular || "neu"}
+            patientId={patient.id}
+            eintrag={formular ? eigene.find(b => b.id === formular) ?? null : null}
+            personen={personen}
+            onFertig={() => setFormular(null)}
+          />
+        )}
         {aktive.length === 0 ? (
           <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0 }}>Keine aktive Beziehung.</p>
         ) : (
@@ -3414,6 +3453,9 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
                 /* Die abgeleitete Zeile trägt keinen Beenden-Knopf: sie folgt
                    dem Feld, und ein Enddatum hätte keinen Ort. */
                 vermerk={b.id === hausarzt?.id ? ABGELEITET_VERMERK : undefined}
+                /* Abgeleitete Beziehungen sind nicht bearbeitbar — sie folgen
+                   dem Feld, und eine Änderung hier hätte keinen Ort. */
+                onBearbeiten={b.id === hausarzt?.id ? undefined : () => setFormular(b.id)}
                 onBeenden={b.id === hausarzt?.id ? undefined : () => {
                   beziehungBeenden(b.id, alsAnzeigedatum(MANDAT_STICHTAG));
                   setMeldung(`Beziehung beendet zum ${alsAnzeigedatum(MANDAT_STICHTAG)}. Sie bleibt unter „Beendet" sichtbar.`);
@@ -3440,8 +3482,151 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
   );
 }
 
-function BeziehungsZeile({ b, nameVon, abgerechnet, onBeenden, vermerk }: {
+/**
+ * Beziehung erfassen oder ändern — an Ort, nicht im Dialog.
+ *
+ * Nach dem Muster der Vorgeschichte: das Formular erscheint dort, wo die
+ * Liste steht, damit der Zusammenhang zum Bestehenden bleibt.
+ *
+ * Die Person wird verknüpft, wo es einen Datensatz gibt: angehörige Personen
+ * und Mitarbeitende stehen zur Auswahl. Wer im Cockpit keinen Datensatz hat —
+ * Ärztinnen, Behörden, Sozialdienste — wird als Name erfasst. Einen
+ * Personaldatensatz für Externe anzulegen liegt ausserhalb des Produkts.
+ */
+function BeziehungFormular({ patientId, eintrag, personen, onFertig }: {
+  patientId: string;
+  eintrag: Beziehung | null;
+  personen: { wert: string; label: string }[];
+  onFertig: () => void;
+}) {
+  const OHNE = "__ohne__";
+  const anfangsWahl = eintrag
+    ? (eintrag.person.art === "angehoeriger" ? `a:${eintrag.person.kennung}`
+      : eintrag.person.art === "mitarbeitende" ? `m:${eintrag.person.name}` : OHNE)
+    : "";
+  const [wahl, setWahl] = useState(anfangsWahl);
+  const [name, setName] = useState(eintrag?.person.art === "ohne_datensatz" ? eintrag.person.name : "");
+  const [rolle, setRolle] = useState<string>(eintrag?.rolle ?? "");
+  const [art, setArt] = useState<string>(eintrag?.art ?? "");
+  const [zugehoerigkeit, setZugehoerigkeit] = useState(eintrag?.zugehoerigkeit ?? "");
+  const [vertretungsart, setVertretungsart] = useState<string>(eintrag?.vertretungsart ?? "");
+  const [beginn, setBeginn] = useState(eintrag?.beginn ?? "");
+  const [ende, setEnde] = useState(eintrag?.ende ?? "");
+  const [telefon, setTelefon] = useState(eintrag?.telefon ?? "");
+  const [notfall, setNotfall] = useState(eintrag?.notfallkontakt ?? false);
+  const [auskunft, setAuskunft] = useState(eintrag?.auskunftsberechtigt ?? false);
+  const [bemerkung, setBemerkung] = useState(eintrag?.bemerkung ?? "");
+  const [fehler, setFehler] = useState("");
+
+  const seite = rolle ? rolleSeite(rolle) : null;
+  const istOhne = wahl === OHNE;
+
+  const sichern = () => {
+    if (!rolle) { setFehler("Bitte eine Rolle wählen."); return; }
+    if (!wahl) { setFehler("Bitte eine Person wählen."); return; }
+    if (istOhne && !name.trim()) { setFehler("Bitte den Namen der Person erfassen."); return; }
+    const person: PersonBezug = istOhne
+      ? { art: "ohne_datensatz", name: name.trim() }
+      : wahl.startsWith("a:")
+        ? { art: "angehoeriger", kennung: wahl.slice(2) }
+        : { art: "mitarbeitende", name: wahl.slice(2) };
+    beziehungSichern({
+      id: eintrag?.id ?? "",
+      patientId,
+      person,
+      rolle: rolle as Beziehung["rolle"],
+      /* Verwandtschaft nur bei privaten Rollen, Zugehörigkeit nur bei
+         externen — sonst schleppte ein Rollenwechsel den alten Wert mit. */
+      art: seite === "privat" ? (art as Beziehung["art"]) : "",
+      zugehoerigkeit: seite === "extern" ? zugehoerigkeit.trim() : "",
+      vertretungsart: rolle === "beistand" ? (vertretungsart as Beziehung["vertretungsart"]) : "",
+      beginn: beginn.trim(),
+      ende: ende.trim(),
+      telefon: telefon.trim(),
+      notfallkontakt: notfall,
+      auskunftsberechtigt: auskunft,
+      bemerkung: bemerkung.trim(),
+    });
+    onFertig();
+  };
+
+  const merkmal = (an: boolean, setzen: (v: boolean) => void, text: string) => (
+    <button type="button" onClick={() => setzen(!an)} aria-pressed={an}
+      className="ui-fokusring cursor-pointer inline-flex items-center"
+      style={{ gap: 6, padding: "4px 12px", borderRadius: "var(--radius-pill)", fontFamily: "inherit",
+        fontSize: "var(--text-small)", fontWeight: an ? "var(--weight-medium)" : "var(--weight-regular)",
+        background: an ? "var(--brand-primary-light)" : "transparent",
+        border: `var(--border-thin) solid ${an ? "var(--brand-primary)" : "var(--border-default)"}`,
+        color: an ? "var(--brand-primary)" : "var(--text-secondary)" }}>
+      {an && <Check style={{ width: 12, height: 12 }} />}{text}
+    </button>
+  );
+
+  return (
+    <div style={{ padding: "14px 16px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: 12 }}>
+        <div>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Person</div>
+          <InlineSelect value={wahl} onChange={setWahl} platzhalter="Bitte wählen"
+            options={[...personen, { wert: OHNE, label: "Person ohne Datensatz" }].map(p => ({ value: p.wert ?? OHNE, label: p.label }))} />
+        </div>
+        {istOhne && <FormFeld label="Name" wert={name} platzhalter="Vor- und Nachname" onAendern={setName} />}
+        <div>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Rolle</div>
+          <InlineSelect value={rolle} onChange={setRolle} platzhalter="Bitte wählen"
+            options={BEZIEHUNGSROLLE.map(r => ({ value: r.code, label: r.label }))} />
+        </div>
+        {seite === "privat" && (
+          <div>
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Verwandtschaft</div>
+            <InlineSelect value={art} onChange={setArt} platzhalter="nicht erfasst"
+              options={BEZIEHUNGSART.map(a => ({ value: a.code, label: a.label }))} />
+          </div>
+        )}
+        {/* Nur bei externen Rollen, und dort mit der Beschriftung, die zur
+            Rolle gehört: Fachgebiet, Stelle oder Behörde. */}
+        {seite === "extern" && (
+          <FormFeld label={zugehoerigkeitLabel(rolle)} wert={zugehoerigkeit}
+            platzhalter={rolle === "beistand" ? "z. B. KESB Zürich" : ""} onAendern={setZugehoerigkeit} />
+        )}
+        {rolle === "beistand" && (
+          <div>
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Art der Vertretung</div>
+            <InlineSelect value={vertretungsart} onChange={setVertretungsart} platzhalter="Art nicht bekannt"
+              options={VERTRETUNGSART.map(v => ({ value: v.code, label: v.label }))} />
+          </div>
+        )}
+        <DateField label="Beginn" value={beginn} wertFormat="display" bereich="past"
+          onChange={v => setBeginn(typeof v === "string" ? v : "")} />
+        <DateField label="Ende" value={ende} wertFormat="display" bereich="past"
+          onChange={v => setEnde(typeof v === "string" ? v : "")} />
+        <FormFeld label="Telefon" wert={telefon} platzhalter="+41 44 000 00 00" onAendern={setTelefon} />
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <FormFeld label="Bemerkung" wert={bemerkung} platzhalter="Freiwillig" onAendern={setBemerkung} />
+      </div>
+      <div className="flex items-center flex-wrap" style={{ gap: 8, marginTop: 12 }}>
+        <span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Merkmale</span>
+        {merkmal(notfall, setNotfall, "Notfallkontakt")}
+        {merkmal(auskunft, setAuskunft, "Auskunftsberechtigt")}
+      </div>
+      {fehler && (
+        <div role="alert" style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 10 }}>{fehler}</div>
+      )}
+      <div className="flex items-center" style={{ gap: 12, marginTop: 14 }}>
+        <AppButton variant="sekundaer" onClick={sichern}>Sichern</AppButton>
+        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BeziehungsZeile({ b, nameVon, abgerechnet, onBeenden, onBearbeiten, vermerk }: {
   b: Beziehung; nameVon: (k: string) => string; abgerechnet: boolean; onBeenden?: () => void;
+  onBearbeiten?: () => void;
   /** Steht anstelle des Zeitraums, wenn die Beziehung abgeleitet ist. */
   vermerk?: string;
 }) {
@@ -3451,9 +3636,19 @@ function BeziehungsZeile({ b, nameVon, abgerechnet, onBeenden, vermerk }: {
         {personName(b, nameVon)}
       </span>
       <span style={{ width: 160, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{rolleLabel(b.rolle)}</span>
-      <span style={{ width: 110, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>{artLabel(b.art)}</span>
+      {/* Eine Spalte, drei Aussagen je nach Rolle: Verwandtschaft bei
+          privaten, Zugehörigkeit bei externen, Vertretungsart beim Beistand. */}
+      <span style={{ width: 110, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+        {b.rolle === "beistand"
+          ? vertretungsartLabel(b.vertretungsart)
+          : rolleSeite(b.rolle) === "extern" ? b.zugehoerigkeit : artLabel(b.art)}
+      </span>
       <span style={{ width: 150, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: vermerk ? undefined : "tabular-nums" }}>
-        {vermerk ?? `seit ${b.beginn}${b.ende ? ` bis ${b.ende}` : ""}`}
+        {/* Ohne Beginn steht das da — „seit" mit nichts dahinter behauptete
+            ein Datum, das niemand erfasst hat. */}
+        {vermerk ?? (b.beginn
+          ? `seit ${b.beginn}${b.ende ? ` bis ${b.ende}` : ""}`
+          : b.ende ? `bis ${b.ende}` : "Beginn nicht erfasst")}
       </span>
       <div className="flex items-center flex-wrap" style={{ gap: 6, flex: 1, minWidth: 150 }}>
         {abgerechnet && (
@@ -3468,6 +3663,12 @@ function BeziehungsZeile({ b, nameVon, abgerechnet, onBeenden, vermerk }: {
         )}
         {b.telefon && <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{b.telefon}</span>}
       </div>
+      {onBearbeiten && (
+        <button type="button" onClick={onBearbeiten} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+          Bearbeiten
+        </button>
+      )}
       {onBeenden && (
         <button type="button" onClick={onBeenden} className="ui-fokusring cursor-pointer"
           style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
@@ -3559,9 +3760,11 @@ function Netzdiagramm({ patient, privat, rechts, nameVon, abgerechnet, stundenJe
             {/* Bei privaten Rollen gehört die Verwandtschaft dazu; fehlt sie,
                 wird das gesagt statt eine leere Stelle zu lassen. */}
             {rolleSeite(b.rolle) === "privat" && ` · ${b.art ? artLabel(b.art) : "Verwandtschaft nicht erfasst"}`}
-            {/* Bei den externen steht dort das Fachgebiet, sofern erfasst —
-                „Hausarzt" allein sagt weniger als „Hausarzt · Kardiologie". */}
-            {rolleSeite(b.rolle) === "extern" && b.bemerkung && ` · ${b.bemerkung}`}
+            {/* Bei den externen steht dort, wo die Person hingehört, sofern
+                erfasst — „Hausarzt" allein sagt weniger als „Hausarzt ·
+                Kardiologie". Fehlt die Angabe, entfällt die Ergänzung; ein
+                leeres Feld behauptete, es sei nichts zu sagen. */}
+            {rolleSeite(b.rolle) === "extern" && b.zugehoerigkeit && ` · ${b.zugehoerigkeit}`}
           </div>
         </div>
       </foreignObject>
