@@ -17,6 +17,7 @@ import { KLVArbeitsbereich } from "./components/KLVArbeitsbereich";
 import { SchulungsnachweisPage } from "./components/schulung/SchulungsnachweisPage";
 import { ArbeitskontrollePage } from "./components/arbeitskontrolle/ArbeitskontrollePage";
 import { InterraiNeuPage } from "./components/interrai-neu/InterraiNeuPage";
+import { DevAbklaerungPage } from "./components/interrai-neu/abklaerung/DevAbklaerungPage";
 
 export const router = createBrowserRouter([
   {
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
       { path: "servicedesk", Component: ServiceDeskPage },
       { path: "showcase/forms", Component: FormShowcase },
       { path: "interrai-neu/:assessmentId", Component: InterraiNeuPage },
+      { path: "dev/abklaerung", Component: DevAbklaerungPage },
       { path: "vorlagen", Component: PlaceholderPage },
       { path: "*", Component: PlaceholderPage },
     ],

@@ -28,6 +28,7 @@ import {
   Plus,
   Search,
   ArrowLeft,
+  ClipboardCheck,
 } from "lucide-react";
 
 // Instrument access layer — all types and functions come from here.
@@ -73,6 +74,9 @@ import {
 import { useRecording } from "../../recording/RecordingContext";
 import { AppButton } from "../ui/AppButton";
 import { StatusMarke } from "../ui/StatusMarke";
+import { AbklaerungszusammenfassungPanel } from "./abklaerung/AbklaerungszusammenfassungPanel";
+import { CAP_KATALOG } from "../../../lib/interrai/katalog/cap-katalog";
+import type { CapErgebnis } from "../../../lib/interrai/abklaerung/typen";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -581,7 +585,7 @@ function scrollItemIntoView(container: HTMLElement | null, itemCode: string) {
 
 export function InterraiNeuPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   // Load assessment and person from store
@@ -898,6 +902,21 @@ export function InterraiNeuPage() {
     (b) => b.code === activeBereich
   );
 
+  // ── Abklärungszusammenfassung (Auswertung) ──────────────────────────────────
+  // Verlinkbare Sicht innerhalb der Detailansicht über den Such-Parameter
+  // `ansicht=zusammenfassung` (URL bleibt teilbar). Die echten CAP-Ergebnisse
+  // kommen mit der offiziellen Engine (engine/caps.ts, gesperrt); bis dahin ist
+  // die Liste leer und das Panel zeigt seinen ehrlichen Leerzustand. Die Fixture
+  // wird hier bewusst NICHT importiert (nur die Dev-Route /dev/abklaerung).
+  const auswertungCaps: CapErgebnis[] = [];
+  const auswertungGesamt = CAP_KATALOG.length;
+  const auswertungBereit = auswertungCaps.filter((c) => c.wert !== null).length;
+  const zeigeZusammenfassung = searchParams.get("ansicht") === "zusammenfassung";
+  const oeffneZusammenfassung = () =>
+    setSearchParams((prev) => { const p = new URLSearchParams(prev); p.set("ansicht", "zusammenfassung"); return p; });
+  const schliesseZusammenfassung = () =>
+    setSearchParams((prev) => { const p = new URLSearchParams(prev); p.delete("ansicht"); return p; });
+
   // Reset content scroll position when the active bereich changes — unless a
   // targeted scroll (deviation jump / entry) is pending for the new bereich.
   useEffect(() => {
@@ -1059,6 +1078,21 @@ export function InterraiNeuPage() {
         )}
         {/* Spacer + right-aligned items */}
         <span style={{ flex: 1 }} />
+        {/* Auswertungs-Indikator — führt zur Abklärungszusammenfassung (verlinkbar) */}
+        <button
+          type="button"
+          onClick={zeigeZusammenfassung ? schliesseZusammenfassung : oeffneZusammenfassung}
+          className="ui-fokusring inline-flex items-center cursor-pointer"
+          style={{
+            gap: 5, padding: "4px 12px", borderRadius: "var(--radius-pill)",
+            background: zeigeZusammenfassung ? "var(--brand-primary)" : "var(--brand-primary-light)",
+            color: zeigeZusammenfassung ? "var(--text-on-dark)" : "var(--brand-primary)",
+            border: "none", fontFamily: "inherit", fontSize: 12, fontWeight: 500,
+          }}
+        >
+          <ClipboardCheck style={{ width: 13, height: 13 }} />
+          {zeigeZusammenfassung ? "Zur Erfassung" : <>{auswertungBereit} Auswertungen bereit</>}
+        </button>
         {/* Last-edited hint — no save button, state is continuously synced */}
         {assessment && !isReadOnly && (
           <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
@@ -1189,7 +1223,7 @@ export function InterraiNeuPage() {
           }}
         >
           {progressPerBereich.map((b) => {
-            const isActive = b.code === activeBereich;
+            const isActive = b.code === activeBereich && !zeigeZusammenfassung;
             const isSkipped = b.skipped;
             // Compute suggestion/deviation indicators for this bereich
             const navSuggestionCount = Object.entries(vorschlaegeMap).filter(([code, v]) => {
@@ -1205,7 +1239,7 @@ export function InterraiNeuPage() {
                 key={b.code}
                 type="button"
                 onClick={() =>
-                  !isSkipped && (setActiveBereich(b.code), setLegendDropdownOpen(false), setLegendHintItem(null))
+                  !isSkipped && (setActiveBereich(b.code), setLegendDropdownOpen(false), setLegendHintItem(null), schliesseZusammenfassung())
                 }
                 disabled={isSkipped}
                 style={{
@@ -1299,9 +1333,61 @@ export function InterraiNeuPage() {
               </button>
             );
           })}
+          {/* ── AUSWERTUNG — abgesetzter Block unter den Bereichen A–S ── */}
+          <div style={{ borderTop: "0.5px solid var(--border-default)", marginTop: 6, paddingTop: 6 }}>
+            <div style={{ padding: "6px 14px", fontSize: "var(--text-micro)", textTransform: "uppercase", letterSpacing: "var(--tracking-wide)", color: "var(--text-tertiary)", fontWeight: "var(--weight-medium)" }}>
+              Auswertung
+            </div>
+            <button
+              type="button"
+              onClick={oeffneZusammenfassung}
+              className="ui-fokusring"
+              style={{
+                display: "flex", alignItems: "center", gap: 8, width: "100%",
+                padding: "7px 14px",
+                background: zeigeZusammenfassung ? "var(--brand-primary-light)" : "transparent",
+                color: zeigeZusammenfassung ? "var(--brand-primary)" : "var(--text-primary)",
+                border: "none",
+                borderLeft: zeigeZusammenfassung ? "2px solid var(--brand-primary)" : "2px solid transparent",
+                cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+              }}
+            >
+              <ClipboardCheck style={{ width: 16, height: 16, flexShrink: 0, color: zeigeZusammenfassung ? "var(--brand-primary)" : "var(--text-tertiary)" }} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 13, fontWeight: zeigeZusammenfassung ? "var(--weight-medium)" : "var(--weight-regular)", lineHeight: 1.3 }}>
+                  Abklärungszusammenfassung
+                </span>
+                {/* Sekundärzeile — bewusst anderes Format als die A–S-Zählspalte
+                    (Vollsatz „bereit", nicht die rechtsbündige „offen"-Zahl). */}
+                <span style={{ display: "block", marginTop: 1, fontSize: 11, color: "var(--text-tertiary)", fontWeight: "var(--weight-regular)" }}>
+                  {auswertungBereit} von {auswertungGesamt} bereit
+                </span>
+              </span>
+            </button>
+          </div>
+
+          {/* Copyright — Pflichtangabe (Kap. 7), auch in der Erfassungsmaske sichtbar */}
+          <div style={{ padding: "12px 14px 6px", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.4 }}>
+            © interRAI 1994–2022 · interRAI HC Schweiz
+          </div>
         </nav>
 
-        {/* Right content panel — sole scrollable region for items */}
+        {/* Right content panel — Erfassung ODER Abklärungszusammenfassung */}
+        {zeigeZusammenfassung ? (
+          <div style={{ flex: 1, overflowY: "auto", minWidth: 0 }}>
+            <AbklaerungszusammenfassungPanel
+              assessmentTyp={assessment?.anlass === "erstabklaerung" ? "erst" : "re"}
+              vergleichsDatum={null}
+              uebernommeneDaten={false}
+              bereicheQuittiert={progressPerBereich.filter((b) => b.total > 0 && b.open === 0).length}
+              bereicheGesamt={progressPerBereich.length}
+              caps={auswertungCaps}
+              gesperrt={isReadOnly}
+              onBereichNavigieren={(b) => { setActiveBereich(b); schliesseZusammenfassung(); }}
+              onOffeneBereiche={schliesseZusammenfassung}
+            />
+          </div>
+        ) : (
         <div
           ref={contentScrollRef}
           style={{
@@ -1430,6 +1516,7 @@ export function InterraiNeuPage() {
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* Skip-clear confirmation dialog */}
