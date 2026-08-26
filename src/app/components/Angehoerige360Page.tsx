@@ -6,6 +6,7 @@ import {
   Mail,
   MapPin,
   FileText,
+  FolderOpen,
   Activity,
   Clock,
   User,
@@ -61,7 +62,14 @@ import {
   type AngehoerigerStatus,
 } from "./angehoerigeData";
 import { useAngehoerige, getAngehoerigen } from "../../lib/angehoerige/store";
-import { TabDokumenteGeneric, type DocFolder } from "./TabDokumente";
+import { useDokumente } from "../../lib/dokumente/store";
+import { MANDAT_STICHTAG } from "../../lib/mandate/store";
+import { gegenwart, GEGENWART_ISO } from "../../lib/gegenwart";
+import {
+  dokumenteVon, ordnerStand, ordnerDes, gueltigBisText, geprueftePflichttypen,
+  type DokumentReferenz,
+} from "../../lib/dokumente/dokumente";
+import { dokumenttyp, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { geschlechtLabel } from "../../lib/stammdaten/geschlecht";
 import { zivilstandLabel } from "../../lib/stammdaten/zivilstand";
 import { staatsangehoerigkeitLabel } from "../../lib/stammdaten/staatsangehoerigkeit";
@@ -70,7 +78,6 @@ import { DetailNavigation } from "./DetailNavigation";
 import { AnnaAngehoerigeSummary } from "../anna/AnnaAngehoerigeSummary";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { DateField } from "./form/DateField";
-import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
 import { getNachweiseFuerAngehoeriger } from "../../lib/schulung/nachweis-store";
 import { getKontrollenFuerAngehoeriger, erstelleKontrolle, getNaechsteFaelligkeit, type KontrolleArt } from "../../lib/arbeitskontrolle/store";
 import { exportiereArbeitskontrollePDF } from "../../lib/arbeitskontrolle/pdf-export";
@@ -207,9 +214,9 @@ interface Ticket {
 
 function getTickets(): Ticket[] {
   return [
-    { id: "SD-2026-0401", subject: "Bankdaten fehlen — Lohnauszahlung blockiert", status: "offen", priority: "hoch", created: "26.02.2026", assignedTo: "K. Meier", category: "HR" },
-    { id: "SD-2026-0395", subject: "SRK-Anmeldung ausstehend", status: "in_bearbeitung", priority: "mittel", created: "22.02.2026", assignedTo: "S. Weber", category: "Ausbildung" },
-    { id: "SD-2026-0380", subject: "Krankenkassenkarte nachreichen", status: "erledigt", priority: "niedrig", created: "18.02.2026", assignedTo: "K. Meier", category: "Dokumente" },
+    { id: "SD-2026-0401", subject: "Bankdaten fehlen — Lohnauszahlung blockiert", status: "offen", priority: "hoch", created: "30.07.2026", assignedTo: "K. Meier", category: "HR" },
+    { id: "SD-2026-0395", subject: "SRK-Anmeldung ausstehend", status: "in_bearbeitung", priority: "mittel", created: "26.07.2026", assignedTo: "S. Weber", category: "Ausbildung" },
+    { id: "SD-2026-0380", subject: "Krankenkassenkarte nachreichen", status: "erledigt", priority: "niedrig", created: "22.07.2026", assignedTo: "K. Meier", category: "Dokumente" },
   ];
 }
 
@@ -226,8 +233,8 @@ const stempelDaten: StempelEntry[] = [
 interface SozialversicherungEntry { kategorie: string; status: "aktiv" | "ausstehend" | "abgelaufen"; gueltigBis: string; details: string; }
 const sozialversicherungDaten: SozialversicherungEntry[] = [
   { kategorie: "AHV / IV", status: "aktiv", gueltigBis: "—", details: "Beiträge aktuell" },
-  { kategorie: "BVG (Pensionskasse)", status: "aktiv", gueltigBis: "31.12.2026", details: "Angemeldet seit 01.01.2026" },
-  { kategorie: "UVG (Unfallversicherung)", status: "aktiv", gueltigBis: "31.12.2026", details: "Suva — Police aktiv" },
+  { kategorie: "BVG (Pensionskasse)", status: "aktiv", gueltigBis: "03.06.2027", details: "Angemeldet seit 01.01.2026" },
+  { kategorie: "UVG (Unfallversicherung)", status: "aktiv", gueltigBis: "03.06.2027", details: "Suva — Police aktiv" },
   { kategorie: "KTG (Krankentaggeld)", status: "ausstehend", gueltigBis: "—", details: "Antrag in Bearbeitung" },
   { kategorie: "Quellensteuer", status: "aktiv", gueltigBis: "—", details: "Tarif gemäss HR-Daten" },
 ];
@@ -242,16 +249,16 @@ interface HistoryEntry {
 
 function getHistorie(): HistoryEntry[] {
   return [
-    { id: "h1", date: "01.03.2026", time: "09:15", user: "K. Meier", action: "Stempelkontrolle durchgeführt", detail: "Februar — 18/22 Tage erfasst", type: "workflow" },
-    { id: "h2", date: "28.02.2026", time: "14:30", user: "System", action: "Lohnlauf ausgelöst", detail: "Monatslohn Februar 2026 berechnet", type: "system" },
-    { id: "h3", date: "26.02.2026", time: "16:20", user: "K. Meier", action: "Dokument hochgeladen", detail: "Krankenkassenkarte — Scan verifiziert", type: "dokument" },
-    { id: "h4", date: "24.02.2026", time: "11:00", user: "S. Weber", action: "Mikroschulung abgeschlossen", detail: "Modul: Grundpflege — bestanden", type: "workflow" },
-    { id: "h5", date: "22.02.2026", time: "10:45", user: "K. Meier", action: "Ticket erstellt", detail: "SD-2026-0395: SRK-Anmeldung ausstehend", type: "ticket" },
-    { id: "h6", date: "20.02.2026", time: "09:30", user: "S. Weber", action: "Regelkontrolle durchgeführt", detail: "Arbeitszeiterfassung geprüft — OK", type: "workflow" },
-    { id: "h7", date: "18.02.2026", time: "14:10", user: "K. Meier", action: "Bankdaten aktualisiert", detail: "IBAN geändert auf neues Konto", type: "hr" },
-    { id: "h8", date: "15.02.2026", time: "08:45", user: "System", action: "BVG-Anmeldung bestätigt", detail: "Pensionskasse aktiv ab 01.01.2026", type: "system" },
-    { id: "h9", date: "10.02.2026", time: "16:00", user: "S. Weber", action: "Status geändert", detail: "Status → Aktiv", type: "status" },
-    { id: "h10", date: "05.02.2026", time: "11:30", user: "K. Meier", action: "Onboarding Schritt abgeschlossen", detail: "Schritt 8: Bankdaten verifiziert", type: "workflow" },
+    { id: "h1", date: "02.08.2026", time: "09:15", user: "K. Meier", action: "Stempelkontrolle durchgeführt", detail: "Februar — 18/22 Tage erfasst", type: "workflow" },
+    { id: "h2", date: "01.08.2026", time: "14:30", user: "System", action: "Lohnlauf ausgelöst", detail: "Monatslohn Februar 2026 berechnet", type: "system" },
+    { id: "h3", date: "30.07.2026", time: "16:20", user: "K. Meier", action: "Dokument hochgeladen", detail: "Krankenkassenkarte — Scan verifiziert", type: "dokument" },
+    { id: "h4", date: "28.07.2026", time: "11:00", user: "S. Weber", action: "Mikroschulung abgeschlossen", detail: "Modul: Grundpflege — bestanden", type: "workflow" },
+    { id: "h5", date: "26.07.2026", time: "10:45", user: "K. Meier", action: "Ticket erstellt", detail: "SD-2026-0395: SRK-Anmeldung ausstehend", type: "ticket" },
+    { id: "h6", date: "24.07.2026", time: "09:30", user: "S. Weber", action: "Regelkontrolle durchgeführt", detail: "Arbeitszeiterfassung geprüft — OK", type: "workflow" },
+    { id: "h7", date: "22.07.2026", time: "14:10", user: "K. Meier", action: "Bankdaten aktualisiert", detail: "IBAN geändert auf neues Konto", type: "hr" },
+    { id: "h8", date: "19.07.2026", time: "08:45", user: "System", action: "BVG-Anmeldung bestätigt", detail: "Pensionskasse aktiv ab 01.01.2026", type: "system" },
+    { id: "h9", date: "14.07.2026", time: "16:00", user: "S. Weber", action: "Status geändert", detail: "Status → Aktiv", type: "status" },
+    { id: "h10", date: "09.07.2026", time: "11:30", user: "K. Meier", action: "Onboarding Schritt abgeschlossen", detail: "Schritt 8: Bankdaten verifiziert", type: "workflow" },
   ];
 }
 
@@ -296,13 +303,9 @@ export function Angehoerige360Page() {
   }
 
 
-  // WF-01: Rhythmus-Tickets generieren (idempotent) wenn aktiv + eintrittsdatum gesetzt
-  if (a.status === "aktiv" && a.eintrittsdatum) {
-    // eintrittsdatum ist im Format "DD.MM.YYYY" → ISO konvertieren
-    const parts = a.eintrittsdatum.split(".");
-    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : a.eintrittsdatum;
-    generiereRhythmusTickets("angehoeriger", a.id, `${a.vorname} ${a.nachname}`, isoAnker, a.pflegefachkraft);
-  }
+  /* Hier entsteht nichts — siehe lib/rhythmus/seed.ts. Der Rhythmus einer
+     angehörigen Person entsteht mit ihrer Anstellung, nicht mit dem Öffnen
+     ihres Dossiers. */
 
   const st = statusConfig[a.status];
   const br = billingReadinessConfig[a.billingReadiness];
@@ -394,7 +397,7 @@ export function Angehoerige360Page() {
 
         {/* Anna HR-Zusammenfassung */}
         <div style={{ marginTop: 12 }}>
-          <AnnaAngehoerigeSummary angehoeriger={a} detail={{ funktion: a.funktion, eintrittsdatum: a.eintrittsdatum, stundenlohn: a.stundenlohn, aufenthaltsstatus: a.aufenthaltsstatus, srkAmpel: srkAmpel(a, new Date(2026, 2, 3)), srkFrist: srkFristAnzeige(a.eintrittsdatum) }} />
+          <AnnaAngehoerigeSummary angehoeriger={a} detail={{ funktion: a.funktion, eintrittsdatum: a.eintrittsdatum, stundenlohn: a.stundenlohn, aufenthaltsstatus: a.aufenthaltsstatus, srkAmpel: srkAmpel(a, gegenwart()), srkFrist: srkFristAnzeige(a.eintrittsdatum) }} />
         </div>
       </div>
 
@@ -522,8 +525,15 @@ function SectionCard({
 function TabUeberblick({ a }: { a: Angehoeriger }) {
   const st = statusConfig[a.status];
   const br = billingReadinessConfig[a.billingReadiness];
-  const uploadedDocs = a.dokumente.filter((d) => d.status === "hochgeladen").length;
-  const totalDocs = a.dokumente.length;
+  /* Aus dem Dokumentbestand, nicht mehr aus einer eigenen Liste am
+     Angehörigen: „vorhanden" ist jetzt, dass ein Dokument existiert, und
+     „gesamt" die Zahl der Pflichttypen — nicht die Länge einer Liste, die
+     auch Abwesenheiten führte. */
+  const alleDok = useDokumente();
+  const eigeneDok = dokumenteVon(alleDok, { art: "angehoeriger", kennung: a.id });
+  const pflichtDok = geprueftePflichttypen(dokumentKontextVon(a), "angehoeriger");
+  const uploadedDocs = eigeneDok.length;
+  const totalDocs = pflichtDok.length;
 
   /* ── Editing state ── */
   const [editingSection, setEditingSection] = useState<string | null>(null);
@@ -1080,7 +1090,7 @@ function ArbeitskontrolleHistorie({ a, kontrollen, navigate, onRefresh }: {
   const parts = a.eintrittsdatum?.split(".") ?? [];
   const isoEintritt = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : undefined;
   const naechsteFaellig = getNaechsteFaelligkeit(a.id, isoEintritt);
-  const heute = new Date().toISOString().slice(0, 10);
+  const heute = GEGENWART_ISO;
   const istUeberfaellig = naechsteFaellig ? naechsteFaellig < heute : false;
   const hatOffene = kontrollen.some(k => k.status === "in_bearbeitung");
 
@@ -1166,128 +1176,80 @@ function ArbeitskontrolleHistorie({ a, kontrollen, navigate, onRefresh }: {
   );
 }
 
-/* ══════════════════════════════════════════
-   ANGEHÖRIGE FOLDER STRUCTURE
-   ══════════════════════════════════════════ */
-function getAngehoerigeFolders(): DocFolder[] {
-  return [
-    {
-      id: "personalien",
-      label: "Personalien",
-      files: [
-        { id: "ap01", name: "ID_Kopie.pdf", type: "PDF", version: "1.0", uploadedAt: "02.01.2026", uploadedBy: "System" },
-        { id: "ap02", name: "AHV_Bestaetigung.pdf", type: "PDF", version: "1.0", uploadedAt: "02.01.2026", uploadedBy: "K. Meier" },
-        { id: "ap03", name: "Foto_Angehoeriger.jpg", type: "JPG", version: "1.0", uploadedAt: "03.01.2026", uploadedBy: "K. Meier" },
-        { id: "ap04", name: "Aufenthaltsbewilligung.pdf", type: "PDF", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "System" },
-      ],
-    },
-    {
-      id: "sozialversicherungen",
-      label: "Sozialversicherungen",
-      files: [
-        { id: "as01", name: "BVG_Anmeldung.pdf", type: "PDF", version: "1.0", uploadedAt: "10.01.2026", uploadedBy: "HR-Abteilung" },
-        { id: "as02", name: "UVG_Police.pdf", type: "PDF", version: "1.0", uploadedAt: "10.01.2026", uploadedBy: "HR-Abteilung" },
-        { id: "as03", name: "Quellensteuer_Verfuegung.pdf", type: "PDF", version: "1.0", uploadedAt: "12.01.2026", uploadedBy: "System" },
-      ],
-    },
-    {
-      id: "vertraege",
-      label: "Verträge",
-      children: [
-        {
-          id: "vertraege_aktuell",
-          label: "Aktuell",
-          files: [
-            { id: "av01", name: "Arbeitsvertrag_2026.pdf", type: "PDF", version: "1.0", uploadedAt: "01.01.2026", uploadedBy: "S. Weber" },
-            { id: "av02", name: "Datenschutzerklaerung.pdf", type: "PDF", version: "1.0", uploadedAt: "01.01.2026", uploadedBy: "System" },
-            { id: "av03", name: "Geheimhaltungsvereinbarung.pdf", type: "PDF", version: "1.0", uploadedAt: "01.01.2026", uploadedBy: "System" },
-          ],
-        },
-        {
-          id: "vertraege_archiv",
-          label: "Archiv",
-          files: [],
-        },
-      ],
-      files: [],
-    },
-    {
-      id: "kinderzulagen",
-      label: "Kinderzulagen",
-      files: [
-        { id: "ak01", name: "Familienbuchlein.pdf", type: "PDF", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "K. Meier" },
-        { id: "ak02", name: "Kinderzulage_Antrag.pdf", type: "PDF", version: "1.0", uploadedAt: "08.01.2026", uploadedBy: "K. Meier" },
-        { id: "ak03", name: "FAK_Bestätigung.pdf", type: "PDF", version: "1.0", uploadedAt: "15.01.2026", uploadedBy: "System" },
-      ],
-    },
-    {
-      id: "bankdaten",
-      label: "Bankdaten",
-      files: [
-        { id: "ab01", name: "Bankkarte_Scan.jpg", type: "JPG", version: "1.0", uploadedAt: "03.01.2026", uploadedBy: "K. Meier" },
-        { id: "ab02", name: "IBAN_Bestaetigung.pdf", type: "PDF", version: "1.0", uploadedAt: "10.01.2026", uploadedBy: "System" },
-      ],
-    },
-    {
-      id: "partner",
-      label: "Partner",
-      files: [
-        { id: "apt01", name: "Partner_Krankenkassenkarte.jpg", type: "JPG", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "K. Meier" },
-        { id: "apt02", name: "Partner_Ausweis.pdf", type: "PDF", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "K. Meier" },
-      ],
-    },
-    {
-      id: "schulungen",
-      label: "Schulungen & SRK",
-      children: [
-        {
-          id: "schulungen_zertifikate",
-          label: "Zertifikate",
-          files: [
-            { id: "az01", name: "SRK_Basismodul_Zertifikat.pdf", type: "PDF", version: "1.0", uploadedAt: "15.01.2026", uploadedBy: "S. Weber" },
-            { id: "az02", name: "Medlink_Schulung_Nachweis.pdf", type: "PDF", version: "1.0", uploadedAt: "20.01.2026", uploadedBy: "System" },
-          ],
-        },
-        {
-          id: "schulungen_anmeldungen",
-          label: "Anmeldungen",
-          files: [
-            { id: "az03", name: "SRK_Aufbaumodul_Anmeldung.pdf", type: "PDF", version: "1.0", uploadedAt: "28.02.2026", uploadedBy: "K. Meier" },
-          ],
-        },
-      ],
-      files: [],
-    },
-    {
-      id: "lohnabrechnungen",
-      label: "Lohnabrechnungen",
-      files: [
-        { id: "al01", name: "Lohnabrechnung_Jan_2026.pdf", type: "PDF", version: "1.0", uploadedAt: "31.01.2026", uploadedBy: "System" },
-        { id: "al02", name: "Lohnabrechnung_Feb_2026.pdf", type: "PDF", version: "1.0", uploadedAt: "28.02.2026", uploadedBy: "System" },
-      ],
-    },
-    {
-      id: "sonstige",
-      label: "Sonstige Dokumente",
-      files: [
-        { id: "asd01", name: "Krankenkassenkarte.jpg", type: "JPG", version: "1.0", uploadedAt: "02.01.2026", uploadedBy: "K. Meier" },
-        { id: "asd02", name: "Notfallkontakt_Info.docx", type: "DOCX", version: "1.0", uploadedAt: "15.02.2026", uploadedBy: "K. Meier" },
-      ],
-    },
-  ];
-}
 
 /* ══════════════════════════════════════════
    TAB: DOKUMENTE (uses shared component)
    ══════════════════════════════════════════ */
+/**
+ * Dokumente der angehörigen Person — dasselbe Modell wie beim Patienten.
+ *
+ * Vorher gab `getAngehoerigeFolders()` für jede Person dieselben erfundenen
+ * Dateien zurück. Jetzt kommen die Ordner aus dem Typkatalog und die
+ * Dokumente aus dem Bestand.
+ */
 function TabDokumenteAngehoerige({ a }: { a: Angehoeriger }) {
-  const folders = getAngehoerigeFolders();
+  const alle = useDokumente();
+  const ref: DokumentReferenz = { art: "angehoeriger", kennung: a.id };
+  const eigene = dokumenteVon(alle, ref);
+  const kontext = dokumentKontextVon(a);
+  const staende = ordnerStand(alle, ref, kontext, MANDAT_STICHTAG);
+
   return (
-    <TabDokumenteGeneric
-      rootLabel={`${a.nachname}_${a.vorname}`}
-      folders={folders}
-    />
+    <div className="space-y-4">
+      <SectionCard title="Ordner" icon={FolderOpen}>
+        <div className="flex flex-col" style={{ gap: 2 }}>
+          {staende.map(o => (
+            <div key={o.ordner} className="flex items-center flex-wrap" style={{ gap: 10, padding: "7px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+              <span style={{ width: 150, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{o.ordner}</span>
+              <span style={{ width: 74, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                {o.dokumente.length} {o.dokumente.length === 1 ? "Dokument" : "Dokumente"}
+              </span>
+              {o.fehlend.length > 0 && (
+                <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>{o.fehlend.join(", ")} fehlt</span>
+              )}
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title={`Dokumente (${eigene.length})`} icon={FileText}>
+        {eigene.length === 0 ? (
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0 }}>
+            Für diese Person liegt kein Dokument ab.
+          </p>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {eigene.map(d => {
+              const typ = dokumenttyp(d.typCode);
+              const bis = gueltigBisText(d);
+              return (
+                <div key={d.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                  <span style={{ width: 190, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{typ?.label ?? d.typCode}</span>
+                  <span style={{ flex: 1, minWidth: 170, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{d.bezeichnung}</span>
+                  <span style={{ width: 90, fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{d.ausgestelltAm}</span>
+                  <span style={{ width: 110, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>{bis ? `gültig bis ${bis}` : "ohne Ablauf"}</span>
+                  <span style={{ width: 150, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{ordnerDes(d)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </SectionCard>
+    </div>
   );
+}
+
+/** Dokumentkontext aus der erfassten Person — dieselben Bedingungen wie im Onboarding. */
+function dokumentKontextVon(a: Angehoeriger): DokumentKontext {
+  return {
+    partnerErforderlich: a.zivilstand === "verheiratet" || a.zivilstand === "eingetragene_partnerschaft",
+    hatKinder: (a.kinder?.length ?? 0) > 0,
+    kinderzulagenUeberSpitex: a.kinderzulagenUeberSpitex === "ja",
+    unterhaltspflicht: (a.kinder?.length ?? 0) > 0,
+    zertifikatDeutschVorhanden: a.zertifikatVorhanden === "ja",
+    srkZertifikatVorhanden: a.srkZertifikatVorhanden === "ja",
+    assistenzbeitragJa: false,
+  };
 }
 
 /* ══════════════════════════════════════════
@@ -1393,7 +1355,7 @@ function TableStempel() {
       tageProWoche: 5,
       minutenA: 90,
       minutenB: 30,
-      gueltigAb: "01.01.2026",
+      gueltigAb: "04.06.2026",
       gueltigBis: "–",
       status: "aktiv",
     },
@@ -1403,8 +1365,8 @@ function TableStempel() {
       tageProWoche: 5,
       minutenA: 60,
       minutenB: 30,
-      gueltigAb: "01.07.2025",
-      gueltigBis: "31.12.2025",
+      gueltigAb: "02.12.2025",
+      gueltigBis: "03.06.2026",
       status: "abgelaufen",
     },
     {
@@ -1413,8 +1375,8 @@ function TableStempel() {
       tageProWoche: 3,
       minutenA: 40,
       minutenB: 20,
-      gueltigAb: "15.01.2025",
-      gueltigBis: "30.06.2025",
+      gueltigAb: "18.06.2025",
+      gueltigBis: "01.12.2025",
       status: "abgelaufen",
     },
   ]);
@@ -2261,7 +2223,7 @@ function TableSozial({ a }: { a: Angehoeriger }) {
 }
 
 function TableQualifikation({ a }: { a: Angehoeriger }) {
-  const TODAY = new Date(2026, 2, 3); // March 3, 2026
+  const TODAY = gegenwart();
 
   /* ── Date helpers ── */
   const parseDe = (d: string): Date | null => {

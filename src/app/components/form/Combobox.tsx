@@ -4,7 +4,23 @@ import { berechneAufklappLage, useLageNachfuehren, type AufklappLage } from "../
 import { ChevronDown, Check, Search } from "lucide-react";
 import { FormField } from "./FormField";
 
-interface Option { value: string; label: string; group?: string }
+interface Option {
+  value: string;
+  label: string;
+  group?: string;
+  /**
+   * Zusätzlicher Text, über den gesucht wird, ohne dass er in der Zeile
+   * steht. Ein Kontakt wird so über seine Zugehörigkeit gefunden, obwohl die
+   * Zeile nur Name und Typ zeigt.
+   */
+  suchtext?: string;
+  /**
+   * Nie wegfiltern. Für Einträge, die keine Wahl unter vielen sind, sondern
+   * ein Ausweg — „Neuen Kontakt erfassen" muss auch dann stehen, wenn die
+   * Suche nichts findet; gerade dann.
+   */
+  immer?: boolean;
+}
 
 interface ComboboxProps {
   label: string;
@@ -20,9 +36,19 @@ interface ComboboxProps {
   placeholder?: string;
   searchPlaceholder?: string;
   disabled?: boolean;
+  /** Steht über den Immer-Einträgen, wenn die Suche sonst nichts findet. */
+  keineTrefferText?: string;
+  /**
+   * Der Suchtext im Augenblick der Wahl, bevor er geleert wird.
+   *
+   * Wer nach „peter frei" sucht, nichts findet und dann anlegt, hat den
+   * Namen bereits getippt. Ihn ein zweites Mal zu verlangen wäre eine
+   * Zumutung ohne Grund.
+   */
+  onSuchtext?: (text: string) => void;
 }
 
-export function Combobox({ label, required, error, success, hint, steuerelementMaxBreite, value, onChange, options, placeholder = "Bitte wählen", searchPlaceholder = "Suchen…", disabled }: ComboboxProps) {
+export function Combobox({ label, required, error, success, hint, steuerelementMaxBreite, value, onChange, options, placeholder = "Bitte wählen", searchPlaceholder = "Suchen…", disabled, keineTrefferText, onSuchtext }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
   const [search, setSearch] = useState("");
@@ -66,8 +92,16 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
   const filtered = useMemo(() => {
     if (!search.trim()) return options;
     const q = search.toLowerCase();
-    return options.filter(o => o.label.toLowerCase().includes(q));
+    /* Gesucht wird über die Zeile und den zusätzlichen Suchtext; `includes`
+       trifft auch mitten im Wort, damit „zürich" den „Sozialdienst Stadt
+       Zürich" findet. Immer-Einträge bleiben unabhängig davon stehen. */
+    return options.filter(o =>
+      o.immer || `${o.label} ${o.suchtext ?? ""}`.toLowerCase().includes(q));
   }, [options, search]);
+
+  /* Nichts gefunden heisst: keine echte Wahl übrig — die Immer-Einträge
+     zählen nicht als Treffer. */
+  const ohneTreffer = search.trim() !== "" && filtered.every(o => o.immer);
 
   // Group filtered options
   const grouped = useMemo(() => {
@@ -90,7 +124,7 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
     if (e.key === "Escape") { setOpen(false); setSearch(""); }
     if (e.key === "ArrowDown") { e.preventDefault(); setFocusIdx(i => Math.min(i + 1, flatFiltered.length - 1)); }
     if (e.key === "ArrowUp") { e.preventDefault(); setFocusIdx(i => Math.max(i - 1, 0)); }
-    if (e.key === "Enter" && focusIdx >= 0 && focusIdx < flatFiltered.length) { e.preventDefault(); onChange(flatFiltered[focusIdx].value); setOpen(false); setSearch(""); }
+    if (e.key === "Enter" && focusIdx >= 0 && focusIdx < flatFiltered.length) { e.preventDefault(); onSuchtext?.(search); onChange(flatFiltered[focusIdx].value); setOpen(false); setSearch(""); }
   };
 
   return (
@@ -145,6 +179,13 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
 
             {/* Options */}
             <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 4 }}>
+              {/* Ein Satz statt einer leeren Liste — und darunter bleiben die
+                  Immer-Einträge stehen, damit der Ausweg erreichbar ist. */}
+              {ohneTreffer && keineTrefferText && (
+                <div style={{ padding: "10px 14px", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+                  {keineTrefferText}
+                </div>
+              )}
               {flatFiltered.length === 0 ? (
                 <div style={{ padding: "var(--space-5)", textAlign: "center", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
                   Keine Ergebnisse
@@ -165,7 +206,7 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
                         <button
                           key={opt.value}
                           type="button"
-                          onClick={() => { onChange(opt.value); setOpen(false); setSearch(""); }}
+                          onClick={() => { onSuchtext?.(search); onChange(opt.value); setOpen(false); setSearch(""); }}
                           onMouseEnter={() => setFocusIdx(globalIdx)}
                           className="w-full text-left flex items-center cursor-pointer transition-colors"
                           style={{

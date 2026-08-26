@@ -18,6 +18,7 @@ import {
   differenceInCalendarDays,
 } from "date-fns";
 import { de } from "date-fns/locale";
+import { gegenwart } from "./gegenwart";
 
 const ANZEIGE = "dd.MM.yyyy";
 const ISO = "yyyy-MM-dd";
@@ -59,7 +60,7 @@ export function formatTagMonat(d: Date): string {
  * Heute / Morgen / Gestern; innerhalb ±14 Tagen "in X Tagen" bzw.
  * "X Tage überfällig"; ansonsten das absolute Datum dd.MM.yyyy.
  */
-export function formatFaelligkeit(d: Date, referenz: Date = new Date()): string {
+export function formatFaelligkeit(d: Date, referenz: Date = gegenwart()): string {
   const diff = differenceInCalendarDays(d, referenz);
   if (diff === 0) return "Heute";
   if (diff === 1) return "Morgen";
@@ -161,4 +162,16 @@ export function isoZuDate(iso: string): Date | null {
 /** Date → ISO yyyy-MM-dd ("" bei ungültigem Datum). */
 export function dateZuIso(d: Date | null | undefined): string {
   return istGueltig(d) ? format(d, ISO) : "";
+}
+
+/**
+ * Zeitpunkt für Protokolle — TT.MM.JJJJ, HH:MM.
+ *
+ * Lag zuvor lokal in StepPatient; Datums- und Zeitausgaben gehören
+ * ausschliesslich in diese Schicht.
+ */
+export function jetztAnzeige(): string {
+  const d = new Date();
+  const zz = (n: number) => String(n).padStart(2, "0");
+  return `${zz(d.getDate())}.${zz(d.getMonth() + 1)}.${d.getFullYear()}, ${zz(d.getHours())}:${zz(d.getMinutes())}`;
 }

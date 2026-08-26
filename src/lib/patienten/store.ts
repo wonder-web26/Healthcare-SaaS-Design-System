@@ -17,18 +17,24 @@
 import { useSyncExternalStore } from "react";
 import { type Patient, type PatientStatus, type AbrechnungsStatus, patientenSeed } from "../../app/components/patientData";
 import { getKrankenkasseLabel } from "../stammdaten/krankenkassen";
-import { isoZuDate } from "../datum";
+import { isoZuDate, anzeigeZuIso, jetztAnzeige } from "../datum";
+import { GEGENWART_ISO } from "../gegenwart";
+import { ENTLASSUNG_SONSTIGES } from "../stammdaten/entlassung";
+import { getMandate, aktualisiereMandat } from "../mandate/store";
+import { rhythmusBeenden } from "../rhythmus/engine";
 import { sdaSpracheLabel } from "../stammdaten/sda-sprache";
 
 /** Zeichen für "keine Pflegefachkraft zugewiesen" — Bestandskonvention. */
 export const NICHT_ZUGEWIESEN = "—";
 
 /**
- * Mock-Stichtag des Prototyps (CLAUDE.md: 03.03.2026). Alle Fristrechnungen am
- * Patienten laufen dagegen, nie gegen new Date() — damit sind sie ohne
- * Rendering nachrechenbar.
+ * Fristrechnungen am Patienten laufen gegen die Gegenwart, nie gegen
+ * new Date() — damit sind sie ohne Rendering nachrechenbar.
+ *
+ * Der Name bleibt, damit die Aufrufstellen unverändert lesen; der Wert kommt
+ * jetzt aus lib/gegenwart.
  */
-export const PATIENTEN_BEZUGSDATUM_ISO = "2026-03-03";
+export const PATIENTEN_BEZUGSDATUM_ISO = GEGENWART_ISO;
 
 /**
  * Tage vom Bezugsdatum bis zur Re-Assessment-Frist. null = keine Frist
@@ -123,11 +129,38 @@ export interface PatientStammdatenEingabe {
   /** Code aus der Kassen-Picklist; der Bestand hält den Klartextnamen. */
   krankenkasse: string;
   kartennummer: string;
-  hausarztName: string;
-  hausarztTelefon: string;
-  notfallkontaktName: string;
-  notfallkontaktTelefon: string;
-  notfallkontaktBeziehung: string;
+  /* ── Bisher nicht übergeben ──────────────────────────────────────────────
+     28 Angaben, die das Abklärungsgespräch erhebt und die nie beim Patienten
+     ankamen. Sie standen im Formular und blieben dort. */
+  geschlecht: string;
+  staatsangehoerigkeit: string;
+  heimatort: string;
+  zivilstand: string;
+  aufenthaltsstatus: string;
+  konfession: string;
+  telefon: string;
+  email: string;
+  spracheAndere: string;
+  uebersetzerNotwendig: string;
+  zusatzversicherungKasse: string;
+  weitereVersicherung: string;
+  hausarztEmail: string;
+  spezialAerzte: string;
+  wohnsituation: string;
+  formZusammenleben: string;
+  neuZusammenlebend: string;
+  etage: string;
+  liftVorhanden: string;
+  treppen: string;
+  personenImHaushalt: string;
+  sozialamtKontakt: string;
+  ivBezug: string;
+  ivBezugProzent: string;
+  hilflosenentschaedigung: string;
+  assistenzbeitrag: string;
+  quellensteuerHinweise: string;
+  /** SP-03 — BAG-Nr. der Kasse. Das Feld bestand am Patienten und blieb leer. */
+  bagNr: string;
 }
 
 /** Der Angehörige kommt aus der Verknüpfung, nicht aus dem Notfallkontakt. */
@@ -157,6 +190,7 @@ function abrechnungsStatusZu(status: PatientStatus): AbrechnungsStatus {
     case "im_onboarding": return "in_vorbereitung";
     case "nicht_abrechenbar": return "nicht_abrechenbar";
     case "gekuendigt": return "gekuendigt";
+    case "ausgetreten": return "ausgetreten";
     case "aktiv": default: return "abrechenbar";
   }
 }
@@ -170,9 +204,9 @@ function stammdatenAbbilden(
   angehoeriger: AngehoerigerVerknuepfung | null,
 ): Pick<Patient,
   "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "adresse" | "krankenkasse" | "aufnahmeDatum" |
-  "kartennummer" | "hausarztName" | "hausarztTelefon" | "sprache" |
-  "notfallkontaktName" | "notfallkontaktTelefon" | "notfallkontaktBeziehung" |
-  "angehoeriger" | "angehoerigerTelefon"> {
+  "kartennummer" | "sprache" |
+  "angehoeriger" | "angehoerigerTelefon" | "bagNr" |
+  "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "zusatzversicherungKasse" | "weitereVersicherung" | "hausarztEmail" | "spezialAerzte" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "sozialamtKontakt" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
   return {
     vorname: eingabe.vorname,
     nachname: eingabe.name,
@@ -186,11 +220,34 @@ function stammdatenAbbilden(
     adresse: adresseZusammensetzen(eingabe.adresseStrasse, eingabe.adressePlz, eingabe.adresseOrt),
     krankenkasse: eingabe.krankenkasse ? getKrankenkasseLabel(eingabe.krankenkasse) : "",
     kartennummer: eingabe.kartennummer,
-    hausarztName: eingabe.hausarztName,
-    hausarztTelefon: eingabe.hausarztTelefon,
-    notfallkontaktName: eingabe.notfallkontaktName,
-    notfallkontaktTelefon: eingabe.notfallkontaktTelefon,
-    notfallkontaktBeziehung: eingabe.notfallkontaktBeziehung,
+    geschlecht: eingabe.geschlecht,
+    staatsangehoerigkeit: eingabe.staatsangehoerigkeit,
+    heimatort: eingabe.heimatort,
+    zivilstand: eingabe.zivilstand,
+    aufenthaltsstatus: eingabe.aufenthaltsstatus,
+    konfession: eingabe.konfession,
+    telefon: eingabe.telefon,
+    email: eingabe.email,
+    spracheAndere: eingabe.spracheAndere,
+    uebersetzerNotwendig: eingabe.uebersetzerNotwendig,
+    zusatzversicherungKasse: eingabe.zusatzversicherungKasse,
+    weitereVersicherung: eingabe.weitereVersicherung,
+    hausarztEmail: eingabe.hausarztEmail,
+    spezialAerzte: eingabe.spezialAerzte,
+    wohnsituation: eingabe.wohnsituation,
+    formZusammenleben: eingabe.formZusammenleben,
+    neuZusammenlebend: eingabe.neuZusammenlebend,
+    etage: eingabe.etage,
+    liftVorhanden: eingabe.liftVorhanden,
+    treppen: eingabe.treppen,
+    personenImHaushalt: eingabe.personenImHaushalt,
+    sozialamtKontakt: eingabe.sozialamtKontakt,
+    ivBezug: eingabe.ivBezug,
+    ivBezugProzent: eingabe.ivBezugProzent,
+    hilflosenentschaedigung: eingabe.hilflosenentschaedigung,
+    assistenzbeitrag: eingabe.assistenzbeitrag,
+    quellensteuerHinweise: eingabe.quellensteuerHinweise,
+    bagNr: eingabe.bagNr,
     angehoeriger: angehoerigerAnzeige(angehoeriger),
     angehoerigerTelefon: angehoeriger?.telefon ?? "",
   };
@@ -234,7 +291,39 @@ export function erfassePatientImOnboarding(
     pflegefachkraftInitialen: NICHT_ZUGEWIESEN,
     leistungsart: "",
     letzterBesuch: "",
-    hausarztFachgebiet: "",
+    geschlecht: "",
+    staatsangehoerigkeit: "",
+    heimatort: "",
+    zivilstand: "",
+    aufenthaltsstatus: "",
+    konfession: "",
+    telefon: "",
+    email: "",
+    spracheAndere: "",
+    uebersetzerNotwendig: "",
+    zusatzversicherungKasse: "",
+    weitereVersicherung: "",
+    hausarztEmail: "",
+    spezialAerzte: "",
+    wohnsituation: "",
+    formZusammenleben: "",
+    neuZusammenlebend: "",
+    etage: "",
+    liftVorhanden: "",
+    treppen: "",
+    personenImHaushalt: "",
+    sozialamtKontakt: "",
+    ivBezug: "",
+    ivBezugProzent: "",
+    hilflosenentschaedigung: "",
+    assistenzbeitrag: "",
+    quellensteuerHinweise: "",
+    austrittDatum: "",
+    austrittNach: "",
+    austrittNachAndere: "",
+    austrittPraezisierungen: "",
+    austrittErfasstVon: "",
+    austrittErfasstAm: "",
     bagNr: "",
     abrechnungsStatus: abrechnungsStatusZu("im_onboarding"),
     reAssessmentFrist: null,
@@ -276,4 +365,103 @@ export function aktualisierePatient(
 /** Zuweisung einer Pflegefachkraft (Sidebar der Patientenliste). */
 export function weisePflegefachkraftZu(patientId: string, name: string, initialen: string): void {
   setzeBestand(bestand.map(p => (p.id === patientId ? { ...p, pflegefachkraft: name, pflegefachkraftInitialen: initialen } : p)));
+}
+
+/* ══════════════════════════════════════════
+   AUSTRITT — Bereich Z des Standardkatalogs
+   ══════════════════════════════════════════ */
+
+export interface AustrittEingabe {
+  /** Z1 — letzter Tag der Inanspruchnahme, TT.MM.JJJJ. */
+  datum: string;
+  /** Z2 — Code aus lib/stammdaten/entlassung. */
+  nach: string;
+  /** Nur bei Code 13 gefüllt. */
+  nachAndere: string;
+  praezisierungen: string;
+  /** Z3 — wer kodiert hat. Das Produkt kennt keine Unterschrift. */
+  erfasstVon: string;
+}
+
+export type AustrittFehler =
+  | "kein_datum"
+  | "datum_unleserlich"
+  | "datum_zukunft"
+  | "datum_vor_aufnahme"
+  | "kein_ziel"
+  | "kein_freitext"
+  | "unbekannt"
+  | "bereits_ausgetreten";
+
+export const AUSTRITT_FEHLERTEXT: Record<AustrittFehler, string> = {
+  kein_datum: "Bitte das Austrittsdatum erfassen.",
+  datum_unleserlich: "Das Austrittsdatum ist unvollständig oder ungültig.",
+  datum_zukunft: "Das Austrittsdatum liegt in der Zukunft. Ein Austritt wird erfasst, wenn er eingetreten ist.",
+  datum_vor_aufnahme: "Das Austrittsdatum liegt vor dem Aufnahmedatum.",
+  kein_ziel: "Bitte angeben, wohin die Person nach dem Austritt geht.",
+  kein_freitext: "Bei „Sonstiges“ braucht es eine Angabe im Freitext.",
+  unbekannt: "Dieser Patient ist nicht im Bestand.",
+  bereits_ausgetreten: "Dieser Patient ist bereits ausgetreten.",
+};
+
+/**
+ * Austritt erfassen.
+ *
+ * Ein Vorgang, ein Schreibweg: der Zustand des Patienten wechselt auf
+ * "ausgetreten", die Felder des Bereichs Z werden gesetzt, und die laufenden
+ * Mandate erhalten dasselbe Enddatum. Die Mandate haben kein eigenes
+ * Zustandsfeld — `mandatZustand` leitet "beendet" aus dem Enddatum ab; darum
+ * genügt das Datum und es wird kein zweiter Zustand geführt.
+ *
+ * Geprüft wird gegen PATIENTEN_BEZUGSDATUM_ISO, nicht gegen new Date() —
+ * dieselbe Regel wie bei allen Fristen am Patienten.
+ *
+ * Der Katalog unterscheidet Entlassung und Einsatzabbruch; bei einem Abbruch
+ * wird kein Formular Entlassung ausgefüllt. Das Produkt kennt den Abbruch
+ * nicht. Diese Lücke wird hier bewusst nicht überbrückt.
+ */
+export function austrittErfassen(
+  patientId: string,
+  eingabe: AustrittEingabe,
+  bezugIso: string = PATIENTEN_BEZUGSDATUM_ISO,
+): AustrittFehler | null {
+  const patient = bestand.find(p => p.id === patientId);
+  if (!patient) return "unbekannt";
+  if (patient.status === "ausgetreten") return "bereits_ausgetreten";
+
+  const datum = eingabe.datum.trim();
+  if (!datum) return "kein_datum";
+  const austrittIso = anzeigeZuIso(datum);
+  if (!austrittIso) return "datum_unleserlich";
+  if (austrittIso > bezugIso) return "datum_zukunft";
+  const aufnahmeIso = anzeigeZuIso(patient.aufnahmeDatum);
+  if (aufnahmeIso && austrittIso < aufnahmeIso) return "datum_vor_aufnahme";
+
+  if (!eingabe.nach) return "kein_ziel";
+  if (eingabe.nach === ENTLASSUNG_SONSTIGES && !eingabe.nachAndere.trim()) return "kein_freitext";
+
+  const aktualisiert: Patient = {
+    ...patient,
+    status: "ausgetreten",
+    abrechnungsStatus: abrechnungsStatusZu("ausgetreten"),
+    austrittDatum: datum,
+    austrittNach: eingabe.nach,
+    // Freitext nur dort, wo der Katalog ihn vorsieht — sonst leer statt mitgeschleppt.
+    austrittNachAndere: eingabe.nach === ENTLASSUNG_SONSTIGES ? eingabe.nachAndere.trim() : "",
+    austrittPraezisierungen: eingabe.praezisierungen.trim(),
+    austrittErfasstVon: eingabe.erfasstVon,
+    austrittErfasstAm: jetztAnzeige(),
+  };
+  setzeBestand(bestand.map(p => (p.id === patientId ? aktualisiert : p)));
+
+  // Laufende Mandate auf dasselbe Datum enden lassen. Bereits beendete bleiben,
+  // wie sie sind — ein früheres Ende wird nicht überschrieben.
+  for (const m of getMandate(patientId)) {
+    if (!m.ende.trim()) aktualisiereMandat(m.id, { ende: datum });
+  }
+
+  // Der Betreuungsrhythmus endet. Offene Schritte entfallen mit Grund;
+  // erledigte bleiben unangetastet — sie sind Nachweis.
+  rhythmusBeenden("patient", patientId, `Patient ausgetreten am ${datum}`);
+  return null;
 }

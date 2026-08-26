@@ -47,6 +47,55 @@ export function istPeriodisch(l: KLVLeistung): boolean {
   return l.einheit !== "e" && l.einheit !== "nB";
 }
 
+/* ── Prüfbarkeit: täglich, im Zeitraum, gar nicht ──────────────────────────────
+   Die Pflegekontrolle vergleicht Erbrachtes mit Verordnetem. Wogegen sie
+   vergleicht, hängt an der Häufigkeit:
+
+   · `t7` ist an jedem Tag verordnet — je Tag prüfbar.
+   · `t2`–`t6`, `w` und `m` sind im Zeitraum verordnet, aber das Blatt sagt
+     nicht, an welchen Tagen. Welcher einzelne Tag gefehlt hat, wäre eine
+     Behauptung; ihre Zeit steht deshalb neben der Tagesabweichung, nicht
+     darin.
+   · `e` (einmalig) und `nB` (nach Bedarf) tragen keine verordnete Menge, gegen
+     die sich etwas prüfen liesse. Sie erscheinen in keiner der beiden
+     Prüfungen — auch nicht als Null, denn eine Null wäre eine Aussage. */
+
+/** An jedem Tag verordnet — Grundlage des Tagessolls. */
+export function istTaeglich(l: KLVLeistung): boolean {
+  return l.einheit === "t7";
+}
+
+/** Minuten, die an einem Tag verordnet sind — Summe der täglichen Positionen. */
+export function tagessollMinuten(positionen: KLVLeistung[]): number {
+  return positionen.filter(istTaeglich).reduce((s, l) => s + l.anzahl * l.zeitMin, 0);
+}
+
+/**
+ * Wie oft eine Position in einem Monat erwartet wird.
+ *
+ * Wochenrhythmen werden über die Länge des Monats hochgerechnet, nicht über
+ * eine feste Vier — ein Monat hat 4.3 bis 4.4 Wochen, und bei 3×/Woche macht
+ * das über den Monat einen ganzen Einsatz Unterschied.
+ */
+export function erwarteteAnzahlImMonat(l: KLVLeistung, tageImMonat: number): number {
+  const wochen = tageImMonat / 7;
+  if (l.einheit === "m") return l.anzahl;
+  if (l.einheit === "w") return Math.round(l.anzahl * wochen);
+  if (l.einheit.startsWith("t")) return Math.round(l.anzahl * tageProWoche(l.einheit) * wochen);
+  return 0;
+}
+
+/**
+ * Verordnete Häufigkeit als ein Ausdruck.
+ *
+ * `anzahl` und Einheit nebeneinander zu setzen ergibt bei der Regelmenge 1
+ * das doppelte „1× 3×/Wo." — die Eins ist dort keine Information, sondern
+ * ein Artefakt des Datenmodells.
+ */
+export function haeufigkeitText(l: KLVLeistung): string {
+  return l.anzahl === 1 ? einheitLabel(l.einheit) : `${l.anzahl}× ${einheitLabel(l.einheit)}`;
+}
+
 /** Menschenlesbarer Einheit-Text. */
 export function einheitLabel(e: KLVEinheit): string {
   switch (e) {

@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import {
   MOCK_ASSESSMENTS,
-  MOCK_KLV_VERORDNUNGEN,
 } from "../../lib/mocks/klinische-artefakte-mock";
+import { useKlvVerordnungen } from "../../lib/klv/store";
 import { ComplianceRisikoSection } from "./ComplianceRisikoSection";
 
 /* ── Derived data ────────────────────────── */
@@ -66,7 +66,7 @@ const pipelineTotal = pipelineStages.reduce((s, st) => s + st.count, 0);
 
 const annaBriefing: Record<string, string> = {
   diplomiert:
-    "Du hast heute 3 Klienten mit überfälligen Re-Assessments. Bei Anna Müller läuft die KLV in 12 Tagen aus — Verlängerung einleiten.",
+    "Du hast heute 3 Klienten mit überfälligen Re-Assessments. Bei Hans-Rudolf Steiner läuft die KLV in 12 Tagen aus — Verlängerung einleiten.",
   backoffice:
     "6 Onboardings in der Pipeline, davon 1 blockiert (Spezialbewilligung B). 3 KLV-Verlängerungen stehen diese Woche an.",
   management:

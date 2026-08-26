@@ -14,12 +14,24 @@ import {
   type RhythmusEntitaet,
   type RhythmusVorlage,
 } from "./vorlage";
+import { GEGENWART_ISO } from "../gegenwart";
 
 /* ══════════════════════════════════════════
    TYPEN
    ══════════════════════════════════════════ */
 
-export type TicketStatus = "offen" | "erledigt" | "ueberfaellig";
+export type TicketStatus =
+  | "offen"
+  | "erledigt"
+  | "ueberfaellig"
+  /**
+   * Der Schritt fällt nicht mehr an, weil das Subjekt weggefallen ist.
+   *
+   * Bewusst nicht "erledigt": erledigt heisst, jemand hat die Arbeit getan.
+   * Ein entfallenes Ticket behauptet das nicht — es sagt, dass niemand sie
+   * mehr tun wird, und warum.
+   */
+  | "entfallen";
 
 export interface RhythmusInstanz {
   id: string;
@@ -31,6 +43,10 @@ export interface RhythmusInstanz {
   vorlageName: string;
   ankerDatum: string; // ISO date — konkretes Datum des Subjekts
   erstelltAm: string; // ISO date
+  /** ISO date, sobald die Instanz beendet wurde. null = laufend. */
+  beendetAm: string | null;
+  /** Weshalb sie beendet wurde. Leer, solange sie läuft. */
+  beendetGrund: string;
 }
 
 export interface FaelligkeitsAenderung {
@@ -56,6 +72,8 @@ export interface RhythmusTicket {
   zugewiesenAn: string | null;
   erledigtAm: string | null;
   erledigtVon: string | null;
+  /** Grund des Entfalls; leer bei jedem anderen Zustand. */
+  entfallenGrund: string;
   /** Audit-Trail: jede Verschiebung wird protokolliert */
   faelligkeitsAenderungen: FaelligkeitsAenderung[];
   /** Subjekt-Felder für schnellen Zugriff in Sammelansichten */
@@ -86,8 +104,15 @@ function addOffset(isoDate: string, monate: number, tage: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Fachliches Heute — Grundlage für Fälligkeit und Überfälligkeit.
+ *
+ * Nicht die Uhr: die Fälligkeiten entstehen aus Mockdaten, die relativ zur
+ * Gegenwart liegen. `erledigtAm` und `geaendertAm` bleiben davon unberührt,
+ * das sind Bedienprotokolle.
+ */
 function heute(): string {
-  return new Date().toISOString().slice(0, 10);
+  return GEGENWART_ISO;
 }
 
 /* ══════════════════════════════════════════
@@ -134,6 +159,8 @@ export function generiereRhythmusTickets(
     vorlageName: vorlage.name,
     ankerDatum,
     erstelltAm: heute(),
+    beendetAm: null,
+    beendetGrund: "",
   };
   INSTANZEN.push(instanz);
 
@@ -163,6 +190,7 @@ export function generiereRhythmusTickets(
       zugewiesenAn: schritt.verantwortlich || zugewiesenAn || null,
       erledigtAm: null,
       erledigtVon: null,
+      entfallenGrund: "",
       faelligkeitsAenderungen: [],
       subjektTyp,
       subjektId,
@@ -188,6 +216,50 @@ export function aktualisiereUeberfaellige(): number {
     }
   }
   return count;
+}
+
+/* ══════════════════════════════════════════
+   INSTANZ BEENDEN
+   ══════════════════════════════════════════ */
+
+export interface BeendenErgebnis {
+  /** Wie viele offene oder überfällige Tickets entfallen sind. */
+  entfallen: number;
+  /** Wie viele erledigte Tickets unangetastet blieben. */
+  unveraendert: number;
+}
+
+/**
+ * Rhythmus eines Subjekts beenden.
+ *
+ * Offene und überfällige Tickets entfallen mit Grund; **erledigte bleiben
+ * unverändert** — sie sind der Nachweis, dass ein Schritt getan wurde, und
+ * ein Nachweis wird nicht nachträglich umgeschrieben.
+ *
+ * Der Aufruf ist wiederholbar: eine bereits beendete Instanz bleibt, wie sie
+ * ist, und meldet null Entfälle.
+ */
+export function rhythmusBeenden(
+  subjektTyp: RhythmusEntitaet,
+  subjektId: string,
+  grund: string,
+): BeendenErgebnis {
+  const instanz = INSTANZEN.find(i => i.subjektTyp === subjektTyp && i.subjektId === subjektId);
+  if (!instanz || instanz.beendetAm) return { entfallen: 0, unveraendert: 0 };
+
+  instanz.beendetAm = heute();
+  instanz.beendetGrund = grund;
+
+  let entfallen = 0;
+  let unveraendert = 0;
+  for (const t of TICKETS) {
+    if (t.instanzId !== instanz.id) continue;
+    if (t.status === "erledigt") { unveraendert++; continue; }
+    t.status = "entfallen";
+    t.entfallenGrund = grund;
+    entfallen++;
+  }
+  return { entfallen, unveraendert };
 }
 
 /* ══════════════════════════════════════════

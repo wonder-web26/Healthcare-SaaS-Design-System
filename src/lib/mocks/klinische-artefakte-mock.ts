@@ -1,14 +1,16 @@
 /**
  * Mock data for klinische Artefakte — Lead-Konvertierungs-Modell.
  *
- * Drei Szenarien: konvertiert (Anna Müller, über patientId), laufendes
+ * Drei Szenarien: konvertiert (Steiner, Alt-Fall, über patientId), laufendes
  * Onboarding (Fritz Huber, OB-2026-105) und der vollständige Demo-Fall
  * (Hans-Rudolf Steiner, OB-2026-101).
  *
  * Fallkennungen stammen aus lib/onboarding/faelle.ts. Artefakte an Kennungen
  * ausserhalb dieses Verzeichnisses wären über die Oberfläche nicht erreichbar.
  */
-import type { InterRAIAssessment, InterRAIItem, AnnaKonfidenz, CapResult, OutcomeScale, Pflegeplanung, Pflegediagnose, Massnahme, Pflegeziel, KLVVerordnung, WorkflowPlan, WorkflowSchritt, AerztlicheDiagnose } from "../../types/klinische-artefakte";
+import type { InterRAIAssessment, InterRAIItem, AnnaKonfidenz, CapResult, OutcomeScale, Pflegeplanung, Pflegediagnose, Massnahme, Pflegeziel, KLVVerordnung, KLVLeistung, KLVEinheit, WorkflowPlan, WorkflowSchritt, AerztlicheDiagnose } from "../../types/klinische-artefakte";
+import type { KlvWerCode } from "../stammdaten/klv-wer";
+import { GEGENWART } from "../gegenwart";
 
 /* ══════════════════════════════════════════
    DEMO ITEMS (30 items, A–S)
@@ -105,13 +107,13 @@ export const DEMO_SCALES: OutcomeScale[] = [
   { id: "PAIN", name: "Schmerzskala", abkuerzung: "PAIN", wert: 1, maxWert: 3, interpretation: "Gelegentlich", richtung: "hoeher-schlechter" },
 ];
 
-const ANNA_DIAGNOSEN: Pflegediagnose[] = [
+const STEINER_ALT_DIAGNOSEN: Pflegediagnose[] = [
   { id: "PD1", nandaCode: "00155", titel: "Sturzgefahr", bezugCap: "CAP-FALLS", begruendung: "Sturz in letzten 30 Tagen, eingeschränkte Mobilität, Umgebungsrisiken Bad.", status: "akzeptiert", icdIds: ["AD-A1"] },
   { id: "PD2", nandaCode: "00095", titel: "Schlafstörung", bezugCap: "CAP-MOOD", begruendung: "Einschlafprobleme bei mittelgradiger Depression.", status: "akzeptiert", icdIds: ["AD-A3"] },
   { id: "PD3", nandaCode: "00241", titel: "Beeinträchtigte Stimmungsregulation", bezugCap: "CAP-MOOD", begruendung: "Anhaltende Traurigkeit, Interessenverlust, Rückzug.", status: "akzeptiert", icdIds: ["AD-A3"] },
 ];
 
-const ANNA_MASSNAHMEN: Massnahme[] = [
+const STEINER_ALT_MASSNAHMEN: Massnahme[] = [
   { id: "MA1", titel: "Sturzprophylaxe-Beratung", bezugDiagnoseId: "PD1", beschreibung: "Sturzrisiken besprechen, Haltegriffe empfehlen.", haeufigkeit: "bei Bedarf", status: "akzeptiert" },
   { id: "MA2", titel: "Wohnraum-Anpassung prüfen", bezugDiagnoseId: "PD1", beschreibung: "Ergotherapeutische Abklärung.", haeufigkeit: "einmalig", status: "akzeptiert" },
   { id: "MA3", titel: "Schlafhygiene-Beratung", bezugDiagnoseId: "PD2", beschreibung: "Schlafrituale, Grübel-Strategien.", haeufigkeit: "wöchentlich", status: "akzeptiert" },
@@ -119,43 +121,46 @@ const ANNA_MASSNAHMEN: Massnahme[] = [
   { id: "MA5", titel: "Blutdruck-Monitoring", bezugDiagnoseId: "PD3", beschreibung: "Regelmässig messen, dokumentieren.", haeufigkeit: "täglich", status: "akzeptiert" },
 ];
 
-const ANNA_ZIELE: Pflegeziel[] = [
+const STEINER_ALT_ZIELE: Pflegeziel[] = [
   { id: "Z1", titel: "Sturzfreiheit 3 Monate", bezugDiagnoseId: "PD1", zeithorizont: "3 Monate", messbar: "Kein Sturz bis Re-Assessment", status: "akzeptiert" },
   { id: "Z2", titel: "Schlafqualität verbessern", bezugDiagnoseId: "PD2", zeithorizont: "6 Wochen", messbar: "Einschlafdauer < 30 Min.", status: "akzeptiert" },
   { id: "Z3", titel: "Soziale Teilhabe", bezugDiagnoseId: "PD3", zeithorizont: "2 Monate", messbar: "1x/Woche soziale Aktivität", status: "akzeptiert" },
 ];
 
 /* ══════════════════════════════════════════
-   SZENARIO 1: Anna Müller (konvertiert)
+   SZENARIO 1: Steiner, Hans-Rudolf (konvertiert, Alt-Fall ONB-ALT-001)
    ══════════════════════════════════════════ */
 
-const ANNA_BA: InterRAIAssessment = {
+const STEINER_ALT_BA: InterRAIAssessment = {
   id: "BA-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041",
-  patientName: "Müller, Anna", typ: "erstassessment", status: "abgeschlossen",
+  patientName: "Steiner, Hans-Rudolf", typ: "erstassessment", status: "abgeschlossen",
   durchgefuehrtVon: "Sandra Weber", startDatum: "15.08.2025", abschlussDatum: "15.08.2025",
   erfassungsgrad: 100, items: DEMO_ITEMS, getriggerteCaps: DEMO_CAPS, outcomeScales: DEMO_SCALES,
 };
 
-const ANNA_RE: InterRAIAssessment = {
+const STEINER_ALT_RE: InterRAIAssessment = {
   id: "BA-2026-010", onboardingId: null, patientId: "P-2026-0041",
-  patientName: "Müller, Anna", typ: "re-assessment", status: "in-bearbeitung",
+  patientName: "Steiner, Hans-Rudolf", typ: "re-assessment", status: "in-bearbeitung",
   durchgefuehrtVon: "Sandra Weber", startDatum: "01.03.2026", abschlussDatum: null,
   erfassungsgrad: 42, items: DEMO_ITEMS.slice(0, 13).map(i => ({ ...i, id: `item-${i.code}-BA-2026-010`, assessmentId: "BA-2026-010", validiert: false, status: "teilweise" as const })),
   getriggerteCaps: [], outcomeScales: [],
 };
 
-const ANNA_PP: Pflegeplanung = {
+const STEINER_ALT_PP: Pflegeplanung = {
   id: "PP-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041",
-  patientName: "Müller, Anna", interRAIAssessmentId: "BA-2025-001",
+  patientName: "Steiner, Hans-Rudolf", interRAIAssessmentId: "BA-2025-001",
   status: "abgeschlossen", erstelltVon: "Sandra Weber",
   erstellDatum: "16.08.2025", abschlussDatum: "16.08.2025",
-  pflegediagnosen: ANNA_DIAGNOSEN, massnahmen: ANNA_MASSNAHMEN, ziele: ANNA_ZIELE,
+  pflegediagnosen: STEINER_ALT_DIAGNOSEN, massnahmen: STEINER_ALT_MASSNAHMEN, ziele: STEINER_ALT_ZIELE,
 };
 
-const ANNA_KLV: KLVVerordnung = {
-  id: "KLV-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041",
-  patientName: "Müller, Anna", pflegeplanungId: "PP-2025-001",
-  status: "kostengutsprache-erhalten", erstelltVon: "Sandra Weber",
+const STEINER_ALT_KLV: KLVVerordnung = {
+  id: "KLV-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", mandatId: null,
+  patientName: "Steiner, Hans-Rudolf", pflegeplanungId: "PP-2025-001",
+  status: "ersetzt",
+  version: 1, art: "erst",
+  statusProtokoll: [{ status: "ersetzt", person: "Sandra Weber", zeitpunkt: "17.08.2025 09:00" }],
+  erstelltVon: "Sandra Weber",
   erstellDatum: "17.08.2025", beginnDatum: "01.09.2025", endDatum: "28.02.2026",
   diagnosen: [
     { id: "KD1", icdCode: "I10", titel: "Arterielle Hypertonie", beschreibung: "Langjährig, medikamentös." },
@@ -235,9 +240,16 @@ const HUBER_PP: Pflegeplanung = {
 };
 
 const HUBER_KLV: KLVVerordnung = {
-  id: "KLV-2026-020", onboardingId: "OB-2026-105", patientId: null,
+  id: "KLV-2026-020", onboardingId: "OB-2026-105", patientId: null, mandatId: null,
   patientName: "Huber, Fritz", pflegeplanungId: null,
-  status: "entwurf", erstelltVon: "Maria Keller",
+  status: "an_arzt",
+  version: 1, art: "erst",
+  statusProtokoll: [
+    { status: "entwurf", person: "Maria Keller", zeitpunkt: "25.02.2026 10:30" },
+    { status: "kontrolliert", person: "Maria Keller", zeitpunkt: "02.07.2026 09:15" },
+    { status: "an_arzt", person: "Maria Keller", zeitpunkt: "05.07.2026 11:40" },
+  ],
+  erstelltVon: "Maria Keller",
   erstellDatum: "25.02.2026", beginnDatum: null, endDatum: null,
   diagnosen: [
     { id: "KD-H1", icdCode: "I10", titel: "Arterielle Hypertonie", beschreibung: "Seit mehreren Jahren bekannt." },
@@ -287,9 +299,9 @@ const WORKFLOW_VERANTWORTLICHE = [
   "Sandra Weber", "Kathrin Meier", "System", "Sandra Weber", "HR-Abteilung",
 ];
 const WORKFLOW_FAELLIG = [
-  "2026-01-15", "2026-01-17", "2026-01-20", "2026-01-22", "2026-01-25",
-  "2026-01-28", "2026-01-30", "2026-02-03", "2026-02-05", "2026-02-08",
-  "2026-02-10", "2026-02-12", "2026-02-15", "2026-02-20", "2026-02-28",
+  "2026-06-18", "2026-06-20", "2026-06-23", "2026-06-25", "2026-06-28",
+  "2026-07-01", "2026-07-03", "2026-07-07", "2026-07-09", "2026-07-12",
+  "2026-07-14", "2026-07-16", "2026-07-19", "2026-07-24", "2026-08-01",
 ];
 
 function buildSchritte(doneCount: number): WorkflowSchritt[] {
@@ -305,14 +317,14 @@ function buildSchritte(doneCount: number): WorkflowSchritt[] {
       dueDateDisplay: `${d}.${m}.${y}`,
       assignee: WORKFLOW_VERANTWORTLICHE[i],
       completedAt: isDone ? `${d}.${m}.${y}, 09:00` : null,
-      overdue: !isDone && new Date(iso) < new Date("2026-03-03"),
+      overdue: !isDone && new Date(iso) < GEGENWART,
     };
   });
 }
 
-const ANNA_WORKFLOW: WorkflowPlan = {
+const STEINER_ALT_WORKFLOW: WorkflowPlan = {
   id: "WF-2025-001", typ: "patient-prozess", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", angehoerigerId: null,
-  bezeichnung: "Patient Prozess — Müller, Anna",
+  bezeichnung: "Patient Prozess — Steiner, Hans-Rudolf",
   schritte: buildSchritte(12),
 };
 
@@ -325,24 +337,24 @@ const HUBER_WORKFLOW: WorkflowPlan = {
 // Angehöriger Monatsschritte
 const ANGEH_SCHRITTE_LABELS = ["Regelkontrolle", "Mikroschulung", "Fallbesprechung", "Arbeitskontrolle", "Mikroschulung", "Kundenfeedback", "SRK-Prüfung Anmeldung"];
 const ANGEH_VERANTWORTLICHE = ["Sandra Weber", "Sandra Weber", "Team", "Sandra Weber", "Sandra Weber", "Patient/Angehörige", "HR-Abteilung"];
-const ANGEH_FAELLIG = ["2026-02-05", "2026-02-10", "2026-02-15", "2026-02-20", "2026-02-25", "2026-02-28", "2026-03-05"];
+const ANGEH_FAELLIG = ["2026-07-09", "2026-07-14", "2026-07-19", "2026-07-24", "2026-07-29", "2026-08-01", "2026-08-06"];
 
 function buildAngehSchritte(doneCount: number): WorkflowSchritt[] {
   return ANGEH_SCHRITTE_LABELS.map((label, i) => {
     const isDone = i < doneCount;
     const iso = ANGEH_FAELLIG[i];
     const [y, m, d] = iso.split("-");
-    return { nr: i + 1, label, status: isDone ? "abgeschlossen" : "offen", dueDate: iso, dueDateDisplay: `${d}.${m}.${y}`, assignee: ANGEH_VERANTWORTLICHE[i], completedAt: isDone ? `${d}.${m}.${y}, 09:00` : null, overdue: !isDone && new Date(iso) < new Date("2026-03-03") };
+    return { nr: i + 1, label, status: isDone ? "abgeschlossen" : "offen", dueDate: iso, dueDateDisplay: `${d}.${m}.${y}`, assignee: ANGEH_VERANTWORTLICHE[i], completedAt: isDone ? `${d}.${m}.${y}, 09:00` : null, overdue: !isDone && new Date(iso) < GEGENWART };
   });
 }
 
-const ANNA_ANGEH_WORKFLOW: WorkflowPlan = {
+const STEINER_ALT_ANGEH_WORKFLOW: WorkflowPlan = {
   id: "WF-A-2025-001", typ: "angehoeriger-monate", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", angehoerigerId: null,
-  bezeichnung: "Angehöriger Monatsschritte — Müller, Anna",
+  bezeichnung: "Angehöriger Monatsschritte — Steiner, Hans-Rudolf",
   schritte: buildAngehSchritte(3),
 };
 
-// Angehörigen-eigene Workflows (z.B. für Tochter von Anna Müller)
+// Angehörigen-eigene Workflows (z.B. für die Angehörige von Steiner)
 const ANGEH_OB_SCHRITTE = [
   "Vertrag & Personalien erfasst", "Steuer & Sozialversicherung geprüft", "Partnerdaten erfasst",
   "Kinderzulagen geklärt", "Anstellungskonditionen definiert", "ID / Ausweis hochgeladen",
@@ -354,8 +366,8 @@ const ANGEH_OB_VERANTW = [
   "K. Meier", "M. Keller", "HR-System", "S. Weber", "IT-System", "S. Weber",
 ];
 const ANGEH_OB_FAELLIG = [
-  "2026-01-05", "2026-01-07", "2026-01-08", "2026-01-10", "2026-01-12", "2026-01-14", "2026-01-14",
-  "2026-01-15", "2026-01-18", "2026-01-20", "2026-01-22", "2026-01-25", "2026-01-28",
+  "2026-06-08", "2026-06-10", "2026-06-11", "2026-06-13", "2026-06-15", "2026-06-17", "2026-06-17",
+  "2026-06-18", "2026-06-21", "2026-06-23", "2026-06-25", "2026-06-28", "2026-07-01",
 ];
 
 function buildAngehOBSchritte(doneCount: number): WorkflowSchritt[] {
@@ -363,18 +375,18 @@ function buildAngehOBSchritte(doneCount: number): WorkflowSchritt[] {
     const isDone = i < doneCount;
     const iso = ANGEH_OB_FAELLIG[i];
     const [y, m, d] = iso.split("-");
-    return { nr: i + 1, label, status: isDone ? "abgeschlossen" : "offen", dueDate: iso, dueDateDisplay: `${d}.${m}.${y}`, assignee: ANGEH_OB_VERANTW[i], completedAt: isDone ? `${d}.${m}.${y}, 09:00` : null, overdue: !isDone && new Date(iso) < new Date("2026-03-03") };
+    return { nr: i + 1, label, status: isDone ? "abgeschlossen" : "offen", dueDate: iso, dueDateDisplay: `${d}.${m}.${y}`, assignee: ANGEH_OB_VERANTW[i], completedAt: isDone ? `${d}.${m}.${y}, 09:00` : null, overdue: !isDone && new Date(iso) < GEGENWART };
   });
 }
 
 const TOCHTER_OB_WORKFLOW: WorkflowPlan = {
-  id: "WF-ANG-OB-001", typ: "angehoeriger-onboarding", onboardingId: null, patientId: null, angehoerigerId: "A-2026-0041",
+  id: "WF-ANG-OB-001", typ: "angehoeriger-onboarding", onboardingId: null, patientId: null, angehoerigerId: "A-2026-0101",
   bezeichnung: "Onboarding Prozess",
   schritte: buildAngehOBSchritte(8),
 };
 
 const TOCHTER_MONAT_WORKFLOW: WorkflowPlan = {
-  id: "WF-ANG-M-001", typ: "angehoeriger-monatsschritte", onboardingId: null, patientId: null, angehoerigerId: "A-2026-0041",
+  id: "WF-ANG-M-001", typ: "angehoeriger-monatsschritte", onboardingId: null, patientId: null, angehoerigerId: "A-2026-0101",
   bezeichnung: "Monatliche Schritte",
   schritte: buildAngehSchritte(3),
 };
@@ -383,8 +395,8 @@ const TOCHTER_MONAT_WORKFLOW: WorkflowPlan = {
    ÄRZTLICHE DIAGNOSEN (eigenes Artefakt)
    ══════════════════════════════════════════ */
 
-/** Anna Müller: konvertiert, Diagnosen vom Arzt bereits bestätigt */
-const ANNA_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [
+/** Steiner, Alt-Fall: konvertiert, Diagnosen vom Arzt bereits bestätigt */
+const STEINER_ALT_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [
   { id: "AD-A1", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", icdCode: "I10", bezeichnung: "Arterielle Hypertonie", quelle: "Arzt-Antwort Dr. M. Huber, 18.08.2025", status: "bestaetigt" },
   { id: "AD-A2", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", icdCode: "E11", bezeichnung: "Diabetes mellitus Typ 2", quelle: "Arzt-Antwort Dr. M. Huber, 18.08.2025", status: "bestaetigt" },
   { id: "AD-A3", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", icdCode: "F32.1", bezeichnung: "Mittelgradige depressive Episode", quelle: "Arzt-Antwort Dr. M. Huber, 18.08.2025", status: "bestaetigt" },
@@ -449,9 +461,18 @@ const STEINER_PP: Pflegeplanung = {
 };
 
 const STEINER_KLV: KLVVerordnung = {
-  id: "KLV-2026-101", onboardingId: "OB-2026-101", patientId: null,
+  id: "KLV-2026-101", onboardingId: "OB-2026-101", patientId: null, mandatId: null,
   patientName: "Steiner, Hans-Rudolf", pflegeplanungId: "PP-2026-101",
-  status: "kostengutsprache-erhalten", erstelltVon: "Maria Keller",
+  status: "an_kasse",
+  version: 2, art: "folge",
+  statusProtokoll: [
+    { status: "entwurf", person: "Maria Keller", zeitpunkt: "24.02.2026 14:15" },
+    { status: "kontrolliert", person: "Maria Keller", zeitpunkt: "10.06.2026 08:30" },
+    { status: "an_arzt", person: "Maria Keller", zeitpunkt: "11.06.2026 16:00" },
+    { status: "unterzeichnet", person: "Dr. med. Peter Frei", zeitpunkt: "16.06.2026 10:20" },
+    { status: "an_kasse", person: "Maria Keller", zeitpunkt: "18.06.2026 09:05" },
+  ],
+  erstelltVon: "Maria Keller",
   erstellDatum: "24.02.2026", beginnDatum: "01.03.2026", endDatum: "31.08.2026",
   diagnosen: [
     { id: "KD-S1", icdCode: "I10", titel: "Arterielle Hypertonie", beschreibung: "Langjährig, medikamentös." },
@@ -476,10 +497,118 @@ const STEINER_KLV: KLVVerordnung = {
    COLLECTED EXPORTS
    ══════════════════════════════════════════ */
 
-export const MOCK_ASSESSMENTS: InterRAIAssessment[] = [ANNA_BA, ANNA_RE, HUBER_BA, STEINER_BA];
-export const MOCK_PFLEGEPLANUNGEN: Pflegeplanung[] = [ANNA_PP, HUBER_PP, STEINER_PP];
-export const MOCK_KLV_VERORDNUNGEN: KLVVerordnung[] = [ANNA_KLV, HUBER_KLV, STEINER_KLV];
-export const MOCK_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [...ANNA_ARZT_DIAGNOSEN, ...HUBER_ARZT_DIAGNOSEN, ...STEINER_ARZT_DIAGNOSEN];
+export const MOCK_ASSESSMENTS: InterRAIAssessment[] = [STEINER_ALT_BA, STEINER_ALT_RE, HUBER_BA, STEINER_BA];
+export const MOCK_PFLEGEPLANUNGEN: Pflegeplanung[] = [STEINER_ALT_PP, HUBER_PP, STEINER_PP];
+
+/* ══════════════════════════════════════════
+   Weitere Leistungsplanungsblätter — je einer der Lagen, die die KLV-Liste
+   zeigen muss. Sie hängen an bestehenden Mandaten bestehender Patienten;
+   Positionen stammen aus dem Leistungskatalog 2025.
+   ══════════════════════════════════════════ */
+
+/** Wenige Positionen genügen; die Werte sind die des Katalogs. */
+function katalogPosition(
+  id: string, nr: string, bezeichnung: string, kategorie: "a" | "b" | "c",
+  zeitMin: number, anzahl: number, einheit: KLVEinheit, wer: KlvWerCode = "S",
+): KLVLeistung {
+  return {
+    id, klvNummer: nr, bezeichnung, kategorie, wer, training: "N",
+    anzahl, einheit, zeitMin, ausAnna: false, annaKonfidenz: null, validiert: true,
+    simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null,
+  };
+}
+
+/** Entwurf — Rexhepi, Mandat mit gültiger Kostengutsprache. */
+const REXHEPI_KLV: KLVVerordnung = {
+  id: "KLV-2026-030", onboardingId: null, patientId: "P-2026-0043", mandatId: null,
+  patientName: "Rexhepi, Fatmire", pflegeplanungId: null,
+  status: "entwurf",
+  version: 1, art: "erst",
+  statusProtokoll: [{ status: "entwurf", person: "Laura Brunner", zeitpunkt: "28.07.2026 08:40" }],
+  erstelltVon: "Laura Brunner",
+  erstellDatum: "28.07.2026", beginnDatum: "01.09.2026", endDatum: null,
+  diagnosen: [],
+  leistungspositionen: [
+    katalogPosition("LP-R1", "10901", "Erstassessment", "a", 60, 1, "e"),
+    katalogPosition("LP-R2", "10104", "Teilwäsche am Lavabo (inkl. Intimpflege)", "c", 26, 1, "t7", "I"),
+  ],
+  zielformulierungen: ["Selbstständigkeit in der Körperpflege erhalten"],
+  arztAngeordnetAm: null, krankenkasseGutspracheAm: null, ablehnungsgrund: null,
+};
+
+/** Bei der Kasse — Ferrari, Mandat OHNE Kostengutsprache. */
+const FERRARI_KLV: KLVVerordnung = {
+  id: "KLV-2026-031", onboardingId: null, patientId: "P-2026-0048", mandatId: null,
+  patientName: "Ferrari, Gino", pflegeplanungId: null,
+  status: "an_kasse",
+  version: 1, art: "erst",
+  statusProtokoll: [
+    { status: "entwurf", person: "Laura Brunner", zeitpunkt: "02.06.2026 09:00" },
+    { status: "kontrolliert", person: "Laura Brunner", zeitpunkt: "04.06.2026 14:20" },
+    { status: "an_arzt", person: "Laura Brunner", zeitpunkt: "05.06.2026 08:15" },
+    { status: "unterzeichnet", person: "Dr. med. Peter Frei", zeitpunkt: "10.06.2026 11:05" },
+    { status: "an_kasse", person: "Laura Brunner", zeitpunkt: "12.06.2026 16:30" },
+  ],
+  erstelltVon: "Laura Brunner",
+  erstellDatum: "02.06.2026", beginnDatum: "01.07.2026", endDatum: "30.06.2027",
+  diagnosen: [],
+  leistungspositionen: [
+    katalogPosition("LP-F1", "10114", "Hilfe An-/Auskleiden", "c", 15, 2, "t7", "I"),
+    katalogPosition("LP-F2", "10505", "Hilfe beim Gehen", "c", 8, 3, "t7", "I"),
+  ],
+  zielformulierungen: [],
+  arztAngeordnetAm: "10.06.2026", krankenkasseGutspracheAm: null, ablehnungsgrund: null,
+};
+
+/** Bei der Ärztin — Da Silva, zweite Zeile für die Sortierung. */
+const DASILVA_KLV: KLVVerordnung = {
+  id: "KLV-2026-032", onboardingId: null, patientId: "P-2026-0046", mandatId: null,
+  patientName: "Da Silva, Joaquim", pflegeplanungId: null,
+  status: "an_arzt",
+  version: 1, art: "erst",
+  statusProtokoll: [
+    { status: "entwurf", person: "Maria Keller", zeitpunkt: "10.07.2026 10:00" },
+    { status: "kontrolliert", person: "Maria Keller", zeitpunkt: "12.07.2026 09:30" },
+    { status: "an_arzt", person: "Maria Keller", zeitpunkt: "20.07.2026 15:45" },
+  ],
+  erstelltVon: "Maria Keller",
+  erstellDatum: "10.07.2026", beginnDatum: "01.08.2026", endDatum: null,
+  diagnosen: [],
+  leistungspositionen: [
+    katalogPosition("LP-D1", "10901", "Erstassessment", "a", 60, 1, "e"),
+  ],
+  zielformulierungen: [],
+  arztAngeordnetAm: null, krankenkasseGutspracheAm: null, ablehnungsgrund: null,
+};
+
+/** Ohne Wartezeit — Zimmermann, Blatt liegt wieder bei der Spitex. */
+const ZIMMERMANN_KLV: KLVVerordnung = {
+  id: "KLV-2026-033", onboardingId: null, patientId: "P-2026-0049", mandatId: null,
+  patientName: "Zimmermann, Gertrud", pflegeplanungId: null,
+  status: "unterzeichnet",
+  version: 1, art: "erst",
+  statusProtokoll: [
+    { status: "entwurf", person: "Sandra Weber", zeitpunkt: "15.06.2026 11:00" },
+    { status: "kontrolliert", person: "Sandra Weber", zeitpunkt: "17.06.2026 08:20" },
+    { status: "an_arzt", person: "Sandra Weber", zeitpunkt: "18.06.2026 09:10" },
+    { status: "unterzeichnet", person: "Dr. med. Marc Wyss", zeitpunkt: "24.06.2026 14:00" },
+  ],
+  erstelltVon: "Sandra Weber",
+  erstellDatum: "15.06.2026", beginnDatum: "01.07.2026", endDatum: "30.06.2027",
+  diagnosen: [],
+  leistungspositionen: [
+    katalogPosition("LP-Z1", "10104", "Teilwäsche am Lavabo (inkl. Intimpflege)", "c", 26, 1, "t3"),
+    katalogPosition("LP-Z2", "10505", "Hilfe beim Gehen", "c", 8, 2, "t7"),
+  ],
+  zielformulierungen: [],
+  arztAngeordnetAm: "24.06.2026", krankenkasseGutspracheAm: null, ablehnungsgrund: null,
+};
+
+export const MOCK_KLV_VERORDNUNGEN: KLVVerordnung[] = [
+  STEINER_ALT_KLV, HUBER_KLV, STEINER_KLV,
+  REXHEPI_KLV, FERRARI_KLV, DASILVA_KLV, ZIMMERMANN_KLV,
+];
+export const MOCK_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [...STEINER_ALT_ARZT_DIAGNOSEN, ...HUBER_ARZT_DIAGNOSEN, ...STEINER_ARZT_DIAGNOSEN];
 /** @deprecated Ersetzt durch Rhythmus-Engine (src/lib/rhythmus/). Nur noch für Typ-Referenz behalten. */
 export const MOCK_WORKFLOWS: WorkflowPlan[] = [];
-export { ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE };
+export { STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE };

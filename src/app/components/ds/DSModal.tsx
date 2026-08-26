@@ -99,7 +99,7 @@ export function DSModal() {
         </>}
       >
         <p className="text-[13px] text-muted-foreground leading-relaxed">
-          Möchten Sie die Änderungen am Behandlungsplan von Patientin Müller, Anna speichern?
+          Möchten Sie die Änderungen am Behandlungsplan von Patientin Muster, Anna speichern?
           Diese Änderung wird sofort im System wirksam.
         </p>
       </Modal>
@@ -170,7 +170,7 @@ export function DSModal() {
             <CheckCircle2 className="w-7 h-7 text-success" />
           </div>
           <p className="text-[14px] text-foreground" style={{ fontWeight: 500 }}>Patient erfolgreich angelegt</p>
-          <p className="text-[12px] text-muted-foreground mt-1">ID: P-0047 · Müller, Anna wurde im System erfasst.</p>
+          <p className="text-[12px] text-muted-foreground mt-1">ID: P-0047 · Muster, Anna wurde im System erfasst.</p>
         </div>
       </Modal>
     </section>

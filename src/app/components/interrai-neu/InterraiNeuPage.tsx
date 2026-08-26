@@ -71,6 +71,7 @@ import {
   type GespraechAbschnitt,
   type Bestaetigung,
 } from "../../../lib/interrai/store";
+import { ansichtPfad } from "../Patient360Page";
 import { useRecording } from "../../recording/RecordingContext";
 import { AppButton } from "../ui/AppButton";
 import { StatusMarke } from "../ui/StatusMarke";
@@ -596,7 +597,7 @@ export function InterraiNeuPage() {
   // list — the button never leads nowhere. The label names the destination.
   const returnZiel = searchParams.get("returnTo")
     || (assessment && getPerson(assessment.personId)?.patientId
-        ? `/patienten/${getPerson(assessment.personId)!.patientId}?tab=interrai`
+        ? ansichtPfad(getPerson(assessment.personId)!.patientId, "interrai-hc")
         : "/interrai");
   // Navigationsrahmen §E: Beschriftung nennt das ZIEL, nicht die Handlung.
   const returnLabel = returnZiel.startsWith("/onboarding") ? "Onboardings"

@@ -7,8 +7,9 @@ import { fallById, patientAnzeigeName } from "../../lib/onboarding/faelle";
 import { getAngehoerige, srkZertifikatFehlt } from "../../lib/angehoerige/store";
 import { unifiedEntries, entryTitle, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
 import { pendenzTypen } from "../../types/pendenz";
+import { GEGENWART_ISO } from "../../lib/gegenwart";
 
-const TODAY = "2026-03-03";
+const TODAY = GEGENWART_ISO;
 const MOCK_HOUR = 8;
 
 /* ══════════════════════════════════════════

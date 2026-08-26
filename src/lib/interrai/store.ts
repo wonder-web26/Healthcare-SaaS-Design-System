@@ -16,7 +16,7 @@ import {
   evaluateSkipLogic,
   getItem,
 } from "./instrument";
-import { dateZuIso } from "../datum";
+import { GEGENWART_ISO } from "../gegenwart";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -186,7 +186,7 @@ function initDemo() {
     onboardingId: "OB-2026-105",
   });
 
-  // Anna Müller — active patient, already converted
+  // Steiner, Hans-Rudolf — active patient, already converted
   persons.set("PERS-002", {
     id: "PERS-002",
     vorname: "Anna",
@@ -224,7 +224,7 @@ function initDemo() {
     abgeschlossenVon: null,
   });
 
-  // Anna Müller: Erstabklärung — no suggestions (both states in demo)
+  // Steiner, Hans-Rudolf: Erstabklärung — no suggestions (both states in demo)
   assessments.set("NEU-ASS-002", {
     id: "NEU-ASS-002",
     personId: "PERS-002",
@@ -405,7 +405,7 @@ export function abschliessenAssessment(assessmentId: string, person: string): nu
   // renderer (previously written as dd.MM.yyyy via toLocaleDateString, which a
   // type=date control sanitised to empty).
   if (a.answers["S2b"] == null || a.answers["S2b"] === "") {
-    a.answers["S2b"] = dateZuIso(new Date());
+    a.answers["S2b"] = GEGENWART_ISO;
   }
 
   // Discard all remaining unconfirmed suggestions

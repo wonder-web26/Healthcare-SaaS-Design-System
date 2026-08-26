@@ -8,7 +8,9 @@ import {
   Headphones,
   Settings,
   HelpCircle,
+  CalendarCheck,
   HeartHandshake,
+  BookUser,
   LayoutDashboard,
 } from "lucide-react";
 import { unifiedEntries, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
@@ -22,6 +24,14 @@ const navItems = [
   { id: "onboarding", label: "Onboarding", icon: UserPlus, badge: 3 },
   { id: "patienten", label: "Patienten", icon: Users },
   { id: "angehoerige", label: "Angehörige", icon: HeartHandshake },
+  /* Dritte Personen — Ärztinnen, Beistände, Sozialdienste. */
+  { id: "kontakte", label: "Kontakte", icon: BookUser },
+  /* Kurzform statt „Leistungsplanungsblatt" — für die Zielgruppe eindeutig.
+     Die Ansicht im Dossier behält den vollen Namen. */
+  { id: "klv", label: "KLV", icon: ClipboardList },
+  /* Die Prüfung der erfassten Einsätze über alle Patienten — der Bildschirm
+     über der Pflegekontrolle im Dossier. */
+  { id: "abschluss", label: "Abschluss", icon: CalendarCheck },
   { id: "zuteilung", label: "Zuteilung", icon: GitBranch },
   { id: "servicedesk", label: "Pendenzen", icon: Headphones, badge: myOpenCount },
 ];

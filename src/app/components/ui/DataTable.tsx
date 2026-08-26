@@ -57,6 +57,22 @@ export interface SpalteDef<T> {
   render: (row: T) => React.ReactNode;
 }
 
+/**
+ * Eine Überschrift über mehreren benachbarten Spalten.
+ *
+ * Sie sagt, dass die Spalten darunter zusammengehören — etwa vier Spalten,
+ * die zusammen eine Summe ergeben. Ohne sie stünden sie gleichrangig neben
+ * den übrigen und die Zusammengehörigkeit müsste erraten werden.
+ *
+ * `spalten` nennt Spalten-Kennungen. Ausgeblendete zählen nicht mit: fällt
+ * eine Spalte unter einem Haltepunkt weg, schrumpft ihre Gruppe mit. Bleibt
+ * keine übrig, entfällt die Überschrift.
+ */
+export interface SpaltenGruppe {
+  label: string;
+  spalten: string[];
+}
+
 export interface DataTableProps<T> {
   spalten: SpalteDef<T>[];
   zeilen: T[];
@@ -73,6 +89,8 @@ export interface DataTableProps<T> {
   fusszeile?: React.ReactNode;
   /** Kartenkopf (z. B. Name + Kennzeichen); die übrigen Spalten werden zu beschrifteten Wertepaaren. */
   karteTitel: (row: T) => React.ReactNode;
+  /** Optionale Überschriften über zusammengehörenden Spalten. */
+  gruppen?: SpaltenGruppe[];
   leerText?: string;
   /** Optionale Zeilenauswahl: Kontrollkästchen in einer festen Spalte links. Fehlt die Prop,
    *  gibt es keine Auswahlspalte (Standard aus) — bestehende Listen bleiben unverändert. */
@@ -169,7 +187,7 @@ function Kontrollkaestchen({ gewaehlt, onToggle, label }: { gewaehlt: boolean; o
 export function DataTable<T>({
   spalten, zeilen, zeilenKey, onZeileKlick, zeilenHintergrund, zeilenAkzent,
   sort, onSort, fusszeile, karteTitel, leerText = "Keine Ergebnisse.",
-  auswahl, containerHaltepunkte = false, karteAbPx,
+  auswahl, containerHaltepunkte = false, karteAbPx, gruppen,
 }: DataTableProps<T>) {
   const rahmenRef = React.useRef<HTMLDivElement>(null);
   const fensterBreite = useFensterBreite();
@@ -275,10 +293,47 @@ export function DataTable<T>({
   ].join(" ");
   const zellPad = `${TABELLE_LAYOUT.zeilePadY} ${TABELLE_LAYOUT.zeilePadX}`;
 
+  /* ── Gruppenzeile ──────────────────────────────────────────────────────────
+     Aus den tatsächlich angezeigten Spalten gebildet, nicht aus der Vorgabe:
+     fällt eine Spalte unter einem Haltepunkt weg, schrumpft ihre Gruppe mit,
+     und eine Gruppe ohne verbleibende Spalte entfällt ganz. Zusammenhängende
+     Läufe werden zu einer Zelle mit `span` verdichtet; Spalten ohne Gruppe
+     bekommen eine leere Zelle, damit das Raster deckungsgleich bleibt. */
+  const gruppenZeile = React.useMemo(() => {
+    if (!gruppen?.length) return null;
+    const gruppeVon = (id: string) => gruppen.find(g => g.spalten.includes(id)) ?? null;
+    const felder: { label: string | null; span: number }[] = [];
+    for (const s of anzeige) {
+      const g = gruppeVon(s.id);
+      const letztes = felder[felder.length - 1];
+      if (g && letztes && letztes.label === g.label) letztes.span += 1;
+      else felder.push({ label: g?.label ?? null, span: 1 });
+    }
+    return felder.some(f => f.label) ? felder : null;
+  }, [gruppen, anzeige]);
+
   return (
     <div ref={rahmenRef} style={rahmen}>
       <div style={karte}>
         <div role="table" aria-rowcount={zeilen.length}>
+          {/* Gruppenzeile über der Kopfzeile — nur wenn Gruppen gesetzt sind */}
+          {gruppenZeile && (
+            <div role="row" style={{ display: "grid", gridTemplateColumns: gridCols, alignItems: "end", background: "var(--bg-secondary)", paddingTop: "0.4rem" }}>
+              {auswahl && <div />}
+              {gruppenZeile.map((f, i) => (
+                <div key={i} role="columnheader" aria-label={f.label ?? undefined}
+                  style={{ gridColumn: `span ${f.span}`, padding: `0 ${TABELLE_LAYOUT.zeilePadX}`, minWidth: 0 }}>
+                  {f.label && (
+                    <span style={{ display: "block", paddingBottom: "0.25rem", borderBottom: "var(--border-thin) solid var(--border-default)",
+                      fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: "var(--weight-medium)",
+                      color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+                      {f.label}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           {/* Kopfzeile */}
           <div role="row" style={{ display: "grid", gridTemplateColumns: gridCols, alignItems: "center", background: "var(--bg-secondary)" }}>
             {auswahl && <div role="columnheader" aria-label="Auswahl" style={{ padding: zellPad }} />}

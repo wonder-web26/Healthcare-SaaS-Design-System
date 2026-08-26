@@ -4,11 +4,15 @@ import { Search, Plus, X, ChevronDown, Check, AlertTriangle, AlertCircle, Extern
 import { type Angehoeriger, type Qualifikation } from "./angehoerigeData";
 import { useAngehoerige, srkZertifikatFehlt } from "../../lib/angehoerige/store";
 import { isoZuAnzeige } from "../../lib/datum";
+import { leerZuletzt } from "../../lib/sortierung";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
+import { AuswahlDropdown } from "./ui/AuswahlDropdown";
+import { ListenGeruest } from "./ui/ListenGeruest";
+import { gegenwart, GEGENWART_ISO } from "../../lib/gegenwart";
 
-/* ── Bezugsdatum (Mock-Demo): Ableitungen laufen gegen diesen Stichtag; der
-   Monatsschritt trägt seine Überfälligkeit als vorberechnetes Feld. ── */
-const BEZUGSDATUM = new Date(2026, 2, 3); // 03.03.2026
+/* ── Ableitungen laufen gegen die Gegenwart; der Monatsschritt trägt seine
+   Überfälligkeit als vorberechnetes Feld. ── */
+const BEZUGSDATUM = gegenwart();
 
 /* ── Zugehörigkeit (Segmentumschalter): "Meine" = angemeldete Benutzerin. ── */
 type Segment = "alle" | "meine";
@@ -78,13 +82,6 @@ function msProgress(a: Angehoeriger): number { const ms = a.monatsSchritt; retur
 function mutKey(d: string): string { const [dd, mm, yy] = d.split("."); return `${yy ?? ""}${mm ?? ""}${dd ?? ""}`; }
 /** Rang der SRK-Spalte: "Vorhanden" vor "Ausstehend" — genau die zwei angezeigten Werte. */
 function srkRang(a: Angehoeriger): number { return a.srkZertifikatVorhanden === "ja" ? 0 : 1; }
-/** Leere Werte stehen unabhängig von der Richtung am Ende. */
-function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): number {
-  if (la && lb) return 0;
-  if (la) return 1;
-  if (lb) return -1;
-  return f * cmp();
-}
 function sortAngehoerige(list: Angehoeriger[], key: SortKey, dir: "asc" | "desc"): Angehoeriger[] {
   const f = dir === "asc" ? 1 : -1;
   return [...list].sort((a, b) => {
@@ -104,49 +101,6 @@ function sortAngehoerige(list: Angehoeriger[], key: SortKey, dir: "asc" | "desc"
   });
 }
 
-/* ── Mehrfachauswahl-Dropdown (lokal; kein neues Shared-/shadcn-Bauteil) ── */
-function AuswahlDropdown({ label, optionen, ausgewaehlt, onToggle }: {
-  label: string;
-  optionen: { value: string; label: string }[];
-  ausgewaehlt: Set<string>;
-  onToggle: (value: string) => void;
-}) {
-  const [offen, setOffen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!offen) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOffen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [offen]);
-  const anzahl = ausgewaehlt.size;
-  return (
-    <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOffen(o => !o)} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
-        style={{ gap: 6, padding: "7px 12px", borderRadius: "var(--radius-pill)", background: anzahl > 0 ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: anzahl > 0 ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: anzahl > 0 ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-        {label}{anzahl > 0 && <span style={{ fontVariantNumeric: "tabular-nums" }}>· {anzahl}</span>}
-        <ChevronDown style={{ width: 14, height: 14, opacity: 0.7 }} />
-      </button>
-      {offen && (
-        <div className="absolute z-50" style={{ top: "calc(100% + 6px)", left: 0, minWidth: 200, padding: 6, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)" }}>
-          {optionen.map(opt => {
-            const aktiv = ausgewaehlt.has(opt.value);
-            return (
-              <button key={opt.value} type="button" onClick={() => onToggle(opt.value)} className="w-full inline-flex items-center cursor-pointer transition-colors"
-                style={{ gap: 8, padding: "7px 8px", borderRadius: 6, background: "transparent", border: "none", fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit", textAlign: "left" }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <span className="inline-flex items-center justify-center shrink-0" style={{ width: 16, height: 16, borderRadius: 4, border: aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: aktiv ? "var(--brand-primary)" : "transparent" }}>
-                  {aktiv && <Check style={{ width: 11, height: 11, color: "var(--text-on-dark)" }} />}
-                </span>
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ══════════════════════════════════════════
    MAIN COMPONENT
@@ -284,30 +238,29 @@ export function AngehoerigePage() {
     <div className="flex flex-col h-full min-h-0">
       <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-6) 0" }}>
         <div style={inhaltRahmen}>
-          {/* 1) Titel + Primäraktion */}
-          <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
-            <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Angehörige</h1>
-            <button onClick={() => navigate("/onboarding/neu")} className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
+          {leerKeineAngehoerige ? (
+            <>
+              <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+                <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Angehörige</h1>
+              </div>
+              <p style={{ fontSize: "var(--text-body)", color: "var(--text-secondary)", maxWidth: 560 }}>
+                Sobald ein Angehöriger angelegt ist, erscheint er hier mit Qualifikation, SRK-Status und Monatsschritt.
+              </p>
+            </>
+          ) : (
+          <ListenGeruest
+              titel="Angehörige"
+              aktion={
+                <button onClick={() => navigate("/onboarding/neu")} className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
               style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
               onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
               <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neuen Angehörigen anlegen</span>
             </button>
-          </div>
-
-          {leerKeineAngehoerige ? (
-            <p style={{ fontSize: "var(--text-body)", color: "var(--text-secondary)", maxWidth: 560 }}>
-              Sobald ein Angehöriger angelegt ist, erscheint er hier mit Qualifikation, SRK-Status und Monatsschritt.
-            </p>
-          ) : (
-            <>
-              {/* 2) Steuerleiste: Suche, Zugehörigkeit, Auswahlfelder */}
-              <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
-                <div className="flex items-center" style={{ flex: "1 1 220px", maxWidth: 300, gap: "var(--space-2)", padding: "7px 14px", borderRadius: 8, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
-                  <Search style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
-                  <input value={filter.suche} onChange={e => setSuche(e.target.value)} placeholder="Angehörige suchen…" className="flex-1 bg-transparent outline-none" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", minWidth: 0 }} />
-                  {filter.suche && <button onClick={() => setSuche("")} className="cursor-pointer shrink-0" style={{ background: "transparent", border: "none" }}><X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} /></button>}
-                </div>
-
+              }
+              suche={filter.suche}
+              onSuche={setSuche}
+              suchePlatzhalter="Angehörige suchen…"
+              segment={
                 <div className="inline-flex shrink-0" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
                   {([["meine", "Meine"], ["alle", "Alle"]] as [Segment, string][]).map(([seg, lbl]) => {
                     const aktiv = filter.segment === seg;
@@ -319,48 +272,19 @@ export function AngehoerigePage() {
                     );
                   })}
                 </div>
-
+              }
+              auswahlfelder={<>
                 <AuswahlDropdown label="Qualifikation" optionen={QUAL_OPTIONEN.map(q => ({ value: q as string, label: QUAL_LABEL[q] }))} ausgewaehlt={filter.qualifikationen as Set<string>} onToggle={v => toggleQual(v as Qualifikation)} />
                 <AuswahlDropdown label="Pflegefachkraft" optionen={allePflegefachkraefte.map(pf => ({ value: pf, label: pf }))} ausgewaehlt={filter.pflegefachkraefte} onToggle={togglePfk} />
-              </div>
-
-              {/* Status-Chips — kombinierbar (UND), Zahl aus denselben Daten */}
-              <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
-                {STATUS_CHIPS.map(chip => {
-                  const aktiv = filter.statusChips.has(chip.id);
-                  const n = chipCounts[chip.id];
-                  return (
-                    <button key={chip.id} type="button" onClick={() => toggleChip(chip.id)} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
-                      style={{ gap: 7, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: aktiv ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: aktiv ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-                      <span className="inline-flex items-center justify-center shrink-0" style={{ width: 15, height: 15, borderRadius: 4, border: aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: aktiv ? "var(--brand-primary)" : "transparent" }}>
-                        {aktiv && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}
-                      </span>
-                      {chip.label}
-                      <span style={{ fontVariantNumeric: "tabular-nums", color: aktiv ? "var(--brand-primary)" : "var(--text-tertiary)" }}>{n}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* 3) Aktivzeile */}
-              <div className="flex items-center flex-wrap" style={{ gap: 6, minHeight: 24, marginBottom: "var(--space-2)" }}>
-                {filterTags.length === 0 ? (
-                  <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-                    {filter.segment === "meine" ? "Meine Angehörigen" : "Alle Angehörigen"}{sort ? ` · sortiert nach ${SORT_LABEL[sort.key]}` : ""}
-                  </span>
-                ) : (
-                  <>
-                    {filterTags.map(t => (
-                      <button key={t.key} type="button" onClick={t.entfernen} className="ui-fokusring inline-flex items-center cursor-pointer"
-                        style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary-light)", color: "var(--brand-primary)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", border: "none", fontFamily: "inherit" }}>
-                        {t.label} <X style={{ width: 10, height: 10 }} />
-                      </button>
-                    ))}
-                    <button type="button" onClick={resetFilter} className="cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", padding: "3px 6px", fontFamily: "inherit" }}>Filter zurücksetzen</button>
-                  </>
-                )}
-              </div>
-            </>
+              </>}
+              chips={STATUS_CHIPS.map(chip => ({
+                id: chip.id, label: chip.label, anzahl: chipCounts[chip.id],
+                aktiv: filter.statusChips.has(chip.id), onToggle: () => toggleChip(chip.id),
+              }))}
+              sichtText={`${filter.segment === "meine" ? "Meine Angehörigen" : "Alle Angehörigen"}${sort ? ` · sortiert nach ${SORT_LABEL[sort.key]}` : ""}`}
+              filterMarken={filterTags}
+              onFilterZuruecksetzen={resetFilter}
+            >{null}</ListenGeruest>
           )}
         </div>
       </div>
@@ -392,7 +316,7 @@ export function AngehoerigePage() {
               sort={sort ?? undefined}
               onSort={toggleSort}
               karteTitel={nameZelle}
-              fusszeile={<><span>{filtered.length} von {angehoerige.length} Angehörigen</span><span>Stand: {isoZuAnzeige("2026-03-03")}</span></>}
+              fusszeile={<><span>{filtered.length} von {angehoerige.length} Angehörigen</span><span>Stand: {isoZuAnzeige(GEGENWART_ISO)}</span></>}
               leerText="Keine Angehörigen mit diesen Filtern."
             />
           )}

@@ -4,16 +4,18 @@ import { Search, Plus, AlertTriangle, Clock, X, ChevronDown, Check } from "lucid
 import { type Patient, type Schweregrad } from "./patientData";
 import { usePatienten, weisePflegefachkraftZu, tageBisReAssessment, NICHT_ZUGEWIESEN, PATIENTEN_BEZUGSDATUM_ISO } from "../../lib/patienten/store";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
+import { AuswahlDropdown } from "./ui/AuswahlDropdown";
+import { ListenGeruest } from "./ui/ListenGeruest";
 import { StatusModal } from "./StatusModal";
 import { PflegefachkraftSidebar, type Caregiver } from "./PflegefachkraftSidebar";
 import { useCurrentUser } from "../auth";
 import { anzeigeZuIso, isoZuAnzeige } from "../../lib/datum";
+import { leerZuletzt, datumKey } from "../../lib/sortierung";
 import { toast } from "sonner";
 
-/* ── Bezugsdatum (Mock-Demo): alle Ableitungen laufen gegen diesen Stichtag statt
-   gegen new Date(), damit die Liste deterministisch ist. 03.03.2026 ist der in
-   CLAUDE.md festgelegte Mock-Stichtag; die Fälligkeitsdaten der Patienten sind
-   darauf ausgerichtet. Die reinen Funktionen erhalten ihn als Parameter. ── */
+/* ── Alle Ableitungen laufen gegen die Gegenwart statt gegen new Date(), damit
+   die Liste deterministisch ist; die Fälligkeitsdaten der Patienten liegen
+   relativ zu ihr. Die reinen Funktionen erhalten sie als Parameter. ── */
 const BEZUGSDATUM_ISO = PATIENTEN_BEZUGSDATUM_ISO;
 
 /* ── Zugehörigkeit (Segmentumschalter, genau eine Auswahl) ──
@@ -50,12 +52,29 @@ function istNichtAbrechenbar(p: Patient): boolean {
   return p.status === "nicht_abrechenbar";
 }
 
+function istAusgetreten(p: Patient): boolean {
+  return p.status === "ausgetreten";
+}
+
+/**
+ * Grundgesamtheit der Liste. Ausgetretene sind standardmässig nicht dabei —
+ * die Liste ist eine Arbeitsliste, und an einem Austritt ist nichts mehr zu
+ * tun. Dieselbe Einschränkung speist Chip-Zahlen, Zeilen und Fusszeile, damit
+ * die Zahlen zueinander passen.
+ */
+function inGrundgesamtheit(p: Patient, ausgetreteneZeigen: boolean): boolean {
+  return ausgetreteneZeigen || !istAusgetreten(p);
+}
+
 /* ── Kennzeichen: Rot schlägt Gelb. Jeder Grund ist zusätzlich in einer Spalte
    sichtbar (überfällig → Prozessstatus, nicht abrechenbar → Status,
    nicht zugewiesen → Pflegefachkraft) — im Kennzeichen steckt nichts allein. ── */
 type KennzeichenTyp = "rot" | "gelb" | null;
 
 function ableitenKennzeichen(p: Patient, bezugIso: string): { typ: KennzeichenTyp; grund: string } {
+  // Am Austritt ist nichts mehr offen. Ein Kennzeichen würde zu einer Handlung
+  // auffordern, die es nicht mehr gibt.
+  if (istAusgetreten(p)) return { typ: null, grund: "" };
   const ueberfaellig = istProzessUeberfaellig(p, bezugIso);
   const nichtAbrechenbar = istNichtAbrechenbar(p);
   if (ueberfaellig && nichtAbrechenbar) return { typ: "rot", grund: "Prozessschritt überfällig und nicht abrechenbar" };
@@ -89,8 +108,10 @@ interface FilterZustand {
   schweregrade: Set<Schweregrad>;
   pflegefachkraefte: Set<string>;
   suche: string;
+  /** Ausgetretene einblenden. Aus, solange niemand sie ausdrücklich sehen will. */
+  ausgetreteneZeigen: boolean;
 }
-const LEERER_FILTER: FilterZustand = { segment: "alle", statusChips: new Set(), schweregrade: new Set(), pflegefachkraefte: new Set(), suche: "" };
+const LEERER_FILTER: FilterZustand = { segment: "alle", statusChips: new Set(), schweregrade: new Set(), pflegefachkraefte: new Set(), suche: "", ausgetreteneZeigen: false };
 
 /* ── Anfangszustand aus der URL: Anna verlinkt die Liste vorgefiltert
    (/patienten?schweregrad=… und ?zuweisung=nicht_zugewiesen). Einmalig gelesen —
@@ -113,6 +134,7 @@ function imSegment(p: Patient, segment: Segment, meinName: string): boolean {
 /** Reine Ableitung: Patienten + Filterzustand + Bezugsdatum → gefilterte Patienten. */
 function filterPatienten(list: Patient[], f: FilterZustand, bezugIso: string, meinName: string): Patient[] {
   return list.filter(p => {
+    if (!inGrundgesamtheit(p, f.ausgetreteneZeigen)) return false;
     if (!imSegment(p, f.segment, meinName)) return false;
     for (const chip of STATUS_CHIPS) if (f.statusChips.has(chip.id) && !chip.praedikat(p, bezugIso)) return false;
     if (f.schweregrade.size > 0 && (!p.schweregrad || !f.schweregrade.has(p.schweregrad))) return false;
@@ -128,26 +150,12 @@ function filterPatienten(list: Patient[], f: FilterZustand, bezugIso: string, me
    Ende. Keine Vorsortierung (Standard unverändert). ── */
 type SortKey = "name" | "angehoeriger" | "status" | "schweregrad" | "pflegefachkraft" | "prozessstatus" | "reassessment" | "tasks" | "aktivitaet";
 const SCHWEREGRAD_RANK: Record<string, number> = { leicht: 0, mittel: 1, schwer: 2, kritisch: 3 };
-const PAT_STATUS_RANK: Record<string, number> = { aktiv: 0, nicht_abrechenbar: 1, gekuendigt: 2 };
+const PAT_STATUS_RANK: Record<string, number> = { aktiv: 0, nicht_abrechenbar: 1, gekuendigt: 2, ausgetreten: 3 };
 const SORT_LABEL: Record<SortKey, string> = {
   name: "Name", angehoeriger: "Angehörigem", status: "Status", schweregrad: "Schweregrad",
   pflegefachkraft: "Pflegefachkraft", prozessstatus: "Prozessstatus",
   reassessment: "Re-Assessment", tasks: "Tasks", aktivitaet: "Aktivität",
 };
-function datumKey(d: string): string { const [dd, mm, yy] = d.split("."); return `${yy ?? ""}${mm ?? ""}${dd ?? ""}`; }
-/**
- * Leere Werte stehen unabhängig von der Richtung am Ende.
- *
- * Ein Rangwert am oberen Ende der Skala würde beim Umkehren nach vorne wandern —
- * dann stünden die nicht erhobenen Werte zuoberst. Leere werden deshalb VOR dem
- * Richtungsfaktor abgehandelt und nie mit ihm multipliziert.
- */
-function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): number {
-  if (la && lb) return 0;
-  if (la) return 1;
-  if (lb) return -1;
-  return f * cmp();
-}
 function sortPatients(list: Patient[], key: SortKey, dir: "asc" | "desc"): Patient[] {
   const f = dir === "asc" ? 1 : -1;
   const angeh = (p: Patient) => p.angehoeriger.split(" (")[0];
@@ -181,6 +189,7 @@ const STATUS_LABEL: Record<Patient["status"], string> = {
   aktiv: "Aktiv",
   nicht_abrechenbar: "Nicht abrechenbar",
   gekuendigt: "Gekündigt",
+  ausgetreten: "Ausgetreten",
 };
 /** Leerer Schweregrad wird nirgends dargestellt — weder als Text noch als Pille. */
 const SCHWEREGRAD_LABEL: Record<Schweregrad, string> = { leicht: "Leicht", mittel: "Mittel", schwer: "Schwer", kritisch: "Kritisch" };
@@ -192,50 +201,6 @@ function kurzname(voll: string): string {
   return `${teile[0][0]}. ${teile.slice(1).join(" ")}`;
 }
 
-/* ── Mehrfachauswahl-Dropdown (lokal; kein neues Shared-Bauteil).
-   Verwaltet nur Auf/Zu + Aussenklick; die Auswahl liegt im Filterzustand. ── */
-function AuswahlDropdown({ label, optionen, ausgewaehlt, onToggle }: {
-  label: string;
-  optionen: { value: string; label: string }[];
-  ausgewaehlt: Set<string>;
-  onToggle: (value: string) => void;
-}) {
-  const [offen, setOffen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!offen) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOffen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [offen]);
-  const anzahl = ausgewaehlt.size;
-  return (
-    <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOffen(o => !o)} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
-        style={{ gap: 6, padding: "7px 12px", borderRadius: "var(--radius-pill)", background: anzahl > 0 ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: anzahl > 0 ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: anzahl > 0 ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-        {label}{anzahl > 0 && <span style={{ fontVariantNumeric: "tabular-nums" }}>· {anzahl}</span>}
-        <ChevronDown style={{ width: 14, height: 14, opacity: 0.7 }} />
-      </button>
-      {offen && (
-        <div className="absolute z-50" style={{ top: "calc(100% + 6px)", left: 0, minWidth: 180, padding: 6, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)" }}>
-          {optionen.map(opt => {
-            const aktiv = ausgewaehlt.has(opt.value);
-            return (
-              <button key={opt.value} type="button" onClick={() => onToggle(opt.value)} className="w-full inline-flex items-center cursor-pointer transition-colors"
-                style={{ gap: 8, padding: "7px 8px", borderRadius: 6, background: "transparent", border: "none", fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit", textAlign: "left" }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <span className="inline-flex items-center justify-center shrink-0" style={{ width: 16, height: 16, borderRadius: 4, border: aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: aktiv ? "var(--brand-primary)" : "transparent" }}>
-                  {aktiv && <Check style={{ width: 11, height: 11, color: "var(--text-on-dark)" }} />}
-                </span>
-                {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ══════════════════════════════════════════
    SEITE
@@ -257,6 +222,7 @@ export function PatientenPage() {
   const toggleChip = (id: StatusChipId) => setFilter(f => { const s = new Set(f.statusChips); if (s.has(id)) s.delete(id); else s.add(id); return { ...f, statusChips: s }; });
   const toggleSchweregrad = (g: Schweregrad) => setFilter(f => { const s = new Set(f.schweregrade); if (s.has(g)) s.delete(g); else s.add(g); return { ...f, schweregrade: s }; });
   const togglePflegefachkraft = (pf: string) => setFilter(f => { const s = new Set(f.pflegefachkraefte); if (s.has(pf)) s.delete(pf); else s.add(pf); return { ...f, pflegefachkraefte: s }; });
+  const toggleAusgetretene = () => setFilter(f => ({ ...f, ausgetreteneZeigen: !f.ausgetreteneZeigen }));
   const resetFilter = () => setFilter(f => ({ ...LEERER_FILTER, suche: f.suche })); // Suche behält ihr eigenes Löschen
 
   const [statusModal, setStatusModal] = useState<{ open: boolean; patient: Patient | null }>({ open: false, patient: null });
@@ -280,7 +246,9 @@ export function PatientenPage() {
   };
 
   /* ── Ableitungen ── */
-  const segmentBasis = useMemo(() => patients.filter(p => imSegment(p, filter.segment, meinName)), [patients, filter.segment, meinName]);
+  const grundgesamtheit = useMemo(() => patients.filter(p => inGrundgesamtheit(p, filter.ausgetreteneZeigen)), [patients, filter.ausgetreteneZeigen]);
+  const ausgetreteneAnzahl = useMemo(() => patients.filter(istAusgetreten).length, [patients]);
+  const segmentBasis = useMemo(() => grundgesamtheit.filter(p => imSegment(p, filter.segment, meinName)), [grundgesamtheit, filter.segment, meinName]);
   const chipCounts = useMemo(() => {
     const r = {} as Record<StatusChipId, number>;
     // Zahl = wie viele Patienten im aktiven Segment der Chip zusätzlich einschränken würde.
@@ -293,6 +261,7 @@ export function PatientenPage() {
   const filterTags = useMemo(() => {
     const t: { key: string; label: string; entfernen: () => void }[] = [];
     STATUS_CHIPS.forEach(chip => { if (filter.statusChips.has(chip.id)) t.push({ key: `s-${chip.id}`, label: chip.label, entfernen: () => toggleChip(chip.id) }); });
+    if (filter.ausgetreteneZeigen) t.push({ key: "ausgetretene", label: "Ausgetretene eingeblendet", entfernen: toggleAusgetretene });
     filter.schweregrade.forEach(g => t.push({ key: `g-${g}`, label: `Schweregrad: ${SCHWEREGRAD_LABEL[g]}`, entfernen: () => toggleSchweregrad(g) }));
     filter.pflegefachkraefte.forEach(pf => t.push({ key: `pf-${pf}`, label: `Pflegefachkraft: ${pf}`, entfernen: () => togglePflegefachkraft(pf) }));
     return t;
@@ -340,13 +309,16 @@ export function PatientenPage() {
       // Ausnahmen behalten die Pille. Der Klick auf den Status bleibt erhalten.
       render: p => {
         const still = p.status === "aktiv";
+        // Ein Austritt ist kein Alarm, sondern ein Abschluss — Pille in Ruhe,
+        // nicht in Warnfarbe.
+        const ruhig = istAusgetreten(p);
         return (
           <button type="button" onClick={e => { e.stopPropagation(); setStatusModal({ open: true, patient: p }); }}
             className="ui-fokusring inline-flex items-center cursor-pointer"
             style={still
               ? { padding: 0, background: "transparent", border: "none", fontSize: "0.8125rem", color: "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }
-              : { gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: "var(--status-danger-bg)", color: "var(--status-danger)", border: "none", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-            {!still && <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "var(--status-danger)" }} />}
+              : { gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: ruhig ? "var(--bg-subtle)" : "var(--status-danger-bg)", color: ruhig ? "var(--text-secondary)" : "var(--status-danger)", border: ruhig ? "var(--border-thin) solid var(--border-default)" : "none", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+            {!still && !ruhig && <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "var(--status-danger)" }} />}
             {STATUS_LABEL[p.status]}
           </button>
         );
@@ -428,32 +400,30 @@ export function PatientenPage() {
         {/* ═══ KOPF — teilt Maximalbreite und Kanten mit der Tabelle ═══ */}
         <div className="shrink-0 pat-list-pad" style={{ paddingTop: "var(--space-4)" }}>
           <div style={inhaltRahmen}>
-            {/* 1) Titel + Primäraktion auf einer Höhe */}
-            <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
-              <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Patienten</h1>
-              <button onClick={() => navigate("/onboarding")} className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
+            {keinePatienten ? (
+              <>
+                <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+                  <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Patienten</h1>
+                </div>
+                <p style={{ fontSize: "var(--text-body)", color: "var(--text-secondary)", maxWidth: 560 }}>
+                  Sobald ein Patient aufgenommen ist, erscheint er hier mit Status, Prozessschritt und zuständiger Pflegefachkraft.
+                </p>
+              </>
+            ) : (
+            <ListenGeruest
+              titel="Patienten"
+              aktion={
+                <button onClick={() => navigate("/onboarding")} className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
                 style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
                 <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Patient anlegen</span>
               </button>
-            </div>
-
-            {keinePatienten ? (
-              <p style={{ fontSize: "var(--text-body)", color: "var(--text-secondary)", maxWidth: 560 }}>
-                Sobald ein Patient aufgenommen ist, erscheint er hier mit Status, Prozessschritt und zuständiger Pflegefachkraft.
-              </p>
-            ) : (
-              <>
-                {/* 2) Steuerleiste: Suche, Zugehörigkeit, Auswahlfelder */}
-                <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
-                  <div className="flex items-center" style={{ flex: "1 1 220px", maxWidth: 300, gap: "var(--space-2)", padding: "7px 14px", borderRadius: 8, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
-                    <Search style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
-                    <input value={filter.suche} onChange={e => setSuche(e.target.value)} placeholder="Patienten suchen…" className="flex-1 bg-transparent outline-none" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", minWidth: 0 }} />
-                    {filter.suche && <button onClick={() => setSuche("")} className="cursor-pointer shrink-0" style={{ background: "transparent", border: "none" }}><X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} /></button>}
-                  </div>
-
-                  {/* Zugehörigkeit — Segmentumschalter, genau eine Auswahl, Vorgabe „Alle" */}
-                  <div className="inline-flex shrink-0" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
+              }
+              suche={filter.suche}
+              onSuche={setSuche}
+              suchePlatzhalter="Patienten suchen…"
+              segment={
+                <div className="inline-flex shrink-0" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
                     {([["meine", "Meine"], ["alle", "Alle"]] as [Segment, string][]).map(([seg, lbl]) => {
                       const aktiv = filter.segment === seg;
                       return (
@@ -464,48 +434,28 @@ export function PatientenPage() {
                       );
                     })}
                   </div>
-
-                  <AuswahlDropdown label="Schweregrad" optionen={SCHWEREGRAD_OPTIONEN} ausgewaehlt={filter.schweregrade as Set<string>} onToggle={v => toggleSchweregrad(v as Schweregrad)} />
-                  <AuswahlDropdown label="Pflegefachkraft" optionen={allePflegefachkraefte.map(pf => ({ value: pf, label: pf }))} ausgewaehlt={filter.pflegefachkraefte} onToggle={togglePflegefachkraft} />
-                </div>
-
-                {/* Status-Chips — kombinierbar (UND), Zahl aus denselben Daten wie die Tabelle */}
-                <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
-                  {STATUS_CHIPS.map(chip => {
-                    const aktiv = filter.statusChips.has(chip.id);
-                    const n = chipCounts[chip.id];
-                    return (
-                      <button key={chip.id} type="button" onClick={() => toggleChip(chip.id)} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
-                        style={{ gap: 7, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: aktiv ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: aktiv ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-                        <span className="inline-flex items-center justify-center shrink-0" style={{ width: 15, height: 15, borderRadius: 4, border: aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: aktiv ? "var(--brand-primary)" : "transparent" }}>
-                          {aktiv && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}
-                        </span>
-                        {chip.label}
-                        <span style={{ fontVariantNumeric: "tabular-nums", color: aktiv ? "var(--brand-primary)" : "var(--text-tertiary)" }}>{n}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* 3) Aktivzeile — immer sichtbar */}
-                <div className="flex items-center flex-wrap" style={{ gap: 6, minHeight: 24, marginBottom: "var(--space-2)" }}>
-                  {filterTags.length === 0 ? (
-                    <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-                      {filter.segment === "meine" ? "Meine Patienten" : "Alle Patienten"} · sortiert nach {SORT_LABEL[sort.key]}
-                    </span>
-                  ) : (
-                    <>
-                      {filterTags.map(t => (
-                        <button key={t.key} type="button" onClick={t.entfernen} className="ui-fokusring inline-flex items-center cursor-pointer"
-                          style={{ gap: 4, padding: "3px 10px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary-light)", color: "var(--brand-primary)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", border: "none", fontFamily: "inherit" }}>
-                          {t.label} <X style={{ width: 10, height: 10 }} />
-                        </button>
-                      ))}
-                      <button type="button" onClick={resetFilter} className="cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", padding: "3px 6px", fontFamily: "inherit" }}>Filter zurücksetzen</button>
-                    </>
-                  )}
-                </div>
-              </>
+              }
+              auswahlfelder={<>
+                                <AuswahlDropdown label="Schweregrad" optionen={SCHWEREGRAD_OPTIONEN} ausgewaehlt={filter.schweregrade as Set<string>} onToggle={v => toggleSchweregrad(v as Schweregrad)} />
+                <AuswahlDropdown label="Pflegefachkraft" optionen={allePflegefachkraefte.map(pf => ({ value: pf, label: pf }))} ausgewaehlt={filter.pflegefachkraefte} onToggle={togglePflegefachkraft} />
+                {/* Nur anbieten, wenn es etwas einzublenden gibt. */}
+                {ausgetreteneAnzahl > 0 && (
+                  <button type="button" onClick={toggleAusgetretene} aria-pressed={filter.ausgetreteneZeigen}
+                    className="ui-fokusring cursor-pointer transition-colors"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: "var(--radius-pill)", border: "var(--border-thin) solid var(--border-default)", background: filter.ausgetreteneZeigen ? "var(--bg-subtle)" : "transparent", fontSize: "var(--text-small)", fontWeight: filter.ausgetreteneZeigen ? "var(--weight-medium)" : "var(--weight-regular)", color: "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                    {filter.ausgetreteneZeigen ? "Ausgetretene ausblenden" : "Ausgetretene einblenden"}
+                    <span style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-tertiary)" }}>{ausgetreteneAnzahl}</span>
+                  </button>
+                )}
+              </>}
+              chips={STATUS_CHIPS.map(chip => ({
+                id: chip.id, label: chip.label, anzahl: chipCounts[chip.id],
+                aktiv: filter.statusChips.has(chip.id), onToggle: () => toggleChip(chip.id),
+              }))}
+              sichtText={`${filter.segment === "meine" ? "Meine Patienten" : "Alle Patienten"} · sortiert nach ${SORT_LABEL[sort.key]}`}
+              filterMarken={filterTags}
+              onFilterZuruecksetzen={resetFilter}
+            >{null}</ListenGeruest>
             )}
           </div>
         </div>
@@ -537,7 +487,10 @@ export function PatientenPage() {
                 sort={sort}
                 onSort={k => toggleSort(k as SortKey)}
                 karteTitel={karteTitel}
-                fusszeile={<><span>{filtered.length} von {patients.length} {patients.length === 1 ? "Patient" : "Patienten"}</span><span>Stand: {isoZuAnzeige(BEZUGSDATUM_ISO)}</span></>}
+                fusszeile={<><span>
+                  {filtered.length} von {grundgesamtheit.length} {grundgesamtheit.length === 1 ? "Patient" : "Patienten"}
+                  {!filter.ausgetreteneZeigen && ausgetreteneAnzahl > 0 && ` · ${ausgetreteneAnzahl} ausgetreten, nicht angezeigt`}
+                </span><span>Stand: {isoZuAnzeige(BEZUGSDATUM_ISO)}</span></>}
                 leerText="Keine Patienten mit diesen Filtern."
               />
             )}

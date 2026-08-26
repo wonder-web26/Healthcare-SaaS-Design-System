@@ -161,7 +161,7 @@ function filterPatienten(list: EnrichedPatient[], f: FilterZustand): EnrichedPat
 type SortKey = "kennzeichen" | "patient" | "status" | "kanton" | "schweregrad" | "sprache" | "zugewiesen";
 const SORT_LABEL: Record<SortKey, string> = { kennzeichen: "Kennzeichen", patient: "Patient", status: "Status", kanton: "Kanton", schweregrad: "Schweregrad", sprache: "Sprache", zugewiesen: "Zuweisung" };
 const KENN_RANG: Record<string, number> = { rot: 0, gelb: 1 };
-const STATUS_RANG: Record<PatientStatus, number> = { aktiv: 0, nicht_abrechenbar: 1, gekuendigt: 2, im_onboarding: 3 };
+const STATUS_RANG: Record<PatientStatus, number> = { aktiv: 0, nicht_abrechenbar: 1, gekuendigt: 2, ausgetreten: 3, im_onboarding: 4 };
 const SCHWERE_RANG: Record<Schweregrad, number> = { leicht: 0, mittel: 1, schwer: 2, kritisch: 3 };
 function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): number {
   if (la && lb) return 0;

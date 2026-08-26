@@ -5,6 +5,8 @@
 import { useState } from "react";
 import { User, Users, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, Languages, ChevronDown, ChevronUp, CheckCircle2, FileText } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
+import { KontaktWahl } from "../ui/KontaktWahl";
+import { BEZIEHUNGSART, VERTRETUNGSART } from "../../../lib/beziehungen/beziehungen";
 import { FELD_MAX, katalogFeldBreite } from "./feldbreiten";
 import { TextInput } from "./TextInput";
 import { TextareaInput } from "./TextareaInput";
@@ -196,12 +198,20 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
       </div>
 
       <SectionHeader icon={Phone} label="Notfallkontakt" />
+      {/* Der Notfallkontakt ist eine dritte Person: gesucht oder angelegt,
+          nicht abgetippt. Telefon und Zugehörigkeit stehen am Kontakt; hier
+          bleibt nur, was das Verhältnis zu diesem Patienten beschreibt. */}
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Name" required value={data.notfallkontaktName} onChange={v => onUpdate("notfallkontaktName", v)} onBlur={() => onBlur("notfallkontaktName")} placeholder="Kontaktperson" error={t("notfallkontaktName") && !filled(data.notfallkontaktName) ? "Pflichtfeld" : undefined} /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" required value={data.notfallkontaktTelefon} onChange={v => onUpdate("notfallkontaktTelefon", v)} onBlur={() => onBlur("notfallkontaktTelefon")} placeholder="+41 79 ..." error={t("notfallkontaktTelefon") && !filled(data.notfallkontaktTelefon) ? "Pflichtfeld" : undefined} /></div>
-      </div>
-      <div style={{ marginTop: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Beziehung" value={data.notfallkontaktBeziehung} onChange={v => onUpdate("notfallkontaktBeziehung", v)} placeholder="z.B. Ehepartner, Kind, Nachbar" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}>
+          <KontaktWahl label="Kontakt" wert={data.notfallkontaktId}
+            onWahl={v => onUpdate("notfallkontaktId", v)} zugehoerigkeitLabel="Zugehörigkeit" />
+        </div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}>
+          <FormSelect label="Verwandtschaft" value={data.notfallkontaktVerwandtschaft || null}
+            onChange={v => onUpdate("notfallkontaktVerwandtschaft", v || "")}
+            options={BEZIEHUNGSART.map(a => ({ value: a.code, label: a.label }))}
+            placeholder="nicht erfasst" />
+        </div>
       </div>
     </div>
   );
@@ -220,9 +230,43 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
       </div>
       {data.sozialamtKontakt === "ja" && (
         <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
-          <TextInput label="Kontakt Sozialamt" required value={data.sozialamtKontaktDetail} onChange={v => onUpdate("sozialamtKontaktDetail", v)} onBlur={() => onBlur("sozialamtKontaktDetail")} placeholder="Name und Kontaktangaben" />
+          {/* Ersetzt den früheren Freitext „Name und Kontaktangaben": beim
+              Onboarding ist der Sozialdienst oft schon bekannt — er hat
+              angemeldet. Wer ihn findet, tippt die Nummer nicht ab. */}
+          <div style={{ maxWidth: FELD_MAX.mittel }}>
+            <KontaktWahl label="Kontaktperson Sozialdienst" wert={data.sozialamtKontaktId}
+              onWahl={v => onUpdate("sozialamtKontaktId", v)} zugehoerigkeitLabel="Stelle" />
+          </div>
         </div>
       )}
+      {/* Gesetzliche Vertretung — auf demselben Reiter wie der Sozialdienst:
+          beides sind formale Zuständigkeiten Dritter, nicht persönliches
+          Umfeld. Derselbe Aufbau: Schalter, dann Kontaktwahl. */}
+      <div style={{ marginTop: "var(--space-4)" }} className="grid grid-cols-1 md:grid-cols-2">
+        <SegmentedControl label="Gesetzliche Vertretung besteht?" required
+          value={data.gesetzlicheVertretung} onChange={v => onUpdate("gesetzlicheVertretung", v)} options={JA_NEIN} />
+      </div>
+      {data.gesetzlicheVertretung === "ja" && (
+        <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
+          <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+            <div style={{ maxWidth: FELD_MAX.mittel }}>
+              <KontaktWahl label="Vertretende Person" wert={data.vertretungKontaktId}
+                onWahl={v => onUpdate("vertretungKontaktId", v)} zugehoerigkeitLabel="Behörde" />
+            </div>
+            <div style={{ maxWidth: FELD_MAX.mittel }}>
+              <FormSelect label="Art der Vertretung" required value={data.vertretungsart || null}
+                onChange={v => onUpdate("vertretungsart", v || "")}
+                options={VERTRETUNGSART.map(v => ({ value: v.code, label: v.label }))}
+                placeholder="Bitte wählen"
+                /* Dieser Reiter führt keinen Berührt-Zustand; der Fehler
+                   erscheint, sobald der Schalter auf Ja steht und die Art
+                   fehlt — wie bei den übrigen Feldern dieses Reiters. */
+                error={!filled(data.vertretungsart) ? "Pflichtfeld" : undefined} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {data.ivBezug === "ja" && (
         <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
           <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="IV-Bezug" required value={data.ivBezugProzent} onChange={v => onUpdate("ivBezugProzent", v)} suffix="%" placeholder="z.B. 100" /></div>

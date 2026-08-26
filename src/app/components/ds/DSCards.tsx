@@ -163,7 +163,7 @@ export function DSCards() {
             </div>
             <div className="space-y-3">
               {[
-                { time: "14:30", text: "Patient Müller, Anna — Leistung erfasst", color: "bg-success" },
+                { time: "14:30", text: "Patient Muster, Anna — Leistung erfasst", color: "bg-success" },
                 { time: "14:15", text: "Ticket #234 — Status geändert", color: "bg-warning" },
                 { time: "13:50", text: "Zuteilung Oerlikon aktualisiert", color: "bg-primary" },
                 { time: "13:20", text: "Patient Fischer — Kündigung eingegangen", color: "bg-error" },

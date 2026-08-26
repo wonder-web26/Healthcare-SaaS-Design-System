@@ -8,7 +8,7 @@ const typeScale = [
   { tag: "H5", size: "14px / 0.875rem", weight: 600, lineHeight: "1.5", tracking: "0", sample: "Letzte Aktivitäten" },
   { tag: "Body", size: "14px / 0.875rem", weight: 400, lineHeight: "1.6", tracking: "0", sample: "Die Patientin zeigt stabile Vitalzeichen und gute Fortschritte in der Rehabilitation." },
   { tag: "Small", size: "12px / 0.75rem", weight: 400, lineHeight: "1.5", tracking: "0", sample: "Zuletzt aktualisiert: 26.02.2026, 14:30" },
-  { tag: "Table", size: "13px / 0.8125rem", weight: 400, lineHeight: "1.5", tracking: "0", sample: "P-2026-0041 · Müller, Anna · Kardiologie" },
+  { tag: "Table", size: "13px / 0.8125rem", weight: 400, lineHeight: "1.5", tracking: "0", sample: "P-2026-0041 · Steiner, Hans-Rudolf · Kardiologie" },
 ];
 
 const sizeMap: Record<string, string> = {

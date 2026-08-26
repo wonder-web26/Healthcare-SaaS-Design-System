@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { AngehoerigerFormData } from "./StepAngehoeriger";
+import { GEGENWART_ISO } from "../../lib/gegenwart";
 
 interface SpezialbewilligungDialogProps {
   data: AngehoerigerFormData;
@@ -19,7 +20,7 @@ interface SpezialbewilligungDialogProps {
   onClose: () => void;
 }
 
-const TODAY_ISO = "2026-03-03";
+const TODAY_ISO = GEGENWART_ISO;
 
 function formatDateDisplay(iso: string): string {
   const [y, m, d] = iso.split("-");

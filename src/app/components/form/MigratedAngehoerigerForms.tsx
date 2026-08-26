@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Info, Download, AlertTriangle } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
+import { GEGENWART_ISO } from "../../../lib/gegenwart";
 import { TextInput } from "./TextInput";
 import { DateField } from "./DateField";
 import { NumberInput } from "./NumberInput";
@@ -376,7 +377,7 @@ function SEMMeldeBanner({ data }: { data: AngehoerigerFormData }) {
     setLoading(true);
     try {
       const blob = await erstelleSEMFormular(semDaten);
-      const datumStr = new Date().toISOString().slice(0, 10);
+      const datumStr = GEGENWART_ISO;
       downloadBlob(blob, `SEM-Meldeformular_${data.name || "Angehoeriger"}_${datumStr}.pdf`);
     } catch (e) {
       console.error("SEM-Formular konnte nicht erstellt werden:", e);

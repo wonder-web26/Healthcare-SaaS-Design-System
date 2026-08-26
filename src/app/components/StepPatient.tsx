@@ -53,7 +53,11 @@ import { TabAnmeldungV2, TabPersonalienV2, TabSteuerV2, TabWohnenUmfeldV2, TabAn
 import { FORMULAR_MAX } from "./form/feldbreiten";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
-import { MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN, MOCK_ARZT_DIAGNOSEN, ANNA_DIAGNOSEN, ANNA_MASSNAHMEN, ANNA_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import { jetztAnzeige } from "../../lib/datum";
+import { MOCK_PFLEGEPLANUNGEN, MOCK_ARZT_DIAGNOSEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import {
+  useKlvVerordnungen, positionHinzufuegen, positionAendern, positionEntfernen, positionenSetzen,
+} from "../../lib/klv/store";
 import { useRecording } from "../recording/RecordingContext";
 import { getPersonByOnboardingId, getOrCreatePersonForOnboarding, createAssessment } from "../../lib/interrai/store";
 import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
@@ -64,6 +68,8 @@ import { InlineSelect } from "./ui/InlineSelect";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
+import { getKontakt } from "../../lib/kontakte/store";
+import { GEGENWART_ISO } from "../../lib/gegenwart";
 import { sdaVerlangtInterrai } from "../../lib/stammdaten/sda-einschaetzung-situation";
 import { INTERRAI_SCHRITTE } from "../../lib/rhythmus/vorlage";
 import { SectionAccordion, SektionBadge } from "./ui/SectionAccordion";
@@ -102,6 +108,13 @@ export type PatientScanFile = ScanFile;
 export interface SdaProtokollEintrag {
   benutzer: string;
   zeitpunkt: string;
+}
+
+/** Trägt der gewählte Kontakt eine Nummer? Ersetzt die frühere Formatprüfung
+    auf dem Freitextfeld — die Nummer steht jetzt am Kontakt. */
+function istKontaktMitTelefon(kennung: string): boolean {
+  if (!kennung) return false;
+  return (getKontakt(kennung)?.telefon ?? "").trim() !== "";
 }
 
 export interface PatientFormData {
@@ -152,9 +165,12 @@ export interface PatientFormData {
   adresseStrasse: string;
   adressePlz: string;
   adresseOrt: string;
-  notfallkontaktName: string;
-  notfallkontaktTelefon: string;
-  notfallkontaktBeziehung: string;
+  /* Der Notfallkontakt ist eine dritte Person und steht im Kontaktbestand.
+     Erfasst wird die Kennung, nie der Name — ändert sich der Name am
+     Kontakt, ändert er sich überall mit. Die Verwandtschaft bleibt hier:
+     sie beschreibt das Verhältnis zu diesem Patienten, nicht die Person. */
+  notfallkontaktId: string;
+  notfallkontaktVerwandtschaft: string;
   spezialAerzte: string;
   /** SP-03: umbenannt von "versicherungsNr" zu "kartennummer" */
   kartennummer: string;
@@ -173,7 +189,16 @@ export interface PatientFormData {
 
   /* Tab 2 – Steuer & Sozialversicherungen */
   sozialamtKontakt: string;
-  sozialamtKontaktDetail: string;
+  /** Kennung des Kontakts beim Sozialdienst; ersetzt den früheren Freitext. */
+  sozialamtKontaktId: string;
+  /* Gesetzliche Vertretung — im SDA-Standard V1.3 nicht vorgesehen, aber
+     fachlich die schwerste der offenen Fragen: wer einwilligt, wenn die
+     Person es nicht mehr kann. Bei Demenz und Hochaltrigkeit keine
+     Nebenfrage. */
+  gesetzlicheVertretung: string;
+  vertretungKontaktId: string;
+  /** Code aus VERTRETUNGSART; die Liste besteht seit dem Beziehungslauf. */
+  vertretungsart: string;
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
@@ -287,9 +312,8 @@ export const emptyPatientForm: PatientFormData = {
   adresseStrasse: "",
   adressePlz: "",
   adresseOrt: "",
-  notfallkontaktName: "",
-  notfallkontaktTelefon: "",
-  notfallkontaktBeziehung: "",
+  notfallkontaktId: "",
+  notfallkontaktVerwandtschaft: "",
   spezialAerzte: "",
   kartennummer: "",
   bagNr: "",
@@ -300,7 +324,10 @@ export const emptyPatientForm: PatientFormData = {
   uebersetzerNotwendig: "",
 
   sozialamtKontakt: "nein",
-  sozialamtKontaktDetail: "",
+  sozialamtKontaktId: "",
+  gesetzlicheVertretung: "",
+  vertretungKontaktId: "",
+  vertretungsart: "",
   ivBezug: "nein",
   ivBezugProzent: "",
   hilflosenentschaedigung: "nein",
@@ -385,13 +412,6 @@ function formatAHV(v: string): string {
   return parts.join(".");
 }
 
-/** Zeitpunkt für das Protokoll — TT.MM.JJJJ, HH:MM. */
-function jetztAnzeige(): string {
-  const d = new Date();
-  const zz = (n: number) => String(n).padStart(2, "0");
-  return `${zz(d.getDate())}.${zz(d.getMonth() + 1)}.${d.getFullYear()}, ${zz(d.getHours())}:${zz(d.getMinutes())}`;
-}
-
 /* ── Tab completion logic ──────────────── */
 function getTabCompletion(tabKey: string, data: PatientFormData): { done: number; total: number } {
   switch (tabKey) {
@@ -422,8 +442,10 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
         filled(data.adresseStrasse),
         filled(data.adressePlz),
         filled(data.adresseOrt),
-        filled(data.notfallkontaktName),
-        isValidPhone(data.notfallkontaktTelefon),
+        /* Derselbe Pflichtstatus wie zuvor, nur an der neuen Speicherform:
+           ein gewählter Kontakt und eine Nummer daran. */
+        filled(data.notfallkontaktId),
+        istKontaktMitTelefon(data.notfallkontaktId),
       ];
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
@@ -431,11 +453,18 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
       const checks = [
         filled(data.sozialamtKontakt),
         filled(data.ivBezug),
+        filled(data.gesetzlicheVertretung),
         filled(data.hilflosenentschaedigung),
         filled(data.konfession),
       ];
-      if (data.sozialamtKontakt === "ja") checks.push(filled(data.sozialamtKontaktDetail));
+      if (data.sozialamtKontakt === "ja") checks.push(filled(data.sozialamtKontaktId));
       if (data.ivBezug === "ja") checks.push(filled(data.ivBezugProzent));
+      /* Bei „ja" beides: eine Vertretung ohne Person und ohne Art wäre eine
+         Behauptung ohne Inhalt. */
+      if (data.gesetzlicheVertretung === "ja") {
+        checks.push(filled(data.vertretungKontaktId));
+        checks.push(filled(data.vertretungsart));
+      }
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
     case "wohnen": {
@@ -754,7 +783,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
                 // Patient-Workflow: Tickets ab Aufnahmedatum (= heute im Onboarding-Kontext)
                 // Triage nach BB16: verlangt der Wert keine Abklärung, fallen die
                 // beiden interRAI-Schritte weg — kein offener Schritt, keine Aufgabe.
-                generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, new Date().toISOString().slice(0, 10), undefined,
+                generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, GEGENWART_ISO, undefined,
                   sdaVerlangtInterrai(data.einschaetzungSituation) ? undefined : INTERRAI_SCHRITTE);
                 return <RhythmusTimeline subjektTyp="patient" subjektId={onboardingId} />;
               })()
@@ -1780,7 +1809,8 @@ function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {
 
 function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   const navigate = useNavigate();
-  const klv = MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === onboardingId);
+  /* Der Bestand ist die Quelle — kein lokaler Abzug mehr. */
+  const klv = useKlvVerordnungen().find(k => k.onboardingId === onboardingId);
   const pp = MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === onboardingId);
   const verfuegbareDiagnosen = pp?.pflegediagnosen || [];
   // Krankenkasse: from patient (if konvertiert) or mock default
@@ -1792,8 +1822,11 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   const ppMassnahmen = pp?.massnahmen || [];
   const ppZiele = pp?.ziele || [];
 
-  // Local in-memory editor state
-  const [leistungen, setLeistungen] = useState<KLVLeistung[]>([]);
+  /* Positionen kommen aus dem Bestand; nur die Bedienzustände bleiben lokal. */
+  const leistungen = klv?.leistungspositionen ?? [];
+  const setLeistungen = (f: (prev: KLVLeistung[]) => KLVLeistung[]) => {
+    if (klv) positionenSetzen(klv.id, f(leistungen));
+  };
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [katalogOpen, setKatalogOpen] = useState(false);
   const [katalogSuche, setKatalogSuche] = useState("");
@@ -1803,7 +1836,6 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   // Initialize leistungen from KLV mock data
   useEffect(() => {
     if (klv) {
-      setLeistungen(klv.leistungspositionen.map(lp => ({ ...lp })));
       // Auto-expand niedrig confidence or unvalidated items
       const autoExpand = new Set<string>();
       for (const lp of klv.leistungspositionen) {
@@ -1829,7 +1861,7 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   };
 
   const validateLeistung = (id: string) => {
-    setLeistungen(prev => prev.map(l => l.id === id ? { ...l, validiert: true } : l));
+    if (klv) positionAendern(klv.id, id, { validiert: true });
     setExpandedIds(prev => {
       const next = new Set(prev);
       next.delete(id);
@@ -1838,11 +1870,11 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   };
 
   const updateLeistung = (id: string, patch: Partial<KLVLeistung>) => {
-    setLeistungen(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+    if (klv) positionAendern(klv.id, id, patch);
   };
 
   const removeLeistung = (id: string) => {
-    setLeistungen(prev => prev.filter(l => l.id !== id));
+    if (klv) positionEntfernen(klv.id, id);
     setExpandedIds(prev => {
       const next = new Set(prev);
       next.delete(id);
@@ -1905,7 +1937,7 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
       diagnoseIds: [],
       wzwBegruendung: null,
     };
-    setLeistungen(prev => [...prev, newLeistung]);
+    if (klv) positionHinzufuegen(klv.id, newLeistung);
     setExpandedIds(prev => new Set(prev).add(newId));
     setKatalogOpen(false);
     setKatalogSuche("");

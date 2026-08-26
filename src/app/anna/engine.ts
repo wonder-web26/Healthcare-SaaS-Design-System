@@ -1,6 +1,7 @@
 import { getPatienten, tageBisReAssessment } from "../../lib/patienten/store";
 import { getAngehoerige, srkZertifikatFehlt } from "../../lib/angehoerige/store";
 import { unifiedEntries, entryTitle, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
+import { GEGENWART_ISO, WOCHENENDE_ISO } from "../../lib/gegenwart";
 
 export interface AnnaMessage {
   role: "anna" | "user";
@@ -23,7 +24,7 @@ interface MatchRule {
   handler: (match: RegExpMatchArray, query: string, context: string) => AnnaMessage;
 }
 
-const TODAY = "2026-03-03";
+const TODAY = GEGENWART_ISO;
 const MOCK_HOUR = 8;
 
 /** Untertitel aus Teilen — leere Teile ("nicht erhoben") entfallen samt Trenner. */
@@ -193,7 +194,7 @@ const rules: MatchRule[] = [
   {
     patterns: [/pendenz.*(?:diese|dieser)\s*woche|(?:diese|dieser)\s*woche.*(?:fällig|pendenz)/i],
     handler: () => {
-      const endOfWeek = "2026-03-07";
+      const endOfWeek = WOCHENENDE_ISO;
       const thisWeek = unifiedEntries.filter(e => e.faellig && e.faellig >= TODAY && e.faellig <= endOfWeek && e.status !== "erledigt");
       const cards = thisWeek.map(e => ({ id: e.id, title: entryTitle(e), subtitle: `${e.typLabel} · Fällig ${e.faellig}`, path: `/servicedesk?id=${e.id}` }));
       return { role: "anna", text: `${formatCount(thisWeek.length, "Pendenz ist", "Pendenzen sind")} diese Woche fällig:`, cards: cards.slice(0, 5), chips: ["Davon überfällig", "Zur Pendenzenliste"] };
@@ -326,7 +327,7 @@ const rules: MatchRule[] = [
     handler: () => {
       const openTotal = unifiedEntries.filter(e => e.status !== "erledigt").length;
       const overdue = unifiedEntries.filter(e => e.faellig && e.faellig < TODAY && e.status !== "erledigt").length;
-      const endOfWeek = "2026-03-07";
+      const endOfWeek = WOCHENENDE_ISO;
       const thisWeek = unifiedEntries.filter(e => e.faellig && e.faellig >= TODAY && e.faellig <= endOfWeek && e.status !== "erledigt").length;
       return {
         role: "anna",

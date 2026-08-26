@@ -38,7 +38,10 @@ export function AppShell() {
     if (location.pathname.startsWith("/interrai")) return "interrai";
     if (location.pathname.startsWith("/patienten")) return "patienten";
     if (location.pathname.startsWith("/angehoerige")) return "angehoerige";
+    if (location.pathname.startsWith("/kontakte")) return "kontakte";
     if (location.pathname.startsWith("/onboarding")) return "onboarding";
+    if (location.pathname.startsWith("/klv")) return "klv";
+    if (location.pathname.startsWith("/abschluss")) return "abschluss";
     if (location.pathname.startsWith("/zuteilung")) return "zuteilung";
     if (location.pathname.startsWith("/servicedesk")) return "servicedesk";
     return "dashboard";
@@ -52,6 +55,9 @@ export function AppShell() {
       onboarding: "/onboarding",
       patienten: "/patienten",
       angehoerige: "/angehoerige",
+      kontakte: "/kontakte",
+      klv: "/klv",
+      abschluss: "/abschluss",
       zuteilung: "/zuteilung",
       servicedesk: "/servicedesk",
     };

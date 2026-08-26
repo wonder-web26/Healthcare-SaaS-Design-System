@@ -44,7 +44,7 @@ import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
 import { fallById, patientRef, angehoerigerRef, patientAnzeigeName, angehoerigerAnzeigeName } from "../../lib/onboarding/faelle";
 import { NotizSpur } from "./notizen/NotizSpur";
 import { type NotizReferenz } from "../../lib/notizen/notizen";
-import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient, seedDemoRhythmus } from "./demoSteinerFall";
+import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient } from "./demoSteinerFall";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { qualifikationAusFunktion } from "../../lib/stammdaten/funktionen";
@@ -53,7 +53,9 @@ import { naechsteFallKennung } from "../../lib/onboarding/faelle";
 import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
 import { erfassePatientImOnboarding, patientFuerOnboarding } from "../../lib/patienten/store";
 import { erfasseAngehoerigenImOnboarding, type AngehoerigenEingabe } from "../../lib/angehoerige/store";
-import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, MOCK_KLV_VERORDNUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
+import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
+import { getKlvVerordnungen, getKlvFuerOnboarding } from "../../lib/klv/store";
+import { lpbStatusLabel } from "../../lib/stammdaten/lpb-status";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
 import { formatFaelligkeit, isoZuDate } from "../../lib/datum";
 import { toast } from "sonner";
@@ -273,7 +275,6 @@ export function OnboardingPage() {
 
   // Demo-Fall: Rhythmus-/Workflow-Aufgaben vorbelegen (idempotent), ohne Umweg
   // über den Patienten-Schritt.
-  useEffect(() => { if (caseId === DEMO_FALL_ID) seedDemoRhythmus(); }, [caseId]);
   const [step2Valid, setStep2Valid] = useState(false);
 
   /* ── Ein Bestand, ein Objekt ────────────────────────────────────────────────
@@ -1132,8 +1133,10 @@ export function OnboardingPage() {
               // Fehlen nicht als Lücke gemeldet.
               if (sdaVerlangtInterrai(patientData.einschaetzungSituation) && (!ba || ba.status !== "abgeschlossen")) hints.push("Das InterRAI ist noch nicht abgeschlossen. Es wird mitkonvertiert und kann später vervollständigt werden.");
               if (!MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === wirksameFallKennung)) hints.push("Es wurde noch keine Pflegeplanung erstellt.");
-              const klv = MOCK_KLV_VERORDNUNGEN.find(k => k.onboardingId === wirksameFallKennung);
-              if (klv && klv.status !== "kostengutsprache-erhalten") hints.push(`Die KLV ist im Status "${klv.status}". Die Pipeline läuft am aktiven Patient weiter.`);
+              const klv = getKlvFuerOnboarding(wirksameFallKennung);
+              // Hinweistext, keine Bedingung: der Abschluss hängt nicht am KLV-Zustand.
+              // Gezeigt wird die Beschriftung, nie der gespeicherte Code.
+              if (klv && klv.status !== "entscheid_erhalten") hints.push(`Die KLV ist im Zustand „${lpbStatusLabel(klv.status)}“. Die Pipeline läuft am aktiven Patient weiter.`);
               if (hints.length === 0) return null;
               return hints.map((h, i) => (
                 <div key={i} className="flex items-start" style={{ gap: 6, padding: "6px 10px", background: "var(--status-warning-bg)", borderRadius: "var(--radius-card)", marginBottom: 6, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
@@ -1160,14 +1163,20 @@ export function OnboardingPage() {
                       setAbschlussAuditLog(auditNote);
                       console.info("[Audit] Abschluss mit Override:", auditNote);
                     }
-                    const ergebnis = konvertiereOnboarding(wirksameFallKennung, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: MOCK_KLV_VERORDNUNGEN, workflows: [] }, {
+                    const ergebnis = konvertiereOnboarding(wirksameFallKennung, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: getKlvVerordnungen(), workflows: [] }, {
                       name: `${angehoerigerData.vorname || ""} ${angehoerigerData.name || ""}`.trim(),
                       quellensteuerpflichtig: angehoerigerData.quellensteuer === "ja",
                       aufenthaltsstatus: angehoerigerData.aufenthaltsstatus,
                       bvgAnbindungGewuenscht: angehoerigerData.bvgAnbindungGewuenscht === "ja",
                       qualifikation: qualifikationAusFunktion(angehoerigerData.funktion),
                       eintrittsdatum: angehoerigerData.eintrittsdatum,
-                    }, ausloeser);
+                    }, ausloeser, {
+                      notfallkontaktId: patientData.notfallkontaktId,
+                      notfallkontaktVerwandtschaft: patientData.notfallkontaktVerwandtschaft,
+                      sozialdienstId: patientData.sozialamtKontakt === "ja" ? patientData.sozialamtKontaktId : "",
+                      vertretungKontaktId: patientData.gesetzlicheVertretung === "ja" ? patientData.vertretungKontaktId : "",
+                      vertretungsart: patientData.vertretungsart,
+                    });
 
                     // Qualifizierte Erfolgsmeldung
                     const a = ergebnis.konvertierteArtefakte;

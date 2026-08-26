@@ -183,7 +183,11 @@ function toUnifiedRhythmus(t: RhythmusTicket): UnifiedEntry {
 
 /** Dynamisch: enthält Rhythmus-Tickets die zur Laufzeit generiert werden */
 export function getUnifiedEntries(): UnifiedEntry[] {
-  const rhythmusTickets = getAlleTickets().filter(t => t.status !== "erledigt");
+  /* Erledigte tragen niemand mehr auf; entfallene ebenso wenig — ihr Subjekt
+     ist weggefallen. Ein entfallenes Ticket hier als „offen" zu führen, wäre
+     eine Pendenz, die niemand erfüllen kann. */
+  const rhythmusTickets = getAlleTickets()
+    .filter(t => t.status !== "erledigt" && t.status !== "entfallen");
   return [
     ...workflowTasks.map(toUnifiedWorkflow),
     ...serviceTickets.map(toUnifiedTicket),
