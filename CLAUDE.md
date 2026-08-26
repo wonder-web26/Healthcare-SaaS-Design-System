@@ -313,3 +313,12 @@ Am Ende einer Migration wird kurz berichtet: welche Komponente jetzt von wem imp
 ### Hintergrund
 
 Diese Konvention existiert, weil Muster-Migrationen wiederholt nur teilweise ausgeführt wurden: ein Tab wurde migriert, ein zweiter behielt seinen Eigenbau, eine alte Komponente blieb verwaist liegen. Das Ergebnis sah korrekt aus, war aber doppelt gepflegt – und brach beim nächsten Änderungswunsch. Die verbindliche Referenz für die Muster selbst ist die styleguide.md, Sektion 8.10 bis 8.15.
+
+## Shell-Befehle
+
+Führe Befehle einzeln aus, nicht verkettet. Keine Ketten mit `&&` oder `;`,
+keine mehrzeiligen `python3 -c`-Blöcke, wenn `grep` oder `rg` dasselbe
+leisten.
+
+Kurze, einzelne Befehle sind vom Erlaubnissystem abgedeckt; Ketten sind es
+nicht und erzeugen bei jedem Lauf Rückfragen.
