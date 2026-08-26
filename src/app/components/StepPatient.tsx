@@ -143,6 +143,7 @@ export interface PatientFormData {
   sdaAbgeschlossenAm: string;
 
   /* Tab 1 – Personalien */
+  anrede: string;
   name: string;
   vorname: string;
   geburtsdatum: string;
@@ -294,6 +295,7 @@ export const emptyPatientForm: PatientFormData = {
   sdaAbgeschlossenVon: "",
   sdaAbgeschlossenAm: "",
 
+  anrede: "",
   name: "",
   vorname: "",
   geburtsdatum: "",

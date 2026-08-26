@@ -4,7 +4,7 @@
  * Form logic (state, validation, conditional fields) unchanged.
  */
 import { useState } from "react";
-import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Info, Download, AlertTriangle } from "lucide-react";
+import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Info, Download, AlertTriangle, Check } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { GEGENWART_ISO } from "../../../lib/gegenwart";
 import { TextInput } from "./TextInput";
@@ -16,6 +16,9 @@ import { SegmentedControl } from "./SegmentedControl";
 import { Combobox as FormSelect } from "./Combobox";
 import { Combobox } from "./Combobox";
 import type { AngehoerigerFormData } from "../StepAngehoeriger";
+import { ANREDE_OPTIONS } from "../../../lib/stammdaten/anrede";
+import { BEZIEHUNG_OPTIONS } from "../../../lib/stammdaten/beziehung-pflege";
+import { PFLEGELEISTUNG_OPTIONS } from "../../../lib/stammdaten/pflegeleistung";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
 import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
@@ -79,13 +82,16 @@ export function PersonalienFormV2({
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       {/* Identität */}
       <SectionHeader icon={User} label="Identität" first />
+      {/* Durchgängig zwei Felder pro Zeile; Anrede vor dem Namen. */}
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Name" required value={data.name} onChange={v => set("name", v)} onBlur={() => touch("name")} placeholder="Nachname" error={touched.name && !filled(data.name) ? "Pflichtfeld" : undefined} /></div>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required value={data.vorname} onChange={v => set("vorname", v)} onBlur={() => touch("vorname")} placeholder="Vorname" error={touched.vorname && !filled(data.vorname) ? "Pflichtfeld" : undefined} /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => { set("geschlecht", v || ""); touch("geschlecht"); }} options={GESCHLECHT_OPTIONS} placeholder="Geschlecht wählen" error={touched.geschlecht && !filled(data.geschlecht) ? "Pflichtfeld" : undefined} /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => set("geburtsdatum", (v as string) ?? "")} onBlur={() => touch("geburtsdatum")} /></div>
+        <div><FormSelect label="Anrede" value={data.anrede || null} onChange={v => set("anrede", v || "")} options={ANREDE_OPTIONS} placeholder="Anrede wählen" /></div>
+        <div><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => { set("geschlecht", v || ""); touch("geschlecht"); }} options={GESCHLECHT_OPTIONS} placeholder="Geschlecht wählen" error={touched.geschlecht && !filled(data.geschlecht) ? "Pflichtfeld" : undefined} /></div>
+        <div><TextInput label="Name" required value={data.name} onChange={v => set("name", v)} onBlur={() => touch("name")} placeholder="Nachname" error={touched.name && !filled(data.name) ? "Pflichtfeld" : undefined} /></div>
+        <div><TextInput label="Vorname" required value={data.vorname} onChange={v => set("vorname", v)} onBlur={() => touch("vorname")} placeholder="Vorname" error={touched.vorname && !filled(data.vorname) ? "Pflichtfeld" : undefined} /></div>
+        <div><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => set("geburtsdatum", (v as string) ?? "")} onBlur={() => touch("geburtsdatum")} /></div>
+        <div><FormSelect label="Beziehung zum Patienten" value={data.beziehungZumPatienten || null} onChange={v => set("beziehungZumPatienten", v || "")} options={BEZIEHUNG_OPTIONS} placeholder="Beziehung wählen" hint="Wie steht die pflegende Person zum Patienten (Kern der Angehörigenpflege)" /></div>
       </div>
-      <div style={{ marginTop: "var(--space-4)", maxWidth: FELD_MAX.mittel }}>
+      <div style={{ marginTop: "var(--space-3)", maxWidth: FELD_MAX.mittel }}>
         <AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => set("ahvNummer", v)} />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
@@ -353,10 +359,35 @@ export function AnstellungFormV2({
         return w ? <div style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>{w}</div> : null;
       })()}
 
+      {/* Pflegeleistungen (Multi-Pick B/C) + voraussichtliche Arbeitszeit */}
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+        <div>
+          <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>Pflegeleistungen</div>
+          <div className="flex flex-wrap" style={{ gap: 8 }}>
+            {PFLEGELEISTUNG_OPTIONS.map(opt => {
+              const on = data.pflegeleistungen.includes(opt.value);
+              return (
+                <button key={opt.value} type="button"
+                  onClick={() => onChange({ ...data, pflegeleistungen: on ? data.pflegeleistungen.filter(x => x !== opt.value) : [...data.pflegeleistungen, opt.value] })}
+                  className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
+                  style={{ gap: 7, padding: "7px 12px", borderRadius: "var(--radius-pill)", background: on ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: on ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: on ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                  <span className="inline-flex items-center justify-center shrink-0" style={{ width: 15, height: 15, borderRadius: 4, border: on ? "none" : "var(--border-thin) solid var(--border-default)", background: on ? "var(--brand-primary)" : "transparent" }}>
+                    {on && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}
+                  </span>
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 4 }}>Mehrfachauswahl · KLV Art. 7</div>
+        </div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Voraussichtliche Arbeitszeit" value={data.voraussichtlicheArbeitszeit} onChange={v => set("voraussichtlicheArbeitszeit", v)} placeholder="z.B. ca. 15 Std./Woche" hint="Freitext" /></div>
+      </div>
+
       <SectionHeader icon={CreditCard} label="Auszahlung" />
-      <div style={{ display: "flex", flexDirection: "column", rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Bankname" required value={data.bankname} onChange={v => set("bankname", v)} onBlur={() => touch("bankname")} placeholder="z.B. PostFinance, UBS, Raiffeisen" error={touched.bankname && !filled(data.bankname) ? "Pflichtfeld" : undefined} /></div>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><IBANInput label="IBAN" required value={data.iban} onChange={v => set("iban", v)} /></div>
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+        <div><TextInput label="Bankname" required value={data.bankname} onChange={v => set("bankname", v)} onBlur={() => touch("bankname")} placeholder="z.B. PostFinance, UBS, Raiffeisen" error={touched.bankname && !filled(data.bankname) ? "Pflichtfeld" : undefined} /></div>
+        <div><IBANInput label="IBAN" required value={data.iban} onChange={v => set("iban", v)} /></div>
       </div>
     </div>
   );

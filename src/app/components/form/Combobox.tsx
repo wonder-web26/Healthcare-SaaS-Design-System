@@ -157,7 +157,7 @@ export function Combobox({ label, required, error, success, hint, steuerelementM
             data-aufklappliste
             onKeyDown={handleKeyDown}
             style={{
-              position: "fixed", top: lage.top, left: lage.left, width: lage.width, zIndex: 1000,
+              position: "fixed", top: lage.top, left: lage.left, width: lage.width, minWidth: 220, zIndex: 1000,
               display: "flex", flexDirection: "column", maxHeight: lage.maxHeight,
               background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
               borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", overflow: "hidden",

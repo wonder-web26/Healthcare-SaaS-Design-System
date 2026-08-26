@@ -64,9 +64,12 @@ import { leiteTarifcodeAb } from "../../lib/stammdaten/quellensteuer-tarif";
    ══════════════════════════════════════════ */
 export interface AngehoerigerFormData {
   /* 1. Personalien – Identität */
+  anrede: string;
   name: string;
   vorname: string;
   geschlecht: string;
+  /** Beziehung der pflegenden Person zum Patienten (Kern der Angehörigenpflege) */
+  beziehungZumPatienten: string;
   geburtsdatum: string;
   ahvNummer: string;
   nationalitaet: string;
@@ -136,6 +139,10 @@ export interface AngehoerigerFormData {
   funktion: string;
   eintrittsdatum: string;
   stundenlohn: string;
+  /** Pflegeleistungen nach KLV (Mehrfachauswahl: B, C) */
+  pflegeleistungen: string[];
+  /** Voraussichtliche Arbeitszeit (Freitext, z.B. "ca. 15 Std./Woche") */
+  voraussichtlicheArbeitszeit: string;
   /** Externe Zweitanstellung (Mehrfacharbeitgeber) */
   arbeitetExtern: string;
   externeFunktion: string;
@@ -252,9 +259,11 @@ interface ScanFile {
 }
 
 export const emptyAngehoerigerForm: AngehoerigerFormData = {
+  anrede: "",
   name: "",
   vorname: "",
   geschlecht: "",
+  beziehungZumPatienten: "",
   geburtsdatum: "",
   ahvNummer: "",
   nationalitaet: "",
@@ -309,6 +318,8 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   funktion: "",
   eintrittsdatum: "",
   stundenlohn: "",
+  pflegeleistungen: [],
+  voraussichtlicheArbeitszeit: "",
   arbeitetExtern: "nein",
   externeFunktion: "",
   externesPensumProzent: "",
