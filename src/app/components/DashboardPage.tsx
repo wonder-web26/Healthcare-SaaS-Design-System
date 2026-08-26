@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { Sparkles, ChevronRight, ArrowUp, Copy, RefreshCw, ThumbsUp, ThumbsDown, Check } from "lucide-react";
 import { processQuery, generateDailySummary, generateFollowUpChips, type AnnaMessage, type AnnaCard } from "../anna/engine";
+import { formatMitWochentag } from "../../lib/datum";
+import { gegenwart } from "../../lib/gegenwart";
 
 const MOCK_HOUR = 8;
 
@@ -149,7 +151,10 @@ export function DashboardPage() {
           {/* Greeting */}
           <div className="text-center" style={{ paddingTop: 40 }}>
             <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)", marginBottom: "var(--space-2)" }}>
-              Dienstag, 3. März 2026
+              {/* Aus der einen Gegenwart, nicht als Text: hier stand bis
+                  zuletzt „Dienstag, 3. März 2026" fest verdrahtet — die
+                  letzte Stelle im Baum, die noch gegen den alten Bezug las. */}
+              {formatMitWochentag(gegenwart())}
             </div>
             <h1 style={{ fontSize: 36, fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)", lineHeight: 1.2 }}>
               {greeting}, Maria

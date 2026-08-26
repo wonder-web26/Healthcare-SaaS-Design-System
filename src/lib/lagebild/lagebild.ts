@@ -21,12 +21,8 @@ import type { MonatsKennzahlen } from "../einsaetze/kontrolle";
 import { type Austritt, austrittText } from "../patienten/austritt";
 import { WOCHENTAGE_LANG, MONATE } from "../einsaetze/einsaetze";
 
-/** Wie ernst eine Aussage ist — bestimmt Band und Reihenfolge. */
-export type Band = "pruefen" | "belegt";
-
 export interface Befund {
   id: string;
-  band: Band;
   text: string;
   /** Beschriftung des Quellenverweises. */
   quelle: string;
@@ -42,18 +38,13 @@ export interface Befund {
 export const BEFUNDE_MAX = 5;
 
 /**
- * Was mangels Datenmodell offen bleibt.
+ * So viele stehen ohne Zutun da; die übrigen klappt auf, wer sie sehen will.
  *
- * Diese Liste ist kein Versäumnis, sondern eine Angabe: sie sagt der
- * Fachperson, worüber das Lagebild schweigt, damit ihr Schweigen nicht als
- * Unbedenklichkeit gelesen wird.
+ * Drei ist, was neben der Kopfzone auf einen 700-Pixel-Bildschirm passt, ohne
+ * die erste Stammdatenkarte zu verdrängen. Die Zahl steht hier und nicht in
+ * der Ansicht, damit sie neben der Obergrenze liegt, gegen die sie zählt.
  */
-export const NICHT_BEURTEILBAR = [
-  "Medikation — es besteht kein Medikationsmodell im Cockpit.",
-  "Supervision und fachliche Begleitung der angehörigen Person.",
-  "Der Inhalt der Pflegeberichte — gezählt wird, ob einer vorliegt, nicht was darin steht.",
-  "Offene Pflichtdokumente — Dokumentstände liegen am Onboarding-Fall, nicht am Patienten.",
-];
+export const BEFUNDE_SICHTBAR = 3;
 
 export interface LagebildQuellen {
   patientId: string;
@@ -100,7 +91,7 @@ export function lagebild(q: LagebildQuellen): Befund[] {
   const ausgetreten = q.austritt !== null;
   if (q.austritt) {
     befunde.push({
-      id: "austritt", band: "belegt", rang: 0,
+      id: "austritt", rang: 0,
       text: `Der Patient ist ${austrittText(q.austritt)}. Vergangenes bleibt abzuschliessen; Neues fällt nicht mehr an.`,
       quelle: "Austritt", ansicht: "austritt",
     });
@@ -114,7 +105,7 @@ export function lagebild(q: LagebildQuellen): Befund[] {
     const tage = wartetSeitTagen(blatt);
     if (tage !== null) {
       befunde.push({
-        id: "blatt-wartet", band: "pruefen", rang: 20,
+        id: "blatt-wartet", rang: 20,
         text: `Das Leistungsplanungsblatt ${blatt.id} wartet seit ${tage} Tagen ${AM_ZUG_TEXT[lpbAmZug(blatt.status) ?? "null"]} — Zustand „${lpbStatusLabel(blatt.status)}".`,
         quelle: "Leistungsplanungsblatt", ansicht: "leistungsplanungsblatt",
       });
@@ -129,7 +120,7 @@ export function lagebild(q: LagebildQuellen): Befund[] {
   if (luecke && !ausgetreten) {
     const tage = tageInklusive(luecke.von, q.stichtag);
     befunde.push({
-      id: "kgs-luecke", band: "pruefen", rang: 10,
+      id: "kgs-luecke", rang: 10,
       text: `Seit ${tage} Tagen besteht keine gültige Kostengutsprache. Erbrachte Leistungen kann die Kasse bis zu fünf Jahre rückwirkend zurückfordern.`,
       quelle: "Verordnung und Kostengutsprache", ansicht: "verordnung",
     });
@@ -144,7 +135,7 @@ export function lagebild(q: LagebildQuellen): Befund[] {
     const zuVielMin = a.lage === "ueber" && a.differenz !== null ? Math.round(-a.differenz * 60) : 0;
     if (zuVielMin >= 1) {
       befunde.push({
-        id: "ueber-bewilligung", band: "pruefen", rang: 30,
+        id: "ueber-bewilligung", rang: 30,
         text: `Das Blatt plant ${zuVielMin} Minuten je Woche mehr, als die Kasse bewilligt hat.`,
         quelle: "Leistungsplanungsblatt", ansicht: "leistungsplanungsblatt",
       });
@@ -159,21 +150,21 @@ export function lagebild(q: LagebildQuellen): Befund[] {
       ? ` Alle fallen auf einen ${WOCHENTAGE_LANG[k.muster.wochentag]} — das ist ein Muster.`
       : "";
     befunde.push({
-      id: "ohne-einsatz", band: "pruefen", rang: 25,
+      id: "ohne-einsatz", rang: 25,
       text: `${wort(k.ohneEinsatz).replace(/^./, c => c.toUpperCase())} Tage im ${monatName} tragen keinen Einsatz, obwohl ein Tagessoll besteht.${muster}`,
       quelle: "Pflegekontrolle", ansicht: "pflegekontrolle", suchteil: monatSuchteil,
     });
   }
   if (k.offen > 0) {
     befunde.push({
-      id: "ungeprueft", band: "pruefen", rang: 40,
+      id: "ungeprueft", rang: 40,
       text: `${k.offen} von ${k.einsaetzeGesamt} Einsätzen im ${monatName} sind noch ungeprüft.`,
       quelle: "Pflegekontrolle", ansicht: "pflegekontrolle", suchteil: monatSuchteil,
     });
   }
   if (k.mitEinsatz > 0 && k.mitBericht < k.mitEinsatz && !ausgetreten) {
     befunde.push({
-      id: "berichte", band: "belegt", rang: 60,
+      id: "berichte", rang: 60,
       text: `An ${k.mitEinsatz - k.mitBericht} von ${k.mitEinsatz} Tagen mit Einsatz fehlt der Pflegebericht.`,
       quelle: "Pflegekontrolle", ansicht: "pflegekontrolle", suchteil: monatSuchteil,
     });
@@ -182,7 +173,7 @@ export function lagebild(q: LagebildQuellen): Befund[] {
   /* ── Pendenzen ── */
   if (q.pendenzen.offen > 0) {
     befunde.push({
-      id: "pendenzen", band: q.pendenzen.ueberfaellig > 0 ? "pruefen" : "belegt",
+      id: "pendenzen",
       rang: q.pendenzen.ueberfaellig > 0 ? 35 : 70,
       text: `${q.pendenzen.offen} ${q.pendenzen.offen === 1 ? "Pendenz ist" : "Pendenzen sind"} offen${q.pendenzen.ueberfaellig > 0 ? `, davon ${q.pendenzen.ueberfaellig} überfällig` : ""}.`,
       quelle: "Pendenzen", ansicht: "pendenzen",

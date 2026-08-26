@@ -89,8 +89,15 @@ export function DetailNavigation({
             >
               <ChevronDown className="w-4 h-4 text-muted-foreground" />
             </button>
-            <div className="hidden md:block ml-1" title="j/k oder ←/→ zum Blättern, Esc zurück">
+            {/* Der Hinweis steht hier und nicht an der Aufrufstelle: die
+                Tastaturbedienung ist in diesem Bauteil verdrahtet (siehe
+                handleKey oben), also kann Hinweis und Funktion nicht
+                auseinanderlaufen. Wäre sie es nicht, müssten Hinweis UND
+                Symbol ersatzlos weg — ein Symbol für eine Funktion, die es
+                nicht gibt, ist eine Behauptung. */}
+            <div className="hidden md:flex items-center ml-1" style={{ gap: 5 }} title="j/k oder ←/→ zum Blättern, Esc zurück">
               <Keyboard className="w-3.5 h-3.5 text-muted-foreground/40" />
+              <span className="text-[11px] text-muted-foreground" style={{ fontWeight: 400 }}>J / K blättert</span>
             </div>
           </div>
         </>

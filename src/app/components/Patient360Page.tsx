@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router";
 import { InlineSelect } from "./ui/InlineSelect";
 import { FormFeld } from "./ui/FormFeld";
 import { KontaktWahl } from "./ui/KontaktWahl";
+import { ArzneimittelWahl, type ArzneimittelWahlWert } from "./ui/ArzneimittelWahl";
+import { TextareaInput } from "./form/TextareaInput";
 import { KRANKENKASSEN_OPTIONS, getKrankenkasseLabel } from "../../lib/stammdaten/krankenkassen";
 import {
   MANDATSART_OPTIONS, GESETZESGRUNDLAGE_OPTIONS, MANDATSGRUND_OPTIONS,
@@ -37,8 +39,6 @@ import {
   Activity,
   Clock,
   User,
-  Edit3,
-  MoreHorizontal,
   Sparkles,
   ExternalLink,
   CheckCircle2,
@@ -92,6 +92,8 @@ import {
   Home,
   Landmark,
   Search,
+  Bandage,
+  Pill,
 } from "lucide-react";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import {
@@ -128,7 +130,7 @@ import {
 import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung, type AerztlicheDiagnose, type ArztDiagnoseStatus, type VorschlagStatus } from "../../types/klinische-artefakte";
 import { TAKT_MINUTEN, MINDESTWERT_EINSATZ, type Monatsabrechnung } from "../../lib/abrechnung/leistungsarten";
 import { monatsKennzahlen } from "../../lib/einsaetze/kontrolle";
-import { lagebild, NICHT_BEURTEILBAR, GEPRUEFT_WURDE } from "../../lib/lagebild/lagebild";
+import { lagebild, GEPRUEFT_WURDE, BEFUNDE_SICHTBAR } from "../../lib/lagebild/lagebild";
 import {
   pruefbereitschaft, zeitraumMonate, zeitraumText, zaehleVollstaendig,
   NICHT_BEURTEILBAR_CONTROLLING, type Zustand, type Zeitraum,
@@ -153,6 +155,36 @@ import {
   type Spitalaufenthalt, type FruehererEingriff,
 } from "../../lib/patienten/vorgeschichte";
 import { patientfeldLabel } from "../../lib/stammdaten/patientfelder";
+import {
+  useAnamnese, biometrieSichern, hilfsmittelSichern, hilfsmittelEntfernen,
+  anamneseeintragSichern, anamneseDatum, type Hilfsmittel, type Anamneseeintrag,
+} from "../../lib/patienten/anamnese";
+import {
+  MEDIKATIONSART, DARREICHUNGSFORM, ANWENDUNGSWEG, UNVERTRAEGLICHKEITSART,
+  OHNE_TAGESDOSIERUNG, UNVERTRAEGLICHKEIT_SCHWERE, medikationswertLabel, medikationsOptionen,
+} from "../../lib/stammdaten/medikationswerte";
+import {
+  PLAN_VORBEHALT, arzneiAngaben, istFreitextlich, istLaufend, istBedarf, tagesdosis,
+  type Medikation, type Unvertraeglichkeit,
+} from "../../lib/medikation/medikation";
+import { medikationFehler, dosisFehler, dosisNormalisieren } from "../../lib/medikation/regeln";
+import {
+  useMedikationsbestand, medikationSichern, medikationAbsetzen,
+  unvertraeglichkeitSichern, plankommentarSichern,
+} from "../../lib/medikation/store";
+import {
+  WUNDART, DEKUBITUSKATEGORIE, GEWEBEART, WUNDHEILUNGSPHASE, EXSUDATMENGE,
+  EXSUDATBESCHAFFENHEIT, WUNDUMGEBUNG, INFEKTIONSZEICHEN, WUNDRAND,
+  wundwertLabel, wundOptionen, type Wundwert,
+} from "../../lib/stammdaten/wundwerte";
+import {
+  istOffen, tageSeit, BEURTEILUNG_FRIST_TAGE,
+  type Wunde, type Wundbeurteilung, type Verlaufseintrag,
+} from "../../lib/wunden/wunden";
+import {
+  anteileSumme, anteileStimmen, kategorieErlaubt, KATEGORIE_RUECKSCHRITT_TEXT,
+} from "../../lib/wunden/regeln";
+import { useWundbestand, wundeSichern, beurteilungSichern, verlaufSichern } from "../../lib/wunden/store";
 import {
   useArztDiagnosen, usePflegediagnosen, arztDiagnoseSichern, pflegediagnoseSichern,
   type PflegediagnoseEintrag,
@@ -183,15 +215,107 @@ import { getNachweiseFuerPatient } from "../../lib/schulung/nachweis-store";
 import "../../lib/schulung/demo-seed";
 import { BezugspersonFeld } from "./BezugspersonFeld";
 import { AppButton } from "./ui/AppButton";
-import { StatusMarke, type StatusMarkeVariante } from "./ui/StatusMarke";
+import { StatusMarke } from "./ui/StatusMarke";
 
-/** Map the existing Tailwind bg class of a status config to a semantic StatusMarke variant. */
-function bgZuVariante(bg: string): StatusMarkeVariante {
-  if (bg.includes("success")) return "erfolg";
-  if (bg.includes("warning")) return "warnung";
-  if (bg.includes("error")) return "gefahr";
-  if (bg.includes("info")) return "info";
-  return "neutral";
+/**
+ * Welche Zustandswerte eine Abweichung sind — und nur die tragen Farbe.
+ *
+ * DER TEST LAUTET: KANN EINE PFLEGEFACHPERSON DIESEN ZUSTAND DURCH HANDELN
+ * AUFLÖSEN? Wenn ja, ist es eine Abweichung. Wenn nein, ist es eine Tatsache,
+ * und eine Tatsache braucht keine Farbe.
+ *
+ * Bis hierher entschied die Farbe über die Farbe: `bgZuVariante()` las die
+ * Tailwind-Klasse des Zustands und übersetzte grün in „Erfolg", gelb in
+ * „Warnung". Die Zuordnung nach dem Augenschein abzuschreiben wäre derselbe
+ * Fehlschluss, nur einmal von der Laufzeit in den Quelltext verschoben —
+ * darum steht hier keine Farbe, sondern der Handlungstest:
+ *
+ *   nicht_abrechenbar — auflösbar: es fehlen Verordnung, Kostengutsprache
+ *     oder Zuteilung, und genau das ist Arbeit. Die Patientenliste führt den
+ *     Wert deshalb als einen ihrer vier Filter, also als Arbeitsvorrat.
+ *   gekuendigt — NICHT auflösbar: das Mandat ist beendet. Das erledigt
+ *     niemand mehr.
+ *   schwer, kritisch — NICHT auflösbar: der Schweregrad ist eine Eigenschaft
+ *     der Patientin, kein Befund über die Betreuung.
+ *   mittel, in_vorbereitung, aktiv, abrechenbar, leicht — Durchgangs- und
+ *     Normalzustände.
+ *
+ * Die Zuordnungen in patientData.ts bleiben unverändert: sie gehören auch
+ * der Patientenliste, und die ist nicht Gegenstand dieses Laufs.
+ */
+const ABWEICHENDE_ZUSTAENDE = new Set(["nicht_abrechenbar"]);
+
+/** Ein leerer Wert — im Bestand steht dafür teils "—", teils nichts. */
+function kopfLeer(wert: string | undefined): boolean {
+  const w = (wert ?? "").trim();
+  return w === "" || w === "—";
+}
+
+/**
+ * Eine Angabe der Metazeile: Beschriftung in der Tertiärfarbe, Wert in der
+ * Primärfarbe, getrennt durch Abstand.
+ *
+ * Leere Angaben verschwinden NICHT. Verschwände die Bezugsperson bei dem
+ * einen Patienten, der keine hat, wäre die Zeile bei jedem Patienten anders
+ * aufgebaut — und ihr Fehlen fiele niemandem auf, weil an ihrer Stelle
+ * einfach die nächste Angabe stünde.
+ *
+ * FÜR DEN LEEREN WERT GILT DERSELBE TEST WIE FÜR DIE ZUSTANDSMARKEN:
+ * auflösbar durch Handeln → Abweichung, sonst neutral. „Es ist kein letzter
+ * Besuch erfasst" ist eine Tatsache; „es ist niemand zugewiesen" ist Arbeit.
+ * Belegt wird das nicht am Augenschein, sondern daran, ob die Patientenliste
+ * das Feld als Filter führt — dann führt die Organisation es als
+ * Arbeitsvorrat. Von den sechs Angaben trifft das nur auf die Bezugsperson
+ * zu (Filter „Nicht zugewiesen", PatientenPage.tsx).
+ */
+function KopfAngabe({ label, wert, kuerzen, fehlendText, fehlendAufloesbar, children }: {
+  label: string;
+  wert?: string;
+  /** Nur die Adresse: sie ist die einzige Angabe ohne obere Längengrenze. */
+  kuerzen?: boolean;
+  /** Was statt „Nicht erfasst" steht, wo das Feld einen eigenen Namen dafür hat. */
+  fehlendText?: string;
+  /** Das Fehlen ist Arbeit, kein Zustand — Warnfarbe und Zeichen. */
+  fehlendAufloesbar?: boolean;
+  children?: React.ReactNode;
+}) {
+  const leer = children === undefined ? kopfLeer(wert) : children === null;
+  return (
+    <span className="inline-flex items-baseline" style={{ gap: 5, minWidth: 0 }}>
+      <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap", flexShrink: 0 }}>{label}</span>
+      {leer ? (
+        <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-small)", whiteSpace: "nowrap",
+          color: fehlendAufloesbar ? "var(--status-warning-text)" : "var(--text-tertiary)",
+          fontWeight: fehlendAufloesbar ? "var(--weight-medium)" : "var(--weight-regular)" }}>
+          {/* Farbe nie allein: das Dreieck trägt die Aussage auch in Graustufen. */}
+          {fehlendAufloesbar && <AlertTriangle aria-hidden="true" style={{ width: 12, height: 12, flexShrink: 0 }} />}
+          {fehlendText ?? "Nicht erfasst"}
+        </span>
+      ) : children !== undefined ? (
+        children
+      ) : (
+        <span
+          title={kuerzen ? wert : undefined}
+          style={{ fontSize: "var(--text-small)", color: "var(--text-primary)",
+            ...(kuerzen
+              ? { maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+              : { whiteSpace: "nowrap" }) }}
+        >{wert}</span>
+      )}
+    </span>
+  );
+}
+
+/** Eine Zustandsmarke des Dossierkopfs — farbig nur bei einer Abweichung. */
+function KopfMarke({ wert, label }: { wert: string; label: string }) {
+  const abweichend = ABWEICHENDE_ZUSTAENDE.has(wert);
+  return (
+    <StatusMarke
+      label={label}
+      variante={abweichend ? "gefahr" : "neutral"}
+      stil={abweichend ? "flaeche" : "umriss"}
+    />
+  );
 }
 
 /* ══════════════════════════════════════════
@@ -313,25 +437,26 @@ function ansichtAusAdresse(gruppe: string | undefined, ansicht: string | undefin
    Zwei Ausprägungen: eine Ansicht, deren Definitionsdokument aussteht, und
    eine, die bereits benannt ist und deren Umfang feststeht.
    ══════════════════════════════════════════ */
-function NochNichtDefiniert({ titel }: { titel: string }) {
+/**
+ * Eine Ansicht, die es noch nicht gibt — und sagt, was dort einmal steht.
+ *
+ * Das einzige Bauteil dieser Art. Daneben stand bis hierher ein zweites, das
+ * nur mitteilte, für diese Ansicht sei noch nichts festgelegt; drei der fünf
+ * geplanten Ansichten landeten dort und waren damit Sackgassen ohne Auskunft.
+ * Der Umfang ist Pflicht: fehlt er, meldet es der Übersetzer, statt dass
+ * still ein allgemeiner Satz erscheint.
+ *
+ * Keine Farbe, keine Warnmarke — das hier ist eine Auskunft, keine Abweichung.
+ */
+function NochNichtVerfuegbar({ gruppe, titel, umfang }: { gruppe: string | null; titel: string; umfang: string[] }) {
   return (
     <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-6)" }}>
+      {gruppe && (
+        <div className="uppercase tracking-wider" style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", marginBottom: 3 }}>{gruppe}</div>
+      )}
       <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{titel}</h3>
       <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 6, maxWidth: 560 }}>
-        Diese Ansicht ist vorgesehen und wird als Nächstes definiert. Solange das
-        Definitionsdokument aussteht, steht hier bewusst nichts — es wird nichts
-        angezeigt, was nicht erhoben ist.
-      </p>
-    </div>
-  );
-}
-
-function NochNichtVerfuegbar({ titel, umfang }: { titel: string; umfang: string[] }) {
-  return (
-    <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-6)" }}>
-      <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{titel}</h3>
-      <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 6, maxWidth: 560 }}>
-        Noch nicht verfügbar. Vorgesehen ist:
+        Diese Ansicht ist geplant. Vorgesehen ist:
       </p>
       <ul style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
         {umfang.map(z => (
@@ -397,9 +522,16 @@ function AnsichtNavigation({ patientId, aktiv, zustaende, obenPx }: {
                   gap: 8, padding: "7px 10px", marginLeft: g.schluessel ? 10 : 0,
                   width: g.schluessel ? "calc(100% - 10px)" : "100%",
                   borderRadius: 8, border: "none", fontFamily: "inherit", textAlign: "left",
-                  background: ist ? "var(--brand-primary-light)" : "transparent",
-                  color: ist ? "var(--brand-primary)" : "var(--text-secondary)",
-                  fontSize: "var(--text-small)", fontWeight: ist ? "var(--weight-medium)" : "var(--weight-regular)",
+                  /* Drei Merkmale, von denen zwei ohne Farbe auskommen: die
+                     Flächenfarbe der Inhaltsfläche gegen den Untergrund der
+                     Spalte, Schriftstärke 600, und erst als drittes die
+                     schmale Kante in der Akzentfarbe. Die Kante steht auch
+                     bei den übrigen Einträgen, nur durchsichtig — sonst
+                     rückte der Text beim Wechsel um zwei Pixel. */
+                  borderLeft: `2px solid ${ist ? "var(--brand-primary)" : "transparent"}`,
+                  background: ist ? "var(--bg-elevated)" : "transparent",
+                  color: ist ? "var(--text-primary)" : "var(--text-secondary)",
+                  fontSize: "var(--text-small)", fontWeight: ist ? 600 : "var(--weight-regular)",
                 }}
               >
                 <span className="flex-1 min-w-0" style={{ overflowWrap: "anywhere" }}>{a.label}</span>
@@ -532,7 +664,12 @@ function getHistorie(_patientId: string): HistoryEntry[] {
 }
 
 /* ── Masked AHV number ─────────────────── */
-function MaskedAhv({ ahv }: { ahv: string }) {
+/**
+ * `label` folgt dem Vorbild von BezugspersonFeld: wo die Metazeile die
+ * Beschriftung schon trägt, wird sie hier weggelassen, statt sie zweimal zu
+ * schreiben. Maskierung und Augensymbol bleiben unberührt.
+ */
+function MaskedAhv({ ahv, label = "AHV" }: { ahv: string; label?: string | null }) {
   const [visible, setVisible] = useState(false);
   const masked = ahv.replace(/^(\d{3}\.)(.+)(.\d{2})$/, (_, p1, _mid, p3) =>
     p1 + _mid.replace(/\d/g, "•") + p3
@@ -545,7 +682,7 @@ function MaskedAhv({ ahv }: { ahv: string }) {
       style={{ gap: 6, background: "transparent", border: "none", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}
       title={visible ? "AHV-Nummer ausblenden" : "AHV-Nummer anzeigen"}
     >
-      <span>AHV: <span style={visible ? {} : { letterSpacing: "0.05em" }}>{visible ? ahv : masked}</span></span>
+      <span>{label ? `${label}: ` : ""}<span style={visible ? {} : { letterSpacing: "0.05em" }}>{visible ? ahv : masked}</span></span>
       {visible
         ? <EyeOff style={{ width: 12, height: 12, color: "var(--text-tertiary)" }} />
         : <Eye style={{ width: 12, height: 12, color: "var(--text-tertiary)" }} />
@@ -580,6 +717,45 @@ function Patient360Inhalt() {
      gemessen statt geraten — sie ändert sich mit der Breite (Umbruch). */
   const kopfRef = useRef<HTMLDivElement>(null);
   const [kopfHoehe, setKopfHoehe] = useState(0);
+  /* Die Metazeile klappt ein, sobald der Inhalt darunter weggerollt ist.
+     Ihre Höhe wird gemessen, nicht geraten — sie hängt von der Breite ab. */
+  const metaRef = useRef<HTMLDivElement>(null);
+  const [metaHoehe, setMetaHoehe] = useState(0);
+  const [metaAus, setMetaAus] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = metaRef.current;
+    if (!el) return;
+    /* Gemessen wird das innere Element: es behält seine natürliche Höhe,
+       auch wenn die Hülle darüber auf null gefahren ist. */
+    const messen = () => setMetaHoehe(el.getBoundingClientRect().height);
+    messen();
+    const ro = new ResizeObserver(messen);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const kopf = kopfRef.current;
+    if (!kopf || metaHoehe === 0) return;
+    /* Gerollt wird nicht das Fenster, sondern der Inhaltsbereich der Hülle —
+       gesucht wird darum der nächste Vorfahr mit eigenem Rollbalken. */
+    let el: HTMLElement | null = kopf.parentElement;
+    while (el && !/(auto|scroll)/.test(getComputedStyle(el).overflowY)) el = el.parentElement;
+    const behaelter: HTMLElement | Window = el ?? window;
+    /* Ohne Bild-Anforderung: der Rumpf liest eine Zahl und setzt einen
+       Zustand, den React bei Gleichheit verwirft — das ist billiger als die
+       Verwaltung eines Bildrahmens. Ein requestAnimationFrame stünde
+       ausserdem still, solange der Reiter im Hintergrund liegt. */
+    const pruefen = () => {
+      const oben = behaelter === window ? window.scrollY : (behaelter as HTMLElement).scrollTop;
+      setMetaAus(oben > metaHoehe);
+    };
+    behaelter.addEventListener("scroll", pruefen, { passive: true });
+    pruefen();
+    return () => behaelter.removeEventListener("scroll", pruefen);
+  }, [metaHoehe]);
+
   useLayoutEffect(() => {
     const el = kopfRef.current;
     if (!el) return;
@@ -645,61 +821,65 @@ function Patient360Inhalt() {
 
   return (
     <>
-      {/* ── Kopf: bleibt beim Rollen stehen ── */}
+      {/* ── Kopf: drei Zeilen — Rückweg, Titel, Meta. Bleibt beim Rollen stehen.
+             Rechts steht nichts: „Bearbeiten" und „⋯" waren funktionslos und
+             sind entfernt, „Ticket erstellen" sprang nur in die Liste, ohne
+             etwas anzulegen und ohne den Patienten mitzunehmen. Bearbeitet
+             wird dort, wo es wirkt — je Karte im Überblick und in den
+             Stammdaten. ── */}
       <div
         ref={kopfRef}
-        style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--bg-elevated)", padding: "var(--space-3) var(--space-6) var(--space-3)", borderBottom: "var(--border-thin) solid var(--border-default)" }}
+        style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--bg-elevated)",
+          padding: "var(--space-3) var(--space-6) var(--space-3)",
+          borderBottom: "var(--border-thin) solid var(--border-default)",
+          /* Was die Metazeile beim Einklappen an Höhe verliert, gibt der Kopf
+             als Abstand zurück. Sonst würde das Dokument kürzer und der
+             Inhalt spränge unter dem Finger nach oben. */
+          marginBottom: metaAus ? metaHoehe : 0 }}
       >
-        <div style={{ marginBottom: 4 }}>
-          <DetailNavigation
-            backLabel="Patienten"
-            backPath="/patienten"
-            currentId={patientId!}
-            allIds={allPatientIds}
-            buildPath={(id) => ansichtPfad(id, aktiveAnsicht)}
-          />
-        </div>
-        <div className="flex items-start justify-between" style={{ gap: 16 }}>
-          <div className="min-w-0">
-            <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
-              <h2 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-                {patient.nachname}, {patient.vorname}
-              </h2>
-              {/* Status/Abrechnung/Schweregrad: Information (nicht bedienbar), je Zustand mit Symbol.
-                  Der Abrechnungsstatus wird aus dem Status abgeleitet und
-                  lautet bei „Nicht abrechenbar" gleich. Zweimal dasselbe Wort
-                  nebeneinander liest sich wie zwei Befunde, ist aber einer —
-                  die abgeleitete Marke entfällt dann. */}
-              <StatusMarke label={st.label} variante={bgZuVariante(st.bg)} />
-              {ast.label !== st.label && <StatusMarke label={ast.label} variante={bgZuVariante(ast.bg)} />}
-              {sg && <StatusMarke label={sg.label} variante={bgZuVariante(sg.bg)} />}
-            </div>
-            <div className="flex items-center flex-wrap" style={{ gap: "var(--space-3)", marginTop: 6, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-              <MaskedAhv ahv={patient.ahvNummer} />
-              <span className="hidden md:inline">·</span>
-              <span>Geb.: {patient.geburtsdatum}</span>
-              <span className="hidden md:inline">·</span>
-              <span>{patient.adresse || "—"}</span>
-              <span className="hidden md:inline">·</span>
-              {patient.pflegefachkraft !== "—" ? (
-                <BezugspersonFeld person={{ initialen: patient.pflegefachkraftInitialen, name: patient.pflegefachkraft }} />
-              ) : (
-                <span className="inline-flex items-center" style={{ gap: 4, color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
-                  <AlertTriangle style={{ width: 12, height: 12 }} /> Nicht zugewiesen
-                </span>
-              )}
-              <span className="hidden md:inline">·</span>
-              <span>Aufnahme: {patient.aufnahmeDatum || "—"}</span>
-              <span className="hidden md:inline">·</span>
-              <span>Letzter Besuch: {patient.letzterBesuch || "—"}</span>
-            </div>
-          </div>
+        {/* ── 1 Rückweg ── */}
+        <DetailNavigation
+          backLabel="Patienten"
+          backPath="/patienten"
+          currentId={patientId!}
+          allIds={allPatientIds}
+          buildPath={(id) => ansichtPfad(id, aktiveAnsicht)}
+        />
 
-          {/* Actions — genau ein Primärknopf (Ticket erstellen), Rest Sekundär/Symbol */}
-          <div className="flex items-center shrink-0" style={{ gap: "var(--space-2)" }}>
-            <AppButton variant="primaer" icon={Plus} onClick={() => navigate("/servicedesk")}>Ticket erstellen</AppButton>
-            <AppButton variant="sekundaer" icon={Edit3}>Bearbeiten</AppButton>
-            <AppButton variant="symbol" icon={MoreHorizontal} ariaLabel="Weitere Aktionen" />
+        {/* ── 2 Titel ── */}
+        <div className="flex items-center" style={{ gap: "var(--space-2)", marginTop: 4, minWidth: 0 }}>
+          {/* Der Name bricht nicht um und wird nicht gekürzt: er ist die
+              Antwort auf „wer ist das", und eine halbe Antwort ist keine. */}
+          <h2 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", whiteSpace: "nowrap", flexShrink: 0 }}>
+            {patient.nachname}, {patient.vorname}
+          </h2>
+          {/* Der Abrechnungsstatus wird aus dem Status abgeleitet und lautet
+              bei „Nicht abrechenbar" gleich. Zweimal dasselbe Wort nebeneinander
+              liest sich wie zwei Befunde, ist aber einer — die abgeleitete
+              Marke entfällt dann. */}
+          <KopfMarke wert={patient.status} label={st.label} />
+          {ast.label !== st.label && <KopfMarke wert={patient.abrechnungsStatus} label={ast.label} />}
+          {sg && <KopfMarke wert={patient.schweregrad} label={sg.label} />}
+        </div>
+
+        {/* ── 3 Meta: eine Zeile, die umbricht. Getrennt wird durch Abstand,
+               nicht durch Trennzeichen — ein Mittelpunkt am Zeilenende zeigt
+               auf etwas, das nicht folgt. ── */}
+        <div style={{ height: metaAus ? 0 : "auto", overflow: "hidden" }}>
+          <div ref={metaRef} className="flex items-baseline flex-wrap" style={{ gap: "4px 20px", paddingTop: 6 }}>
+            <KopfAngabe label="AHV"><MaskedAhv ahv={patient.ahvNummer} label={null} /></KopfAngabe>
+            <KopfAngabe label="Geb." wert={patient.geburtsdatum} />
+            <KopfAngabe label="Adresse" wert={patient.adresse} kuerzen />
+            {/* Die einzige der sechs Angaben, deren Fehlen die Liste als
+                Arbeitsvorrat führt — Filter „Nicht zugewiesen". */}
+            <KopfAngabe label="Bezugsperson" wert={patient.pflegefachkraft}
+              fehlendText="Nicht zugewiesen" fehlendAufloesbar>
+              {kopfLeer(patient.pflegefachkraft) ? null : (
+                <BezugspersonFeld label={null} person={{ initialen: patient.pflegefachkraftInitialen, name: patient.pflegefachkraft }} />
+              )}
+            </KopfAngabe>
+            <KopfAngabe label="Aufnahme" wert={patient.aufnahmeDatum} />
+            <KopfAngabe label="Letzter Besuch" wert={patient.letzterBesuch} />
           </div>
         </div>
       </div>
@@ -742,20 +922,36 @@ const ANSICHT_HAT_INHALT: Record<string, true> = {
   pflegekontrolle: true, dokumente: true, pendenzen: true, verlauf: true, controlling: true,
   ordnerstruktur: true, pflichtluecken: true,
   stammdaten: true, vorgeschichte: true, diagnosen: true, pflegeberichte: true,
-  austritt: true,
+  austritt: true, wunddokumentation: true, plan: true, unvertraeglichkeiten: true,
 };
 
+/**
+ * Die fünf Ansichten, für die noch kein Fall in der Weiche besteht.
+ *
+ * Als Aufzählung und nicht als loser Schlüssel: `Record<GeplanteAnsicht, …>`
+ * verlangt jeden der fünf Einträge. Wer eine sechste geplante Ansicht
+ * aufnimmt und den Umfang vergisst, bekommt einen Übersetzungsfehler, keine
+ * leere Liste zur Laufzeit.
+ */
+const GEPLANTE_ANSICHTEN = ["sda", "caps", "kassenregeln", "richten-und-bezug", "termine"] as const;
+type GeplanteAnsicht = typeof GEPLANTE_ANSICHTEN[number];
+
 /** Ansichten, deren Umfang schon feststeht — sie nennen ihn statt zu schweigen. */
-const ANSICHT_UMFANG: Record<string, string[]> = {
-  plan: [
-    "Wirkstoff, Dosierung und Einnahmezeitpunkt je Position",
-    "Verordnende Ärztin oder verordnender Arzt",
-    "Gültigkeit und Änderungsverlauf",
+const ANSICHT_UMFANG: Record<GeplanteAnsicht, string[]> = {
+  sda: [
+    "Strukturierter Datenaustausch nach dem Handbuch SDA Entlassung.",
+    "Übernahme der Austrittsdaten aus dem Spital in das Dossier.",
+    "Abgleich der übernommenen Daten mit den erfassten Stammdaten.",
   ],
-  unvertraeglichkeiten: [
-    "Wirkstoff-Unverträglichkeiten mit Schweregrad",
-    "Abgleich gegen den Medikationsplan",
-    "Quelle und Erfassungsdatum je Eintrag",
+  caps: [
+    "Abgeleitete Handlungsfelder aus dem interRAI-HC-Assessment.",
+    "Auslösung je Handlungsfeld mit Begründung aus den Antworten.",
+    "Übernahme ausgelöster Handlungsfelder in die Pflegeplanung.",
+  ],
+  kassenregeln: [
+    "Hinterlegte Prüfregeln der Krankenversicherer je Leistungskategorie.",
+    "Abgleich des Leistungsplanungsblatts gegen die Regeln vor der Abgabe.",
+    "Hinweis auf Abweichungen mit Bezug auf die verletzte Regel.",
   ],
   "richten-und-bezug": [
     "Richtprotokoll je Woche",
@@ -775,7 +971,9 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
   tickets: Ticket[];
   navigate: (p: string) => void;
 }) {
-  const label = ALLE_ANSICHTEN.find(e => e.ansicht.schluessel === schluessel)?.ansicht.label ?? "Ansicht";
+  const eintrag = ALLE_ANSICHTEN.find(e => e.ansicht.schluessel === schluessel);
+  const label = eintrag?.ansicht.label ?? "Ansicht";
+  const gruppe = eintrag?.gruppe.label ?? null;
 
   switch (schluessel) {
     case "ueberblick":
@@ -789,6 +987,9 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "austritt": return <AnsichtAustritt patient={patient} />;
     case "beziehungen": return <AnsichtBeziehungenNeu patient={patient} />;
     case "vorgeschichte": return <AnsichtVorgeschichte patient={patient} />;
+    case "wunddokumentation": return <AnsichtWunddokumentation patient={patient} />;
+    case "plan": return <AnsichtMedikationsplan patient={patient} />;
+    case "unvertraeglichkeiten": return <AnsichtUnvertraeglichkeiten patient={patient} />;
     case "diagnosen": return <AnsichtDiagnosen patient={patient} />;
     case "mandate": return <AnsichtMandate patient={patient} />;
     case "interrai-hc": return <TabInterRAI patientId={patient.id} patientName={`${patient.nachname}, ${patient.vorname}`} navigate={navigate} />;
@@ -807,10 +1008,20 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "pflichtluecken": return <AnsichtPflichtluecken patient={patient} />;
     case "pendenzen": return <TabTickets tickets={tickets} navigate={navigate} />;
     case "verlauf": return <TabHistorie patient={patient} />;
+    /* Die fünf geplanten Ansichten stehen als Fälle da, nicht im
+       Standardzweig: nur so kennt der Übersetzer den Schlüssel als einen der
+       fünf und prüft den Zugriff auf ANSICHT_UMFANG. */
+    case "sda":
+    case "caps":
+    case "kassenregeln":
+    case "richten-und-bezug":
+    case "termine":
+      return <NochNichtVerfuegbar gruppe={gruppe} titel={label} umfang={ANSICHT_UMFANG[schluessel]} />;
     default:
-      return ANSICHT_UMFANG[schluessel]
-        ? <NochNichtVerfuegbar titel={label} umfang={ANSICHT_UMFANG[schluessel]} />
-        : <NochNichtDefiniert titel={label} />;
+      /* Unerreichbar: eine unbekannte Adresse fällt in `ansichtAusAdresse`
+         auf den Überblick zurück, und jeder Navigationsschlüssel hat oben
+         einen Fall. */
+      return null;
   }
 }
 
@@ -820,11 +1031,22 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
    ══════════════════════════════════════════ */
 
 /** Read-only data field */
-function PDataField({ label, value, mono }: { label: string; value: string | React.ReactNode; mono?: boolean }) {
+function PDataField({ label, value, mono, mehrzeilig }: {
+  label: string; value: string | React.ReactNode; mono?: boolean;
+  /**
+   * Für Werte, die aus mehreren Zeilen bestehen: die Umbrüche bleiben stehen,
+   * und nichts wird abgeschnitten. Ohne das Kennzeichen fällt ein Umbruch im
+   * Fluss zusammen und der Text liest sich als ein Satz, der er nicht ist.
+   */
+  mehrzeilig?: boolean;
+}) {
   return (
     <div>
       <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>{label}</div>
-      <div className={`text-[13px] text-foreground ${mono ? "font-mono" : ""}`} style={{ fontWeight: 400 }}>{value || "—"}</div>
+      <div className={`text-[13px] text-foreground ${mono ? "font-mono" : ""}`}
+        style={mehrzeilig
+          ? { fontWeight: 400, whiteSpace: "pre-wrap", lineHeight: 1.6, maxWidth: "82ch" }
+          : { fontWeight: 400 }}>{value || "—"}</div>
     </div>
   );
 }
@@ -886,7 +1108,7 @@ function PSectionCard({
   return (
     <div className={`bg-card rounded-2xl border transition-colors ${editing ? "border-primary/25 shadow-sm" : "border-border"}`}>
       <div className="px-5 py-4 border-b border-border-light flex items-center gap-2">
-        <Icon className="w-4 h-4 text-primary" />
+        <Icon className="w-4 h-4 text-muted-foreground" />
         <h5 className="text-foreground flex-1">{title}</h5>
         {editable && !editing && (
           <button
@@ -1146,7 +1368,8 @@ function TabUeberblick({ patient }: { patient: Patient }) {
             </>
           ) : (
             <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-              <CheckCircle2 className="w-4 h-4 text-success" />
+              {/* Der Normalfall bekommt kein grünes Häkchen. */}
+              <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
               Keine offenen Aufgaben
             </div>
           )}
@@ -1157,7 +1380,7 @@ function TabUeberblick({ patient }: { patient: Patient }) {
           raOverdue ? "border-error/25" : raUrgent ? "border-error/20" : "border-border"
         }`}>
           <div className="px-5 py-4 border-b border-border-light flex items-center gap-2">
-            <Timer className={`w-4 h-4 ${raOverdue || raUrgent ? "text-error" : "text-primary"}`} />
+            <Timer className={`w-4 h-4 ${raOverdue || raUrgent ? "text-error" : "text-muted-foreground"}`} />
             <h5 className="text-foreground">Re-Assessment</h5>
           </div>
           <div className="p-5">
@@ -1408,70 +1631,57 @@ function WorkflowSection({
    TAB: ANAMNESE
    ══════════════════════════════════════════ */
 
-interface AllergieEntry { id: string; stoff: string; reaktion: string; schwere: "Schwer" | "Mittel" | "Leicht" }
 interface HilfsmittelEntry { id: string; label: string; detail: string }
 interface AnamneseEntry { id: string; text: string; datum: string; autor: string }
 
 function TabAnamnese({ patient }: { patient: Patient }) {
-  /* ── Karte 1 — Biometrie (editable) ── */
-  const [groesse, setGroesse] = useState(172);
-  const [gewicht, setGewicht] = useState(84);
+  /* Die Werte kommen aus dem Bestand, nicht aus lokalen Anfangswerten: sonst
+     tragen alle Patienten dieselben 172 cm, und beim Ansichtswechsel ist die
+     Eingabe weg. Allergien stehen bewusst nicht darin — sie liegen im
+     Unverträglichkeitsbestand. */
+  const { biometrie, hilfsmittel, eintraege } = useAnamnese(patient.id);
+
+  /* ── Karte 1 — Biometrie ── */
   const [editBio, setEditBio] = useState(false);
-  const [bioSnap, setBioSnap] = useState({ g: 172, w: 84 });
-  const bmi = groesse > 0 ? +(gewicht / (groesse / 100) ** 2).toFixed(1) : 0;
-  const bmiKategorie = bmi < 18.5 ? "Untergewicht" : bmi < 25 ? "Normalgewicht" : bmi < 30 ? "Übergewicht" : "Adipositas";
-  const bmiColor = bmi < 18.5 ? "text-warning" : bmi < 25 ? "text-success" : bmi < 30 ? "text-warning" : "text-error";
+  const [bioEntwurf, setBioEntwurf] = useState({ g: 0, w: 0 });
+  const groesse = editBio ? bioEntwurf.g : (biometrie?.groesse ?? 0);
+  const gewicht = editBio ? bioEntwurf.w : (biometrie?.gewicht ?? 0);
+  /* Ohne beide Masse gibt es keinen BMI — eine 0 stünde da wie ein Wert. */
+  const bmiBekannt = groesse > 0 && gewicht > 0;
+  const bmi = bmiBekannt ? +(gewicht / (groesse / 100) ** 2).toFixed(1) : 0;
+  const bmiKategorie = !bmiBekannt ? "Nicht erfasst"
+    : bmi < 18.5 ? "Untergewicht" : bmi < 25 ? "Normalgewicht" : bmi < 30 ? "Übergewicht" : "Adipositas";
+  const bmiColor = !bmiBekannt ? "text-muted-foreground"
+    : bmi < 18.5 ? "text-warning" : bmi < 25 ? "text-success" : bmi < 30 ? "text-warning" : "text-error";
 
-  /* ── Karte 2 — Allergien & Hilfsmittel ── */
-  const [allergien, setAllergien] = useState<AllergieEntry[]>([
-    { id: "a1", stoff: "Penicillin", reaktion: "Anaphylaxie", schwere: "Schwer" },
-    { id: "a2", stoff: "Latex", reaktion: "Hautausschlag", schwere: "Mittel" },
-  ]);
-  const [hilfsmittel, setHilfsmittel] = useState<HilfsmittelEntry[]>([
-    { id: "h1", label: "Brille", detail: "Lesen & Fernsicht" },
-    { id: "h2", label: "Hörgerät rechts", detail: "Seit 2021" },
-    { id: "h3", label: "Rollator", detail: "Innenbereich" },
-  ]);
+  /* ── Karte 2 — Allergien und Hilfsmittel ──
+     Die Allergien stehen im Unverträglichkeitsbestand, nicht hier: sie gelten
+     auch dann, wenn kein Arzneimittel verordnet ist, und ein zweiter Ort
+     dafür wäre ein zweiter Wahrheitsanspruch. Dieselbe Liste zeigt die
+     Ansicht Medikation › Unverträglichkeiten. */
+  const { unvertraeglichkeiten } = useMedikationsbestand();
+  const allergien = unvertraeglichkeiten.filter(u => u.patientId === patient.id);
   const [editK2, setEditK2] = useState(false);
-  const [k2Snap, setK2Snap] = useState<{ a: AllergieEntry[]; h: HilfsmittelEntry[] } | null>(null);
-
+  const [aEntwurf, setAEntwurf] = useState<Unvertraeglichkeit[]>([]);
+  const [hEntwurf, setHEntwurf] = useState<Hilfsmittel[]>([]);
+  const gezeigteAllergien = editK2 ? aEntwurf : allergien;
+  const gezeigteHilfsmittel = editK2 ? hEntwurf : hilfsmittel;
 
   /* ── Bereich B — Anamnese-Einträge ── */
-  const initialText = `Herr ${patient.nachname} ist ein ${Math.floor(new Date().getFullYear() - 1958)}-jähriger Patient mit bekannter arterieller Hypertonie (seit 2018), Diabetes mellitus Typ 2 (seit 2020) und mittelgradiger depressiver Episode (seit 2024). Zustand nach Hüft-TEP links 2019 — seitdem eingeschränkte Mobilität mit Rollator im Innenbereich.
-
-Aktuell stabile Blutdruckwerte unter Lisinopril 10 mg. HbA1c zuletzt 7.2% (Dezember 2025), Therapie mit Metformin 500 mg 1-0-1. Die depressive Symptomatik wird mit Sertralin 50 mg behandelt und zeigt eine leichte Besserung der Stimmungslage gemäss Rückmeldung der Angehörigen.
-
-Bekannte Allergie auf Penicillin (anaphylaktische Reaktion 2008, dokumentiert) sowie Kontaktallergie auf Latex. Beide Allergien sind im Medikationsplan und bei allen behandelnden Ärzten hinterlegt.
-
-Stationärer Aufenthalt im Januar 2026 nach häuslichem Sturz (Oberschenkelprellung, keine Fraktur). Mobilisation konnte rasch wieder aufgenommen werden. Zweiter Aufenthalt Ende November 2025 zur stationären Diabetes-Einstellung nach Entgleisung (BZ > 18 mmol/l).
-
-Der Patient lebt mit seiner Ehefrau zusammen, die als pflegende Angehörige registriert ist. Kognitive Fähigkeiten sind weitgehend erhalten, bei leichter Vergesslichkeit im Alltag. Kommunikation in ${patient.sprache} gut möglich. Nächtliche Inkontinenzproblematik besteht intermittierend.
-
-Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (Vollübernahme). Fusspflege durch Podologe alle 6 Wochen. Wochendosierer wird durch die zuständige Pflegefachkraft vorbereitet. Notrufknopf ist vorhanden und wird selbstständig bedient.`;
-
-  const [anamneseEntries, setAnamneseEntries] = useState<AnamneseEntry[]>([
-    { id: "an1", text: initialText, datum: "15.01.2026", autor: "Sandra Weber" },
-  ]);
   const [editAnamnese, setEditAnamnese] = useState(false);
-  const [anamneseSnap, setAnamneseSnap] = useState("");
   const [anaDraft, setAnaDraft] = useState("");
   const [showNewAnamnese, setShowNewAnamnese] = useState(false);
   const [newAnaDraft, setNewAnaDraft] = useState("");
   const [expandedOld, setExpandedOld] = useState<Set<string>>(new Set());
 
-  const currentAnamnese = anamneseEntries[0];
-  const olderAnamnesen = anamneseEntries.slice(1);
+  const currentAnamnese = eintraege[0] ?? null;
+  const olderAnamnesen = eintraege.slice(1);
 
   /* ── shared classes ── */
   const _editBtn = "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors cursor-pointer";
   const _saveBtn = "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] text-primary-foreground bg-primary hover:bg-primary-hover transition-colors cursor-pointer";
   const _cancelBtn = "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors cursor-pointer";
   const _input = "w-full rounded-lg border border-border bg-background px-3 py-1.5 text-[13px] text-foreground outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/10 transition-colors";
-
-  const todayStr = () => {
-    const d = new Date();
-    return `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
-  };
 
   return (
     <div className="space-y-5">
@@ -1481,18 +1691,18 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
         {/* ── Karte 1: Biometrie ─────────── */}
         <div className={`bg-card rounded-2xl border overflow-hidden transition-colors ${editBio ? "border-primary/25 shadow-sm" : "border-border"}`}>
           <div className="px-5 py-3.5 border-b border-border-light flex items-center gap-2">
-            <Activity className="w-4 h-4 text-primary" />
+            <Activity className="w-4 h-4 text-muted-foreground" />
             <h5 className="text-foreground flex-1">Biometrie</h5>
             {!editBio ? (
-              <button onClick={() => { setBioSnap({ g: groesse, w: gewicht }); setEditBio(true); }} className={_editBtn} style={{ fontWeight: 450 }}>
+              <button onClick={() => { setBioEntwurf({ g: groesse, w: gewicht }); setEditBio(true); }} className={_editBtn} style={{ fontWeight: 450 }}>
                 <Pencil className="w-3 h-3" /> Bearbeiten
               </button>
             ) : (
               <div className="flex items-center gap-1.5">
-                <button onClick={() => { setGroesse(bioSnap.g); setGewicht(bioSnap.w); setEditBio(false); }} className={_cancelBtn} style={{ fontWeight: 450 }}>
+                <button onClick={() => setEditBio(false)} className={_cancelBtn} style={{ fontWeight: 450 }}>
                   <X className="w-3 h-3" /> Abbrechen
                 </button>
-                <button onClick={() => setEditBio(false)} className={_saveBtn} style={{ fontWeight: 500 }}>
+                <button onClick={() => { biometrieSichern(patient.id, bioEntwurf.g, bioEntwurf.w); setEditBio(false); }} className={_saveBtn} style={{ fontWeight: 500 }}>
                   <Check className="w-3 h-3" /> Speichern
                 </button>
               </div>
@@ -1503,17 +1713,17 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
               <div className="grid grid-cols-3 gap-4">
                 <div className="text-center">
                   <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Grösse</div>
-                  <div className="text-[22px] text-foreground" style={{ fontWeight: 600, lineHeight: "1.2" }}>{groesse}</div>
+                  <div className="text-[22px] text-foreground" style={{ fontWeight: 600, lineHeight: "1.2" }}>{groesse > 0 ? groesse : "—"}</div>
                   <div className="text-[11px] text-muted-foreground" style={{ fontWeight: 400 }}>cm</div>
                 </div>
                 <div className="text-center">
                   <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Gewicht</div>
-                  <div className="text-[22px] text-foreground" style={{ fontWeight: 600, lineHeight: "1.2" }}>{gewicht}</div>
+                  <div className="text-[22px] text-foreground" style={{ fontWeight: 600, lineHeight: "1.2" }}>{gewicht > 0 ? gewicht : "—"}</div>
                   <div className="text-[11px] text-muted-foreground" style={{ fontWeight: 400 }}>kg</div>
                 </div>
                 <div className="text-center">
                   <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>BMI</div>
-                  <div className={`text-[22px] ${bmiColor}`} style={{ fontWeight: 600, lineHeight: "1.2" }}>{bmi}</div>
+                  <div className={`text-[22px] ${bmiColor}`} style={{ fontWeight: 600, lineHeight: "1.2" }}>{bmiBekannt ? bmi : "—"}</div>
                   <div className={`text-[11px] ${bmiColor}`} style={{ fontWeight: 500 }}>{bmiKategorie}</div>
                 </div>
               </div>
@@ -1522,16 +1732,16 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1 block" style={{ fontWeight: 500 }}>Grösse (cm)</label>
-                    <input type="number" value={groesse} onChange={(e) => setGroesse(+e.target.value || 0)} className={_input} />
+                    <input type="number" value={bioEntwurf.g} onChange={(e) => setBioEntwurf(v => ({ ...v, g: +e.target.value || 0 }))} className={_input} />
                   </div>
                   <div>
                     <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1 block" style={{ fontWeight: 500 }}>Gewicht (kg)</label>
-                    <input type="number" value={gewicht} onChange={(e) => setGewicht(+e.target.value || 0)} className={_input} />
+                    <input type="number" value={bioEntwurf.w} onChange={(e) => setBioEntwurf(v => ({ ...v, w: +e.target.value || 0 }))} className={_input} />
                   </div>
                 </div>
                 <div className="rounded-lg bg-muted/40 px-3 py-2 flex items-center justify-between">
                   <span className="text-[11px] text-muted-foreground" style={{ fontWeight: 500 }}>Berechneter BMI</span>
-                  <span className={`text-[15px] ${bmiColor}`} style={{ fontWeight: 600 }}>{bmi} <span className="text-[11px]" style={{ fontWeight: 500 }}>({bmiKategorie})</span></span>
+                  <span className={`text-[15px] ${bmiColor}`} style={{ fontWeight: 600 }}>{bmiBekannt ? bmi : "—"} <span className="text-[11px]" style={{ fontWeight: 500 }}>({bmiKategorie})</span></span>
                 </div>
               </div>
             )}
@@ -1561,15 +1771,31 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
             <AlertTriangle className="w-4 h-4 text-error" />
             <h5 className="text-foreground flex-1">Allergien & Hilfsmittel</h5>
             {!editK2 ? (
-              <button onClick={() => { setK2Snap({ a: allergien.map(x => ({...x})), h: hilfsmittel.map(x => ({...x})) }); setEditK2(true); }} className={_editBtn} style={{ fontWeight: 450 }}>
+              <button onClick={() => { setAEntwurf(allergien.map(x => ({...x}))); setHEntwurf(hilfsmittel.map(x => ({...x}))); setEditK2(true); }} className={_editBtn} style={{ fontWeight: 450 }}>
                 <Pencil className="w-3 h-3" /> Bearbeiten
               </button>
             ) : (
               <div className="flex items-center gap-1.5">
-                <button onClick={() => { if (k2Snap) { setAllergien(k2Snap.a); setHilfsmittel(k2Snap.h); } setEditK2(false); }} className={_cancelBtn} style={{ fontWeight: 450 }}>
+                <button onClick={() => setEditK2(false)} className={_cancelBtn} style={{ fontWeight: 450 }}>
                   <X className="w-3 h-3" /> Abbrechen
                 </button>
-                <button onClick={() => setEditK2(false)} className={_saveBtn} style={{ fontWeight: 500 }}>
+                <button onClick={() => {
+                  /* Entfernte zuerst, dann die übrigen sichern — sonst legte
+                     eine leere Kennung den Eintrag ein zweites Mal an. */
+                  hilfsmittel.filter(x => !hEntwurf.some(e => e.id === x.id)).forEach(x => hilfsmittelEntfernen(x.id));
+                  hEntwurf.forEach(x => hilfsmittelSichern({ ...x, patientId: patient.id }));
+                  /* Erfasst am und durch entstehen beim Anlegen; ein bereits
+                     gesetzter Vermerk bleibt stehen. */
+                  aEntwurf.forEach(x => unvertraeglichkeitSichern({
+                    ...x, patientId: patient.id,
+                    /* Gestempelt wird nur, was hier entsteht. Einem
+                       bestehenden Eintrag einen Erfassungsvermerk zu geben
+                       hiesse zu behaupten, jemand habe ihn heute erhoben. */
+                    erfasstAm: x.id ? x.erfasstAm : alsAnzeigedatum(GEGENWART),
+                    erfasstDurch: x.id ? x.erfasstDurch : AKTUELLE_FACHPERSON,
+                  }));
+                  setEditK2(false);
+                }} className={_saveBtn} style={{ fontWeight: 500 }}>
                   <Check className="w-3 h-3" /> Speichern
                 </button>
               </div>
@@ -1580,34 +1806,41 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
             <div className="rounded-xl bg-error/[0.06] border border-error/15 p-3.5">
               <div className="flex items-center gap-1.5 mb-2.5">
                 <AlertTriangle className="w-3.5 h-3.5 text-error" />
-                <span className="text-[11px] text-error uppercase tracking-wider" style={{ fontWeight: 600 }}>Bekannte Allergien</span>
+                <span className="text-[11px] text-error uppercase tracking-wider" style={{ fontWeight: 600 }}>Bekannte Unverträglichkeiten</span>
               </div>
               <div className="space-y-2">
-                {allergien.map((a) => (
+                {gezeigteAllergien.length === 0 && (
+                  <p className="text-[12px] text-muted-foreground" style={{ margin: 0, lineHeight: 1.6, maxWidth: "62ch" }}>
+                    Keine Unverträglichkeit erfasst.
+                  </p>
+                )}
+                {gezeigteAllergien.map((a) => (
                   <div key={a.id} className="flex items-center justify-between gap-2">
                     {editK2 ? (
                       <>
-                        <input value={a.stoff} onChange={e => setAllergien(prev => prev.map(x => x.id === a.id ? {...x, stoff: e.target.value} : x))} className={`${_input} flex-1`} placeholder="Allergen" />
-                        <input value={a.reaktion} onChange={e => setAllergien(prev => prev.map(x => x.id === a.id ? {...x, reaktion: e.target.value} : x))} className={`${_input} flex-1`} placeholder="Reaktion" />
-                        <select value={a.schwere} onChange={e => setAllergien(prev => prev.map(x => x.id === a.id ? {...x, schwere: e.target.value as AllergieEntry["schwere"]} : x))} className={`${_input} w-24 shrink-0`}>
-                          <option value="Leicht">Leicht</option><option value="Mittel">Mittel</option><option value="Schwer">Schwer</option>
+                        <input value={a.substanz} onChange={e => setAEntwurf(prev => prev.map(x => x.id === a.id ? {...x, substanz: e.target.value} : x))} className={`${_input} flex-1`} placeholder="Substanz" />
+                        <input value={a.reaktion} onChange={e => setAEntwurf(prev => prev.map(x => x.id === a.id ? {...x, reaktion: e.target.value} : x))} className={`${_input} flex-1`} placeholder="Reaktion" />
+                        <select value={a.schwere} onChange={e => setAEntwurf(prev => prev.map(x => x.id === a.id ? {...x, schwere: e.target.value} : x))} className={`${_input} w-32 shrink-0`}>
+                          <option value="">Nicht eingestuft</option>
+                          {UNVERTRAEGLICHKEIT_SCHWERE.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
                         </select>
-                        <button onClick={() => setAllergien(prev => prev.filter(x => x.id !== a.id))} className="p-1 rounded-lg text-error/60 hover:text-error hover:bg-error/8 transition-colors shrink-0"><X className="w-3.5 h-3.5" /></button>
                       </>
                     ) : (
                       <>
                         <div>
-                          <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{a.stoff}</span>
-                          <span className="text-[11px] text-muted-foreground ml-1.5" style={{ fontWeight: 400 }}>— {a.reaktion}</span>
+                          <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{a.substanz}</span>
+                          <span className="text-[11px] text-muted-foreground ml-1.5" style={{ fontWeight: 400 }}>— {a.reaktion || "Reaktion nicht erfasst"}</span>
                         </div>
-                        <span className={`text-[10px] px-1.5 py-[2px] rounded-md shrink-0 ${a.schwere === "Schwer" ? "bg-error-light text-error-foreground" : a.schwere === "Mittel" ? "bg-warning-light text-warning-foreground" : "bg-muted text-muted-foreground"}`} style={{ fontWeight: 500 }}>{a.schwere}</span>
+                        <span className="text-[10px] px-1.5 py-[2px] rounded-md shrink-0 bg-muted text-muted-foreground" style={{ fontWeight: 500 }}>
+                          {a.schwere ? medikationswertLabel(UNVERTRAEGLICHKEIT_SCHWERE, a.schwere) : "Nicht eingestuft"}
+                        </span>
                       </>
                     )}
                   </div>
                 ))}
                 {editK2 && (
-                  <button onClick={() => setAllergien(prev => [...prev, { id: `a${Date.now()}`, stoff: "", reaktion: "", schwere: "Mittel" }])} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary-hover pt-1 transition-colors cursor-pointer" style={{ fontWeight: 500 }}>
-                    <Plus className="w-3 h-3" /> Allergie hinzufügen
+                  <button onClick={() => setAEntwurf(prev => [...prev, { id: "", patientId: patient.id, substanz: "", art: "art_unbekannt", reaktion: "", schwere: "", erfasstAm: "", erfasstDurch: "" }])} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary-hover pt-1 transition-colors cursor-pointer" style={{ fontWeight: 500 }}>
+                    <Plus className="w-3 h-3" /> Unverträglichkeit hinzufügen
                   </button>
                 )}
               </div>
@@ -1616,26 +1849,31 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>Hilfsmittel</div>
               <div className="space-y-1.5">
-                {hilfsmittel.map((h) => (
+                {gezeigteHilfsmittel.length === 0 && (
+                  <p className="text-[12px] text-muted-foreground" style={{ margin: 0, lineHeight: 1.6, maxWidth: "62ch" }}>
+                    Kein Hilfsmittel erfasst. Hier steht, was im Alltag gebraucht wird — Brille, Hörgerät, Rollator.
+                  </p>
+                )}
+                {gezeigteHilfsmittel.map((h) => (
                   <div key={h.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-background border border-border-light">
                     {editK2 ? (
                       <>
                         <Eye className="w-3.5 h-3.5 text-primary/60 shrink-0" />
-                        <input value={h.label} onChange={e => setHilfsmittel(prev => prev.map(x => x.id === h.id ? {...x, label: e.target.value} : x))} className={`${_input} flex-1`} placeholder="Bezeichnung" />
-                        <input value={h.detail} onChange={e => setHilfsmittel(prev => prev.map(x => x.id === h.id ? {...x, detail: e.target.value} : x))} className={`${_input} w-36 shrink-0`} placeholder="Details" />
-                        <button onClick={() => setHilfsmittel(prev => prev.filter(x => x.id !== h.id))} className="p-1 rounded-lg text-error/60 hover:text-error hover:bg-error/8 transition-colors shrink-0"><X className="w-3.5 h-3.5" /></button>
+                        <input value={h.bezeichnung} onChange={e => setHEntwurf(prev => prev.map(x => x.id === h.id ? {...x, bezeichnung: e.target.value} : x))} className={`${_input} flex-1`} placeholder="Bezeichnung" />
+                        <input value={h.detail} onChange={e => setHEntwurf(prev => prev.map(x => x.id === h.id ? {...x, detail: e.target.value} : x))} className={`${_input} w-36 shrink-0`} placeholder="Details" />
+                        <button onClick={() => setHEntwurf(prev => prev.filter(x => x.id !== h.id))} className="p-1 rounded-lg text-error/60 hover:text-error hover:bg-error/8 transition-colors shrink-0"><X className="w-3.5 h-3.5" /></button>
                       </>
                     ) : (
                       <>
                         <Eye className="w-3.5 h-3.5 text-primary/60 shrink-0" />
-                        <span className="text-[12px] text-foreground flex-1" style={{ fontWeight: 450 }}>{h.label}</span>
+                        <span className="text-[12px] text-foreground flex-1" style={{ fontWeight: 450 }}>{h.bezeichnung}</span>
                         <span className="text-[11px] text-muted-foreground" style={{ fontWeight: 400 }}>{h.detail}</span>
                       </>
                     )}
                   </div>
                 ))}
                 {editK2 && (
-                  <button onClick={() => setHilfsmittel(prev => [...prev, { id: `h${Date.now()}`, label: "", detail: "" }])} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary-hover pt-1 transition-colors cursor-pointer" style={{ fontWeight: 500 }}>
+                  <button onClick={() => setHEntwurf(prev => [...prev, { id: "", patientId: patient.id, bezeichnung: "", detail: "" }])} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary-hover pt-1 transition-colors cursor-pointer" style={{ fontWeight: 500 }}>
                     <Plus className="w-3 h-3" /> Hilfsmittel hinzufügen
                   </button>
                 )}
@@ -1666,7 +1904,7 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
           <div className="px-5 py-3.5 border-b border-border-light flex items-center gap-2">
             <Plus className="w-4 h-4 text-primary" />
             <h5 className="text-foreground flex-1">Neue Anamnese</h5>
-            <span className="text-[10.5px] text-muted-foreground" style={{ fontWeight: 400 }}>{todayStr()} · Sandra Weber</span>
+            <span className="text-[10.5px] text-muted-foreground" style={{ fontWeight: 400 }}>{anamneseDatum()} · {AKTUELLE_FACHPERSON}</span>
             <div className="flex items-center gap-1.5 ml-3">
               <button onClick={() => setShowNewAnamnese(false)} className={_cancelBtn} style={{ fontWeight: 450 }}>
                 <X className="w-3 h-3" /> Verwerfen
@@ -1674,7 +1912,9 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
               <button
                 onClick={() => {
                   if (!newAnaDraft.trim()) return;
-                  setAnamneseEntries(prev => [{ id: `an${Date.now()}`, text: newAnaDraft.trim(), datum: todayStr(), autor: "Sandra Weber" }, ...prev]);
+                  /* Datum aus der einen Gegenwart, Autor die angemeldete
+                     Fachperson — beides gesetzt, nicht erfragt. */
+                  anamneseeintragSichern({ id: "", patientId: patient.id, text: newAnaDraft.trim(), datum: anamneseDatum(), autor: AKTUELLE_FACHPERSON });
                   setShowNewAnamnese(false);
                   setNewAnaDraft("");
                 }}
@@ -1699,23 +1939,46 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
       )}
 
       {/* Current Anamnese */}
+      {currentAnamnese === null ? (
+        <div className="bg-card rounded-2xl border border-border overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-border-light flex items-center gap-2">
+            <FileText className="w-4 h-4 text-muted-foreground" />
+            <h5 className="text-foreground flex-1">Anamnese</h5>
+          </div>
+          <div className="p-5">
+            <p className="text-[13px] text-muted-foreground" style={{ margin: 0, lineHeight: 1.6, maxWidth: "74ch" }}>
+              Keine Anamnese erfasst. Sie hält fest, was bei der Aufnahme erhoben wurde — Vorgeschichte,
+              Beschwerden, Lebensumstände und was für die Pflege daraus folgt.
+            </p>
+          </div>
+        </div>
+      ) : (
       <div className={`bg-card rounded-2xl border overflow-hidden transition-colors ${editAnamnese ? "border-primary/25 shadow-sm" : "border-border"}`}>
         <div className="px-5 py-3.5 border-b border-border-light flex items-center gap-2">
-          <FileText className="w-4 h-4 text-primary" />
+          <FileText className="w-4 h-4 text-muted-foreground" />
           <h5 className="text-foreground flex-1">Anamnese</h5>
           <span className="text-[10.5px] text-muted-foreground mr-2" style={{ fontWeight: 400 }}>
-            {olderAnamnesen.length === 0 ? "Übernommen aus Onboarding · " : ""}{currentAnamnese.datum}, {currentAnamnese.autor}
+            {/* „Übernommen aus Onboarding" stand hier, solange der einzige
+                Eintrag aus dem Seitencode kam. Er kommt jetzt aus dem
+                Bestand und entsteht bei der Erfassung — der Zusatz wäre eine
+                Herkunftsangabe, die niemand geprüft hat. */}
+            {currentAnamnese.datum}, {currentAnamnese.autor}
           </span>
           {!editAnamnese ? (
-            <button onClick={() => { setAnamneseSnap(currentAnamnese.text); setAnaDraft(currentAnamnese.text); setEditAnamnese(true); }} className={_editBtn} style={{ fontWeight: 450 }}>
+            <button onClick={() => { setAnaDraft(currentAnamnese.text); setEditAnamnese(true); }} className={_editBtn} style={{ fontWeight: 450 }}>
               <Pencil className="w-3 h-3" /> Bearbeiten
             </button>
           ) : (
             <div className="flex items-center gap-1.5">
-              <button onClick={() => { setAnaDraft(anamneseSnap); setEditAnamnese(false); }} className={_cancelBtn} style={{ fontWeight: 450 }}>
+              <button onClick={() => setEditAnamnese(false)} className={_cancelBtn} style={{ fontWeight: 450 }}>
                 <X className="w-3 h-3" /> Abbrechen
               </button>
-              <button onClick={() => { setAnamneseEntries(prev => prev.map((ent, i) => i === 0 ? {...ent, text: anaDraft, datum: todayStr(), autor: "Sandra Weber"} : ent)); setEditAnamnese(false); }} className={_saveBtn} style={{ fontWeight: 500 }}>
+              <button onClick={() => {
+                /* Nur der Text wird richtiggestellt. Datum und Autor sagen,
+                   wer wann erhoben hat — nicht, wer zuletzt getippt hat. */
+                anamneseeintragSichern({ ...currentAnamnese, text: anaDraft });
+                setEditAnamnese(false);
+              }} className={_saveBtn} style={{ fontWeight: 500 }}>
                 <Check className="w-3 h-3" /> Speichern
               </button>
             </div>
@@ -1740,6 +2003,7 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
           )}
         </div>
       </div>
+      )}
 
       {/* Older Anamnesen (collapsed by default) */}
       {olderAnamnesen.length > 0 && (
@@ -1907,7 +2171,7 @@ function TabATL({ patient }: { patient: Patient }) {
       {/* ── Summary bar ──────────────────── */}
       <div className="rounded-2xl p-5">
         <div className="flex items-center gap-2 mb-4">
-          <ClipboardList className="w-4 h-4 text-primary" />
+          <ClipboardList className="w-4 h-4 text-muted-foreground" />
           <h5 className="text-foreground">ATL-Übersicht</h5>
           <span className="text-[11px] text-muted-foreground ml-auto" style={{ fontWeight: 400 }}>
             {total} Aktivitäten erfasst · Letzte Aktualisierung: 24.02.2026
@@ -1940,7 +2204,7 @@ function TabATL({ patient }: { patient: Patient }) {
         return (
           <div key={bereich.id} className={`bg-card rounded-2xl border overflow-hidden transition-colors ${isEdit ? "border-primary/25 shadow-sm" : "border-border"}`}>
             <div className="px-5 py-3.5 border-b border-border-light flex items-center gap-2">
-              <Icon className="w-4 h-4 text-primary" />
+              <Icon className="w-4 h-4 text-muted-foreground" />
               <h5 className="text-foreground flex-1">{bereich.bereich}</h5>
               {!isEdit ? (
                 <button onClick={() => startEditBereich(bereich)} className={_atlEdit} style={{ fontWeight: 450 }}>
@@ -3875,6 +4139,1150 @@ function Netzdiagramm({ patient, privat, rechts, nameVon, kontaktVon, zugehoerig
 
 /* ── Vorgeschichte ───────────────────────────────────────────────────────── */
 
+/* ══════════════════════════════════════════
+   ANSICHT: MEDIKATION — PLAN
+   ══════════════════════════════════════════ */
+
+/** Eine Marke an der Zeile — Bedarf, freitextlich, ausser Handel. */
+function MedMarke({ text, warnend }: { text: string; warnend?: boolean }) {
+  return (
+    <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)",
+      fontWeight: "var(--weight-medium)", whiteSpace: "nowrap",
+      background: warnend ? "var(--status-warning-bg)" : "var(--bg-secondary)",
+      color: warnend ? "var(--status-warning-text)" : "var(--text-secondary)" }}>
+      {text}
+    </span>
+  );
+}
+
+/**
+ * Der Medikationsplan.
+ *
+ * Der Vorbehalt steht über allem und ist nicht wegklickbar — die
+ * Umsetzungshilfe verlangt ihn ausdrücklich, und ein Hinweis, den man
+ * einmal wegklickt, ist beim nächsten Leser nicht mehr da.
+ */
+function AnsichtMedikationsplan({ patient }: { patient: Patient }) {
+  const { medikationen, plankommentare } = useMedikationsbestand();
+  const kontakte = useKontakte();
+  /* "" = neu, Kennung = ändern, null = geschlossen. */
+  const [formular, setFormular] = useState<string | null>(null);
+  const [abgesetztOffen, setAbgesetztOffen] = useState(false);
+  const [kommentarOffen, setKommentarOffen] = useState(false);
+
+  const eigene = medikationen.filter(m => m.patientId === patient.id);
+  const laufend = eigene.filter(istLaufend);
+  const abgesetzt = eigene.filter(m => !istLaufend(m));
+  /* Reserve und Notfall stehen unter den übrigen — sie werden nicht nach
+     Tageszeit eingenommen und lesen sich in derselben Spalte falsch. */
+  const regelmaessig = laufend.filter(m => !istBedarf(m));
+  const beiBedarf = laufend.filter(istBedarf);
+  const kommentar = plankommentare[patient.id] ?? "";
+
+  const kontaktVon = (k: string) => {
+    const t = kontakte.find(x => x.id === k);
+    return t ? kontaktName(t) : "";
+  };
+
+  return (
+    <div className="space-y-4">
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "10px 18px" }}>
+        <div className="flex items-center flex-wrap" style={{ gap: 12 }}>
+          <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Medikationsplan</h3>
+          {formular === null && (
+            <button type="button" onClick={() => setFormular("")} className="ui-fokusring cursor-pointer inline-flex items-center"
+              style={{ gap: 5, marginLeft: "auto", background: "none", border: "none", padding: "4px 8px", fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--brand-primary)" }}>
+              <Plus style={{ width: 13, height: 13 }} /> Medikation erfassen
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Der Vorbehalt. Kein Schliessknopf — mit Absicht. */}
+      <div role="note" style={{ display: "flex", gap: 10, padding: "10px 14px", borderRadius: "var(--radius-card)", background: "var(--status-info-bg)" }}>
+        <Info aria-hidden="true" style={{ width: 15, height: 15, color: "var(--status-info)", flexShrink: 0, marginTop: 2 }} />
+        <p style={{ margin: 0, fontSize: "var(--text-meta)", color: "var(--status-info)", lineHeight: 1.6, maxWidth: "82ch" }}>
+          {PLAN_VORBEHALT}
+        </p>
+      </div>
+
+      {/* Plankommentar — was den ganzen Plan betrifft, nicht eine Position. */}
+      <PSectionCard title="Hinweise zum Plan" icon={MessageSquare}>
+        {kommentarOffen ? (
+          <PlankommentarFormular patientId={patient.id} wert={kommentar} onFertig={() => setKommentarOffen(false)} />
+        ) : kommentar.trim() ? (
+          <div className="flex items-start" style={{ gap: 12 }}>
+            <p style={{ margin: 0, flex: 1, fontSize: "var(--text-small)", color: "var(--text-primary)", lineHeight: 1.6, maxWidth: "82ch" }}>{kommentar}</p>
+            <button type="button" onClick={() => setKommentarOffen(true)} className="ui-fokusring cursor-pointer"
+              style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+              Bearbeiten
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setKommentarOffen(true)} className="ui-fokusring cursor-pointer inline-flex items-center"
+            style={{ gap: 5, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            <Plus style={{ width: 13, height: 13 }} /> Hinweis erfassen
+          </button>
+        )}
+      </PSectionCard>
+
+      {formular === "" && (
+        <PSectionCard title="Neue Medikation" icon={Pill}>
+          <MedikationFormular patientId={patient.id} eintrag={null} onFertig={() => setFormular(null)} />
+        </PSectionCard>
+      )}
+
+      {laufend.length === 0 && formular === null ? (
+        <PSectionCard title="Medikation" icon={Pill}>
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+            Für diesen Patienten ist keine Medikation erfasst. Der Plan hält alle Medikamente fest,
+            die der Patient aktuell einnehmen sollte — auch verschriebene, die noch nicht bezogen
+            sind. Die Spitex führt ihn; verordnet wird anderswo.
+          </p>
+          <div style={{ marginTop: 12 }}>
+            <AppButton variant="sekundaer" icon={Plus} onClick={() => setFormular("")}>Medikation erfassen</AppButton>
+          </div>
+        </PSectionCard>
+      ) : laufend.length > 0 && (
+        <PSectionCard title="Laufende Medikation" icon={Pill}>
+          <MedikationsListe eintraege={[...regelmaessig, ...beiBedarf]} kontaktVon={kontaktVon}
+            offen={formular} onOeffnen={setFormular} onSchliessen={() => setFormular(null)}
+            patientId={patient.id} absetzbar />
+        </PSectionCard>
+      )}
+
+      {abgesetzt.length > 0 && (
+        <PSectionCard title={`Abgesetzt (${abgesetzt.length})`} icon={Clock}>
+          <button type="button" onClick={() => setAbgesetztOffen(o => !o)} className="ui-fokusring cursor-pointer"
+            style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            {abgesetztOffen ? "Einklappen" : `${abgesetzt.length} abgesetzte ${abgesetzt.length === 1 ? "Medikation" : "Medikationen"} anzeigen`}
+          </button>
+          {abgesetztOffen && (
+            <div style={{ marginTop: 8 }}>
+              <MedikationsListe eintraege={abgesetzt} kontaktVon={kontaktVon}
+                offen={null} onOeffnen={() => {}} onSchliessen={() => {}} patientId={patient.id} />
+            </div>
+          )}
+          {/* Es gibt keinen Löschweg: der Bestand kennt nur Sichern und
+              Absetzen. Eine abgesetzte Medikation erklärt, was der Patient
+              vorher bekam — das gehört zur Geschichte. */}
+          <p style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", margin: "10px 0 0", maxWidth: "74ch", lineHeight: 1.6 }}>
+            Abgesetzte Medikationen bleiben erhalten. Sie erklären, was der Patient vorher bekam.
+          </p>
+        </PSectionCard>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Die Zeilen des Plans — Feldreihenfolge nach Empfehlung 11 der
+ * Umsetzungshilfe: Produktename, Wirkstoff, Darreichungsform,
+ * Wirkstoffmenge, Dosierung, Anwendungsweg, Beginn und Ende,
+ * Behandlungsgrund.
+ */
+function MedikationsListe({ eintraege, kontaktVon, offen, onOeffnen, onSchliessen, patientId, absetzbar }: {
+  eintraege: Medikation[];
+  kontaktVon: (k: string) => string;
+  offen: string | null;
+  onOeffnen: (id: string) => void;
+  onSchliessen: () => void;
+  patientId: string;
+  absetzbar?: boolean;
+}) {
+  return (
+    <div className="flex flex-col" style={{ gap: 2 }}>
+      {eintraege.map(m => {
+        if (offen === m.id) {
+          return (
+            <div key={m.id} style={{ paddingTop: 8, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+              <MedikationFormular patientId={patientId} eintrag={m} onFertig={onSchliessen} />
+            </div>
+          );
+        }
+        const a = arzneiAngaben(m);
+        const arzt = kontaktVon(m.verordnetDurch);
+        return (
+          <div key={m.id} style={{ padding: "10px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+            <div className="flex items-baseline flex-wrap" style={{ gap: 10 }}>
+              <span style={{ minWidth: 230, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+                {a.produktename || a.wirkstoff || "ohne Bezeichnung"}
+              </span>
+              <span style={{ width: 150, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{a.wirkstoff || "—"}</span>
+              <span style={{ width: 190, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+                {[a.darreichungsform ? medikationswertLabel(DARREICHUNGSFORM, a.darreichungsform) : "", a.wirkstoffmenge].filter(Boolean).join(" · ") || "—"}
+              </span>
+              <span style={{ width: 130, fontSize: "var(--text-meta)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>{tagesdosis(m)}</span>
+              <span style={{ width: 110, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                {m.anwendungsweg ? medikationswertLabel(ANWENDUNGSWEG, m.anwendungsweg) : "—"}
+              </span>
+              <span style={{ width: 170, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                {m.beginn || "—"}{m.ende ? ` – ${m.ende}` : ""}
+              </span>
+              <span className="flex flex-wrap items-baseline" style={{ gap: 6, flex: 1, minWidth: 150 }}>
+                {istBedarf(m) && <MedMarke text={medikationswertLabel(MEDIKATIONSART, m.art)} />}
+                {istFreitextlich(m) && <MedMarke text="Ohne Katalog" />}
+                {a.eintrag && !a.eintrag.verfuegbar && <MedMarke text="Nicht mehr im Handel" warnend />}
+                {!istLaufend(m) && <MedMarke text={`Abgesetzt ${m.abgesetztAm}`} />}
+              </span>
+              <button type="button" onClick={() => onOeffnen(m.id)} className="ui-fokusring cursor-pointer"
+                style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+                Bearbeiten
+              </button>
+              {absetzbar && (
+                <button type="button" onClick={() => medikationAbsetzen(m.id, alsAnzeigedatum(GEGENWART))} className="ui-fokusring cursor-pointer"
+                  style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+                  Absetzen
+                </button>
+              )}
+            </div>
+            {(m.behandlungsgrund.trim() || m.kommentar.trim() || arzt) && (
+              <div className="flex flex-wrap" style={{ gap: 14, marginTop: 4, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                {m.behandlungsgrund.trim() && <span>{m.behandlungsgrund}</span>}
+                {m.kommentar.trim() && <span>{m.kommentar}</span>}
+                {arzt && <span>Verordnet durch {arzt}</span>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PlankommentarFormular({ patientId, wert, onFertig }: {
+  patientId: string; wert: string; onFertig: () => void;
+}) {
+  const [text, setText] = useState(wert);
+  return (
+    <div>
+      <FormFeld label="Hinweis zum ganzen Plan" wert={text}
+        platzhalter="z. B. Schluckbeschwerden — Tabletten mörsern; antikoaguliert" onAendern={setText} />
+      <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
+        <AppButton variant="sekundaer" onClick={() => { plankommentarSichern(patientId, text.trim()); onFertig(); }}>Sichern</AppButton>
+        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Medikation erfassen oder ändern — an Ort, wie in der Wunddokumentation.
+ *
+ * Die Feldreihenfolge folgt der Empfehlung 11 der Umsetzungshilfe.
+ */
+function MedikationFormular({ patientId, eintrag, onFertig }: {
+  patientId: string; eintrag: Medikation | null; onFertig: () => void;
+}) {
+  const [arznei, setArznei] = useState<ArzneimittelWahlWert>({
+    arzneimittelId: eintrag?.arzneimittelId ?? "",
+    produktename: eintrag?.produktename ?? "",
+    wirkstoff: eintrag?.wirkstoff ?? "",
+    darreichungsform: eintrag?.darreichungsform ?? "",
+    wirkstoffmenge: eintrag?.wirkstoffmenge ?? "",
+  });
+  const [morgen, setMorgen] = useState(eintrag?.morgen ?? "");
+  const [mittag, setMittag] = useState(eintrag?.mittag ?? "");
+  const [abend, setAbend] = useState(eintrag?.abend ?? "");
+  const [nacht, setNacht] = useState(eintrag?.nacht ?? "");
+  const [dosierungText, setDosierungText] = useState(eintrag?.dosierungText ?? "");
+  const [anwendungsweg, setAnwendungsweg] = useState(eintrag?.anwendungsweg ?? "");
+  const [art, setArt] = useState(eintrag?.art ?? "");
+  const [beginn, setBeginn] = useState(eintrag?.beginn ?? "");
+  const [ende, setEnde] = useState(eintrag?.ende ?? "");
+  const [behandlungsgrund, setBehandlungsgrund] = useState(eintrag?.behandlungsgrund ?? "");
+  const [kommentar, setKommentar] = useState(eintrag?.kommentar ?? "");
+  const [verordnetDurch, setVerordnetDurch] = useState(eintrag?.verordnetDurch ?? "");
+  const [fehler, setFehler] = useState("");
+
+  const bedarf = OHNE_TAGESDOSIERUNG.includes(art);
+
+  const zusammen = (): Medikation => ({
+    id: eintrag?.id ?? "",
+    patientId,
+    arzneimittelId: arznei.arzneimittelId,
+    /* Bei einem Katalogeintrag bleiben die vier Felder leer — sie werden von
+       dort gelesen, nicht kopiert. */
+    produktename: arznei.arzneimittelId ? "" : arznei.produktename.trim(),
+    wirkstoff: arznei.arzneimittelId ? "" : arznei.wirkstoff.trim(),
+    darreichungsform: arznei.arzneimittelId ? "" : arznei.darreichungsform,
+    wirkstoffmenge: arznei.arzneimittelId ? "" : arznei.wirkstoffmenge.trim(),
+    /* Reserve und Notfall haben keine Tagesdosierung — die Felder blieben
+       sonst von einer früheren Art stehen. */
+    morgen: bedarf ? "" : dosisNormalisieren(morgen),
+    mittag: bedarf ? "" : dosisNormalisieren(mittag),
+    abend: bedarf ? "" : dosisNormalisieren(abend),
+    nacht: bedarf ? "" : dosisNormalisieren(nacht),
+    dosierungText: dosierungText.trim(),
+    anwendungsweg,
+    art,
+    beginn: beginn.trim(),
+    /* Nur die befristete Medikation trägt ein Ende. */
+    ende: art === "befristet" ? ende.trim() : "",
+    behandlungsgrund: behandlungsgrund.trim(),
+    kommentar: kommentar.trim(),
+    verordnetDurch,
+    abgesetztAm: eintrag?.abgesetztAm ?? "",
+  });
+
+  const sichern = () => {
+    const m = zusammen();
+    const meldung = medikationFehler(m);
+    if (meldung) { setFehler(meldung); return; }
+    medikationSichern(m);
+    onFertig();
+  };
+
+  const dosis = (label: string, wert: string, setzen: (v: string) => void) => (
+    <div>
+      <FormFeld label={label} wert={wert} platzhalter="0"
+        onAendern={v => { setFehler(""); setzen(v); }} />
+      {dosisFehler(wert) && (
+        <div style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)", marginTop: 3 }}>Nur Zahlen</div>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ padding: "14px 16px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
+      <ArzneimittelWahl wert={arznei} onWahl={w => { setFehler(""); setArznei(w); }} />
+
+      {!bedarf && (
+        <div style={{ marginTop: 14 }}>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 5 }}>
+            Dosierung je Einnahmezeitpunkt
+          </div>
+          {/* Dezimal: eine halbe Tablette ist 0.5. */}
+          <div className="grid grid-cols-2 sm:grid-cols-4" style={{ gap: 12 }}>
+            {dosis("Morgen", morgen, setMorgen)}
+            {dosis("Mittag", mittag, setMittag)}
+            {dosis("Abend", abend, setAbend)}
+            {dosis("Nacht", nacht, setNacht)}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: 12, marginTop: 14 }}>
+        <FormFeld label="Dosierung als Text" wert={dosierungText}
+          platzhalter={bedarf ? "z. B. bei Schmerzen, max. 3x täglich" : "wenn die vier Felder nicht genügen"}
+          onAendern={setDosierungText} />
+        <div>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Anwendungsanweisung</div>
+          <InlineSelect value={anwendungsweg} onChange={setAnwendungsweg} platzhalter="nicht erfasst"
+            options={medikationsOptionen(ANWENDUNGSWEG)} />
+        </div>
+        <div>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Art</div>
+          <InlineSelect value={art} onChange={v => { setFehler(""); setArt(v); }} platzhalter="Bitte wählen"
+            options={medikationsOptionen(MEDIKATIONSART)} />
+        </div>
+        <DateField label="Beginn" value={beginn} wertFormat="display" bereich="any"
+          onChange={v => { setFehler(""); setBeginn(typeof v === "string" ? v : ""); }} />
+        {art === "befristet" && (
+          <DateField label="Ende" value={ende} wertFormat="display" bereich="any"
+            onChange={v => { setFehler(""); setEnde(typeof v === "string" ? v : ""); }} />
+        )}
+        <FormFeld label="Behandlungsgrund" wert={behandlungsgrund} platzhalter="Wogegen" onAendern={setBehandlungsgrund} />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12, marginTop: 12 }}>
+        <FormFeld label="Kommentar" wert={kommentar}
+          platzhalter={bedarf ? "Anwendungshinweise gehören hierher" : "Freiwillig"} onAendern={setKommentar} />
+        {/* Die verordnende Person ist ein Kontakt, meist vom Typ Arztpraxis;
+            gespeichert wird die Kennung, der Name kommt aus dem Bestand. */}
+        <KontaktWahl wert={verordnetDurch} onWahl={setVerordnetDurch} label="Verordnet durch"
+          platzhalter="nicht erfasst" zugehoerigkeitLabel="Praxis" />
+      </div>
+
+      {fehler && (
+        <div role="alert" style={{ padding: "8px 10px", borderRadius: 8, background: "var(--status-warning-bg)", fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 10, lineHeight: 1.6, maxWidth: "74ch" }}>
+          {fehler}
+        </div>
+      )}
+      <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
+        <AppButton variant="sekundaer" onClick={sichern}>Sichern</AppButton>
+        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   ANSICHT: MEDIKATION — UNVERTRÄGLICHKEITEN
+   ══════════════════════════════════════════ */
+
+/**
+ * Unverträglichkeiten stehen bewusst neben dem Plan, nicht in ihm: die
+ * Umsetzungshilfe hält ausdrücklich fest, dass sie nicht zum Medikationsplan
+ * gehören.
+ */
+function AnsichtUnvertraeglichkeiten({ patient }: { patient: Patient }) {
+  const { unvertraeglichkeiten } = useMedikationsbestand();
+  const [formular, setFormular] = useState<string | null>(null);
+  const eigene = unvertraeglichkeiten.filter(u => u.patientId === patient.id);
+
+  return (
+    <div className="space-y-4">
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "10px 18px" }}>
+        <div className="flex items-center flex-wrap" style={{ gap: 12 }}>
+          <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Unverträglichkeiten</h3>
+          {formular === null && (
+            <button type="button" onClick={() => setFormular("")} className="ui-fokusring cursor-pointer inline-flex items-center"
+              style={{ gap: 5, marginLeft: "auto", background: "none", border: "none", padding: "4px 8px", fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--brand-primary)" }}>
+              <Plus style={{ width: 13, height: 13 }} /> Unverträglichkeit erfassen
+            </button>
+          )}
+        </div>
+      </div>
+
+      {formular === "" && (
+        <PSectionCard title="Neue Unverträglichkeit" icon={AlertTriangle}>
+          <UnvertraeglichkeitFormular patientId={patient.id} eintrag={null} onFertig={() => setFormular(null)} />
+        </PSectionCard>
+      )}
+
+      {eigene.length === 0 && formular === null ? (
+        <PSectionCard title="Unverträglichkeiten" icon={AlertTriangle}>
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+            Für diesen Patienten ist keine Unverträglichkeit erfasst. Hier stehen Substanzen, auf die
+            der Patient reagiert — Arzneimittel, Nahrungsmittel, Latex. Sie stehen bewusst nicht im
+            Medikationsplan: der Standard führt sie als eigene Information, weil sie auch dann
+            gelten, wenn das auslösende Mittel gar nicht verordnet ist.
+          </p>
+          <div style={{ marginTop: 12 }}>
+            <AppButton variant="sekundaer" icon={Plus} onClick={() => setFormular("")}>Unverträglichkeit erfassen</AppButton>
+          </div>
+        </PSectionCard>
+      ) : eigene.length > 0 && (
+        <PSectionCard title="Erfasste Unverträglichkeiten" icon={AlertTriangle}>
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {eigene.map(u => formular === u.id ? (
+              <div key={u.id} style={{ paddingTop: 8, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <UnvertraeglichkeitFormular patientId={patient.id} eintrag={u} onFertig={() => setFormular(null)} />
+              </div>
+            ) : (
+              <div key={u.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "9px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <span style={{ width: 190, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{u.substanz}</span>
+                <MedMarke text={medikationswertLabel(UNVERTRAEGLICHKEITSART, u.art)} warnend={u.art === "allergie"} />
+                {/* Die Schwere ist eine Einstufung, keine Abweichung — wo
+                    niemand eingestuft hat, steht es da, ohne Marke. */}
+                <span style={{ width: 120, fontSize: "var(--text-meta)",
+                  color: u.schwere ? "var(--text-primary)" : "var(--text-tertiary)" }}>
+                  {u.schwere ? medikationswertLabel(UNVERTRAEGLICHKEIT_SCHWERE, u.schwere) : "Nicht eingestuft"}
+                </span>
+                <span style={{ flex: 1, minWidth: 180, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{u.reaktion || "Reaktion nicht erfasst"}</span>
+                <span style={{ width: 210, fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                  {u.erfasstAm || u.erfasstDurch ? `${u.erfasstAm} · ${u.erfasstDurch}` : "Herkunft nicht erfasst"}
+                </span>
+                <button type="button" onClick={() => setFormular(u.id)} className="ui-fokusring cursor-pointer"
+                  style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+                  Bearbeiten
+                </button>
+              </div>
+            ))}
+          </div>
+        </PSectionCard>
+      )}
+    </div>
+  );
+}
+
+function UnvertraeglichkeitFormular({ patientId, eintrag, onFertig }: {
+  patientId: string; eintrag: Unvertraeglichkeit | null; onFertig: () => void;
+}) {
+  const [substanz, setSubstanz] = useState(eintrag?.substanz ?? "");
+  const [art, setArt] = useState(eintrag?.art ?? "");
+  const [reaktion, setReaktion] = useState(eintrag?.reaktion ?? "");
+  const [schwere, setSchwere] = useState(eintrag?.schwere ?? "");
+  const [fehler, setFehler] = useState("");
+
+  return (
+    <div style={{ padding: "14px 16px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: 12 }}>
+        <FormFeld label="Substanz" wert={substanz} platzhalter="z. B. Penicillin, Latex"
+          onAendern={v => { setFehler(""); setSubstanz(v); }} />
+        <div>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Art</div>
+          <InlineSelect value={art} onChange={v => { setFehler(""); setArt(v); }} platzhalter="Bitte wählen"
+            options={medikationsOptionen(UNVERTRAEGLICHKEITSART)} />
+        </div>
+        <div>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Schwere</div>
+          <InlineSelect value={schwere} onChange={setSchwere} platzhalter="nicht eingestuft"
+            options={medikationsOptionen(UNVERTRAEGLICHKEIT_SCHWERE)} />
+        </div>
+        <FormFeld label="Reaktion" wert={reaktion} platzhalter="Was geschieht" onAendern={setReaktion} />
+      </div>
+      {fehler && (
+        <div role="alert" style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 8 }}>{fehler}</div>
+      )}
+      <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
+        <AppButton variant="sekundaer" onClick={() => {
+          if (!substanz.trim()) { setFehler("Bitte die Substanz angeben."); return; }
+          if (!art) { setFehler("Bitte die Art wählen."); return; }
+          unvertraeglichkeitSichern({
+            id: eintrag?.id ?? "", patientId, substanz: substanz.trim(), art, reaktion: reaktion.trim(), schwere,
+            /* Erfasst am und durch werden gesetzt, nicht erfragt — sie sind
+               Tatsachen der Erfassung, keine Eingabe. Beim Ändern bleibt der
+               ursprüngliche Vermerk stehen. */
+            erfasstAm: eintrag?.erfasstAm ?? alsAnzeigedatum(GEGENWART),
+            erfasstDurch: eintrag?.erfasstDurch ?? AKTUELLE_FACHPERSON,
+          });
+          onFertig();
+        }}>Sichern</AppButton>
+        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   ANSICHT: WUNDDOKUMENTATION
+   ══════════════════════════════════════════ */
+
+/**
+ * Wunddokumentation — drei Ebenen je Wunde.
+ *
+ * Die Wunde beschreibt, was für eine Wunde es ist; die Beurteilung, wie sie
+ * heute aussieht; der Verlaufseintrag, was getan wurde. Getrennt, weil sie
+ * verschieden oft anfallen: die Wunde einmal, die Beurteilung alle sieben bis
+ * vierzehn Tage, der Verlaufseintrag bei jedem Verbandwechsel.
+ *
+ * Die Formulare erscheinen an Ort, nach dem Muster der Vorgeschichte, und
+ * tragen immer Sichern und Abbrechen.
+ */
+function AnsichtWunddokumentation({ patient }: { patient: Patient }) {
+  const { wunden, beurteilungen, verlauf } = useWundbestand();
+  /* "" = neu, Kennung = ändern, null = geschlossen. */
+  const [formular, setFormular] = useState<string | null>(null);
+  const [abgeheiltOffen, setAbgeheiltOffen] = useState(false);
+
+  const eigene = wunden.filter(w => w.patientId === patient.id);
+  const offene = eigene.filter(istOffen);
+  const abgeheilt = eigene.filter(w => !istOffen(w));
+
+  return (
+    <div className="space-y-4">
+      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "10px 18px" }}>
+        <div className="flex items-center flex-wrap" style={{ gap: 12 }}>
+          <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Wunddokumentation</h3>
+          {formular === null && (
+            <button type="button" onClick={() => setFormular("")} className="ui-fokusring cursor-pointer inline-flex items-center"
+              style={{ gap: 5, marginLeft: "auto", background: "none", border: "none", padding: "4px 8px", fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--brand-primary)" }}>
+              <Plus style={{ width: 13, height: 13 }} /> Wunde erfassen
+            </button>
+          )}
+        </div>
+      </div>
+
+      {formular === "" && (
+        <PSectionCard title="Neue Wunde" icon={Bandage}>
+          <WundeFormular patientId={patient.id} eintrag={null} onFertig={() => setFormular(null)} />
+        </PSectionCard>
+      )}
+
+      {offene.length === 0 && formular === null && (
+        <PSectionCard title="Wunden" icon={Bandage}>
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
+            Für diesen Patienten ist keine Wunde dokumentiert. Erfasst wird eine Wunde einmal mit
+            Art, Lokalisation und Entstehung; ihr Zustand kommt danach aus den Beurteilungen, die
+            durchgeführte Pflege aus den Verlaufseinträgen.
+          </p>
+          <div style={{ marginTop: 12 }}>
+            <AppButton variant="sekundaer" icon={Plus} onClick={() => setFormular("")}>Wunde erfassen</AppButton>
+          </div>
+        </PSectionCard>
+      )}
+
+      {offene.map(w => (
+        <WundeKarte key={w.id} wunde={w} nummer={eigene.indexOf(w) + 1}
+          beurteilungen={beurteilungen.filter(b => b.wundeId === w.id)}
+          verlauf={verlauf.filter(v => v.wundeId === w.id)}
+          bearbeiten={formular === w.id}
+          onBearbeiten={() => setFormular(w.id)}
+          onFertig={() => setFormular(null)} />
+      ))}
+
+      {abgeheilt.length > 0 && (
+        <PSectionCard title={`Abgeheilt (${abgeheilt.length})`} icon={Clock}>
+          <button type="button" onClick={() => setAbgeheiltOffen(o => !o)} className="ui-fokusring cursor-pointer"
+            style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            {abgeheiltOffen ? "Einklappen" : `${abgeheilt.length} abgeheilte ${abgeheilt.length === 1 ? "Wunde" : "Wunden"} anzeigen`}
+          </button>
+          {abgeheiltOffen && (
+            <div className="flex flex-col" style={{ gap: 2, marginTop: 8 }}>
+              {abgeheilt.map(w => (
+                <WundeKarte key={w.id} wunde={w} nummer={eigene.indexOf(w) + 1}
+                  beurteilungen={beurteilungen.filter(b => b.wundeId === w.id)}
+                  verlauf={verlauf.filter(v => v.wundeId === w.id)}
+                  bearbeiten={formular === w.id}
+                  onBearbeiten={() => setFormular(w.id)}
+                  onFertig={() => setFormular(null)} />
+              ))}
+            </div>
+          )}
+          {/* Eine abgeheilte Wunde wird nicht gelöscht: sie ist der Beleg
+              dafür, dass die Leistung nötig war, und sie sagt beim nächsten
+              Befund an derselben Stelle, ob es ein Rezidiv ist. */}
+          <p style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 10, margin: "10px 0 0", maxWidth: "74ch", lineHeight: 1.6 }}>
+            Abgeheilte Wunden bleiben erhalten. Sie belegen die erbrachte Pflege und zeigen bei einem
+            neuen Befund an derselben Stelle, dass es ein Rezidiv ist.
+          </p>
+        </PSectionCard>
+      )}
+
+      {/* Was hier fehlt, gehört gesagt, statt unbemerkt zu fehlen. */}
+      <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.6, maxWidth: "74ch" }}>
+        Klassifiziert wird nur der Dekubitus nach EPUAP/NPIAP. Die Klassifikationen nach Widmer für
+        das Ulcus cruris venosum, nach Fontaine für die arterielle Verschlusskrankheit und nach
+        Wagner-Armstrong für das diabetische Fusssyndrom sind offen — sie brauchen je eigene
+        Wertelisten und eigene Regeln.
+      </div>
+    </div>
+  );
+}
+
+/** Eine Wunde mit ihren Beurteilungen und ihrem Verlauf. */
+function WundeKarte({ wunde, nummer, beurteilungen, verlauf, bearbeiten, onBearbeiten, onFertig }: {
+  wunde: Wunde;
+  nummer: number;
+  beurteilungen: Wundbeurteilung[];
+  verlauf: Verlaufseintrag[];
+  bearbeiten: boolean;
+  onBearbeiten: () => void;
+  onFertig: () => void;
+}) {
+  const [bOffen, setBOffen] = useState<string | null>(null);
+  const [vOffen, setVOffen] = useState<string | null>(null);
+
+  /* Absteigend: die jüngste Beurteilung ist die, die zählt. */
+  const nachDatum = <T extends { datum: string }>(l: T[]) =>
+    [...l].sort((a, b) => tageSeit(a.datum, GEGENWART) - tageSeit(b.datum, GEGENWART));
+  const bSortiert = nachDatum(beurteilungen);
+  const vSortiert = nachDatum(verlauf);
+  const juengste = bSortiert[0];
+  const alter = juengste ? tageSeit(juengste.datum, GEGENWART) : -1;
+  /* Nur bei offenen Wunden. Eine abgeheilte Wunde braucht keine weitere
+     Beurteilung; der Hinweis würde mit jedem Tag lauter, ohne dass es
+     etwas zu tun gäbe. */
+  const ueberfaellig = istOffen(wunde) && juengste !== undefined && alter > BEURTEILUNG_FRIST_TAGE;
+
+  const titel = `Wunde ${nummer} — ${wunde.lokalisation || "ohne Lokalisation"}`
+    + ` (${wundwertLabel(WUNDART, wunde.wundart)})`;
+
+  return (
+    <PSectionCard title={titel} icon={Bandage}>
+      {bearbeiten ? (
+        <WundeFormular patientId={wunde.patientId} eintrag={wunde} onFertig={onFertig} />
+      ) : (
+        <div style={{ paddingBottom: 10 }}>
+          <div className="flex items-baseline flex-wrap" style={{ gap: 16 }}>
+            <PDataField label="Entstanden" value={wunde.entstehungsdatum || "—"} />
+            {wunde.wundart === "dekubitus" && (
+              <PDataField label="Kategorie" value={wunde.dekubituskategorie
+                ? wundwertLabel(DEKUBITUSKATEGORIE, wunde.dekubituskategorie) : "—"} />
+            )}
+            {!istOffen(wunde) && <PDataField label="Abgeheilt" value={wunde.abheilungsdatum} />}
+            <button type="button" onClick={onBearbeiten} className="ui-fokusring cursor-pointer"
+              style={{ marginLeft: "auto", background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+              Bearbeiten
+            </button>
+          </div>
+          {/* Ursache und Anordnung stehen über die volle Breite und nicht in
+              der Zeile: es ist fachlicher Text über mehrere Zeilen, der ganz
+              gelesen werden muss. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2" style={{ gap: 16, marginTop: 14 }}>
+            <PDataField label="Ursache" value={wunde.ursache || "—"} mehrzeilig />
+            <PDataField label="Ärztliche Anordnung" value={wunde.aerztlicheAnordnung || "—"} mehrzeilig />
+          </div>
+        </div>
+      )}
+
+      {/* ── Beurteilungen ── */}
+      <div style={{ borderTop: "var(--border-thin) solid var(--border-default)", paddingTop: 12, marginTop: 4 }}>
+        <div className="flex items-center flex-wrap" style={{ gap: 10, marginBottom: 8 }}>
+          <span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Beurteilungen</span>
+          {bOffen === null && (
+            <button type="button" onClick={() => setBOffen("")} className="ui-fokusring cursor-pointer inline-flex items-center"
+              style={{ gap: 5, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+              <Plus style={{ width: 13, height: 13 }} /> Beurteilung erfassen
+            </button>
+          )}
+        </div>
+        {ueberfaellig && (
+          <div style={{ padding: "8px 10px", borderRadius: 8, background: "var(--status-warning-bg)", fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginBottom: 10 }}>
+            Die letzte Beurteilung ist {alter} Tage alt. Der Standard verlangt sie alle sieben bis
+            vierzehn Tage.
+          </div>
+        )}
+        {bOffen === "" && (
+          <BeurteilungFormular wundeId={wunde.id} eintrag={null} onFertig={() => setBOffen(null)} />
+        )}
+        {bSortiert.length === 0 && bOffen === null ? (
+          <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: 0 }}>
+            Noch keine Beurteilung. Ohne sie ist nicht belegbar, ob die Wunde heilt.
+          </p>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {bSortiert.map(b => bOffen === b.id ? (
+              <div key={b.id} style={{ paddingTop: 8, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <BeurteilungFormular wundeId={wunde.id} eintrag={b} onFertig={() => setBOffen(null)} />
+              </div>
+            ) : (
+              <div key={b.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <span style={{ width: 92, fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{b.datum}</span>
+                <span style={{ width: 130, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>{groesse(b)}</span>
+                <span style={{ flex: 1, minWidth: 200, fontSize: "var(--text-meta)", color: "var(--text-primary)" }}>{gewebeText(b)}</span>
+                <span style={{ width: 150, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                  {b.wundheilungsphase ? wundwertLabel(WUNDHEILUNGSPHASE, b.wundheilungsphase) : "—"}
+                </span>
+                <span style={{ width: 120, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{b.beurteiltDurch}</span>
+                <button type="button" onClick={() => setBOffen(b.id)} className="ui-fokusring cursor-pointer"
+                  style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+                  Bearbeiten
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Verlauf ── */}
+      <div style={{ borderTop: "var(--border-thin) solid var(--border-default)", paddingTop: 12, marginTop: 12 }}>
+        <div className="flex items-center flex-wrap" style={{ gap: 10, marginBottom: 8 }}>
+          <span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Verlauf</span>
+          {vOffen === null && (
+            <button type="button" onClick={() => setVOffen("")} className="ui-fokusring cursor-pointer inline-flex items-center"
+              style={{ gap: 5, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
+              <Plus style={{ width: 13, height: 13 }} /> Verlaufseintrag erfassen
+            </button>
+          )}
+        </div>
+        {vOffen === "" && (
+          <VerlaufFormular wundeId={wunde.id} patientId={wunde.patientId} eintrag={null} onFertig={() => setVOffen(null)} />
+        )}
+        {vSortiert.length === 0 && vOffen === null ? (
+          <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: 0 }}>
+            Noch kein Verlaufseintrag. Auch eine blosse Kontrolle ohne Wechsel gehört hierher.
+          </p>
+        ) : (
+          <div className="flex flex-col" style={{ gap: 2 }}>
+            {vSortiert.map(v => vOffen === v.id ? (
+              <div key={v.id} style={{ paddingTop: 8, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <VerlaufFormular wundeId={wunde.id} patientId={wunde.patientId} eintrag={v} onFertig={() => setVOffen(null)} />
+              </div>
+            ) : (
+              <div key={v.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                <span style={{ width: 92, fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{v.datum}</span>
+                <span style={{ width: 96, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+                  {v.art === "gewechselt" ? "Gewechselt" : "Kontrolliert"}
+                </span>
+                <span style={{ flex: 1, minWidth: 200, fontSize: "var(--text-meta)", color: "var(--text-primary)" }}>{verbandText(v)}</span>
+                <span style={{ width: 120, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{v.durchgefuehrtVon}</span>
+                <button type="button" onClick={() => setVOffen(v.id)} className="ui-fokusring cursor-pointer"
+                  style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+                  Bearbeiten
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </PSectionCard>
+  );
+}
+
+/** „4.0 × 2.5 × 0.3 cm" — leere Masse werden weggelassen, nicht als 0 gezeigt. */
+function groesse(b: Wundbeurteilung): string {
+  const teile = [b.laenge, b.breite, b.tiefe].filter(t => t.trim() !== "");
+  return teile.length === 0 ? "nicht gemessen" : `${teile.join(" × ")} cm`;
+}
+
+function gewebeText(b: Wundbeurteilung): string {
+  const e = Object.entries(b.gewebeanteile).filter(([, p]) => p > 0)
+    .sort((x, y) => y[1] - x[1]);
+  return e.length === 0 ? "—" : e.map(([c, p]) => `${p} % ${wundwertLabel(GEWEBEART, c)}`).join(", ");
+}
+
+function verbandText(v: Verlaufseintrag): string {
+  const t = [v.primaerverband, v.sekundaerverband, v.fixierung].filter(x => x.trim() !== "");
+  return t.length === 0 ? (v.bemerkung || "—") : t.join(" · ");
+}
+
+/** Merkmal-Pille — an oder aus, wie im Beziehungsformular. */
+function WundMerkmal({ an, onWechseln, text }: { an: boolean; onWechseln: () => void; text: string }) {
+  return (
+    <button type="button" onClick={onWechseln} aria-pressed={an}
+      className="ui-fokusring cursor-pointer inline-flex items-center"
+      style={{ gap: 6, padding: "4px 12px", borderRadius: "var(--radius-pill)", fontFamily: "inherit",
+        fontSize: "var(--text-small)", fontWeight: an ? "var(--weight-medium)" : "var(--weight-regular)",
+        background: an ? "var(--brand-primary-light)" : "transparent",
+        border: `var(--border-thin) solid ${an ? "var(--brand-primary)" : "var(--border-default)"}`,
+        color: an ? "var(--brand-primary)" : "var(--text-secondary)" }}>
+      {an && <Check style={{ width: 12, height: 12 }} />}{text}
+    </button>
+  );
+}
+
+/** Mehrfachauswahl aus einer Werteliste — gespeichert werden die Codes. */
+function WundMerkmalGruppe({ label, liste, gewaehlt, onAendern }: {
+  label: string; liste: Wundwert[]; gewaehlt: string[]; onAendern: (v: string[]) => void;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 5 }}>{label}</div>
+      <div className="flex flex-wrap" style={{ gap: 6 }}>
+        {liste.map(w => (
+          <WundMerkmal key={w.code} an={gewaehlt.includes(w.code)} text={w.label}
+            onWechseln={() => onAendern(gewaehlt.includes(w.code)
+              ? gewaehlt.filter(c => c !== w.code) : [...gewaehlt, w.code])} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WundAuswahl({ label, liste, wert, platzhalter, onAendern }: {
+  label: string; liste: Wundwert[]; wert: string; platzhalter: string; onAendern: (v: string) => void;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>{label}</div>
+      <InlineSelect value={wert} onChange={onAendern} platzhalter={platzhalter} options={wundOptionen(liste)} />
+    </div>
+  );
+}
+
+/**
+ * Wunde erfassen oder ändern.
+ *
+ * Hier greift die zweite Regel: eine Dekubituskategorie wird nicht
+ * zurückgesetzt. Geprüft wird beim Sichern, nicht beim Tippen — sonst
+ * verschwände die Begründung, bevor sie gelesen ist.
+ */
+function WundeFormular({ patientId, eintrag, onFertig }: {
+  patientId: string; eintrag: Wunde | null; onFertig: () => void;
+}) {
+  const [wundart, setWundart] = useState(eintrag?.wundart ?? "");
+  const [lokalisation, setLokalisation] = useState(eintrag?.lokalisation ?? "");
+  const [entstehung, setEntstehung] = useState(eintrag?.entstehungsdatum ?? "");
+  const [ursache, setUrsache] = useState(eintrag?.ursache ?? "");
+  const [kategorie, setKategorie] = useState(eintrag?.dekubituskategorie ?? "");
+  const [abheilung, setAbheilung] = useState(eintrag?.abheilungsdatum ?? "");
+  const [anordnung, setAnordnung] = useState(eintrag?.aerztlicheAnordnung ?? "");
+  const [fehler, setFehler] = useState("");
+
+  const rueckschritt = eintrag !== null && wundart === "dekubitus"
+    && !kategorieErlaubt(eintrag.dekubituskategorie, kategorie);
+
+  const sichern = () => {
+    if (!wundart) { setFehler("Bitte eine Wundart wählen."); return; }
+    if (!lokalisation.trim()) { setFehler("Bitte die Lokalisation angeben."); return; }
+    /* Kein zweiter Text: die Begründung steht schon am Feld, solange der
+       Rückschritt gewählt ist. Sie hier zusätzlich in `fehler` zu legen
+       hiesse, sie stehen zu lassen, nachdem der Wert berichtigt wurde. */
+    if (rueckschritt) return;
+    wundeSichern({
+      id: eintrag?.id ?? "",
+      patientId,
+      wundart,
+      lokalisation: lokalisation.trim(),
+      entstehungsdatum: entstehung.trim(),
+      ursache: ursache.trim(),
+      /* Kategorie nur beim Dekubitus — sonst schleppte ein Artwechsel den
+         alten Wert mit. */
+      dekubituskategorie: wundart === "dekubitus" ? kategorie : "",
+      abheilungsdatum: abheilung.trim(),
+      aerztlicheAnordnung: anordnung.trim(),
+    });
+    onFertig();
+  };
+
+  return (
+    <div style={{ padding: "14px 16px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: 12 }}>
+        <WundAuswahl label="Wundart" liste={WUNDART} wert={wundart} platzhalter="Bitte wählen"
+          onAendern={v => { setFehler(""); setWundart(v); }} />
+        <FormFeld label="Lokalisation" wert={lokalisation} platzhalter="z. B. Sacrum, Ferse links"
+          onAendern={v => { setFehler(""); setLokalisation(v); }} />
+        <DateField label="Entstanden am" value={entstehung} wertFormat="display" bereich="past"
+          onChange={v => setEntstehung(typeof v === "string" ? v : "")} />
+        {wundart === "dekubitus" && (
+          <div className="sm:col-span-2">
+            <WundAuswahl label="Kategorie" liste={DEKUBITUSKATEGORIE} wert={kategorie}
+              platzhalter="Bitte wählen" onAendern={setKategorie} />
+          </div>
+        )}
+        {/* Mehrzeilig über den bestehenden Baustein aus form/ — dieselbe
+            Familie wie DateField und Combobox, die in diesem Formular schon
+            neben FormFeld stehen. Kein zweites Textfeld daneben.
+            Über die volle Rasterbreite, damit die Reihenfolge der Felder
+            unverändert bleibt und der Text trotzdem Platz hat. */}
+        <div className="sm:col-span-2 lg:col-span-3">
+          <TextareaInput label="Ursache" value={ursache} onChange={setUrsache} rows={4}
+            placeholder="Wie die Wunde entstanden ist — bei einem Ulcus cruris die Vorgeschichte" />
+        </div>
+        {eintrag !== null && (
+          <DateField label="Abgeheilt am" value={abheilung} wertFormat="display" bereich="past"
+            onChange={v => setAbheilung(typeof v === "string" ? v : "")} />
+        )}
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <TextareaInput label="Ärztliche Anordnung" value={anordnung} onChange={setAnordnung} rows={4}
+          placeholder="Spüllösung, Verbandwechselrhythmus, Vorbehalte — von wem und seit wann" />
+      </div>
+      {rueckschritt && (
+        <div style={{ padding: "8px 10px", borderRadius: 8, background: "var(--status-warning-bg)", fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 10, lineHeight: 1.6, maxWidth: "74ch" }}>
+          {KATEGORIE_RUECKSCHRITT_TEXT}
+        </div>
+      )}
+      {fehler && (
+        <div style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 8 }}>{fehler}</div>
+      )}
+      <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
+        <AppButton variant="sekundaer" onClick={sichern}>Sichern</AppButton>
+        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Beurteilung erfassen oder ändern.
+ *
+ * Hier greift die erste Regel: die Gewebeanteile ergeben zusammen hundert
+ * Prozent. Die laufende Summe steht am Feld, damit sie beim Tippen sichtbar
+ * ist und nicht erst beim Sichern auffällt.
+ */
+function BeurteilungFormular({ wundeId, eintrag, onFertig }: {
+  wundeId: string; eintrag: Wundbeurteilung | null; onFertig: () => void;
+}) {
+  const [datum, setDatum] = useState(eintrag?.datum ?? alsAnzeigedatum(GEGENWART));
+  const [durch, setDurch] = useState(eintrag?.beurteiltDurch ?? AKTUELLE_FACHPERSON);
+  const [laenge, setLaenge] = useState(eintrag?.laenge ?? "");
+  const [breite, setBreite] = useState(eintrag?.breite ?? "");
+  const [tiefe, setTiefe] = useState(eintrag?.tiefe ?? "");
+  const [unterminiert, setUnterminiert] = useState(eintrag?.unterminierung ?? false);
+  const [unterminierung, setUnterminierung] = useState(eintrag?.unterminierungAngabe ?? "");
+  const [anteile, setAnteile] = useState<Record<string, number>>(eintrag?.gewebeanteile ?? {});
+  const [phase, setPhase] = useState(eintrag?.wundheilungsphase ?? "");
+  const [rand, setRand] = useState(eintrag?.wundrand ?? "");
+  const [umgebung, setUmgebung] = useState<string[]>(eintrag?.wundumgebung ?? []);
+  const [menge, setMenge] = useState(eintrag?.exsudatmenge ?? "");
+  const [beschaffenheit, setBeschaffenheit] = useState(eintrag?.exsudatbeschaffenheit ?? "");
+  const [geruch, setGeruch] = useState(eintrag?.geruch ?? false);
+  const [infektion, setInfektion] = useState<string[]>(eintrag?.infektionszeichen ?? []);
+  const [schmerz, setSchmerz] = useState(eintrag?.schmerz ?? "");
+  const [beeintraechtigung, setBeeintraechtigung] = useState(eintrag?.beeintraechtigung ?? "");
+  const [fehler, setFehler] = useState("");
+
+  const summe = anteileSumme(anteile);
+  const anteileGesetzt = Object.values(anteile).some(p => p > 0);
+  const anteileFalsch = anteileGesetzt && !anteileStimmen(anteile);
+
+  const sichern = () => {
+    if (!datum.trim()) { setFehler("Bitte ein Datum angeben."); return; }
+    if (anteileFalsch) { setFehler(""); return; }
+    beurteilungSichern({
+      id: eintrag?.id ?? "", wundeId, datum: datum.trim(), beurteiltDurch: durch.trim(),
+      laenge: laenge.trim(), breite: breite.trim(), tiefe: tiefe.trim(),
+      unterminierung: unterminiert,
+      unterminierungAngabe: unterminiert ? unterminierung.trim() : "",
+      /* Nur gesetzte Anteile werden aufbewahrt — eine Null je Gewebeart
+         wäre eine Angabe, die niemand gemacht hat. */
+      gewebeanteile: Object.fromEntries(Object.entries(anteile).filter(([, p]) => p > 0)),
+      wundheilungsphase: phase, wundrand: rand, wundumgebung: umgebung,
+      exsudatmenge: menge, exsudatbeschaffenheit: beschaffenheit, geruch,
+      infektionszeichen: infektion, schmerz: schmerz.trim(),
+      beeintraechtigung: beeintraechtigung.trim(),
+    });
+    onFertig();
+  };
+
+  return (
+    <div style={{ padding: "14px 16px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" style={{ gap: 12 }}>
+        <DateField label="Datum" value={datum} wertFormat="display" bereich="past"
+          onChange={v => setDatum(typeof v === "string" ? v : "")} />
+        <FormFeld label="Beurteilt durch" wert={durch} onAendern={setDurch} />
+        <FormFeld label="Länge (cm)" wert={laenge} platzhalter="z. B. 4.0" onAendern={setLaenge} />
+        <FormFeld label="Breite (cm)" wert={breite} platzhalter="z. B. 2.5" onAendern={setBreite} />
+        <FormFeld label="Tiefe (cm)" wert={tiefe} platzhalter="z. B. 0.3" onAendern={setTiefe} />
+        <WundAuswahl label="Wundheilungsphase" liste={WUNDHEILUNGSPHASE} wert={phase} platzhalter="nicht beurteilt" onAendern={setPhase} />
+        <WundAuswahl label="Wundrand" liste={WUNDRAND} wert={rand} platzhalter="nicht beurteilt" onAendern={setRand} />
+        <FormFeld label="Schmerz (0–10)" wert={schmerz} platzhalter="nicht erhoben" onAendern={setSchmerz} />
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: 8 }}>
+          <WundMerkmal an={unterminiert} onWechseln={() => setUnterminiert(!unterminiert)} text="Unterminierung oder Tasche" />
+          {unterminiert && (
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <FormFeld label="Lage und Ausmass" wert={unterminierung}
+                platzhalter="z. B. 2 cm bei 3 Uhr" onAendern={setUnterminierung} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Wundgrund. Kein Farbmodell: eine angeweichte Nekrose ist gelb,
+             Fibrin ebenso, Sehnen und Knochen auch. Erfasst wird das Gewebe. ── */}
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+        <div className="flex items-baseline" style={{ gap: 10, marginBottom: 8 }}>
+          <span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Wundgrund in Prozent</span>
+          <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums",
+            color: anteileFalsch ? "var(--status-warning-text)" : "var(--text-tertiary)" }}>
+            Summe {summe} %
+          </span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" style={{ gap: 12 }}>
+          {GEWEBEART.map(g => (
+            <FormFeld key={g.code} label={g.label} wert={anteile[g.code] ? String(anteile[g.code]) : ""}
+              platzhalter="0"
+              onAendern={v => {
+                const n = Number(v.replace(",", "."));
+                setAnteile(a => ({ ...a, [g.code]: Number.isFinite(n) && n > 0 ? Math.round(n) : 0 }));
+              }} />
+          ))}
+        </div>
+        {anteileFalsch && (
+          <div style={{ padding: "8px 10px", borderRadius: 8, background: "var(--status-warning-bg)", fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 10, lineHeight: 1.6, maxWidth: "74ch" }}>
+            Die Gewebeanteile ergeben {summe} Prozent. Sie beschreiben denselben Wundgrund und müssen
+            zusammen hundert ergeben — sonst bleibt offen, was mit dem Rest der Wundfläche ist.
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "var(--border-thin) solid var(--border-default)" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: 12 }}>
+          <WundAuswahl label="Exsudatmenge" liste={EXSUDATMENGE} wert={menge} platzhalter="nicht beurteilt" onAendern={setMenge} />
+          <WundAuswahl label="Exsudatbeschaffenheit" liste={EXSUDATBESCHAFFENHEIT} wert={beschaffenheit} platzhalter="nicht beurteilt" onAendern={setBeschaffenheit} />
+          <div style={{ display: "flex", alignItems: "flex-end" }}>
+            <WundMerkmal an={geruch} onWechseln={() => setGeruch(!geruch)} text="Geruch" />
+          </div>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <WundMerkmalGruppe label="Wundumgebung" liste={WUNDUMGEBUNG} gewaehlt={umgebung} onAendern={setUmgebung} />
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <WundMerkmalGruppe label="Infektionszeichen" liste={INFEKTIONSZEICHEN} gewaehlt={infektion} onAendern={setInfektion} />
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <FormFeld label="Beeinträchtigung im Alltag" wert={beeintraechtigung}
+            platzhalter="Was der Patient wegen der Wunde nicht kann" onAendern={setBeeintraechtigung} />
+        </div>
+      </div>
+
+      {fehler && (
+        <div style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 8 }}>{fehler}</div>
+      )}
+      <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
+        <AppButton variant="sekundaer" onClick={sichern}>Sichern</AppButton>
+        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Verlaufseintrag erfassen oder ändern.
+ *
+ * Auch die blosse Kontrolle ohne Wechsel wird festgehalten: sonst sieht der
+ * Verlauf aus, als sei tagelang niemand bei der Wunde gewesen.
+ */
+function VerlaufFormular({ wundeId, patientId, eintrag, onFertig }: {
+  wundeId: string; patientId: string; eintrag: Verlaufseintrag | null; onFertig: () => void;
+}) {
+  const [datum, setDatum] = useState(eintrag?.datum ?? alsAnzeigedatum(GEGENWART));
+  const [durch, setDurch] = useState(eintrag?.durchgefuehrtVon ?? AKTUELLE_FACHPERSON);
+  const [art, setArt] = useState<string>(eintrag?.art ?? "gewechselt");
+  const [spuelung, setSpuelung] = useState(eintrag?.spulloesung ?? "");
+  const [primaer, setPrimaer] = useState(eintrag?.primaerverband ?? "");
+  const [sekundaer, setSekundaer] = useState(eintrag?.sekundaerverband ?? "");
+  const [fixierung, setFixierung] = useState(eintrag?.fixierung ?? "");
+  const [bemerkung, setBemerkung] = useState(eintrag?.bemerkung ?? "");
+  const [einsatzId, setEinsatzId] = useState(eintrag?.einsatzId ?? "");
+  const [fehler, setFehler] = useState("");
+
+  /* Einsätze desselben Tages — der Eintrag hängt sich an den Besuch, bei dem
+     er entstand, statt ein zweites Mal Zeit und Person zu behaupten. */
+  const einsaetze = useEinsaetze();
+  const desTages = einsaetze.filter(e => e.patientId === patientId && e.datum === datum.trim());
+
+  return (
+    <div style={{ padding: "14px 16px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" style={{ gap: 12 }}>
+        <DateField label="Datum" value={datum} wertFormat="display" bereich="past"
+          onChange={v => setDatum(typeof v === "string" ? v : "")} />
+        <FormFeld label="Durchgeführt von" wert={durch} onAendern={setDurch} />
+        <div>
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Art</div>
+          <InlineSelect value={art} onChange={setArt} platzhalter="Bitte wählen"
+            options={[{ value: "gewechselt", label: "Verband gewechselt" }, { value: "kontrolliert", label: "Nur kontrolliert" }]} />
+        </div>
+        {desTages.length > 0 && (
+          <div>
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Einsatz</div>
+            <InlineSelect value={einsatzId} onChange={setEinsatzId} platzhalter="ohne Einsatz"
+              options={desTages.map(e => ({ value: e.id, label: `${e.von}–${e.bis}` }))} />
+          </div>
+        )}
+      </div>
+      {art === "gewechselt" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" style={{ gap: 12, marginTop: 12 }}>
+          <FormFeld label="Spüllösung" wert={spuelung} platzhalter="z. B. NaCl 0.9 %" onAendern={setSpuelung} />
+          <FormFeld label="Primärverband" wert={primaer} platzhalter="Was auf der Wunde liegt" onAendern={setPrimaer} />
+          <FormFeld label="Sekundärverband" wert={sekundaer} platzhalter="Was darüber liegt" onAendern={setSekundaer} />
+          <FormFeld label="Fixierung" wert={fixierung} platzhalter="z. B. Schlauchverband" onAendern={setFixierung} />
+        </div>
+      )}
+      <div style={{ marginTop: 12 }}>
+        <FormFeld label="Bemerkung" wert={bemerkung} platzhalter="Freiwillig" onAendern={setBemerkung} />
+      </div>
+      {fehler && (
+        <div style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 8 }}>{fehler}</div>
+      )}
+      <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
+        <AppButton variant="sekundaer" onClick={() => {
+          if (!datum.trim()) { setFehler("Bitte ein Datum angeben."); return; }
+          verlaufSichern({
+            id: eintrag?.id ?? "", wundeId, datum: datum.trim(), durchgefuehrtVon: durch.trim(),
+            art: art === "kontrolliert" ? "kontrolliert" : "gewechselt",
+            /* Beim blossen Kontrollieren wurde kein Material verbraucht —
+               die Verbandfelder blieben sonst vom letzten Wechsel stehen. */
+            spulloesung: art === "gewechselt" ? spuelung.trim() : "",
+            primaerverband: art === "gewechselt" ? primaer.trim() : "",
+            sekundaerverband: art === "gewechselt" ? sekundaer.trim() : "",
+            fixierung: art === "gewechselt" ? fixierung.trim() : "",
+            bemerkung: bemerkung.trim(),
+            einsatzId: desTages.some(e => e.id === einsatzId) ? einsatzId : "",
+          });
+          onFertig();
+        }}>Sichern</AppButton>
+        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AnsichtVorgeschichte({ patient }: { patient: Patient }) {
   const { aufenthalte, eingriffe } = useVorgeschichte(patient.id);
   /* Eine Kennung, die gerade bearbeitet wird — "" heisst „neu", null heisst
@@ -5232,6 +6640,9 @@ function AnnaLagebild({ patient }: { patient: Patient }) {
   const kgs = useKostengutsprachen();
   const [erzeugtAm, setErzeugtAm] = useState(() => jetztAnzeige());
   const [meldung, setMeldung] = useState("");
+  /* Drei Zeilen sind, was auf einen Blick gelesen wird; `lagebild()` liefert
+     bis zu fünf. Die übrigen verschwinden nicht, sie warten. */
+  const [alleOffen, setAlleOffen] = useState(false);
 
   const monat = { jahr: EINSATZ_BEZUGSMONAT.getFullYear(), monat: EINSATZ_BEZUGSMONAT.getMonth() };
   const mandatIds = mandate.filter(m => m.patientId === patient.id).map(m => m.id);
@@ -5258,7 +6669,10 @@ function AnnaLagebild({ patient }: { patient: Patient }) {
   });
 
   return (
-    <div style={{ background: "var(--anna-bg, var(--status-info-bg))", borderLeft: "3px solid var(--brand-primary)",
+    /* Eine gewöhnliche Karte: Tönung und farbige Kante liessen den Normalfall
+       so laut auftreten wie einen Befund. Annas Signatur bleibt das
+       Sparkle-Symbol, nicht die Fläche. */
+    <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
       borderRadius: "var(--radius-card)", overflow: "hidden" }}>
       {/* ── Kopf ── */}
       <div className="flex items-center flex-wrap" style={{ gap: 9, padding: "12px 16px 8px" }}>
@@ -5281,18 +6695,20 @@ function AnnaLagebild({ patient }: { patient: Patient }) {
           /* Eine Zeile, kein leerer Block: „nichts offen" ohne Nennung des
              Geprüften wäre wertlos, weil unklar bliebe, worauf es sich bezieht. */
           <div className="flex items-start" style={{ gap: 8, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
-            <Check style={{ width: 14, height: 14, color: "var(--status-success)", flexShrink: 0, marginTop: 2 }} />
+            <Check style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 2 }} />
             <span style={{ maxWidth: "74ch" }}>Nichts offen. Geprüft wurden {GEPRUEFT_WURDE}</span>
           </div>
         ) : (
           <div className="flex flex-col" style={{ gap: 7 }}>
-            {befunde.map(b => (
+            {(alleOffen ? befunde : befunde.slice(0, BEFUNDE_SICHTBAR)).map(b => (
               <div key={b.id} className="flex items-start flex-wrap" style={{ gap: 8 }}>
-                <span style={{ flexShrink: 0, padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap",
-                  background: b.band === "pruefen" ? "var(--status-warning-bg)" : "var(--bg-elevated)",
-                  color: b.band === "pruefen" ? "var(--status-warning-text)" : "var(--text-secondary)" }}>
-                  {b.band === "pruefen" ? "Bitte prüfen" : "Belegt"}
-                </span>
+                {/* Keine Marke. „Bitte prüfen" war eine Handlungsaufforderung —
+                    was zu tun ist, steht im Sprungziel rechts. „Belegt" mass
+                    keine Belegtheit: „13 von 27 Einsätzen sind ungeprüft" und
+                    „an 17 von 27 Tagen fehlt der Bericht" sind beide gezählte
+                    Werte aus demselben Bestand und trugen trotzdem
+                    verschiedene Marken. Die Fusszeile sagt, dass alles
+                    gerechnet ist; mehr gibt die Achse nicht her. */}
                 <span style={{ flex: 1, minWidth: 240, fontSize: "var(--text-small)", color: "var(--text-primary)", lineHeight: 1.55 }}>
                   {b.text}
                 </span>
@@ -5305,20 +6721,15 @@ function AnnaLagebild({ patient }: { patient: Patient }) {
                 </button>
               </div>
             ))}
+            {befunde.length > BEFUNDE_SICHTBAR && (
+              <button type="button" onClick={() => setAlleOffen(o => !o)} className="ui-fokusring cursor-pointer"
+                style={{ alignSelf: "flex-start", marginTop: 2, background: "none", border: "none", padding: 0, fontFamily: "inherit",
+                  fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
+                {alleOffen ? "Weniger anzeigen" : `${befunde.length - BEFUNDE_SICHTBAR} weitere anzeigen`}
+              </button>
+            )}
           </div>
         )}
-
-        {/* ── Was mangels Datenmodell offen bleibt ──
-            Damit das Schweigen des Lagebilds nicht als Unbedenklichkeit
-            gelesen wird. */}
-        <div style={{ marginTop: 12, padding: "9px 11px", borderRadius: 10, background: "var(--bg-elevated)" }}>
-          <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 4 }}>Nicht beurteilbar</div>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {NICHT_BEURTEILBAR.map((t, i) => (
-              <li key={i} style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.55, maxWidth: "74ch" }}>{t}</li>
-            ))}
-          </ul>
-        </div>
 
         {meldung && (
           <div style={{ marginTop: 8, fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>{meldung}</div>
@@ -5374,7 +6785,8 @@ function NotizKarte({ patient }: { patient: Patient }) {
               <div key={n.id}>
                 <div className="flex items-center" style={{ gap: 6, marginBottom: 2 }}>
                   {n.angeheftet && (
-                    <span style={{ padding: "0 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--brand-primary-light)", color: "var(--brand-primary)" }}>
+                    /* Angeheftet ist ein Normalzustand — neutral. */
+                    <span style={{ padding: "0 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--bg-secondary)", color: "var(--text-secondary)" }}>
                       Angeheftet
                     </span>
                   )}
@@ -5665,7 +7077,7 @@ function ZuPruefen({
 
       {/* ── Annas Einordnung ── */}
       {einordnung.length > 0 && (
-        <div style={{ margin: "0 18px 14px", padding: "12px 14px", borderRadius: 12, background: "var(--anna-bg, var(--status-info-bg))" }}>
+        <div style={{ margin: "0 18px 14px", padding: "12px 14px", borderRadius: 12, background: "var(--bg-secondary)" }}>
           <div className="flex items-center" style={{ gap: 7, marginBottom: 7 }}>
             <Sparkles style={{ width: 14, height: 14, color: "var(--brand-primary)" }} />
             <span style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)" }}>Annas Einordnung</span>
@@ -6666,10 +8078,16 @@ function LpbAbgleich({ v }: { v: KLVVerordnung }) {
   const kgs = useKostengutsprachen();
   const a = abgleichen(v, kgs, MANDAT_STICHTAG);
 
-  const zeile = (label: string, wert: string, betont = false, farbe?: string) => (
+  /* Das Zeichen steht vor dem Wert, nicht statt der Farbe: eine Zahl, die
+     nur durch ihren Farbton auffällt, ist auf einem Graustufenausdruck keine
+     Meldung mehr. */
+  const zeile = (label: string, wert: string, betont = false, farbe?: string, zeichen = false) => (
     <div className="flex items-center justify-between" style={{ padding: "6px 0" }}>
       <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{label}</span>
-      <span style={{ fontSize: "var(--text-small)", fontWeight: betont ? "var(--weight-medium)" : "var(--weight-regular)", fontVariantNumeric: "tabular-nums", color: farbe ?? "var(--text-primary)" }}>{wert}</span>
+      <span className="inline-flex items-center" style={{ gap: 5, fontSize: "var(--text-small)", fontWeight: betont ? "var(--weight-medium)" : "var(--weight-regular)", fontVariantNumeric: "tabular-nums", color: farbe ?? "var(--text-primary)" }}>
+        {zeichen && <AlertTriangle style={{ width: 13, height: 13, flexShrink: 0 }} />}
+        {wert}
+      </span>
     </div>
   );
 
@@ -6689,11 +8107,17 @@ function LpbAbgleich({ v }: { v: KLVVerordnung }) {
           {zeile("Geplant", stunden(a.geplant), true)}
           {zeile("Bewilligt", stunden(a.bewilligt!), true)}
           <div style={{ borderTop: "var(--border-thin) solid var(--border-default)", marginTop: 4 }} />
+          {/* Stimmen geplant und bewilligt überein, steht ein Gedankenstrich in
+              der Sekundärfarbe — keine Marke, die den Normalfall feiert. */}
           {zeile(
             "Differenz",
-            `${a.differenz! >= 0 ? "+" : "−"}${Math.abs(a.differenz!).toFixed(2)} h/Wo.`,
-            true,
-            a.lage === "ueber" ? "var(--status-warning-text)" : "var(--text-primary)",
+            a.differenz === 0
+              ? "—"
+              : `${a.differenz! >= 0 ? "+" : "−"}${Math.abs(a.differenz!).toFixed(2)} h/Wo.`,
+            a.differenz !== 0,
+            a.lage === "ueber" ? "var(--status-warning-text)"
+              : a.differenz === 0 ? "var(--text-secondary)" : "var(--text-primary)",
+            a.lage === "ueber",
           )}
           {a.lage === "ueber" && (
             <div className="flex items-start" style={{ gap: 8, marginTop: 8, padding: "10px 12px", borderRadius: 10, background: "var(--status-warning-bg)" }}>

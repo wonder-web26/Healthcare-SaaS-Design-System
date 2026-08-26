@@ -17,6 +17,9 @@ import { CheckCircle2, AlertTriangle, Info, Ban } from "lucide-react";
 
 export type StatusMarkeVariante = "erfolg" | "warnung" | "info" | "gefahr" | "neutral";
 
+/** Aussehen, unabhängig von der Bedeutung. */
+export type MarkenStil = "flaeche" | "umriss";
+
 interface VarianteCfg { bg: string; text: string; icon: ElementType | null; }
 
 const VARIANTEN: Record<StatusMarkeVariante, VarianteCfg> = {
@@ -32,10 +35,24 @@ export interface StatusMarkeProps {
   variante: StatusMarkeVariante;
   /** Override the default icon of a semantic variant. Ignored for "neutral". */
   icon?: ElementType;
+  /**
+   * Aussehen der Marke — eine Eigenschaft mit zwei Werten, kein Schalter.
+   *
+   * "flaeche" ist die getönte Marke ohne Rahmen, wie sie das Onboarding und
+   * InterRAI führen; "umriss" ist Rahmen in der Linienfarbe, Text in der
+   * Sekundärfarbe, keine Füllung. Als Eigenschaft und nicht als zwei
+   * boolesche Schalter, weil sich zwei Schalter widersprechen können und
+   * eine Eigenschaft nicht.
+   *
+   * Die Bedeutung steckt in `variante`, das Aussehen hier — deshalb keine
+   * eigene Variante daneben.
+   */
+  stil?: MarkenStil;
   style?: CSSProperties;
 }
 
-export function StatusMarke({ label, variante, icon, style }: StatusMarkeProps) {
+export function StatusMarke({ label, variante, icon, stil = "flaeche", style }: StatusMarkeProps) {
+  const umriss = stil === "umriss";
   const cfg = VARIANTEN[variante];
   const Icon = variante === "neutral" ? null : (icon ?? cfg.icon);
   return (
@@ -48,9 +65,9 @@ export function StatusMarke({ label, variante, icon, style }: StatusMarkeProps) 
         gap: 4,
         fontSize: "var(--text-meta)", // 12
         fontWeight: "var(--weight-medium)",
-        background: cfg.bg,
-        color: cfg.text,
-        border: "none",
+        background: umriss ? "transparent" : cfg.bg,
+        color: umriss ? "var(--text-secondary)" : cfg.text,
+        border: umriss ? "var(--border-thin) solid var(--border-default)" : "none",
         ...style,
       }}
     >
