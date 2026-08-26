@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import {
   ArrowLeft,
@@ -6,12 +6,9 @@ import {
   Mail,
   MapPin,
   FileText,
-  FolderOpen,
   Activity,
   Clock,
   User,
-  Edit3,
-  MoreHorizontal,
   ExternalLink,
   CheckCircle2,
   Circle,
@@ -27,7 +24,6 @@ import {
   FileClock,
   Award,
   ListChecks,
-  Table2,
   LayoutDashboard,
   History,
   Receipt,
@@ -54,30 +50,26 @@ import {
   MessageSquare,
 } from "lucide-react";
 import {
+  angehoerigeSeed as angehoerige,
   qualifikationConfig,
-  billingReadinessConfig,
-  createEmptyAngehoerigerKind,
   type Angehoeriger,
-  type AngehoerigerKind,
   type AngehoerigerStatus,
 } from "./angehoerigeData";
-import { useAngehoerige, getAngehoerigen } from "../../lib/angehoerige/store";
-import { useDokumente } from "../../lib/dokumente/store";
-import { MANDAT_STICHTAG } from "../../lib/mandate/store";
-import { gegenwart, GEGENWART_ISO } from "../../lib/gegenwart";
-import {
-  dokumenteVon, ordnerStand, ordnerDes, gueltigBisText, geprueftePflichttypen,
-  type DokumentReferenz,
-} from "../../lib/dokumente/dokumente";
-import { dokumenttyp, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
-import { geschlechtLabel } from "../../lib/stammdaten/geschlecht";
-import { zivilstandLabel } from "../../lib/stammdaten/zivilstand";
-import { staatsangehoerigkeitLabel } from "../../lib/stammdaten/staatsangehoerigkeit";
-import { aufenthaltsstatusLabel } from "../../lib/stammdaten/aufenthaltsstatus";
+import { patientenSeed as patients } from "./patientData";
+import { FORMULAR_MAX } from "./form/feldbreiten";
+import { NotizSpur } from "./notizen/NotizSpur";
+import { type NotizReferenz } from "../../lib/notizen/notizen";
+import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
+import { PersonenAuswahl, type PersonOption } from "./ui/PersonenAuswahl";
+import { BezugspersonFeld } from "./BezugspersonFeld";
+import { getDiplomierte, getDiplomierterById, diplomierterAnzeigename } from "../../lib/betreuung/diplomierte";
+import { UserMinus } from "lucide-react";
+import { TabDokumenteGeneric, type DocFolder } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
 import { AnnaAngehoerigeSummary } from "../anna/AnnaAngehoerigeSummary";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { DateField } from "./form/DateField";
+import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
 import { getNachweiseFuerAngehoeriger } from "../../lib/schulung/nachweis-store";
 import { getKontrollenFuerAngehoeriger, erstelleKontrolle, getNaechsteFaelligkeit, type KontrolleArt } from "../../lib/arbeitskontrolle/store";
 import { exportiereArbeitskontrollePDF } from "../../lib/arbeitskontrolle/pdf-export";
@@ -86,23 +78,185 @@ import { type KindEntry, createEmptyKind, ZULAGENART_LABEL, zulagenartLabel } fr
 import { isoZuAnzeige, anzeigeZuIso } from "../../lib/datum";
 import "../../lib/schulung/demo-seed";
 import "../../lib/arbeitskontrolle/demo-seed";
-import { srkAmpel, srkFrist, srkFristAnzeige, istFluechtling, istGrenzgaenger } from "../../lib/angehoerige/regeln";
-import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
 
 /* ══════════════════════════════════════════
    EXTENDED MOCK DATA — HR detail fields
    (simulates onboarding-captured data)
    ══════════════════════════════════════════ */
-/* Personenbestand und Rückfall-Datensatz entfernt: sie zeigten Angaben
-   fremder Personen. Die Seite liest jede Angabe aus dem Bestand
-   (angehoerigeData / lib/angehoerige/store) oder aus einer Ableitung
-   (lib/angehoerige/regeln). Trägt der Bestand ein Feld nicht, bleibt es leer. */
+interface AngehoerigerDetail {
+  /* Personalien */
+  geschlecht: string;
+  geburtsdatum: string;
+  ahvNummer: string;
+  nationalitaet: string;
+  heimatort: string;
+  aufenthaltsstatus: string;
+  zivilstand: string;
+  zivilstandSeit: string;
+  strasse: string;
+  plz: string;
+  ort: string;
+  email: string;
+  telefon: string;
+  krankenkasseName: string;
+  versicherungsnummer: string;
+  /* Steuer & Sozialversicherung */
+  quellensteuer: string;
+  konfession: string;
+  quellensteuerTarif: string;
+  steuergemeinde: string;
+  sozialamtInvolviert: string;
+  sozialamtKontakt: string;
+  lohnabtretung: string;
+  /* Partner */
+  partnerName: string;
+  partnerGeburtsdatum: string;
+  partnerAhvNummer: string;
+  partnerZemisNummer: string;
+  partnerAufenthaltsstatus: string;
+  /* Kinder — einheitliches Modell (KindEntry aus dem Onboarding) */
+  kinder: KindEntry[];
+  kinderzulagenAktiv: string;
+  kinderzulagenUeberSpitex: string;
+  familienausgleichskasse: string;
+  /* Lohn & Aufenthalt */
+  lohnsumme: string;
+  fluechtlingsstatus: string;
+  grenzgaenger: string;
+  /* Anstellung & Auszahlung */
+  funktion: string;
+  eintrittsdatum: string;
+  stundenlohn: string;
+  bankname: string;
+  iban: string;
+  /* SRK Kurs */
+  srkStatus: "abgeschlossen" | "offen" | "ueberfaellig";
+  srkAngemeldet: boolean;
+  srkDeadline: string;
+  srkAbgeschlossenAm: string;
+  /* Dokumente */
+  dokumente: { name: string; status: "hochgeladen" | "fehlend" | "abgelaufen"; datum: string }[];
+}
+
+const detailLookup: Record<string, AngehoerigerDetail> = {
+  "A-2026-0101": {
+    geschlecht: "Männlich", geburtsdatum: "14.03.1978", ahvNummer: "756.1234.5678.97",
+    nationalitaet: "Schweiz", heimatort: "Luzern", aufenthaltsstatus: "—",
+    zivilstand: "Verheiratet", zivilstandSeit: "12.06.2005",
+    strasse: "Bahnhofstrasse 42", plz: "8001", ort: "Zürich",
+    email: "peter.mueller@bluewin.ch", telefon: "+41 44 321 65 87",
+    krankenkasseName: "CSS", versicherungsnummer: "KK-834291",
+    quellensteuer: "Nein", konfession: "Evangelisch-reformiert",
+    quellensteuerTarif: "—", steuergemeinde: "Zürich",
+    sozialamtInvolviert: "Nein", sozialamtKontakt: "—", lohnabtretung: "Nein",
+    partnerName: "Anna Müller", partnerGeburtsdatum: "22.08.1980",
+    partnerAhvNummer: "756.9876.5432.10", partnerZemisNummer: "—", partnerAufenthaltsstatus: "Schweizer/in",
+    kinder: [
+      { id: "K-0101-1", nachname: "Müller", vorname: "Luca", geburtsdatum: "15.04.2010", ahvNummer: "756.1111.2222.33", geschlecht: "Männlich", zulagenart: "K", ausbildungsbeginn: "—", inAusbildung: "nein", ausbildungsstatus: "", typQuelle: "abgeleitet", overrideBegruendung: "", doppelbezug: "nein" },
+      { id: "K-0101-2", nachname: "Müller", vorname: "Sophie", geburtsdatum: "03.09.2012", ahvNummer: "756.4444.5555.66", geschlecht: "Weiblich", zulagenart: "K", ausbildungsbeginn: "—", inAusbildung: "nein", ausbildungsstatus: "", typQuelle: "abgeleitet", overrideBegruendung: "", doppelbezug: "nein" },
+    ],
+    kinderzulagenAktiv: "Ja", kinderzulagenUeberSpitex: "Ja", familienausgleichskasse: "SVA Zürich",
+    lohnsumme: "3'540.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
+    funktion: "Pflegende/r Angehörige/r", eintrittsdatum: "01.01.2026", stundenlohn: "29.50",
+    bankname: "UBS", iban: "CH93 0076 2011 6238 5295 7",
+    srkStatus: "abgeschlossen", srkAngemeldet: true, srkDeadline: "31.12.2026", srkAbgeschlossenAm: "15.01.2026",
+    dokumente: [
+      { name: "ID / Pass", status: "hochgeladen", datum: "02.01.2026" },
+      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "02.01.2026" },
+      { name: "Bankkarte", status: "hochgeladen", datum: "03.01.2026" },
+      { name: "Familienbüchlein", status: "hochgeladen", datum: "05.01.2026" },
+      { name: "Partner Krankenkassenkarte", status: "hochgeladen", datum: "05.01.2026" },
+    ],
+  },
+  "A-2026-0102": {
+    geschlecht: "Weiblich", geburtsdatum: "28.11.1985", ahvNummer: "756.2345.6789.08",
+    nationalitaet: "Deutschland", heimatort: "—", aufenthaltsstatus: "Bewilligung B",
+    zivilstand: "Ledig", zivilstandSeit: "—",
+    strasse: "Seestrasse 15", plz: "8002", ort: "Zürich",
+    email: "lisa.schmid@gmail.com", telefon: "+41 76 555 12 34",
+    krankenkasseName: "Helsana", versicherungsnummer: "—",
+    quellensteuer: "Ja", konfession: "Konfessionslos",
+    quellensteuerTarif: "A", steuergemeinde: "Zürich",
+    sozialamtInvolviert: "Nein", sozialamtKontakt: "—", lohnabtretung: "Nein",
+    partnerName: "—", partnerGeburtsdatum: "—",
+    partnerAhvNummer: "—", partnerZemisNummer: "—", partnerAufenthaltsstatus: "—",
+    kinder: [],
+    kinderzulagenAktiv: "Nein", kinderzulagenUeberSpitex: "Nein", familienausgleichskasse: "—",
+    lohnsumme: "2'800.00", fluechtlingsstatus: "Nein", grenzgaenger: "Ja",
+    funktion: "Pflegende/r Angehörige/r", eintrittsdatum: "15.02.2026", stundenlohn: "28.00",
+    bankname: "—", iban: "—",
+    srkStatus: "offen", srkAngemeldet: true, srkDeadline: "15.03.2026", srkAbgeschlossenAm: "—",
+    dokumente: [
+      { name: "ID / Pass", status: "hochgeladen", datum: "16.02.2026" },
+      { name: "Krankenkassenkarte", status: "fehlend", datum: "—" },
+      { name: "Bankkarte", status: "fehlend", datum: "—" },
+      { name: "Familienbüchlein", status: "fehlend", datum: "—" },
+      { name: "Partner Krankenkassenkarte", status: "fehlend", datum: "—" },
+    ],
+  },
+  "A-2026-0103": {
+    geschlecht: "Männlich", geburtsdatum: "05.07.1972", ahvNummer: "756.3456.7890.19",
+    nationalitaet: "Schweiz", heimatort: "Bern", aufenthaltsstatus: "—",
+    zivilstand: "Geschieden", zivilstandSeit: "01.03.2018",
+    strasse: "Musterweg 7", plz: "3012", ort: "Bern",
+    email: "j.weber@gmx.ch", telefon: "+41 31 777 88 99",
+    krankenkasseName: "Swica", versicherungsnummer: "KK-556783",
+    quellensteuer: "Nein", konfession: "Römisch-katholisch",
+    quellensteuerTarif: "—", steuergemeinde: "Bern",
+    sozialamtInvolviert: "Nein", sozialamtKontakt: "—", lohnabtretung: "Nein",
+    partnerName: "—", partnerGeburtsdatum: "—",
+    partnerAhvNummer: "—", partnerZemisNummer: "—", partnerAufenthaltsstatus: "—",
+    kinder: [
+      { id: "K-0103-1", nachname: "Weber", vorname: "Tim", geburtsdatum: "20.01.2008", ahvNummer: "756.7777.8888.99", geschlecht: "Männlich", zulagenart: "W", ausbildungsbeginn: "01.08.2024", inAusbildung: "ja", ausbildungsstatus: "laufend", typQuelle: "abgeleitet", overrideBegruendung: "", doppelbezug: "nein" },
+    ],
+    kinderzulagenAktiv: "Ja", kinderzulagenUeberSpitex: "Ja", familienausgleichskasse: "SVA Bern",
+    lohnsumme: "4'160.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
+    funktion: "Pflegende/r Angehörige/r", eintrittsdatum: "01.11.2025", stundenlohn: "32.00",
+    bankname: "PostFinance", iban: "CH55 0900 0000 1234 5678 9",
+    srkStatus: "ueberfaellig", srkAngemeldet: false, srkDeadline: "15.02.2026", srkAbgeschlossenAm: "—",
+    dokumente: [
+      { name: "ID / Pass", status: "hochgeladen", datum: "01.11.2025" },
+      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "01.11.2025" },
+      { name: "Bankkarte", status: "hochgeladen", datum: "02.11.2025" },
+      { name: "Familienbüchlein", status: "hochgeladen", datum: "05.11.2025" },
+      { name: "Partner Krankenkassenkarte", status: "fehlend", datum: "—" },
+    ],
+  },
+};
+
+/* Fallback detail for any angehoeriger not in the lookup */
+function getDetail(id: string): AngehoerigerDetail {
+  if (detailLookup[id]) return detailLookup[id];
+  return {
+    geschlecht: "Weiblich", geburtsdatum: "10.05.1975", ahvNummer: "756.5555.6666.77",
+    nationalitaet: "Schweiz", heimatort: "Basel", aufenthaltsstatus: "—",
+    zivilstand: "Verheiratet", zivilstandSeit: "20.09.2002",
+    strasse: "Hauptstrasse 10", plz: "4051", ort: "Basel",
+    email: "kontakt@example.ch", telefon: "+41 61 222 33 44",
+    krankenkasseName: "Concordia", versicherungsnummer: "KK-112233",
+    quellensteuer: "Nein", konfession: "Evangelisch-reformiert",
+    quellensteuerTarif: "—", steuergemeinde: "Basel-Stadt",
+    sozialamtInvolviert: "Nein", sozialamtKontakt: "—", lohnabtretung: "Nein",
+    partnerName: "Max Muster", partnerGeburtsdatum: "01.01.1974",
+    partnerAhvNummer: "756.8888.9999.00", partnerZemisNummer: "—", partnerAufenthaltsstatus: "Schweizer/in",
+    kinder: [],
+    kinderzulagenAktiv: "Nein", kinderzulagenUeberSpitex: "Nein", familienausgleichskasse: "—",
+    lohnsumme: "3'100.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
+    funktion: "Pflegende/r Angehörige/r", eintrittsdatum: "01.01.2026", stundenlohn: "29.50",
+    bankname: "ZKB", iban: "CH12 0070 0110 0061 5200 0",
+    srkStatus: "offen", srkAngemeldet: false, srkDeadline: "30.06.2026", srkAbgeschlossenAm: "—",
+    dokumente: [
+      { name: "ID / Pass", status: "hochgeladen", datum: "01.01.2026" },
+      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "01.01.2026" },
+      { name: "Bankkarte", status: "hochgeladen", datum: "02.01.2026" },
+      { name: "Familienbüchlein", status: "fehlend", datum: "—" },
+      { name: "Partner Krankenkassenkarte", status: "fehlend", datum: "—" },
+    ],
+  };
+}
 
 /* ── Status config (same pattern as Patient) �� */
-/* Vollständig über AngehoerigerStatus — ein neuer Zustand fällt beim Übersetzen
-   auf, statt zur Laufzeit ins Leere zu greifen. */
-const statusConfig: Record<AngehoerigerStatus, { label: string; bg: string; text: string; dot: string }> = {
-  in_erfassung: { label: "In Erfassung", bg: "bg-muted", text: "text-muted-foreground", dot: "bg-border" },
+const statusConfig: Record<string, { label: string; bg: string; text: string; dot: string }> = {
   aktiv: { label: "Aktiv", bg: "bg-success-light", text: "text-success-foreground", dot: "bg-success" },
   in_onboarding: { label: "In Onboarding", bg: "bg-warning-light", text: "text-warning-foreground", dot: "bg-warning" },
   fehlende_dokumente: { label: "Fehlende Dokumente", bg: "bg-error-light", text: "text-error-foreground", dot: "bg-error" },
@@ -111,94 +265,92 @@ const statusConfig: Record<AngehoerigerStatus, { label: string; bg: string; text
 /* ── Tab definitions ─────────────────────── */
 const profileTabs = [
   { id: "ueberblick", label: "Überblick", icon: LayoutDashboard },
-  { id: "workflow", label: "Workflow", icon: ListChecks },
+  { id: "stammdaten", label: "Stammdaten", icon: User },
+  { id: "anstellung", label: "Anstellung", icon: Briefcase },
+  { id: "qualifikation", label: "Qualifikation", icon: Award },
+  { id: "einsatz", label: "Kontrollen", icon: Stamp },
+  { id: "rhythmus", label: "Betreuung", icon: Activity },
   { id: "dokumente", label: "Dokumente", icon: FileText },
-  { id: "related", label: "Related Lists", icon: Table2 },
-  { id: "tickets", label: "Tickets", icon: Headphones },
+  { id: "pendenzen", label: "Pendenzen", icon: Headphones },
   { id: "historie", label: "Historie", icon: History },
 ];
 
-/* ── Betreuungsrhythmus ──────────────────── */
-interface ProcessStep {
-  nr: number;
-  label: string;
-  status: "done" | "active" | "pending";
-  date?: string;
-  note?: string;
-  responsible?: string;
-  dueDate?: string;
-  overdue?: boolean;
+/* ── Kennzeichen: identische Ableitung wie in der Angehörigenliste
+   (AngehoerigePage.tsx: ableitenKennzeichen). Die Liste bleibt in diesem Lauf
+   unverändert, daher hier als eigenständige, wortgleiche Kopie. Form + Farbe. ── */
+function detailNichtZugewiesen(a: Angehoeriger): boolean {
+  return !a.pflegefachkraft || a.pflegefachkraft.trim() === "" || a.pflegefachkraft === "—";
+}
+function ableitenKennzeichen(a: Angehoeriger): { typ: "rot" | "gelb" | null; grund: string } {
+  if (a.monatsSchritt.ueberfaellig === true) return { typ: "rot", grund: "Monatsschritt überfällig" };
+  if (a.qualifikation === "ohne_srk") return { typ: "gelb", grund: "SRK-Kurs offen" };
+  if (detailNichtZugewiesen(a)) return { typ: "gelb", grund: "Keine Pflegefachkraft zugewiesen" };
+  return { typ: null, grund: "" };
 }
 
-function getOnboardingProzess(a: Angehoeriger): ProcessStep[] {
-  const steps = [
-    "Vertrag & Personalien erfasst",
-    "Steuer & Sozialversicherung geprüft",
-    "Partnerdaten erfasst",
-    "Kinderzulagen geklärt",
-    "Anstellungskonditionen definiert",
-    "ID / Ausweis hochgeladen",
-    "Krankenkassenkarte hochgeladen",
-    "Bankdaten verifiziert",
-    "Quellensteuer-Tarif geprüft",
-    "BVG / UVG Anmeldung",
-    "Arbeitsvertrag unterschrieben",
-    "MedLink-Zugang erstellt",
-    "Ersteinsatz-Briefing durchgeführt",
-  ];
-  const responsibles = [
-    "K. Meier", "K. Meier", "K. Meier", "K. Meier", "S. Weber",
-    "K. Meier", "K. Meier", "K. Meier", "M. Keller", "HR-System",
-    "S. Weber", "IT-System", "S. Weber",
-  ];
-  const dueDates = [
-    "05.01.2026", "07.01.2026", "08.01.2026", "10.01.2026", "12.01.2026",
-    "14.01.2026", "14.01.2026", "15.01.2026", "18.01.2026", "20.01.2026",
-    "22.01.2026", "25.01.2026", "28.01.2026",
-  ];
-  const doneCount = a.status === "aktiv" ? 13 : a.status === "fehlende_dokumente" ? 5 : 4;
-  const dates = [
-    "02.01.2026", "03.01.2026", "04.01.2026", "05.01.2026", "06.01.2026",
-    "07.01.2026", "08.01.2026", "10.01.2026", "12.01.2026", "15.01.2026",
-    "18.01.2026", "20.01.2026", "25.01.2026",
-  ];
-  return steps.map((label, i) => ({
-    nr: i + 1,
-    label,
-    status: i < doneCount ? "done" : i === doneCount ? "active" : "pending",
-    date: i < doneCount ? dates[i] : undefined,
-    note: i === doneCount ? "In Bearbeitung" : undefined,
-    responsible: responsibles[i],
-    dueDate: dueDates[i],
-    overdue: i === doneCount && a.status === "fehlende_dokumente",
-  }));
+/* ── Linke Zustandsspalte: Zuständigkeit + geteilte Notizspur (wie im Assistenten) ── */
+/** Benutzerquelle für die Zuweisung: zentrale Diplomierten-Liste (lib/betreuung). */
+const DIPL_PERSONEN: PersonOption[] = getDiplomierte().map(d => ({
+  id: d.id, initialen: d.initialen, nachname: d.name, vorname: d.vorname, rolle: d.funktion,
+}));
+
+/** Zuständigkeit — dieselbe Darstellung wie der Bezugsperson-Block des Assistenten
+ *  (geteiltes BezugspersonFeld + PersonenAuswahl), aber mit lokalem Zustand statt
+ *  des fallgebundenen betreuung/store. */
+function ZustaendigkeitBlock({ a }: { a: Angehoeriger }) {
+  const [open, setOpen] = useState(false);
+  const surfaceRef = useRef<HTMLButtonElement>(null);
+  const initialId = getDiplomierte().find(d => `${d.vorname} ${d.name}` === a.pflegefachkraft)?.id ?? null;
+  const [userId, setUserId] = useState<string | null>(initialId);
+  const selected = getDiplomierterById(userId);
+  const zuweisen = (id: string | null) => { setUserId(id); setOpen(false); };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <span className="flex" style={{ width: "100%" }}>
+          <BezugspersonFeld
+            surfaceRef={surfaceRef}
+            label={null}
+            voll
+            person={selected ? { initialen: selected.initialen, name: diplomierterAnzeigename(selected) } : null}
+            onAktivieren={() => setOpen(o => !o)}
+            offen={open}
+          />
+        </span>
+      </PopoverAnchor>
+      <PopoverContent align="start" side="bottom" sideOffset={6} style={{ width: 300, padding: 6 }}
+        onEscapeKeyDown={() => setOpen(false)}
+        onCloseAutoFocus={e => { e.preventDefault(); surfaceRef.current?.focus(); }}>
+        <PersonenAuswahl personen={DIPL_PERSONEN} selectedId={userId} onSelect={zuweisen} suchePlaceholder="Person suchen" leerText="Keine Person gefunden." />
+        {selected && (
+          <>
+            <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "6px 4px" }} />
+            <button type="button" onClick={() => zuweisen(null)} className="ui-fokusring w-full inline-flex items-center cursor-pointer"
+              style={{ gap: 8, padding: "8px 10px", borderRadius: "var(--radius-input)", background: "transparent", border: "none", fontFamily: "inherit", fontSize: "var(--text-small)", color: "var(--status-danger)" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+              <UserMinus style={{ width: 15, height: 15 }} /> Zuweisung aufheben
+            </button>
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
-function getMonatsschritte(): ProcessStep[] {
-  const steps = [
-    "Regelkontrolle", "Mikroschulung", "Fallbesprechung",
-    "Arbeitskontrolle", "Mikroschulung", "Kundenfeedback",
-    "SRK-Prüfung Anmeldung",
-  ];
-  const responsibles = [
-    "Sandra Weber", "Sandra Weber", "Team", "Sandra Weber",
-    "Sandra Weber", "Patient/Angehörige", "HR-Abteilung",
-  ];
-  const dueDates = [
-    "05.02.2026", "10.02.2026", "15.02.2026", "20.02.2026",
-    "25.02.2026", "28.02.2026", "05.03.2026",
-  ];
-  const dates = ["01.02.2026", "05.02.2026", "10.02.2026"];
-  return steps.map((label, i) => ({
-    nr: i + 1,
-    label,
-    status: i < 3 ? "done" : i === 3 ? "active" : "pending",
-    date: i < 3 ? dates[i] : undefined,
-    note: i === 3 ? "Fällig am 20.02.2026" : undefined,
-    responsible: responsibles[i],
-    dueDate: dueDates[i],
-    overdue: false,
-  }));
+function LinkeSpalte({ a }: { a: Angehoeriger }) {
+  const referenz: NotizReferenz = { art: "angehoeriger", kennung: a.id };
+  return (
+    <div className="space-y-5">
+      {/* Zuständigkeit */}
+      <div>
+        <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>Zuständigkeit</div>
+        <ZustaendigkeitBlock a={a} />
+      </div>
+
+      {/* Notizen — dieselbe Spur (geteilter Store) wie im Onboarding-Assistenten */}
+      <NotizSpur referenz={referenz} personName={`${a.vorname} ${a.nachname}`} />
+    </div>
+  );
 }
 
 /* ── Tickets mock ────────────────────────── */
@@ -214,9 +366,9 @@ interface Ticket {
 
 function getTickets(): Ticket[] {
   return [
-    { id: "SD-2026-0401", subject: "Bankdaten fehlen — Lohnauszahlung blockiert", status: "offen", priority: "hoch", created: "30.07.2026", assignedTo: "K. Meier", category: "HR" },
-    { id: "SD-2026-0395", subject: "SRK-Anmeldung ausstehend", status: "in_bearbeitung", priority: "mittel", created: "26.07.2026", assignedTo: "S. Weber", category: "Ausbildung" },
-    { id: "SD-2026-0380", subject: "Krankenkassenkarte nachreichen", status: "erledigt", priority: "niedrig", created: "22.07.2026", assignedTo: "K. Meier", category: "Dokumente" },
+    { id: "SD-2026-0401", subject: "Bankdaten fehlen — Lohnauszahlung blockiert", status: "offen", priority: "hoch", created: "26.02.2026", assignedTo: "K. Meier", category: "HR" },
+    { id: "SD-2026-0395", subject: "SRK-Anmeldung ausstehend", status: "in_bearbeitung", priority: "mittel", created: "22.02.2026", assignedTo: "S. Weber", category: "Ausbildung" },
+    { id: "SD-2026-0380", subject: "Krankenkassenkarte nachreichen", status: "erledigt", priority: "niedrig", created: "18.02.2026", assignedTo: "K. Meier", category: "Dokumente" },
   ];
 }
 
@@ -233,12 +385,13 @@ const stempelDaten: StempelEntry[] = [
 interface SozialversicherungEntry { kategorie: string; status: "aktiv" | "ausstehend" | "abgelaufen"; gueltigBis: string; details: string; }
 const sozialversicherungDaten: SozialversicherungEntry[] = [
   { kategorie: "AHV / IV", status: "aktiv", gueltigBis: "—", details: "Beiträge aktuell" },
-  { kategorie: "BVG (Pensionskasse)", status: "aktiv", gueltigBis: "03.06.2027", details: "Angemeldet seit 01.01.2026" },
-  { kategorie: "UVG (Unfallversicherung)", status: "aktiv", gueltigBis: "03.06.2027", details: "Suva — Police aktiv" },
+  { kategorie: "BVG (Pensionskasse)", status: "aktiv", gueltigBis: "31.12.2026", details: "Angemeldet seit 01.01.2026" },
+  { kategorie: "UVG (Unfallversicherung)", status: "aktiv", gueltigBis: "31.12.2026", details: "Suva — Police aktiv" },
   { kategorie: "KTG (Krankentaggeld)", status: "ausstehend", gueltigBis: "—", details: "Antrag in Bearbeitung" },
   { kategorie: "Quellensteuer", status: "aktiv", gueltigBis: "—", details: "Tarif gemäss HR-Daten" },
 ];
 
+/* (SRK Kurs data is now per-angehöriger in AngehoerigerDetail) */
 
 /* ── Historie mock ───────────────────────── */
 interface HistoryEntry {
@@ -249,16 +402,16 @@ interface HistoryEntry {
 
 function getHistorie(): HistoryEntry[] {
   return [
-    { id: "h1", date: "02.08.2026", time: "09:15", user: "K. Meier", action: "Stempelkontrolle durchgeführt", detail: "Februar — 18/22 Tage erfasst", type: "workflow" },
-    { id: "h2", date: "01.08.2026", time: "14:30", user: "System", action: "Lohnlauf ausgelöst", detail: "Monatslohn Februar 2026 berechnet", type: "system" },
-    { id: "h3", date: "30.07.2026", time: "16:20", user: "K. Meier", action: "Dokument hochgeladen", detail: "Krankenkassenkarte — Scan verifiziert", type: "dokument" },
-    { id: "h4", date: "28.07.2026", time: "11:00", user: "S. Weber", action: "Mikroschulung abgeschlossen", detail: "Modul: Grundpflege — bestanden", type: "workflow" },
-    { id: "h5", date: "26.07.2026", time: "10:45", user: "K. Meier", action: "Ticket erstellt", detail: "SD-2026-0395: SRK-Anmeldung ausstehend", type: "ticket" },
-    { id: "h6", date: "24.07.2026", time: "09:30", user: "S. Weber", action: "Regelkontrolle durchgeführt", detail: "Arbeitszeiterfassung geprüft — OK", type: "workflow" },
-    { id: "h7", date: "22.07.2026", time: "14:10", user: "K. Meier", action: "Bankdaten aktualisiert", detail: "IBAN geändert auf neues Konto", type: "hr" },
-    { id: "h8", date: "19.07.2026", time: "08:45", user: "System", action: "BVG-Anmeldung bestätigt", detail: "Pensionskasse aktiv ab 01.01.2026", type: "system" },
-    { id: "h9", date: "14.07.2026", time: "16:00", user: "S. Weber", action: "Status geändert", detail: "Status → Aktiv", type: "status" },
-    { id: "h10", date: "09.07.2026", time: "11:30", user: "K. Meier", action: "Onboarding Schritt abgeschlossen", detail: "Schritt 8: Bankdaten verifiziert", type: "workflow" },
+    { id: "h1", date: "01.03.2026", time: "09:15", user: "K. Meier", action: "Stempelkontrolle durchgeführt", detail: "Februar — 18/22 Tage erfasst", type: "workflow" },
+    { id: "h2", date: "28.02.2026", time: "14:30", user: "System", action: "Lohnlauf ausgelöst", detail: "Monatslohn Februar 2026 berechnet", type: "system" },
+    { id: "h3", date: "26.02.2026", time: "16:20", user: "K. Meier", action: "Dokument hochgeladen", detail: "Krankenkassenkarte — Scan verifiziert", type: "dokument" },
+    { id: "h4", date: "24.02.2026", time: "11:00", user: "S. Weber", action: "Mikroschulung abgeschlossen", detail: "Modul: Grundpflege — bestanden", type: "workflow" },
+    { id: "h5", date: "22.02.2026", time: "10:45", user: "K. Meier", action: "Ticket erstellt", detail: "SD-2026-0395: SRK-Anmeldung ausstehend", type: "ticket" },
+    { id: "h6", date: "20.02.2026", time: "09:30", user: "S. Weber", action: "Regelkontrolle durchgeführt", detail: "Arbeitszeiterfassung geprüft — OK", type: "workflow" },
+    { id: "h7", date: "18.02.2026", time: "14:10", user: "K. Meier", action: "Bankdaten aktualisiert", detail: "IBAN geändert auf neues Konto", type: "hr" },
+    { id: "h8", date: "15.02.2026", time: "08:45", user: "System", action: "BVG-Anmeldung bestätigt", detail: "Pensionskasse aktiv ab 01.01.2026", type: "system" },
+    { id: "h9", date: "10.02.2026", time: "16:00", user: "S. Weber", action: "Status geändert", detail: "Status → Aktiv", type: "status" },
+    { id: "h10", date: "05.02.2026", time: "11:30", user: "K. Meier", action: "Onboarding Schritt abgeschlossen", detail: "Schritt 8: Bankdaten verifiziert", type: "workflow" },
   ];
 }
 
@@ -277,11 +430,8 @@ export function Angehoerige360Page() {
     setSearchParams(next, { replace: true });
   };
 
-  const angehoerige = useAngehoerige();
   const allAngehoerigeIds = angehoerige.map(x => x.id);
-  /* Die Blätter-Navigation folgt der Liste; die Seite selbst findet auch eine
-     Person im Zustand "in_erfassung", die dort noch nicht erscheint. */
-  const a = angehoerige.find((x) => x.id === angehoerigerIdOrNew) ?? getAngehoerigen(angehoerigerIdOrNew);
+  const a = angehoerige.find((x) => x.id === angehoerigerIdOrNew);
 
   if (!a) {
     return (
@@ -302,14 +452,29 @@ export function Angehoerige360Page() {
     );
   }
 
+  const detail = getDetail(a.id);
 
-  /* Hier entsteht nichts — siehe lib/rhythmus/seed.ts. Der Rhythmus einer
-     angehörigen Person entsteht mit ihrer Anstellung, nicht mit dem Öffnen
-     ihres Dossiers. */
+  // WF-01: Rhythmus-Tickets generieren (idempotent) wenn aktiv + eintrittsdatum gesetzt
+  if (a.status === "aktiv" && detail.eintrittsdatum) {
+    // eintrittsdatum ist im Format "DD.MM.YYYY" → ISO konvertieren
+    const parts = detail.eintrittsdatum.split(".");
+    const isoAnker = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : detail.eintrittsdatum;
+    generiereRhythmusTickets("angehoeriger", a.id, `${a.vorname} ${a.nachname}`, isoAnker, a.pflegefachkraft);
+  }
 
-  const st = statusConfig[a.status];
-  const br = billingReadinessConfig[a.billingReadiness];
+  // Status als bearbeitbares Feld (Prototyp: lokaler Zustand, persistiert nicht).
+  // Ein Wechsel, der die Person aus dem aktiven Betrieb nimmt (Leistungen pausiert),
+  // verlangt eine Rückfrage. Hinweis: das Angehörigen-Modell kennt keinen terminalen
+  // "gekündigt"-Status; "fehlende_dokumente" ist der deaktivierende Zustand.
+  const STATUS_DEAKTIVIEREND = new Set<AngehoerigerStatus>(["fehlende_dokumente"]);
+  const [status, setStatus] = useState<AngehoerigerStatus>(a.status);
+  const statusAendern = (neu: AngehoerigerStatus) => {
+    if (neu === status) return;
+    if (STATUS_DEAKTIVIEREND.has(neu) && !window.confirm(`Status auf «${statusConfig[neu].label}» ändern? Das nimmt die Person aus dem aktiven Betrieb — laufende Leistungen werden pausiert.`)) return;
+    setStatus(neu);
+  };
   const qual = qualifikationConfig[a.qualifikation];
+  const kennzeichen = ableitenKennzeichen(a);
   const tickets = getTickets();
 
   return (
@@ -326,123 +491,95 @@ export function Angehoerige360Page() {
         />
       </div>
 
-      {/* ── Header ─────────────────────────── */}
-      <div style={{ padding: "var(--space-4) var(--space-6) 0" }}>
-        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "20px 24px" }}>
-          <div className="flex flex-col md:flex-row md:items-start" style={{ gap: 20 }}>
-            {/* Avatar */}
-            <div className="shrink-0 flex items-center justify-center" style={{ width: 56, height: 56, borderRadius: "var(--radius-card)", background: "var(--brand-primary-light)" }}>
-              <span style={{ fontSize: 20, fontWeight: "var(--weight-semibold)", color: "var(--brand-primary)" }}>
-                {a.vorname[0]}{a.nachname[0]}
+      {/* ── Kopf (schlank: ohne Rahmen, Kartenfläche, Avatar) ── */}
+      <div style={{ padding: "6px var(--space-6) 0" }}>
+        <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
+          {kennzeichen.typ && (
+            <AlertTriangle role="img" aria-label={kennzeichen.grund}
+              style={{ width: 15, height: 15, flexShrink: 0, color: kennzeichen.typ === "rot" ? "var(--status-danger)" : "var(--status-warning)", fill: kennzeichen.typ === "rot" ? "var(--status-danger)" : "none" }} />
+          )}
+          <h2 style={{ fontSize: 21, fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+            {a.nachname}, {a.vorname}
+          </h2>
+          <select value={status} onChange={e => statusAendern(e.target.value as AngehoerigerStatus)} aria-label="Status"
+            style={{ fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-pill)", padding: "3px 10px", cursor: "pointer" }}>
+            {(Object.keys(statusConfig) as AngehoerigerStatus[]).map(s => (
+              <option key={s} value={s}>{statusConfig[s].label}</option>
+            ))}
+          </select>
+          <span className={`inline-flex items-center ${qual.bg} ${qual.text}`} style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)" }}>
+            {qual.label}
+          </span>
+
+          {/* rechts: nur Abweichung (falls vorhanden) + Primäraktion */}
+          <div className="flex items-center" style={{ gap: "var(--space-2)", marginLeft: "auto" }}>
+            {kennzeichen.typ && (
+              <span className="inline-flex items-center" style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: kennzeichen.typ === "rot" ? "var(--status-danger-bg)" : "var(--status-warning-bg)", color: kennzeichen.typ === "rot" ? "var(--status-danger)" : "var(--status-warning-text)" }}>
+                <AlertTriangle style={{ width: 11, height: 11 }} /> {kennzeichen.grund}
               </span>
-            </div>
-
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
-                <h2 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-                  {a.nachname}, {a.vorname}
-                </h2>
-                <span className={`inline-flex items-center ${st.bg} ${st.text}`} style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)" }}>
-                  <span className={st.dot} style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)" }} />
-                  {st.label}
-                </span>
-                <span className={`inline-flex items-center ${br.bg} ${br.text}`} style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)" }}>
-                  <span className={br.dot} style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)" }} />
-                  {br.label}
-                </span>
-                <span className={`inline-flex items-center ${qual.bg} ${qual.text}`} style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)" }}>
-                  {qual.label}
-                </span>
-              </div>
-
-              {/* Zugeordnete Patienten */}
-              <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)", marginTop: 8 }}>
-                {a.zugeordnetePatientenList.length > 0 ? (
-                  a.zugeordnetePatientenList.map((p) => (
-                    <button key={p.id} onClick={() => navigate(`/patienten/${p.id}`)}
-                      className="inline-flex items-center cursor-pointer"
-                      style={{ gap: 4, fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)", background: "transparent", border: "none" }}>
-                      <Users style={{ width: 12, height: 12 }} /> {p.name}
-                    </button>
-                  ))
-                ) : (
-                  <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-small)", color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
-                    <AlertTriangle style={{ width: 12, height: 12 }} /> Kein Patient zugeordnet
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center shrink-0" style={{ gap: "var(--space-2)" }}>
-              <button onClick={() => navigate("/servicedesk")} className="inline-flex items-center cursor-pointer transition-colors"
-                style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
-                <Plus style={{ width: 14, height: 14 }} /> Ticket erstellen
-              </button>
-              <button className="inline-flex items-center cursor-pointer transition-colors"
-                style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
-                <Edit3 style={{ width: 14, height: 14, color: "var(--text-secondary)" }} /> Bearbeiten
-              </button>
-              <button className="flex items-center justify-center cursor-pointer transition-colors"
-                style={{ width: 32, height: 32, borderRadius: "var(--radius-pill)", background: "transparent", border: "var(--border-thin) solid var(--border-default)" }}
-                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                <MoreHorizontal style={{ width: 16, height: 16, color: "var(--text-secondary)" }} />
-              </button>
-            </div>
+            )}
+            <button onClick={() => navigate("/servicedesk")} className="inline-flex items-center cursor-pointer transition-colors"
+              style={{ gap: 6, padding: "7px 14px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
+              <Plus style={{ width: 14, height: 14 }} /> Neue Pendenz
+            </button>
           </div>
         </div>
 
-        {/* Anna HR-Zusammenfassung */}
-        <div style={{ marginTop: 12 }}>
-          <AnnaAngehoerigeSummary angehoeriger={a} detail={{ funktion: a.funktion, eintrittsdatum: a.eintrittsdatum, stundenlohn: a.stundenlohn, aufenthaltsstatus: a.aufenthaltsstatus, srkAmpel: srkAmpel(a, gegenwart()), srkFrist: srkFristAnzeige(a.eintrittsdatum) }} />
-        </div>
       </div>
 
-      {/* ── Tabs ───────────────────────────── */}
-      <div style={{ padding: "0 var(--space-6)", marginTop: 20 }}>
-        <div style={{ borderBottom: "var(--border-thin) solid var(--border-default)" }}>
-          <div className="flex overflow-x-auto" style={{ gap: 0, marginBottom: -1 }}>
-            {profileTabs.map((t) => {
-              const Icon = t.icon;
-              const isActive = activeTab === t.id;
-              const ticketCount = t.id === "tickets" ? tickets.filter((tk) => tk.status !== "erledigt").length : 0;
-              return (
-                <button key={t.id} onClick={() => setActiveTab(t.id)}
-                  className="relative flex items-center whitespace-nowrap cursor-pointer transition-colors"
-                  style={{
-                    gap: "var(--space-2)", padding: "12px 16px",
-                    fontSize: "var(--text-body)", fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)",
-                    color: isActive ? "var(--brand-primary)" : "var(--text-secondary)",
-                    background: "transparent", border: "none",
-                  }}>
-                  <Icon style={{ width: 16, height: 16 }} />
-                  {t.label}
-                  {t.id === "tickets" && ticketCount > 0 && (
-                    <span style={{ marginLeft: 4, padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-semibold)", background: "var(--status-danger-bg)", color: "var(--status-danger)" }}>
-                      {ticketCount}
-                    </span>
-                  )}
-                  {isActive && (
-                    <span className="absolute" style={{ bottom: -1, left: 8, right: 8, height: 2, background: "var(--brand-primary)", borderTopLeftRadius: "var(--radius-pill)", borderTopRightRadius: "var(--radius-pill)" }} />
-                  )}
-                </button>
-              );
-            })}
+      {/* ── Körperkarte um den gesamten Körper (Rahmen/Rundung/Hintergrund aus dem Assistenten) ── */}
+      <div style={{ padding: "16px var(--space-6) 40px" }}>
+        <div className="flex" style={{ border: "var(--border-thin) solid var(--border-default)", borderRadius: 10, background: "var(--bg-elevated)", alignItems: "flex-start" }}>
+          {/* Linke Zustandsspalte — Zuständigkeit + Notizen; scrollt eigenständig; Trennlinie rechts */}
+          <aside className="hidden lg:block shrink-0" style={{ width: 260, borderRight: "var(--border-thin) solid var(--border-default)", padding: "var(--space-4)", position: "sticky", top: 16, maxHeight: "calc(100vh - 32px)", overflowY: "auto" }}>
+            <LinkeSpalte a={a} />
+          </aside>
+
+          {/* Rechter Bereich: Reiterzeile + Inhalt */}
+          <div className="flex-1 min-w-0" style={{ padding: "var(--space-4)" }}>
+          <div style={{ borderBottom: "var(--border-thin) solid var(--border-default)" }}>
+            <div className="flex overflow-x-auto flex-wrap" style={{ gap: 0, marginBottom: -1 }}>
+              {profileTabs.map((t) => {
+                const isActive = activeTab === t.id;
+                const ticketCount = t.id === "pendenzen" ? tickets.filter((tk) => tk.status !== "erledigt").length : 0;
+                return (
+                  <button key={t.id} onClick={() => setActiveTab(t.id)}
+                    className="relative flex items-center whitespace-nowrap cursor-pointer transition-colors"
+                    style={{ gap: "var(--space-2)", padding: "12px 14px", fontSize: "var(--text-body)", fontWeight: isActive ? "var(--weight-medium)" : "var(--weight-regular)", color: isActive ? "var(--brand-primary)" : "var(--text-secondary)", background: "transparent", border: "none" }}>
+                    {t.label}
+                    {t.id === "pendenzen" && ticketCount > 0 && (
+                      <span style={{ marginLeft: 4, padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-semibold)", background: "var(--status-danger-bg)", color: "var(--status-danger)" }}>
+                        {ticketCount}
+                      </span>
+                    )}
+                    {isActive && (
+                      <span className="absolute" style={{ bottom: -1, left: 8, right: 8, height: 2, background: "var(--brand-primary)", borderTopLeftRadius: "var(--radius-pill)", borderTopRightRadius: "var(--radius-pill)" }} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Reiter-Inhalt — Formularbereich auf FORMULAR_MAX begrenzt */}
+          <div style={{ padding: "20px 0 0", maxWidth: FORMULAR_MAX }}>
+            {activeTab === "ueberblick" && <TabUeberblick a={a} detail={detail} tickets={tickets} navigate={navigate} />}
+            {activeTab === "stammdaten" && <TabStammdaten a={a} detail={detail} />}
+            {activeTab === "anstellung" && <TabAnstellungLohn detail={detail} />}
+            {activeTab === "qualifikation" && <TabQualifikation a={a} detail={detail} />}
+            {activeTab === "einsatz" && <TabEinsatzKontrollen a={a} detail={detail} />}
+            {activeTab === "rhythmus" && (
+              <div style={{ padding: "var(--space-4) 0" }}>
+                <RhythmusTimeline subjektTyp="angehoeriger" subjektId={a.id} aktuellerBenutzer={a.pflegefachkraft} />
+              </div>
+            )}
+            {activeTab === "dokumente" && <TabDokumenteAngehoerige a={a} />}
+            {activeTab === "pendenzen" && <TabTickets tickets={tickets} navigate={navigate} />}
+            {activeTab === "historie" && <TabHistorie />}
           </div>
         </div>
-      </div>
-
-      {/* ── Tab Content ────────────────────── */}
-      <div style={{ padding: "20px var(--space-6) 40px" }}>
-        {activeTab === "ueberblick" && <TabUeberblick a={a} />}
-        {activeTab === "workflow" && <TabWorkflow a={a} />}
-        {activeTab === "dokumente" && <TabDokumenteAngehoerige a={a} />}
-        {activeTab === "related" && <TabRelatedLists a={a} />}
-        {activeTab === "tickets" && <TabTickets tickets={tickets} navigate={navigate} />}
-        {activeTab === "historie" && <TabHistorie />}
+        </div>
       </div>
     </>
   );
@@ -493,28 +630,40 @@ function SectionCard({
 }: {
   title: string; icon: React.ElementType; editable?: boolean; editing?: boolean; onEdit?: () => void; onSave?: () => void; onCancel?: () => void; children: React.ReactNode;
 }) {
+  // Lesezustand: rahmenlos wie im Assistenten — Überschrift, Felder, Trennlinie
+  // zwischen den Abschnitten (letzter Abschnitt ohne Linie).
+  if (!editing) {
+    return (
+      <div className="border-b border-border-light pb-5 mb-5 last:border-b-0 last:pb-0 last:mb-0">
+        <div className="flex items-center gap-2 mb-3">
+          <Icon className="w-4 h-4 text-primary" />
+          <h5 className="text-foreground flex-1">{title}</h5>
+          {editable && (
+            <button onClick={onEdit} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors cursor-pointer" style={{ fontWeight: 450 }}>
+              <Pencil className="w-3 h-3" /> Bearbeiten
+            </button>
+          )}
+        </div>
+        {children}
+      </div>
+    );
+  }
+  // Bearbeitungszustand: Rahmen + getönte Kopfzeile; Aktionen am Fuss.
   return (
-    <div className={`bg-card rounded-2xl border transition-colors ${editing ? "border-primary/25 shadow-sm" : "border-border"}`}>
-      <div className="px-5 py-4 border-b border-border-light flex items-center gap-2">
+    <div className="rounded-2xl border border-primary/30 shadow-sm mb-5 last:mb-0 overflow-hidden">
+      <div className="px-5 py-4 border-b border-border-light flex items-center gap-2" style={{ background: "var(--brand-primary-light)" }}>
         <Icon className="w-4 h-4 text-primary" />
         <h5 className="text-foreground flex-1">{title}</h5>
-        {editable && !editing && (
-          <button onClick={onEdit} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors cursor-pointer" style={{ fontWeight: 450 }}>
-            <Pencil className="w-3 h-3" /> Bearbeiten
-          </button>
-        )}
-        {editing && (
-          <div className="flex items-center gap-1.5">
-            <button onClick={onCancel} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors cursor-pointer" style={{ fontWeight: 450 }}>
-              <X className="w-3 h-3" /> Abbrechen
-            </button>
-            <button onClick={onSave} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] text-primary-foreground bg-primary hover:bg-primary-hover transition-colors cursor-pointer" style={{ fontWeight: 500 }}>
-              <Check className="w-3 h-3" /> Speichern
-            </button>
-          </div>
-        )}
       </div>
       <div className="p-5">{children}</div>
+      <div className="px-5 py-3 border-t border-border-light flex items-center justify-end gap-2">
+        <button onClick={onCancel} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors cursor-pointer" style={{ fontWeight: 450 }}>
+          <X className="w-3 h-3" /> Abbrechen
+        </button>
+        <button onClick={onSave} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] text-primary-foreground bg-primary hover:bg-primary-hover transition-colors cursor-pointer" style={{ fontWeight: 500 }}>
+          <Check className="w-3 h-3" /> Sichern
+        </button>
+      </div>
     </div>
   );
 }
@@ -522,19 +671,7 @@ function SectionCard({
 /* ══════════════════════════════════════════
    TAB: ÜBERBLICK
    ══════════════════════════════════════════ */
-function TabUeberblick({ a }: { a: Angehoeriger }) {
-  const st = statusConfig[a.status];
-  const br = billingReadinessConfig[a.billingReadiness];
-  /* Aus dem Dokumentbestand, nicht mehr aus einer eigenen Liste am
-     Angehörigen: „vorhanden" ist jetzt, dass ein Dokument existiert, und
-     „gesamt" die Zahl der Pflichttypen — nicht die Länge einer Liste, die
-     auch Abwesenheiten führte. */
-  const alleDok = useDokumente();
-  const eigeneDok = dokumenteVon(alleDok, { art: "angehoeriger", kennung: a.id });
-  const pflichtDok = geprueftePflichttypen(dokumentKontextVon(a), "angehoeriger");
-  const uploadedDocs = eigeneDok.length;
-  const totalDocs = pflichtDok.length;
-
+function TabStammdaten({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDetail }) {
   /* ── Editing state ── */
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<Record<string, string>>({});
@@ -542,47 +679,42 @@ function TabUeberblick({ a }: { a: Angehoeriger }) {
   /* ── Personalien fields ── */
   const [vorname, setVorname] = useState(a.vorname);
   const [nachname, setNachname] = useState(a.nachname);
-  const [geschlecht, setGeschlecht] = useState(a.geschlecht);
-  const [geburtsdatum, setGeburtsdatum] = useState(a.geburtsdatum);
-  const [ahvNummer, setAhvNummer] = useState(a.ahvNummer);
-  const [nationalitaet, setNationalitaet] = useState(a.nationalitaet);
-  const [heimatort, setHeimatort] = useState(a.heimatort);
-  const [aufenthaltsstatus, setAufenthaltsstatus] = useState(a.aufenthaltsstatus);
-  const [zivilstand, setZivilstand] = useState(a.zivilstand);
-  const [zivilstandSeit, setZivilstandSeit] = useState(a.zivilstandSeit);
-  const [strasse, setStrasse] = useState(a.strasse);
-  const [plz, setPlz] = useState(a.plz);
-  const [ort, setOrt] = useState(a.ort);
-  const [email, setEmail] = useState(a.email);
-  const [telefon, setTelefon] = useState(a.telefon);
-  const [kkName, setKkName] = useState(a.krankenkasseName);
-  const [kkNummer, setKkNummer] = useState(a.kartennummer);
+  const [geschlecht, setGeschlecht] = useState(detail.geschlecht);
+  const [geburtsdatum, setGeburtsdatum] = useState(detail.geburtsdatum);
+  const [ahvNummer, setAhvNummer] = useState(detail.ahvNummer);
+  const [nationalitaet, setNationalitaet] = useState(detail.nationalitaet);
+  const [heimatort, setHeimatort] = useState(detail.heimatort);
+  const [aufenthaltsstatus, setAufenthaltsstatus] = useState(detail.aufenthaltsstatus);
+  const [zivilstand, setZivilstand] = useState(detail.zivilstand);
+  const [zivilstandSeit, setZivilstandSeit] = useState(detail.zivilstandSeit);
+  const [strasse, setStrasse] = useState(detail.strasse);
+  const [plz, setPlz] = useState(detail.plz);
+  const [ort, setOrt] = useState(detail.ort);
+  const [email, setEmail] = useState(detail.email);
+  const [telefon, setTelefon] = useState(detail.telefon);
+  const [kkName, setKkName] = useState(detail.krankenkasseName);
+  const [kkNummer, setKkNummer] = useState(detail.versicherungsnummer);
 
   /* ── Steuer fields ── */
-  const [quellensteuer, setQuellensteuer] = useState(a.quellensteuer);
-  const [konfession, setKonfession] = useState(a.konfession);
-  const [qsTarif, setQsTarif] = useState(a.quellensteuerTarif);
-  const [steuergemeinde, setSteuergemeinde] = useState(a.steuergemeinde);
-  const [sozialamtInvolviert, setSozialamtInvolviert] = useState(a.sozialamtInvolviert);
-  const [sozialamtKontakt, setSozialamtKontakt] = useState(a.sozialamtKontakt);
-  const [lohnabtretung, setLohnabtretung] = useState(a.lohnabtretung);
+  const [quellensteuer, setQuellensteuer] = useState(detail.quellensteuer);
+  const [konfession, setKonfession] = useState(detail.konfession);
+  const [qsTarif, setQsTarif] = useState(detail.quellensteuerTarif);
+  const [steuergemeinde, setSteuergemeinde] = useState(detail.steuergemeinde);
+  const [sozialamtInvolviert, setSozialamtInvolviert] = useState(detail.sozialamtInvolviert);
+  const [sozialamtKontakt, setSozialamtKontakt] = useState(detail.sozialamtKontakt);
+  const [lohnabtretung, setLohnabtretung] = useState(detail.lohnabtretung);
 
   /* ── Partner fields ── */
-  const [partnerVorname, setPartnerVorname] = useState(a.partnerVorname);
-  const [partnerName, setPartnerName] = useState(a.partnerName);
-  const [partnerGeb, setPartnerGeb] = useState(a.partnerGeburtsdatum);
-  const [partnerAufenthalt, setPartnerAufenthalt] = useState(a.partnerAufenthaltsstatus);
+  const [partnerName, setPartnerName] = useState(detail.partnerName);
+  const [partnerGeb, setPartnerGeb] = useState(detail.partnerGeburtsdatum);
+  const [partnerAhv, setPartnerAhv] = useState(detail.partnerAhvNummer);
+  const [partnerZemis, setPartnerZemis] = useState(detail.partnerZemisNummer);
+  const [partnerAufenthalt, setPartnerAufenthalt] = useState(detail.partnerAufenthaltsstatus);
 
   /* ── Kinder fields ── */
-  const [kinderList, setKinderList] = useState<AngehoerigerKind[]>(a.kinder.map(k => ({ ...k })));
-  const [kinderZulagenSpitex, setKinderZulagenSpitex] = useState(a.kinderzulagenUeberSpitex);
-
-  /* ── Anstellung fields ── */
-  const [funktion, setFunktion] = useState(a.funktion);
-  const [eintrittsdatum, setEintrittsdatum] = useState(a.eintrittsdatum);
-  const [stundenlohn, setStundenlohn] = useState(a.stundenlohn);
-  const [bankname, setBankname] = useState(a.bankname);
-  const [iban, setIban] = useState(a.iban);
+  const [kinderList, setKinderList] = useState<KindEntry[]>(detail.kinder.map(k => ({ ...k })));
+  const [kinderZulagenSpitex, setKinderZulagenSpitex] = useState(detail.kinderzulagenUeberSpitex);
+  const [familienAk, setFamilienAk] = useState(detail.familienausgleichskasse);
 
   /* ── AHV masking ── */
   const [revealedAhv, setRevealedAhv] = useState(false);
@@ -601,11 +733,9 @@ function TabUeberblick({ a }: { a: Angehoeriger }) {
     } else if (section === "steuer") {
       setSnapshot({ quellensteuer, konfession, qsTarif, steuergemeinde, sozialamtInvolviert, sozialamtKontakt, lohnabtretung });
     } else if (section === "partner") {
-      setSnapshot({ partnerVorname, partnerName, partnerGeb, partnerAufenthalt });
+      setSnapshot({ partnerName, partnerGeb, partnerAhv, partnerZemis, partnerAufenthalt });
     } else if (section === "kinder") {
-      setSnapshot({ kinderZulagenSpitex, _kinder: JSON.stringify(kinderList) });
-    } else if (section === "anstellung") {
-      setSnapshot({ funktion, eintrittsdatum, stundenlohn, bankname, iban });
+      setSnapshot({ kinderZulagenSpitex, familienAk, _kinder: JSON.stringify(kinderList) });
     }
     setEditingSection(section);
   };
@@ -626,16 +756,13 @@ function TabUeberblick({ a }: { a: Angehoeriger }) {
       setSozialamtInvolviert(snapshot.sozialamtInvolviert ?? sozialamtInvolviert);
       setSozialamtKontakt(snapshot.sozialamtKontakt ?? sozialamtKontakt); setLohnabtretung(snapshot.lohnabtretung ?? lohnabtretung);
     } else if (section === "partner") {
-      setPartnerVorname(snapshot.partnerVorname ?? partnerVorname);
       setPartnerName(snapshot.partnerName ?? partnerName); setPartnerGeb(snapshot.partnerGeb ?? partnerGeb);
+      setPartnerAhv(snapshot.partnerAhv ?? partnerAhv); setPartnerZemis(snapshot.partnerZemis ?? partnerZemis);
       setPartnerAufenthalt(snapshot.partnerAufenthalt ?? partnerAufenthalt);
     } else if (section === "kinder") {
       setKinderZulagenSpitex(snapshot.kinderZulagenSpitex ?? kinderZulagenSpitex);
+      setFamilienAk(snapshot.familienAk ?? familienAk);
       if (snapshot._kinder) setKinderList(JSON.parse(snapshot._kinder));
-    } else if (section === "anstellung") {
-      setFunktion(snapshot.funktion ?? funktion); setEintrittsdatum(snapshot.eintrittsdatum ?? eintrittsdatum);
-      setStundenlohn(snapshot.stundenlohn ?? stundenlohn); setBankname(snapshot.bankname ?? bankname);
-      setIban(snapshot.iban ?? iban);
     }
     setEditingSection(null);
   };
@@ -644,79 +771,19 @@ function TabUeberblick({ a }: { a: Angehoeriger }) {
   const isEd = (s: string) => editingSection === s;
   const inputClass = "w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all";
 
-  /* Kinder helpers — genau ein Weg, ein leeres Kind zu erzeugen: createEmptyAngehoerigerKind() */
-  const addKind = () => setKinderList([...kinderList, createEmptyAngehoerigerKind()]);
+  /* Kinder helpers — genau ein Weg, ein leeres Kind zu erzeugen: createEmptyKind() */
+  const addKind = () => setKinderList([...kinderList, { ...createEmptyKind(), zulagenart: "K" }]);
   const removeKind = (id: string) => setKinderList(kinderList.filter(k => k.id !== id));
-  const updateKind = (id: string, field: keyof AngehoerigerKind, value: string) => setKinderList(kinderList.map(k => k.id === id ? ({ ...k, [field]: value } as AngehoerigerKind) : k));
+  const updateKind = (id: string, field: keyof KindEntry, value: string) => setKinderList(kinderList.map(k => k.id === id ? ({ ...k, [field]: value } as KindEntry) : k));
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-      <div className="xl:col-span-2 space-y-4">
-        {/* Quick status cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-card rounded-xl border border-border p-3.5">
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1">
-              <Activity className="w-3 h-3" /> Status
-            </div>
-            <div className={`inline-flex items-center gap-1.5 px-2 py-[2px] rounded-full text-[11px] ${st.bg} ${st.text}`} style={{ fontWeight: 500 }}>
-              <span className={`w-[5px] h-[5px] rounded-full ${st.dot}`} />
-              {st.label}
-            </div>
-          </div>
-          <div className="bg-card rounded-xl border border-border p-3.5">
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1">
-              <CheckCircle2 className="w-3 h-3" /> Abrechenbarkeit
-            </div>
-            <div className={`inline-flex items-center gap-1.5 px-2 py-[2px] rounded-full text-[11px] ${br.bg} ${br.text}`} style={{ fontWeight: 500 }}>
-              <span className={`w-[5px] h-[5px] rounded-full ${br.dot}`} />
-              {br.label}
-            </div>
-          </div>
-          <div className="bg-card rounded-xl border border-border p-3.5">
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1">
-              <Stamp className="w-3 h-3" /> Stempeltage
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`text-[14px] ${a.stempelTage / a.stempelSoll < 0.5 ? "text-error" : a.stempelTage / a.stempelSoll < 0.8 ? "text-warning" : "text-foreground"}`} style={{ fontWeight: 600 }}>
-                {a.stempelTage}/{a.stempelSoll}
-              </span>
-            </div>
-          </div>
-          <div className="bg-card rounded-xl border border-border p-3.5">
-            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-1">
-              <FileText className="w-3 h-3" /> Dokumente
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`text-[14px] ${uploadedDocs < totalDocs ? "text-warning" : "text-foreground"}`} style={{ fontWeight: 600 }}>
-                {uploadedDocs}/{totalDocs}
-              </span>
-              <span className="text-[11px] text-muted-foreground">hochgeladen</span>
-            </div>
-          </div>
-        </div>
-
-        {/* HR Problems Banner */}
-        {(a.status === "fehlende_dokumente" || !a.hrCheck.bankdaten || !a.hrCheck.kinderzulagen || !a.hrCheck.quellensteuerTarif) && (
-          <div className="rounded-2xl border border-error/20 bg-error-light/30 p-5">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-error" />
-              <h5 className="text-foreground">Offene HR-Punkte</h5>
-            </div>
-            <ul className="space-y-1 text-[12px] text-error-foreground">
-              {!a.hrCheck.bankdaten && <li className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-error" /> Bankdaten nicht hinterlegt</li>}
-              {!a.hrCheck.kinderzulagen && <li className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-error" /> Kinderzulagen nicht geklärt</li>}
-              {!a.hrCheck.quellensteuerTarif && <li className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-error" /> Quellensteuer-Tarif fehlt</li>}
-              {a.status === "fehlende_dokumente" && <li className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-error" /> Pflichtdokumente unvollständig</li>}
-            </ul>
-          </div>
-        )}
-
+    <div>
         {/* 1. Personalien */}
         <SectionCard title="Personalien" icon={User} editable editing={isEd("personalien")} onEdit={() => startEdit("personalien")} onSave={saveEdit} onCancel={() => cancelEdit("personalien")}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <EditableField label="Vorname" value={vorname} editing={isEd("personalien")} onChange={setVorname} />
             <EditableField label="Nachname" value={nachname} editing={isEd("personalien")} onChange={setNachname} />
-            <EditableField label="Geschlecht" value={isEd("personalien") ? geschlecht : geschlechtLabel(geschlecht)} editing={isEd("personalien")} onChange={setGeschlecht} />
+            <EditableField label="Geschlecht" value={geschlecht} editing={isEd("personalien")} onChange={setGeschlecht} />
             <EditableField label="Geburtsdatum" value={geburtsdatum} editing={isEd("personalien")} onChange={setGeburtsdatum} />
             {isEd("personalien") ? (
               <EditableField label="AHV-Nummer" value={ahvNummer} editing mono onChange={setAhvNummer} />
@@ -733,15 +800,15 @@ function TabUeberblick({ a }: { a: Angehoeriger }) {
                 </div>
               </div>
             )}
-            <EditableField label="Staatsangehörigkeit" value={isEd("personalien") ? nationalitaet : staatsangehoerigkeitLabel(nationalitaet)} editing={isEd("personalien")} onChange={setNationalitaet} />
+            <EditableField label="Nationalität" value={nationalitaet} editing={isEd("personalien")} onChange={setNationalitaet} />
             <EditableField label="Heimatort" value={heimatort} editing={isEd("personalien")} onChange={setHeimatort} />
-            <EditableField label="Aufenthaltsstatus" value={isEd("personalien") ? aufenthaltsstatus : aufenthaltsstatusLabel(aufenthaltsstatus)} editing={isEd("personalien")} onChange={setAufenthaltsstatus} />
-            <EditableField label="Zivilstand" value={isEd("personalien") ? zivilstand : zivilstandLabel(zivilstand)} editing={isEd("personalien")} onChange={setZivilstand} />
+            <EditableField label="Aufenthaltsstatus" value={aufenthaltsstatus} editing={isEd("personalien")} onChange={setAufenthaltsstatus} />
+            <EditableField label="Zivilstand" value={zivilstand} editing={isEd("personalien")} onChange={setZivilstand} />
             <EditableField label="Zivilstand seit" value={zivilstandSeit} editing={isEd("personalien")} onChange={setZivilstandSeit} />
           </div>
           <div className="mt-5 pt-4 border-t border-border-light">
             <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-3" style={{ fontWeight: 600 }}>Kontaktdaten</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {isEd("personalien") ? (
                 <>
                   <EditableField label="Strasse" value={strasse} editing onChange={setStrasse} />
@@ -781,14 +848,14 @@ function TabUeberblick({ a }: { a: Angehoeriger }) {
             <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-3" style={{ fontWeight: 600 }}>Krankenkasse</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <EditableField label="Krankenkasse" value={kkName} editing={isEd("personalien")} onChange={setKkName} />
-              <EditableField label="Kartennummer" value={kkNummer} editing={isEd("personalien")} onChange={setKkNummer} mono />
+              <EditableField label="Versicherungsnummer" value={kkNummer} editing={isEd("personalien")} onChange={setKkNummer} mono />
             </div>
           </div>
         </SectionCard>
 
         {/* 2. Steuer & Sozialversicherung */}
         <SectionCard title="Steuer & Sozialversicherung" icon={Receipt} editable editing={isEd("steuer")} onEdit={() => startEdit("steuer")} onSave={saveEdit} onCancel={() => cancelEdit("steuer")}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <EditableField label="Quellensteuer-pflichtig" value={quellensteuer} editing={isEd("steuer")} onChange={setQuellensteuer} />
             <EditableField label="Konfession" value={konfession} editing={isEd("steuer")} onChange={setKonfession} />
             <EditableField label="Quellensteuer-Tarif" value={qsTarif} editing={isEd("steuer")} onChange={setQsTarif} />
@@ -802,12 +869,27 @@ function TabUeberblick({ a }: { a: Angehoeriger }) {
         </SectionCard>
 
         {/* 3. Partner */}
-        {istVerheiratetOderPartnerschaft(zivilstand) && (
+        {zivilstand === "Verheiratet" && (
           <SectionCard title="Partner" icon={Heart} editable editing={isEd("partner")} onEdit={() => startEdit("partner")} onSave={saveEdit} onCancel={() => cancelEdit("partner")}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <EditableField label="Vorname" value={partnerVorname} editing={isEd("partner")} onChange={setPartnerVorname} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <EditableField label="Name" value={partnerName} editing={isEd("partner")} onChange={setPartnerName} />
               <EditableField label="Geburtsdatum" value={partnerGeb} editing={isEd("partner")} onChange={setPartnerGeb} />
+              {isEd("partner") ? (
+                <EditableField label="AHV-Nummer" value={partnerAhv} editing mono onChange={setPartnerAhv} />
+              ) : (
+                <div>
+                  <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>AHV-Nummer</div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[13px] text-foreground font-mono">{revealedPartnerAhv ? partnerAhv : maskAhv(partnerAhv)}</span>
+                    {partnerAhv && partnerAhv !== "—" && (
+                      <button type="button" onClick={() => setRevealedPartnerAhv(!revealedPartnerAhv)} className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                        {revealedPartnerAhv ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              <EditableField label="ZEMIS-Nummer" value={partnerZemis} editing={isEd("partner")} onChange={setPartnerZemis} mono />
               <EditableField label="Aufenthaltsstatus" value={partnerAufenthalt} editing={isEd("partner")} onChange={setPartnerAufenthalt} />
             </div>
           </SectionCard>
@@ -836,10 +918,10 @@ function TabUeberblick({ a }: { a: Angehoeriger }) {
                             {isEd("kinder") ? (
                               <div className="flex gap-1">
                                 <input type="text" value={k.vorname} onChange={e => updateKind(k.id, "vorname", e.target.value)} placeholder="Vorname" className={inputClass + " !py-1.5 !text-[12px]"} style={{ maxWidth: 90 }} />
-                                <input type="text" value={k.name} onChange={e => updateKind(k.id, "name", e.target.value)} placeholder="Nachname" className={inputClass + " !py-1.5 !text-[12px]"} style={{ maxWidth: 90 }} />
+                                <input type="text" value={k.nachname} onChange={e => updateKind(k.id, "nachname", e.target.value)} placeholder="Nachname" className={inputClass + " !py-1.5 !text-[12px]"} style={{ maxWidth: 90 }} />
                               </div>
                             ) : (
-                              <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{k.vorname} {k.name}</span>
+                              <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{k.vorname} {k.nachname}</span>
                             )}
                           </td>
                           <td className="px-3 py-2.5">
@@ -902,6 +984,7 @@ function TabUeberblick({ a }: { a: Angehoeriger }) {
               )}
               <div className="mt-4 pt-3 border-t border-border-light grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <EditableField label="Kinderzulagen über Spitex" value={kinderZulagenSpitex} editing={isEd("kinder")} onChange={setKinderZulagenSpitex} />
+                <EditableField label="Familienausgleichskasse" value={familienAk} editing={isEd("kinder")} onChange={setFamilienAk} />
               </div>
             </>
           ) : (
@@ -909,169 +992,237 @@ function TabUeberblick({ a }: { a: Angehoeriger }) {
           )}
         </SectionCard>
 
-        {/* 5. Anstellung & Auszahlung */}
-        <SectionCard title="Anstellung & Auszahlung" icon={Briefcase} editable editing={isEd("anstellung")} onEdit={() => startEdit("anstellung")} onSave={saveEdit} onCancel={() => cancelEdit("anstellung")}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <EditableField label="Funktion" value={funktion} editing={isEd("anstellung")} onChange={setFunktion} />
-            <EditableField label="Eintrittsdatum" value={eintrittsdatum} editing={isEd("anstellung")} onChange={setEintrittsdatum} />
-            <EditableField label="Stundenlohn" value={isEd("anstellung") ? stundenlohn : (stundenlohn ? `CHF ${stundenlohn}` : "—")} editing={isEd("anstellung")} onChange={setStundenlohn} />
+      </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   TAB: ÜBERBLICK — Zustandsansicht (read-only)
+   ══════════════════════════════════════════ */
+/** Aktive Bewilligung — statischer Mock (wie TableStempel, nicht personenspezifisch). */
+const UEBERBLICK_AKTIVE_BEWILLIGUNG = { version: 3, taeglicheMin: 120, tageProWoche: 5, gueltigAb: "01.01.2026", gueltigBis: "–" };
+
+/** Zustandskachel; getönte Fläche + farbiger Wert nur bei Abweichung (Farbe nie allein). */
+function KachelKarte({ icon: Icon, titel, abweichung, children }: { icon: React.ElementType; titel: string; abweichung?: "rot" | "gelb" | null; children: React.ReactNode }) {
+  const ton = abweichung ?? null;
+  const rand = ton === "rot" ? "var(--status-danger)" : ton === "gelb" ? "var(--status-warning)" : "var(--border-default)";
+  const flaeche = ton === "rot" ? "var(--status-danger-bg)" : ton === "gelb" ? "var(--status-warning-bg)" : "var(--bg-elevated)";
+  return (
+    <div style={{ background: flaeche, border: `var(--border-thin) solid ${rand}`, borderRadius: "var(--radius-card)", padding: 12 }}>
+      <div className="flex items-center" style={{ gap: 6, marginBottom: 8, fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)" }}>
+        <Icon style={{ width: 13, height: 13 }} /> {titel}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TabUeberblick({ a, detail, tickets, navigate }: { a: Angehoeriger; detail: AngehoerigerDetail; tickets: Ticket[]; navigate: (path: string) => void }) {
+  const ms = a.monatsSchritt;
+  const offenePendenzen = tickets.filter(t => t.status !== "erledigt");
+  const srkTon: "rot" | "gelb" | null = detail.srkStatus === "ueberfaellig" ? "rot" : detail.srkStatus === "offen" ? "gelb" : null;
+  const srkLabel = detail.srkStatus === "abgeschlossen" ? "Abgeschlossen" : detail.srkStatus === "ueberfaellig" ? "Überfällig" : "Offen";
+  const leer = (v: string | undefined | null) => (v && v !== "—" ? v : "—");
+
+  const patientenZeilen = a.zugeordnetePatientenList.map(zp => {
+    const p = patients.find(pt => pt.id === zp.id);
+    return { id: zp.id, name: zp.name, schweregrad: p?.schweregrad ?? null, status: p?.status ?? null, beginn: p?.aufnahmeDatum ?? null };
+  });
+  type PatientZeile = typeof patientenZeilen[number];
+  const patientenSpalten: SpalteDef<PatientZeile>[] = [
+    { id: "name", label: "Patient", minCh: 18, maxSpur: "28ch", align: "left", sortierbar: true, ausKarte: true,
+      render: p => <button onClick={e => { e.stopPropagation(); navigate(`/patienten/${p.id}`); }} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, background: "transparent", border: "none", padding: 0, fontFamily: "inherit", color: "var(--brand-primary)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)" }}><ExternalLink style={{ width: 11, height: 11, opacity: 0.6 }} />{p.name}</button> },
+    { id: "schweregrad", label: "Schweregrad", minCh: 12, maxSpur: "14ch", align: "left", sortierbar: true,
+      render: p => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{p.schweregrad ?? "—"}</span> },
+    { id: "status", label: "Status", minCh: 10, maxSpur: "18ch", align: "left", sortierbar: true, abwerfRang: 1,
+      render: p => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{p.status ?? "—"}</span> },
+    { id: "beginn", label: "Betreuungsbeginn", minCh: 15, maxSpur: "15ch", align: "left", sortierbar: true, abwerfRang: 2,
+      render: p => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{p.beginn ?? "—"}</span> },
+  ];
+
+  const pendenzSpalten: SpalteDef<Ticket>[] = [
+    { id: "prio", label: "", festBreitePx: 26, align: "center", sortierbar: true, ausKarte: true,
+      render: t => t.priority === "hoch" ? <AlertTriangle role="img" aria-label="Hohe Priorität" style={{ width: 14, height: 14, color: "var(--status-danger)" }} /> : <span style={{ color: "var(--text-tertiary)" }}>·</span> },
+    { id: "subject", label: "Betreff", minCh: 20, maxSpur: "44ch", align: "left", sortierbar: true, ausKarte: true,
+      render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)" }}>{t.subject}</span> },
+    { id: "category", label: "Art", minCh: 10, maxSpur: "13ch", align: "left", sortierbar: true, abwerfRang: 1,
+      render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{t.category}</span> },
+    { id: "created", label: "Fälligkeit", minCh: 12, maxSpur: "12ch", align: "left", sortierbar: true, abwerfRang: 2,
+      render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{isoZuAnzeige(anzeigeZuIso(t.created))}</span> },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <KachelKarte icon={ListChecks} titel="Monatsschritt" abweichung={ms.ueberfaellig ? "rot" : null}>
+          <div style={{ fontSize: 16, fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{leer(ms.label)}</div>
+          <div style={{ fontSize: "var(--text-meta)", color: ms.ueberfaellig ? "var(--status-danger)" : "var(--text-secondary)", marginTop: 2 }}>Schritt {ms.aktuell} von {ms.total}{ms.faellig ? ` · fällig ${ms.faellig}` : ""}{ms.ueberfaellig ? " · überfällig" : ""}</div>
+          <div className="mt-2 rounded-full overflow-hidden" style={{ height: 3, background: "var(--bg-secondary)" }}>
+            <div className="h-full rounded-full" style={{ width: `${Math.min(100, ms.total ? ((ms.abgeschlossen ? ms.total : Math.max(0, ms.aktuell - 1)) / ms.total) * 100 : 0)}%`, background: ms.ueberfaellig ? "var(--status-danger)" : "var(--brand-primary)" }} />
           </div>
-          <div className="mt-5 pt-4 border-t border-border-light">
-            <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-3" style={{ fontWeight: 600 }}>Bankverbindung</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {isEd("anstellung") ? (
-                <>
-                  <EditableField label="Bankname" value={bankname} editing onChange={setBankname} />
-                  <EditableField label="IBAN" value={iban} editing mono onChange={setIban} />
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <div>
-                      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>Bankname</div>
-                      <div className="text-[13px] text-foreground">{bankname || "—"}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <div>
-                      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>IBAN</div>
-                      <div className="text-[13px] text-foreground font-mono">{iban || "—"}</div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </SectionCard>
+        </KachelKarte>
+
+        <KachelKarte icon={Award} titel="SRK-Kurs" abweichung={srkTon}>
+          <div style={{ fontSize: 16, fontWeight: "var(--weight-medium)", color: srkTon === "rot" ? "var(--status-danger)" : srkTon === "gelb" ? "var(--status-warning-text)" : "var(--text-primary)" }}>{srkLabel}</div>
+          <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>{detail.srkStatus === "abgeschlossen" ? `Abgeschlossen ${leer(detail.srkAbgeschlossenAm)}` : `Frist ${leer(detail.srkDeadline)}`} · {qualifikationConfig[a.qualifikation].label}</div>
+        </KachelKarte>
+
+        <KachelKarte icon={Headphones} titel="Offene Pendenzen" abweichung={offenePendenzen.some(t => t.priority === "hoch") ? "gelb" : null}>
+          <div style={{ fontSize: 16, fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{offenePendenzen.length}</div>
+          <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>{offenePendenzen.filter(t => t.priority === "hoch").length} mit hoher Priorität</div>
+        </KachelKarte>
       </div>
 
-      {/* Sidebar */}
-      <div className="space-y-4">
-        {/* Stempel-Fortschritt */}
-        <div className="rounded-2xl p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Stamp className="w-4 h-4 text-primary" />
-            <h5 className="text-foreground">Stempelkontrolle</h5>
-          </div>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${a.stempelTage / a.stempelSoll >= 0.8 ? "bg-success" : a.stempelTage / a.stempelSoll >= 0.5 ? "bg-warning" : "bg-error"}`}
-                style={{ width: `${Math.min(100, (a.stempelTage / a.stempelSoll) * 100)}%` }}
-              />
-            </div>
-            <span className="text-[12px] text-foreground tabular-nums" style={{ fontWeight: 600 }}>
-              {a.stempelTage}/{a.stempelSoll}
-            </span>
-          </div>
-          {a.stempelWarnings.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {a.stempelWarnings.map((w, i) => (
-                <div key={i} className="flex items-center gap-1.5 text-[11px] text-warning" style={{ fontWeight: 500 }}>
-                  <AlertTriangle className="w-3 h-3" /> {w.label}
-                </div>
-              ))}
-            </div>
-          )}
+      <div>
+        <div className="flex items-center" style={{ gap: 8, marginBottom: 8 }}>
+          <Users style={{ width: 15, height: 15, color: "var(--brand-primary)" }} />
+          <h5 className="text-foreground">Betreute Patienten</h5>
         </div>
+        <DataTable<PatientZeile>
+          spalten={patientenSpalten}
+          zeilen={patientenZeilen}
+          zeilenKey={p => p.id}
+          onZeileKlick={p => navigate(`/patienten/${p.id}`)}
+          karteTitel={p => <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{p.name}</span>}
+          containerHaltepunkte
+          karteAbPx={560}
+          leerText="Keine Patienten zugeordnet."
+        />
+      </div>
 
-        {/* HR-Check */}
-        <div className="rounded-2xl p-5">
-          <h5 className="text-foreground mb-3">HR-Check</h5>
-          <div className="space-y-2">
-            {[
-              { label: "Bankdaten", ok: a.hrCheck.bankdaten },
-              { label: "Kinderzulagen", ok: a.hrCheck.kinderzulagen },
-              { label: "Quellensteuer-Tarif", ok: !!a.hrCheck.quellensteuerTarif },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between">
-                <span className="text-[12px] text-muted-foreground">{item.label}</span>
-                {item.ok ? (
-                  <CheckCircle2 className="w-4 h-4 text-success" />
-                ) : (
-                  <AlertTriangle className="w-4 h-4 text-error" />
-                )}
-              </div>
-            ))}
-          </div>
+      <div>
+        <div className="flex items-center" style={{ gap: 8, marginBottom: 8 }}>
+          <Headphones style={{ width: 15, height: 15, color: "var(--brand-primary)" }} />
+          <h5 className="text-foreground">Offene Pendenzen</h5>
         </div>
-
-        {/* Zugeordnete Patienten */}
-        <div className="rounded-2xl p-5">
-          <h5 className="text-foreground mb-3">Zugeordnete Patienten</h5>
-          {a.zugeordnetePatientenList.length > 0 ? (
-            <div className="space-y-2">
-              {a.zugeordnetePatientenList.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => window.location.href = `/patienten/${p.id}`}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/60 transition-colors text-left group"
-                >
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center shrink-0">
-                    <span className="text-[10px] text-primary" style={{ fontWeight: 600 }}>
-                      {p.name.split(" ").map(n => n[0]).join("")}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] text-foreground group-hover:text-primary transition-colors" style={{ fontWeight: 500 }}>{p.name}</div>
-                    <div className="text-[11px] text-muted-foreground font-mono">{p.id}</div>
-                  </div>
-                  <ExternalLink className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-[12px] text-muted-foreground">Keine Patienten zugeordnet.</p>
-          )}
-        </div>
-
-        {/* Quick Links */}
-        
-
-        {/* Letzte Mutation */}
-        
+        <DataTable<Ticket>
+          spalten={pendenzSpalten}
+          zeilen={offenePendenzen}
+          zeilenKey={t => t.id}
+          onZeileKlick={() => navigate("/servicedesk")}
+          karteTitel={t => <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{t.subject}</span>}
+          containerHaltepunkte
+          karteAbPx={560}
+          fusszeile={<button onClick={() => navigate("/servicedesk")} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, background: "transparent", border: "none", padding: 0, fontFamily: "inherit", color: "var(--brand-primary)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)" }}><ExternalLink style={{ width: 12, height: 12 }} /> Alle Pendenzen anzeigen</button>}
+          leerText="Keine offenen Pendenzen."
+        />
       </div>
     </div>
   );
 }
 
 /* ══════════════════════════════════════════
-   TAB: WORKFLOW / ACTION PLAN
+   TAB: ANSTELLUNG & LOHN
    ══════════════════════════════════════════ */
-function TabWorkflow({ a }: { a: Angehoeriger }) {
-  const navigate = useNavigate();
-  const [, forceUpdate] = useState(0);
-  const nachweise = getNachweiseFuerAngehoeriger(a.id);
-  const kontrollen = getKontrollenFuerAngehoeriger(a.id);
+function TabAnstellungLohn({ detail }: { detail: AngehoerigerDetail }) {
+  const [editing, setEditing] = useState(false);
+  const [snapshot, setSnapshot] = useState<Record<string, string>>({});
+  const [funktion, setFunktion] = useState(detail.funktion);
+  const [eintrittsdatum, setEintrittsdatum] = useState(detail.eintrittsdatum);
+  const [stundenlohn, setStundenlohn] = useState(detail.stundenlohn);
+  const [bankname, setBankname] = useState(detail.bankname);
+  const [iban, setIban] = useState(detail.iban);
+
+  const start = () => { setSnapshot({ funktion, eintrittsdatum, stundenlohn, bankname, iban }); setEditing(true); };
+  const cancel = () => {
+    setFunktion(snapshot.funktion ?? funktion); setEintrittsdatum(snapshot.eintrittsdatum ?? eintrittsdatum);
+    setStundenlohn(snapshot.stundenlohn ?? stundenlohn); setBankname(snapshot.bankname ?? bankname);
+    setIban(snapshot.iban ?? iban); setEditing(false);
+  };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      <RhythmusTimeline subjektTyp="angehoeriger" subjektId={a.id} aktuellerBenutzer={a.pflegefachkraft} />
-
-      {/* Schulungsnachweise */}
-      {nachweise.length > 0 && (
-        <div style={{ padding: "var(--space-4)" }}>
-          <div style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 12 }}>Schulungsnachweise</div>
-          <div className="flex flex-col" style={{ gap: 8 }}>
-            {nachweise.map(n => (
-              <div key={n.id} className="flex items-center justify-between cursor-pointer" onClick={() => navigate(`/schulungsnachweis/${n.id}`)} style={{ padding: "12px 16px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
-                <div>
-                  <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>Initialschulung — Patient {n.patientName}</div>
-                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2 }}>{n.unterschriften.length} von {n.positionen.length} Positionen unterschrieben</div>
+    <div>
+      <SectionCard title="Anstellung & Auszahlung" icon={Briefcase} editable editing={editing} onEdit={start} onSave={() => setEditing(false)} onCancel={cancel}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <EditableField label="Funktion" value={funktion} editing={editing} onChange={setFunktion} />
+          <EditableField label="Eintrittsdatum" value={eintrittsdatum} editing={editing} onChange={setEintrittsdatum} />
+          <EditableField label="Stundenlohn" value={editing ? stundenlohn : (stundenlohn ? `CHF ${stundenlohn}` : "—")} editing={editing} onChange={setStundenlohn} />
+        </div>
+        <div className="mt-5 pt-4 border-t border-border-light">
+          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-3" style={{ fontWeight: 600 }}>Bankverbindung</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {editing ? (
+              <>
+                <EditableField label="Bankname" value={bankname} editing onChange={setBankname} />
+                <EditableField label="IBAN" value={iban} editing mono onChange={setIban} />
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <div>
+                    <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>Bankname</div>
+                    <div className="text-[13px] text-foreground">{bankname || "—"}</div>
+                  </div>
                 </div>
-                <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: n.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: n.status === "abgeschlossen" ? "var(--status-success)" : "var(--status-warning-text)" }}>
-                  {n.status === "abgeschlossen" ? "Abgeschlossen" : n.status === "in_bearbeitung" ? "In Bearbeitung" : "—"}
-                </span>
-              </div>
-            ))}
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <div>
+                    <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>IBAN</div>
+                    <div className="text-[13px] text-foreground font-mono">{iban || "—"}</div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
-      )}
+      </SectionCard>
 
-      {/* Arbeitskontrollen */}
-      <ArbeitskontrolleHistorie a={a} kontrollen={kontrollen} navigate={navigate} onRefresh={() => forceUpdate(n => n + 1)} />
+      {/* Bereich aus den bisherigen Related Lists (Lohnsumme, Quellensteuer-Tarif u.a.)
+          — vorläufig unverändert; Zusammenführung folgt in Lauf 2/3. */}
+      <TableSozial detail={detail} />
+    </div>
+  );
+}
+
+/* Schulungsnachweise — geteilter Block (Reiter Qualifikation). */
+function SchulungsnachweiseListe({ a }: { a: Angehoeriger }) {
+  const navigate = useNavigate();
+  const nachweise = getNachweiseFuerAngehoeriger(a.id);
+  if (nachweise.length === 0) return null;
+  return (
+    <div>
+      <div style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 12 }}>Schulungsnachweise</div>
+      <div className="flex flex-col" style={{ gap: 8 }}>
+        {nachweise.map(n => (
+          <div key={n.id} className="flex items-center justify-between cursor-pointer" onClick={() => navigate(`/schulungsnachweis/${n.id}`)} style={{ padding: "12px 16px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
+            <div>
+              <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>Initialschulung — Patient {n.patientName}</div>
+              <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2 }}>{n.unterschriften.length} von {n.positionen.length} Positionen unterschrieben</div>
+            </div>
+            <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: n.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: n.status === "abgeschlossen" ? "var(--status-success)" : "var(--status-warning-text)" }}>
+              {n.status === "abgeschlossen" ? "Abgeschlossen" : "In Bearbeitung"}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   TAB: QUALIFIKATION
+   ══════════════════════════════════════════ */
+function TabQualifikation({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDetail }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <TableQualifikation detail={detail} />
+      <SchulungsnachweiseListe a={a} />
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   TAB: EINSATZ & KONTROLLEN
+   ══════════════════════════════════════════ */
+function TabEinsatzKontrollen({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDetail }) {
+  const navigate = useNavigate();
+  const [, forceUpdate] = useState(0);
+  const kontrollen = getKontrollenFuerAngehoeriger(a.id);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <TableStempel />
+      <ArbeitskontrolleHistorie a={a} detail={detail} kontrollen={kontrollen} navigate={navigate} onRefresh={() => forceUpdate(n => n + 1)} />
     </div>
   );
 }
@@ -1080,17 +1231,18 @@ function TabWorkflow({ a }: { a: Angehoeriger }) {
    ARBEITSKONTROLLE HISTORIE
    ══════════════════════════════════════════ */
 
-function ArbeitskontrolleHistorie({ a, kontrollen, navigate, onRefresh }: {
+function ArbeitskontrolleHistorie({ a, detail, kontrollen, navigate, onRefresh }: {
   a: Angehoeriger;
+  detail: AngehoerigerDetail;
   kontrollen: ReturnType<typeof getKontrollenFuerAngehoeriger>;
   navigate: ReturnType<typeof useNavigate>;
   onRefresh: () => void;
 }) {
   // Eintrittsdatum in ISO konvertieren
-  const parts = a.eintrittsdatum?.split(".") ?? [];
+  const parts = detail.eintrittsdatum?.split(".") ?? [];
   const isoEintritt = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : undefined;
   const naechsteFaellig = getNaechsteFaelligkeit(a.id, isoEintritt);
-  const heute = GEGENWART_ISO;
+  const heute = new Date().toISOString().slice(0, 10);
   const istUeberfaellig = naechsteFaellig ? naechsteFaellig < heute : false;
   const hatOffene = kontrollen.some(k => k.status === "in_bearbeitung");
 
@@ -1104,193 +1256,223 @@ function ArbeitskontrolleHistorie({ a, kontrollen, navigate, onRefresh }: {
   };
 
   return (
-    <div style={{ padding: "var(--space-4)" }}>
-      <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+    <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+      {/* Kopf: Titel + Zähler + Fälligkeit, Aktionen */}
+      <div className="px-5 py-4 border-b border-border-light flex items-start justify-between flex-wrap" style={{ gap: 12 }}>
         <div>
-          <div style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)" }}>Arbeitskontrollen</div>
+          <div className="flex items-center" style={{ gap: 8 }}>
+            <Stamp className="w-4 h-4 text-primary" />
+            <h5 className="text-foreground">Arbeitskontrollen</h5>
+            {kontrollen.length > 0 && (
+              <span className="text-[11px] text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full" style={{ fontWeight: 500 }}>{kontrollen.length}</span>
+            )}
+          </div>
           {naechsteFaellig && (
-            <div style={{ fontSize: "var(--text-meta)", color: istUeberfaellig ? "var(--status-danger)" : "var(--text-tertiary)", marginTop: 2 }}>
-              Nächste fällig: {isoZuAnzeige(naechsteFaellig)}
-              {istUeberfaellig && " — überfällig"}
+            <div className="inline-flex items-center" style={{ gap: 5, marginTop: 5, fontSize: "var(--text-meta)", fontWeight: istUeberfaellig ? 500 : 400, color: istUeberfaellig ? "var(--status-danger)" : "var(--text-tertiary)" }}>
+              {istUeberfaellig ? <AlertTriangle style={{ width: 13, height: 13 }} /> : <Calendar style={{ width: 13, height: 13 }} />}
+              Nächste fällig {isoZuAnzeige(naechsteFaellig)}{istUeberfaellig && " · überfällig"}
             </div>
           )}
         </div>
-        <div className="flex items-center" style={{ gap: 6 }}>
-          <button onClick={() => neueKontrolleErstellen("regulaer")} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "6px 14px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-meta)", fontWeight: 500, border: "none" }}>
-            + Reguläre Kontrolle
+        <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
+          <button onClick={() => neueKontrolleErstellen("regulaer")} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors" style={{ gap: 5, padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}>
+            <Plus style={{ width: 14, height: 14 }} /> Reguläre Kontrolle
           </button>
-          <button onClick={() => neueKontrolleErstellen("ausserordentlich")} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "6px 14px", borderRadius: 999, background: "var(--bg-secondary)", color: "var(--text-primary)", fontSize: "var(--text-meta)", fontWeight: 500, border: "0.5px solid var(--border-default)" }}>
-            + Ausserordentlich
+          <button onClick={() => neueKontrolleErstellen("ausserordentlich")} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors" style={{ gap: 5, padding: "7px 14px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "var(--border-thin) solid var(--border-default)" }}>
+            <Plus style={{ width: 14, height: 14 }} /> Ausserordentlich
           </button>
         </div>
       </div>
 
+      {/* Liste */}
       {kontrollen.length === 0 ? (
-        <div style={{ padding: "var(--space-6)", textAlign: "center", color: "var(--text-tertiary)", fontSize: "var(--text-small)" }}>
-          Noch keine Arbeitskontrollen durchgeführt.
+        <div className="text-center" style={{ padding: "var(--space-8) var(--space-6)" }}>
+          <Stamp className="w-8 h-8 mx-auto mb-3" style={{ color: "var(--text-tertiary)", opacity: 0.4 }} />
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Noch keine Arbeitskontrollen durchgeführt.</p>
         </div>
       ) : (
-        <div className="flex flex-col" style={{ gap: 8 }}>
-          {kontrollen.map(k => (
-            <div key={k.id} className="flex items-center justify-between" style={{ padding: "12px 16px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 10 }}>
-              <div className="flex items-center cursor-pointer" style={{ gap: 10, flex: 1 }} onClick={() => navigate(`/arbeitskontrolle/${k.id}`)}>
-                <div>
-                  <div className="flex items-center" style={{ gap: 6 }}>
-                    <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
-                      {isoZuAnzeige(k.kontrollDatum)}
-                    </span>
-                    {k.art === "ausserordentlich" && (
-                      <span style={{ padding: "1px 6px", borderRadius: 4, fontSize: "var(--text-meta)", background: "var(--status-info-bg)", color: "var(--status-info)", fontWeight: 500 }}>Ausserordentlich</span>
-                    )}
+        <div>
+          {kontrollen.map(k => {
+            const fertig = k.status === "abgeschlossen";
+            const sigVoll = k.unterschriften.length >= 2;
+            return (
+              <div key={k.id} className="flex items-stretch border-b border-border-light last:border-b-0 transition-colors hover:bg-secondary/40" style={{ cursor: "pointer" }} onClick={() => navigate(`/arbeitskontrolle/${k.id}`)}>
+                {/* Status-Akzent links (Form + Farbe) */}
+                <span aria-hidden="true" style={{ width: 3, flexShrink: 0, background: fertig ? "var(--status-success)" : "var(--status-warning)" }} />
+                <div className="flex items-center justify-between flex-1" style={{ gap: 12, padding: "12px 16px", minWidth: 0 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="flex items-center" style={{ gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{isoZuAnzeige(k.kontrollDatum)}</span>
+                      {k.art === "ausserordentlich" && (
+                        <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", background: "var(--status-info-bg)", color: "var(--status-info)", fontWeight: "var(--weight-medium)" }}>Ausserordentlich</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 3, overflowWrap: "anywhere" }}>
+                      {k.fallfuehrendeName}{k.patientName ? ` · ${k.patientName}` : ""}
+                    </div>
                   </div>
-                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2 }}>
-                    {k.fallfuehrendeName}{k.patientName ? ` · ${k.patientName}` : ""} · {k.unterschriften.length}/2 Unterschriften
+                  <div className="flex items-center shrink-0" style={{ gap: 10 }}>
+                    {/* Unterschriften-Indikator */}
+                    <span className="inline-flex items-center" style={{ gap: 4, fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: sigVoll ? "var(--status-success-text)" : "var(--text-tertiary)" }} title={`${k.unterschriften.length} von 2 Unterschriften`}>
+                      {sigVoll ? <CheckCircle2 style={{ width: 14, height: 14 }} /> : <span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: "50%", border: "1.5px solid var(--text-tertiary)" }} />}
+                      {k.unterschriften.length}/2
+                    </span>
+                    {/* PDF-Export */}
+                    {fertig && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const blob = await exportiereArbeitskontrollePDF(k);
+                          const url = URL.createObjectURL(blob);
+                          const anchor = document.createElement("a"); anchor.href = url; anchor.download = `Arbeitskontrolle_${k.kontrollDatum}.pdf`;
+                          document.body.appendChild(anchor); anchor.click(); document.body.removeChild(anchor); URL.revokeObjectURL(url);
+                        }}
+                        className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
+                        style={{ gap: 4, padding: "4px 10px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", color: "var(--text-secondary)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", border: "var(--border-thin) solid var(--border-default)" }}
+                      >
+                        <FileText style={{ width: 12, height: 12 }} /> PDF
+                      </button>
+                    )}
+                    {/* Status-Pille (Icon + Text, nie Farbe allein) */}
+                    <span className="inline-flex items-center" style={{ gap: 4, padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap", background: fertig ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: fertig ? "var(--status-success-text)" : "var(--status-warning-text)" }}>
+                      {fertig ? <Check style={{ width: 12, height: 12 }} /> : <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--status-warning)" }} />}
+                      {fertig ? "Abgeschlossen" : "In Bearbeitung"}
+                    </span>
                   </div>
                 </div>
               </div>
-              <div className="flex items-center" style={{ gap: 6 }}>
-                {k.status === "abgeschlossen" && (
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      const blob = await exportiereArbeitskontrollePDF(k);
-                      const url = URL.createObjectURL(blob);
-                      const anchor = document.createElement("a"); anchor.href = url; anchor.download = `Arbeitskontrolle_${k.kontrollDatum}.pdf`;
-                      document.body.appendChild(anchor); anchor.click(); document.body.removeChild(anchor); URL.revokeObjectURL(url);
-                    }}
-                    className="inline-flex items-center cursor-pointer"
-                    style={{ gap: 3, padding: "3px 10px", borderRadius: 999, background: "var(--bg-secondary)", color: "var(--text-secondary)", fontSize: "var(--text-meta)", fontWeight: 500, border: "0.5px solid var(--border-default)" }}
-                  >
-                    PDF
-                  </button>
-                )}
-                <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: k.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: k.status === "abgeschlossen" ? "var(--status-success)" : "var(--status-warning-text)" }}>
-                  {k.status === "abgeschlossen" ? "Abgeschlossen" : k.status === "in_bearbeitung" ? "In Bearbeitung" : "—"}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
+/* ══════════════════════════════════════════
+   ANGEHÖRIGE FOLDER STRUCTURE
+   ══════════════════════════════════════════ */
+function getAngehoerigeFolders(): DocFolder[] {
+  return [
+    {
+      id: "personalien",
+      label: "Personalien",
+      files: [
+        { id: "ap01", name: "ID_Kopie.pdf", type: "PDF", version: "1.0", uploadedAt: "02.01.2026", uploadedBy: "System" },
+        { id: "ap02", name: "AHV_Bestaetigung.pdf", type: "PDF", version: "1.0", uploadedAt: "02.01.2026", uploadedBy: "K. Meier" },
+        { id: "ap03", name: "Foto_Angehoeriger.jpg", type: "JPG", version: "1.0", uploadedAt: "03.01.2026", uploadedBy: "K. Meier" },
+        { id: "ap04", name: "Aufenthaltsbewilligung.pdf", type: "PDF", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "System" },
+      ],
+    },
+    {
+      id: "sozialversicherungen",
+      label: "Sozialversicherungen",
+      files: [
+        { id: "as01", name: "BVG_Anmeldung.pdf", type: "PDF", version: "1.0", uploadedAt: "10.01.2026", uploadedBy: "HR-Abteilung" },
+        { id: "as02", name: "UVG_Police.pdf", type: "PDF", version: "1.0", uploadedAt: "10.01.2026", uploadedBy: "HR-Abteilung" },
+        { id: "as03", name: "Quellensteuer_Verfuegung.pdf", type: "PDF", version: "1.0", uploadedAt: "12.01.2026", uploadedBy: "System" },
+      ],
+    },
+    {
+      id: "vertraege",
+      label: "Verträge",
+      children: [
+        {
+          id: "vertraege_aktuell",
+          label: "Aktuell",
+          files: [
+            { id: "av01", name: "Arbeitsvertrag_2026.pdf", type: "PDF", version: "1.0", uploadedAt: "01.01.2026", uploadedBy: "S. Weber" },
+            { id: "av02", name: "Datenschutzerklaerung.pdf", type: "PDF", version: "1.0", uploadedAt: "01.01.2026", uploadedBy: "System" },
+            { id: "av03", name: "Geheimhaltungsvereinbarung.pdf", type: "PDF", version: "1.0", uploadedAt: "01.01.2026", uploadedBy: "System" },
+          ],
+        },
+        {
+          id: "vertraege_archiv",
+          label: "Archiv",
+          files: [],
+        },
+      ],
+      files: [],
+    },
+    {
+      id: "kinderzulagen",
+      label: "Kinderzulagen",
+      files: [
+        { id: "ak01", name: "Familienbuchlein.pdf", type: "PDF", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "K. Meier" },
+        { id: "ak02", name: "Kinderzulage_Antrag.pdf", type: "PDF", version: "1.0", uploadedAt: "08.01.2026", uploadedBy: "K. Meier" },
+        { id: "ak03", name: "FAK_Bestätigung.pdf", type: "PDF", version: "1.0", uploadedAt: "15.01.2026", uploadedBy: "System" },
+      ],
+    },
+    {
+      id: "bankdaten",
+      label: "Bankdaten",
+      files: [
+        { id: "ab01", name: "Bankkarte_Scan.jpg", type: "JPG", version: "1.0", uploadedAt: "03.01.2026", uploadedBy: "K. Meier" },
+        { id: "ab02", name: "IBAN_Bestaetigung.pdf", type: "PDF", version: "1.0", uploadedAt: "10.01.2026", uploadedBy: "System" },
+      ],
+    },
+    {
+      id: "partner",
+      label: "Partner",
+      files: [
+        { id: "apt01", name: "Partner_Krankenkassenkarte.jpg", type: "JPG", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "K. Meier" },
+        { id: "apt02", name: "Partner_Ausweis.pdf", type: "PDF", version: "1.0", uploadedAt: "05.01.2026", uploadedBy: "K. Meier" },
+      ],
+    },
+    {
+      id: "schulungen",
+      label: "Schulungen & SRK",
+      children: [
+        {
+          id: "schulungen_zertifikate",
+          label: "Zertifikate",
+          files: [
+            { id: "az01", name: "SRK_Basismodul_Zertifikat.pdf", type: "PDF", version: "1.0", uploadedAt: "15.01.2026", uploadedBy: "S. Weber" },
+            { id: "az02", name: "Medlink_Schulung_Nachweis.pdf", type: "PDF", version: "1.0", uploadedAt: "20.01.2026", uploadedBy: "System" },
+          ],
+        },
+        {
+          id: "schulungen_anmeldungen",
+          label: "Anmeldungen",
+          files: [
+            { id: "az03", name: "SRK_Aufbaumodul_Anmeldung.pdf", type: "PDF", version: "1.0", uploadedAt: "28.02.2026", uploadedBy: "K. Meier" },
+          ],
+        },
+      ],
+      files: [],
+    },
+    {
+      id: "lohnabrechnungen",
+      label: "Lohnabrechnungen",
+      files: [
+        { id: "al01", name: "Lohnabrechnung_Jan_2026.pdf", type: "PDF", version: "1.0", uploadedAt: "31.01.2026", uploadedBy: "System" },
+        { id: "al02", name: "Lohnabrechnung_Feb_2026.pdf", type: "PDF", version: "1.0", uploadedAt: "28.02.2026", uploadedBy: "System" },
+      ],
+    },
+    {
+      id: "sonstige",
+      label: "Sonstige Dokumente",
+      files: [
+        { id: "asd01", name: "Krankenkassenkarte.jpg", type: "JPG", version: "1.0", uploadedAt: "02.01.2026", uploadedBy: "K. Meier" },
+        { id: "asd02", name: "Notfallkontakt_Info.docx", type: "DOCX", version: "1.0", uploadedAt: "15.02.2026", uploadedBy: "K. Meier" },
+      ],
+    },
+  ];
+}
 
 /* ══════════════════════════════════════════
    TAB: DOKUMENTE (uses shared component)
    ══════════════════════════════════════════ */
-/**
- * Dokumente der angehörigen Person — dasselbe Modell wie beim Patienten.
- *
- * Vorher gab `getAngehoerigeFolders()` für jede Person dieselben erfundenen
- * Dateien zurück. Jetzt kommen die Ordner aus dem Typkatalog und die
- * Dokumente aus dem Bestand.
- */
 function TabDokumenteAngehoerige({ a }: { a: Angehoeriger }) {
-  const alle = useDokumente();
-  const ref: DokumentReferenz = { art: "angehoeriger", kennung: a.id };
-  const eigene = dokumenteVon(alle, ref);
-  const kontext = dokumentKontextVon(a);
-  const staende = ordnerStand(alle, ref, kontext, MANDAT_STICHTAG);
-
+  const folders = getAngehoerigeFolders();
   return (
-    <div className="space-y-4">
-      <SectionCard title="Ordner" icon={FolderOpen}>
-        <div className="flex flex-col" style={{ gap: 2 }}>
-          {staende.map(o => (
-            <div key={o.ordner} className="flex items-center flex-wrap" style={{ gap: 10, padding: "7px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
-              <span style={{ width: 150, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{o.ordner}</span>
-              <span style={{ width: 74, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
-                {o.dokumente.length} {o.dokumente.length === 1 ? "Dokument" : "Dokumente"}
-              </span>
-              {o.fehlend.length > 0 && (
-                <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>{o.fehlend.join(", ")} fehlt</span>
-              )}
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-
-      <SectionCard title={`Dokumente (${eigene.length})`} icon={FileText}>
-        {eigene.length === 0 ? (
-          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0 }}>
-            Für diese Person liegt kein Dokument ab.
-          </p>
-        ) : (
-          <div className="flex flex-col" style={{ gap: 2 }}>
-            {eigene.map(d => {
-              const typ = dokumenttyp(d.typCode);
-              const bis = gueltigBisText(d);
-              return (
-                <div key={d.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
-                  <span style={{ width: 190, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{typ?.label ?? d.typCode}</span>
-                  <span style={{ flex: 1, minWidth: 170, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{d.bezeichnung}</span>
-                  <span style={{ width: 90, fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{d.ausgestelltAm}</span>
-                  <span style={{ width: 110, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>{bis ? `gültig bis ${bis}` : "ohne Ablauf"}</span>
-                  <span style={{ width: 150, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{ordnerDes(d)}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </SectionCard>
-    </div>
+    <TabDokumenteGeneric
+      rootLabel={`${a.nachname}_${a.vorname}`}
+      folders={folders}
+    />
   );
 }
 
-/** Dokumentkontext aus der erfassten Person — dieselben Bedingungen wie im Onboarding. */
-function dokumentKontextVon(a: Angehoeriger): DokumentKontext {
-  return {
-    partnerErforderlich: a.zivilstand === "verheiratet" || a.zivilstand === "eingetragene_partnerschaft",
-    hatKinder: (a.kinder?.length ?? 0) > 0,
-    kinderzulagenUeberSpitex: a.kinderzulagenUeberSpitex === "ja",
-    unterhaltspflicht: (a.kinder?.length ?? 0) > 0,
-    zertifikatDeutschVorhanden: a.zertifikatVorhanden === "ja",
-    srkZertifikatVorhanden: a.srkZertifikatVorhanden === "ja",
-    assistenzbeitragJa: false,
-  };
-}
-
-/* ══════════════════════════════════════════
-   TAB: RELATED LISTS
-   ══════════════════════════════════════════ */
-function TabRelatedLists({ a }: { a: Angehoeriger }) {
-  const [activeList, setActiveList] = useState("stempel");
-  const lists = [
-    { id: "stempel", label: "Stempelkontrolle & Absenzen", icon: Stamp },
-    { id: "sozial", label: "Sozialversicherung & HR", icon: Shield },
-    { id: "qualifikation", label: "SRK Kurs", icon: Award },
-  ];
-
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {lists.map((l) => {
-          const Icon = l.icon;
-          const isActive = activeList === l.id;
-          return (
-            <button
-              key={l.id}
-              onClick={() => setActiveList(l.id)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] border whitespace-nowrap transition-all ${
-                isActive ? "border-primary/20 bg-primary-light text-primary" : "border-border bg-card text-muted-foreground hover:bg-secondary/60"
-              }`}
-              style={{ fontWeight: isActive ? 500 : 400 }}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {l.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {activeList === "stempel" && <TableStempel />}
-      {activeList === "sozial" && <TableSozial a={a} />}
-      {activeList === "qualifikation" && <TableQualifikation a={a} />}
-    </div>
-  );
-}
 
 function TableStempel() {
   const [hatAbsenzen, setHatAbsenzen] = useState(false);
@@ -1355,7 +1537,7 @@ function TableStempel() {
       tageProWoche: 5,
       minutenA: 90,
       minutenB: 30,
-      gueltigAb: "04.06.2026",
+      gueltigAb: "01.01.2026",
       gueltigBis: "–",
       status: "aktiv",
     },
@@ -1365,8 +1547,8 @@ function TableStempel() {
       tageProWoche: 5,
       minutenA: 60,
       minutenB: 30,
-      gueltigAb: "02.12.2025",
-      gueltigBis: "03.06.2026",
+      gueltigAb: "01.07.2025",
+      gueltigBis: "31.12.2025",
       status: "abgelaufen",
     },
     {
@@ -1375,8 +1557,8 @@ function TableStempel() {
       tageProWoche: 3,
       minutenA: 40,
       minutenB: 20,
-      gueltigAb: "18.06.2025",
-      gueltigBis: "01.12.2025",
+      gueltigAb: "15.01.2025",
+      gueltigBis: "30.06.2025",
       status: "abgelaufen",
     },
   ]);
@@ -1479,204 +1661,7 @@ function TableStempel() {
   return (
     <div className="space-y-4">
 
-      {/* ═══ SECTION 1: Aktive Bewilligung ═══ */}
-      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-        <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Stamp className="w-4 h-4 text-primary" />
-            <h5 className="text-foreground">Aktive Bewilligung</h5>
-          </div>
-          {aktive && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-success/10 text-success border border-success/15" style={{ fontWeight: 600 }}>
-              <span className="w-1.5 h-1.5 rounded-full bg-success" />
-              Aktiv
-            </span>
-          )}
-        </div>
-
-        {aktive ? (
-          <div className="p-5 space-y-5">
-            {/* Validity row */}
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                <Calendar className="w-3.5 h-3.5" />
-                <span style={{ fontWeight: 450 }}>Gültig ab:</span>
-                <span className="text-foreground" style={{ fontWeight: 500 }}>{aktive.gueltigAb}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                <ArrowRight className="w-3.5 h-3.5" />
-                <span style={{ fontWeight: 450 }}>Gültig bis:</span>
-                <span className="text-foreground" style={{ fontWeight: 500 }}>{aktive.gueltigBis}</span>
-              </div>
-              <span className="text-[11px] text-muted-foreground/60">Version {aktive.id}</span>
-            </div>
-
-            {/* 2×2 Metric Grid */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-border bg-secondary/30 p-4">
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>Tägliche Minuten</div>
-                <div className="text-[28px] text-foreground tracking-tight" style={{ fontWeight: 600, lineHeight: 1.1 }}>{aktive.taeglicheMin}</div>
-                <div className="text-[11px] text-muted-foreground mt-1">Minuten / Tag</div>
-              </div>
-              <div className="rounded-xl border border-border bg-secondary/30 p-4">
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>Einsatztage</div>
-                <div className="text-[28px] text-foreground tracking-tight" style={{ fontWeight: 600, lineHeight: 1.1 }}>{aktive.tageProWoche}</div>
-                <div className="text-[11px] text-muted-foreground mt-1">Tage / Woche</div>
-              </div>
-              <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-4">
-                <div className="text-[11px] text-primary/70 uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>A-Leistungen</div>
-                <div className="text-[28px] text-primary tracking-tight" style={{ fontWeight: 600, lineHeight: 1.1 }}>{aktive.minutenA}</div>
-                <div className="text-[11px] text-primary/60 mt-1">Minuten / Tag</div>
-              </div>
-              <div className="rounded-xl border border-success/15 bg-success/[0.04] p-4">
-                <div className="text-[11px] text-success/70 uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>B-Leistungen</div>
-                <div className="text-[28px] text-success tracking-tight" style={{ fontWeight: 600, lineHeight: 1.1 }}>{aktive.minutenB}</div>
-                <div className="text-[11px] text-success/60 mt-1">Minuten / Tag</div>
-              </div>
-            </div>
-
-            {/* Weekly total row */}
-            <div className="rounded-xl border border-primary/20 bg-primary/[0.03] px-5 py-4 flex items-center justify-between">
-              <div>
-                <div className="text-[11px] text-primary/70 uppercase tracking-wider" style={{ fontWeight: 500 }}>Wöchentliche Gesamtminuten</div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">{aktive.taeglicheMin} Min × {aktive.tageProWoche} Tage</div>
-              </div>
-              <div className="text-[32px] text-primary tracking-tight" style={{ fontWeight: 700, lineHeight: 1 }}>{aktive.taeglicheMin * aktive.tageProWoche}</div>
-            </div>
-
-            {/* Note + Button row */}
-            <div className="flex items-center justify-between flex-wrap gap-3">
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground/70">
-                <Info className="w-3.5 h-3.5 shrink-0" />
-                Basierend auf ärztlicher Verordnung
-              </div>
-              {!showNewBewForm && (
-                <button
-                  onClick={() => setShowNewBewForm(true)}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] text-primary-foreground bg-primary hover:bg-primary-hover transition-colors cursor-pointer"
-                  style={{ fontWeight: 500 }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Neue Bewilligung erfassen
-                </button>
-              )}
-            </div>
-
-            {/* ── New version form ── */}
-            {showNewBewForm && (
-              <div className="border-t border-border-light pt-5 space-y-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <FileClock className="w-4 h-4 text-primary" />
-                  <p className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>Neue Version erstellen</p>
-                </div>
-                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-warning/[0.06] border border-warning/15">
-                  <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
-                  <span className="text-[12px] text-warning/90" style={{ fontWeight: 450 }}>
-                    Die aktuelle Bewilligung (Version {aktive.id}) wird automatisch geschlossen. Bestehende Versionen bleiben in der Historie erhalten.
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>Gültig ab *</label>
-                    <DateField wertFormat="display" bereich="any" value={bewForm.gueltigAb || null} onChange={v => setBewForm((p) => ({ ...p, gueltigAb: (v as string) ?? "" }))} />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>Gültig bis</label>
-                    <DateField wertFormat="display" bereich="any" value={bewForm.gueltigBis || null} onChange={v => setBewForm((p) => ({ ...p, gueltigBis: (v as string) ?? "" }))} />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>Tägliche Minuten *</label>
-                    <input type="number" min={1} placeholder="z.B. 120" value={bewForm.taeglicheMin} onChange={(e) => setBewForm((p) => ({ ...p, taeglicheMin: e.target.value }))} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>Einsatztage / Woche *</label>
-                    <input type="number" min={1} max={7} placeholder="z.B. 5" value={bewForm.tageProWoche} onChange={(e) => setBewForm((p) => ({ ...p, tageProWoche: e.target.value }))} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-primary/70 uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>A-Leistungen (Min/Tag) *</label>
-                    <input type="number" min={0} placeholder="z.B. 90" value={bewForm.minutenA} onChange={(e) => setBewForm((p) => ({ ...p, minutenA: e.target.value }))} className="w-full text-[13px] text-foreground bg-primary/[0.03] border border-primary/20 rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50" />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-success/70 uppercase tracking-wider mb-1.5 block" style={{ fontWeight: 500 }}>B-Leistungen (Min/Tag) *</label>
-                    <input type="number" min={0} placeholder="z.B. 30" value={bewForm.minutenB} onChange={(e) => setBewForm((p) => ({ ...p, minutenB: e.target.value }))} className="w-full text-[13px] text-foreground bg-success/[0.03] border border-success/20 rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all placeholder:text-muted-foreground/50" />
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-1">
-                  <button onClick={handleCancelBew} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] border border-border bg-card hover:bg-secondary/60 text-foreground transition-colors cursor-pointer" style={{ fontWeight: 500 }}>
-                    Abbrechen
-                  </button>
-                  <button
-                    onClick={handleSaveBew}
-                    disabled={!canSaveBew}
-                    className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] transition-colors ${
-                      canSaveBew
-                        ? "text-primary-foreground bg-primary hover:bg-primary-hover cursor-pointer"
-                        : "text-muted-foreground bg-muted cursor-not-allowed"
-                    }`}
-                    style={{ fontWeight: 500 }}
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    Version erstellen
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="p-5">
-            <div className="text-center py-8">
-              <Stamp className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-[13px] text-muted-foreground" style={{ fontWeight: 450 }}>Noch keine Bewilligung erfasst</p>
-              <button
-                onClick={() => setShowNewBewForm(true)}
-                className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] text-primary-foreground bg-primary hover:bg-primary-hover transition-colors cursor-pointer"
-                style={{ fontWeight: 500 }}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Erste Bewilligung erfassen
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ═══ SECTION 2: Bewilligungs-Historie ═══ */}
-      {historie.length > 0 && (
-        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-          <div className="px-5 py-4 border-b border-border-light flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <History className="w-4 h-4 text-muted-foreground" />
-              <h5 className="text-foreground">Bewilligungs-Historie</h5>
-            </div>
-            <span className="text-[11px] text-muted-foreground bg-secondary/60 px-2 py-0.5 rounded-full" style={{ fontWeight: 500 }}>
-              {historie.length} {historie.length === 1 ? "Version" : "Versionen"}
-            </span>
-          </div>
-          <div className="px-4 pb-4 pt-2">
-            <DataTable<Bewilligung>
-              spalten={bewSpalten}
-              zeilen={histSortiert}
-              zeilenKey={b => String(b.id)}
-              sort={histSort ?? undefined}
-              onSort={histToggle}
-              karteTitel={bewKarteTitel}
-              containerHaltepunkte
-              karteAbPx={560}
-              leerText="Keine abgelaufenen Bewilligungen."
-            />
-          </div>
-          <div className="px-5 py-3 border-t border-border-light">
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground/70">
-              <Info className="w-3.5 h-3.5 shrink-0" />
-              Vergangene Bewilligungen sind schreibgeschützt und können nicht gelöscht oder überschrieben werden.
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ SECTION 3: Absenzen ═══ */}
+      {/* ═══ Absenzen ═══ */}
       <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
         <div className="px-5 py-4 border-b border-border-light flex items-center gap-2">
           <CalendarOff className="w-4 h-4 text-primary" />
@@ -1855,22 +1840,24 @@ function TableStempel() {
   );
 }
 
-function TableSozial({ a }: { a: Angehoeriger }) {
+function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
   const [isEditing, setIsEditing] = useState(false);
   const [revealedAhv, setRevealedAhv] = useState<Record<number, boolean>>({});
 
   /* ── Editable local state (initialized from detail) ── */
-  const [kinderzulagenUeberSpitex, setKinderzulagenUeberSpitex] = useState(a.kinderzulagenUeberSpitex);
-  const [kinder, setKinder] = useState<AngehoerigerKind[]>(a.kinder.map(k => ({ ...k })));
+  const [kinderzulagenAktiv, setKinderzulagenAktiv] = useState(detail.kinderzulagenAktiv);
+  const [kinderzulagenUeberSpitex, setKinderzulagenUeberSpitex] = useState(detail.kinderzulagenUeberSpitex);
+  const [kinder, setKinder] = useState<KindEntry[]>(detail.kinder.map(k => ({ ...k })));
 
-  const [quellensteuer, setQuellensteuer] = useState(a.quellensteuer);
-  const [quellensteuerTarif, setQuellensteuerTarif] = useState(a.quellensteuerTarif);
-  const [konfession, setKonfession] = useState(a.konfession);
+  const [quellensteuer, setQuellensteuer] = useState(detail.quellensteuer);
+  const [quellensteuerTarif, setQuellensteuerTarif] = useState(detail.quellensteuerTarif);
+  const [konfession, setKonfession] = useState(detail.konfession);
 
+  const [lohnsumme, setLohnsumme] = useState(detail.lohnsumme);
 
-  /* R22 und R23: Anzeigen, keine gespeicherten Felder — sie folgen dem
-     Aufenthaltsstatus und lassen sich nicht getrennt setzen. */
-  const [aufenthaltsstatus, setAufenthaltsstatus] = useState(a.aufenthaltsstatus);
+  const [fluechtlingsstatus, setFluechtlingsstatus] = useState(detail.fluechtlingsstatus);
+  const [grenzgaenger, setGrenzgaenger] = useState(detail.grenzgaenger);
+  const [aufenthaltsstatus, setAufenthaltsstatus] = useState(detail.aufenthaltsstatus);
 
   const toggleAhv = (idx: number) => setRevealedAhv((p) => ({ ...p, [idx]: !p[idx] }));
 
@@ -1882,20 +1869,24 @@ function TableSozial({ a }: { a: Angehoeriger }) {
   };
 
   const handleAddKind = () => {
-    setKinder((prev) => [...prev, createEmptyAngehoerigerKind()]);
+    setKinder((prev) => [...prev, { ...createEmptyKind(), zulagenart: "K" }]);
   };
 
-  const updateKind = (id: string, field: keyof AngehoerigerKind, value: string) => {
-    setKinder((prev) => prev.map((k) => k.id === id ? ({ ...k, [field]: value } as AngehoerigerKind) : k));
+  const updateKind = (id: string, field: keyof KindEntry, value: string) => {
+    setKinder((prev) => prev.map((k) => k.id === id ? ({ ...k, [field]: value } as KindEntry) : k));
   };
 
   const handleCancel = () => {
-    setKinderzulagenUeberSpitex(a.kinderzulagenUeberSpitex);
-    setKinder(a.kinder.map(k => ({ ...k })));
-    setQuellensteuer(a.quellensteuer);
-    setQuellensteuerTarif(a.quellensteuerTarif);
-    setKonfession(a.konfession);
-    setAufenthaltsstatus(a.aufenthaltsstatus);
+    setKinderzulagenAktiv(detail.kinderzulagenAktiv);
+    setKinderzulagenUeberSpitex(detail.kinderzulagenUeberSpitex);
+    setKinder(detail.kinder.map(k => ({ ...k })));
+    setQuellensteuer(detail.quellensteuer);
+    setQuellensteuerTarif(detail.quellensteuerTarif);
+    setKonfession(detail.konfession);
+    setLohnsumme(detail.lohnsumme);
+    setFluechtlingsstatus(detail.fluechtlingsstatus);
+    setGrenzgaenger(detail.grenzgaenger);
+    setAufenthaltsstatus(detail.aufenthaltsstatus);
     setIsEditing(false);
   };
 
@@ -2011,10 +2002,10 @@ function TableSozial({ a }: { a: Angehoeriger }) {
                             {isEditing ? (
                               <div className="flex items-center gap-1.5">
                                 <input type="text" value={k.vorname} onChange={(e) => updateKind(k.id, "vorname", e.target.value)} placeholder="Vorname" className={inputClass + " !py-1.5 !text-[12px]"} />
-                                <input type="text" value={k.name} onChange={(e) => updateKind(k.id, "name", e.target.value)} placeholder="Name" className={inputClass + " !py-1.5 !text-[12px]"} />
+                                <input type="text" value={k.nachname} onChange={(e) => updateKind(k.id, "nachname", e.target.value)} placeholder="Name" className={inputClass + " !py-1.5 !text-[12px]"} />
                               </div>
                             ) : (
-                              <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{k.vorname} {k.name}</span>
+                              <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{k.vorname} {k.nachname}</span>
                             )}
                           </td>
                           {/* Geburtsdatum */}
@@ -2095,7 +2086,15 @@ function TableSozial({ a }: { a: Angehoeriger }) {
               )}
 
               {/* Footer fields — matches Überblick tab */}
-              <div className="mt-4 pt-3 border-t border-border-light grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+              <div className="mt-4 pt-3 border-t border-border-light grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4">
+                <div>
+                  <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>Kinderzulagen aktiv</div>
+                  {isEditing ? (
+                    <YesNoToggle value={kinderzulagenAktiv} onChange={setKinderzulagenAktiv} />
+                  ) : (
+                    <YesNoBadge value={kinderzulagenAktiv} />
+                  )}
+                </div>
                 <div>
                   <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>Kinderzulagen über Spitex</div>
                   {isEditing ? (
@@ -2104,6 +2103,7 @@ function TableSozial({ a }: { a: Angehoeriger }) {
                     <div className="text-[13px] text-foreground" style={{ fontWeight: 450 }}>{kinderzulagenUeberSpitex || "—"}</div>
                   )}
                 </div>
+                <Field label="Familienausgleichskasse" value={detail.familienausgleichskasse} />
               </div>
             </>
           ) : (
@@ -2166,10 +2166,7 @@ function TableSozial({ a }: { a: Angehoeriger }) {
         </div>
       </div>
 
-      {/* Block "Lohnsumme" entfallen: der Katalog kennt kein solches Feld, es
-         wurde nirgends erhoben und nirgends berechnet. */}
-
-      {/* ═══ BLOCK 4: Arbeits-/Aufenthaltsstatus ═══ */}
+      {/* ═══ BLOCK 3: Arbeits-/Aufenthaltsstatus ═══ */}
       <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
         <div className="px-5 py-4 border-b border-border-light flex items-center gap-2">
           <Globe className="w-4 h-4 text-primary" />
@@ -2179,13 +2176,19 @@ function TableSozial({ a }: { a: Angehoeriger }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4">
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Flüchtlingsstatus</div>
-              {/* R22: folgt dem Aufenthaltsstatus, wird nicht gespeichert. */}
-              <YesNoBadge value={istFluechtling(aufenthaltsstatus) ? "ja" : "nein"} />
+              {isEditing ? (
+                <YesNoToggle value={fluechtlingsstatus} onChange={setFluechtlingsstatus} />
+              ) : (
+                <YesNoBadge value={fluechtlingsstatus} />
+              )}
             </div>
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Grenzgänger</div>
-              {/* R23: folgt dem Aufenthaltsstatus, wird nicht gespeichert. */}
-              <YesNoBadge value={istGrenzgaenger(aufenthaltsstatus) ? "ja" : "nein"} />
+              {isEditing ? (
+                <YesNoToggle value={grenzgaenger} onChange={setGrenzgaenger} />
+              ) : (
+                <YesNoBadge value={grenzgaenger} />
+              )}
             </div>
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Aufenthaltsstatus</div>
@@ -2222,8 +2225,8 @@ function TableSozial({ a }: { a: Angehoeriger }) {
   );
 }
 
-function TableQualifikation({ a }: { a: Angehoeriger }) {
-  const TODAY = gegenwart();
+function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
+  const TODAY = new Date(2026, 2, 3); // March 3, 2026
 
   /* ── Date helpers ── */
   const parseDe = (d: string): Date | null => {
@@ -2244,36 +2247,70 @@ function TableQualifikation({ a }: { a: Angehoeriger }) {
     return Math.ceil((d.getTime() - TODAY.getTime()) / (1000 * 60 * 60 * 24));
   };
 
-  /* ── R21 · SRK-Gate. Nichts davon wird gespeichert; alles folgt aus dem
-     Eintrittsdatum (AN-F8), dem Zertifikat (AN-G3) und der Qualifikationsstufe.
-     Ohne Eintrittsdatum gibt es keine Ampel — ein fehlender Wert ist keine
-     Freigabe. ── */
-  const ampel = srkAmpel(a, TODAY);
-  const frist = srkFrist(a.eintrittsdatum);
-  const grenze12Str = frist ? formatDe(frist) : "—";
-  const daysToGrenze = frist ? Math.ceil((frist.getTime() - TODAY.getTime()) / (1000 * 60 * 60 * 24)) : null;
+  /* ── Editable state ── */
+  const [isEditing, setIsEditing] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
+  const [status, setStatus] = useState<"abgeschlossen" | "offen" | "ueberfaellig">(detail.srkStatus);
+  const [angemeldet, setAngemeldet] = useState(detail.srkAngemeldet);
+  const [deadline, setDeadline] = useState(detail.srkDeadline);
+  const [abgeschlossenAm, setAbgeschlossenAm] = useState(detail.srkAbgeschlossenAm);
 
-  const gateConfig: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
-    erlaubt:   { label: "Leistungen erlaubt",    bg: "bg-success/10", text: "text-success", border: "border-success/15", dot: "bg-success" },
-    risiko:    { label: "Leistungen in Risiko",   bg: "bg-warning/10", text: "text-warning", border: "border-warning/15", dot: "bg-warning" },
-    pausiert:  { label: "Leistungen pausiert",    bg: "bg-error/10",   text: "text-error",   border: "border-error/15",   dot: "bg-error" },
-    kein_gate: { label: "Kein SRK-Gate",          bg: "bg-muted",      text: "text-muted-foreground", border: "border-border", dot: "bg-border" },
-    offen:     { label: "Kein Eintrittsdatum",    bg: "bg-muted",      text: "text-muted-foreground", border: "border-border", dot: "bg-border" },
-  };
-  const statusBadgeConfig: Record<string, { label: string; bg: string; text: string; border: string; dot: string }> = {
-    erlaubt:   { label: "SRK erfüllt",       bg: "bg-success/10", text: "text-success", border: "border-success/20", dot: "bg-success" },
-    risiko:    { label: "SRK offen",          bg: "bg-warning/10", text: "text-warning", border: "border-warning/20", dot: "bg-warning" },
-    pausiert:  { label: "SRK überfällig",     bg: "bg-error/10",   text: "text-error",   border: "border-error/20",   dot: "bg-error" },
-    kein_gate: { label: "Ausbildung ersetzt den Nachweis", bg: "bg-muted", text: "text-muted-foreground", border: "border-border", dot: "bg-border" },
-    offen:     { label: "Kein Eintrittsdatum", bg: "bg-muted",      text: "text-muted-foreground", border: "border-border", dot: "bg-border" },
+  const handleCancel = () => {
+    setStatus(detail.srkStatus);
+    setAngemeldet(detail.srkAngemeldet);
+    setDeadline(detail.srkDeadline);
+    setAbgeschlossenAm(detail.srkAbgeschlossenAm);
+    setIsEditing(false);
   };
 
-  /* Schlüssel für beide Zuordnungen — nie leer, damit kein Zugriff ins Leere
-     greift. `null` (kein Eintrittsdatum) wird eigens benannt, nicht "erlaubt". */
-  const ampelKey = ampel ?? "offen";
-  const gateStatus = ampelKey;
-  const sb = statusBadgeConfig[ampelKey];
-  const gc = gateConfig[ampelKey];
+  const handleSave = () => {
+    setIsEditing(false);
+    setShowSaved(true);
+    setTimeout(() => setShowSaved(false), 2500);
+  };
+
+  /* ── Compliance calculations ── */
+  const vertragsDate = parseDe(detail.eintrittsdatum);
+  const grenze12 = vertragsDate ? new Date(vertragsDate.getFullYear() + 1, vertragsDate.getMonth(), vertragsDate.getDate()) : null;
+  const grenze12Str = grenze12 ? formatDe(grenze12) : "—";
+  const daysToGrenze = grenze12 ? Math.ceil((grenze12.getTime() - TODAY.getTime()) / (1000 * 60 * 60 * 24)) : null;
+
+  const deadlineDays = daysUntil(deadline);
+  const isOverdue = status === "ueberfaellig";
+  const isSoonDeadline = status === "offen" && deadlineDays !== null && deadlineDays <= 30;
+
+  // Gate status
+  let gateStatus: "erlaubt" | "risiko" | "pausiert" = "erlaubt";
+  if (status === "abgeschlossen") {
+    gateStatus = "erlaubt";
+  } else if (grenze12 && TODAY >= grenze12) {
+    gateStatus = "pausiert";
+  } else if (daysToGrenze !== null && daysToGrenze <= 30) {
+    gateStatus = "risiko";
+  } else if (isOverdue || isSoonDeadline) {
+    gateStatus = "risiko";
+  }
+
+  const gateConfig = {
+    erlaubt:  { label: "Leistungen erlaubt",   bg: "bg-success/10", text: "text-success", border: "border-success/15", dot: "bg-success" },
+    risiko:   { label: "Leistungen in Risiko",  bg: "bg-warning/10", text: "text-warning", border: "border-warning/15", dot: "bg-warning" },
+    pausiert: { label: "Leistungen pausiert",   bg: "bg-error/10",   text: "text-error",   border: "border-error/15",   dot: "bg-error" },
+  };
+
+  const statusBadgeConfig = {
+    abgeschlossen: { label: "SRK erfüllt",     bg: "bg-success/10", text: "text-success", border: "border-success/20", dot: "bg-success" },
+    offen:         { label: "SRK offen",        bg: "bg-warning/10", text: "text-warning", border: "border-warning/20", dot: "bg-warning" },
+    ueberfaellig:  { label: "SRK überfällig",   bg: "bg-error/10",   text: "text-error",   border: "border-error/20",   dot: "bg-error" },
+  };
+
+  const statusDropdownConfig = {
+    abgeschlossen: "Abgeschlossen",
+    offen: "Offen",
+    ueberfaellig: "Überfällig",
+  };
+
+  const sb = statusBadgeConfig[status];
+  const gc = gateConfig[gateStatus];
 
   const inputClass = "w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all";
   const selectClass = inputClass + " appearance-none";
@@ -2301,9 +2338,42 @@ function TableQualifikation({ a }: { a: Angehoeriger }) {
             </div>
           </div>
 
-          {/* Aktionsleiste entfernt: Status, Anmeldung, Frist und Abschluss
-              sind keine Felder mehr, sondern folgen nach R21 aus Eintrittsdatum,
-              Zertifikat und Qualifikationsstufe. Es gibt nichts zu bearbeiten. */}
+          {/* Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            {showSaved && (
+              <span className="text-[11px] text-success flex items-center gap-1" style={{ fontWeight: 500 }}>
+                <CheckCircle2 className="w-3.5 h-3.5" /> Änderungen gespeichert
+              </span>
+            )}
+            {!isEditing ? (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors cursor-pointer"
+                style={{ fontWeight: 500 }}
+              >
+                <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                Bearbeiten
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCancel}
+                  className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors cursor-pointer text-foreground"
+                  style={{ fontWeight: 500 }}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl text-primary-foreground bg-primary hover:bg-primary-hover transition-colors cursor-pointer"
+                  style={{ fontWeight: 500 }}
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Speichern
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Rule text */}
@@ -2316,21 +2386,21 @@ function TableQualifikation({ a }: { a: Angehoeriger }) {
           </div>
         </div>
 
-        {/* Warnband — aus der Ampel nach R21 */}
-        {(ampelKey === "pausiert" || ampelKey === "risiko") && (
+        {/* Warning banner */}
+        {(isOverdue || isSoonDeadline) && (
           <div className="px-5 pb-4">
             <div className={`flex items-start gap-2.5 px-4 py-3 rounded-xl border ${
-              ampelKey === "pausiert" ? "bg-error/[0.04] border-error/15" : "bg-warning/[0.04] border-warning/15"
+              isOverdue ? "bg-error/[0.04] border-error/15" : "bg-warning/[0.04] border-warning/15"
             }`}>
-              <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${ampelKey === "pausiert" ? "text-error" : "text-warning"}`} />
+              <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${isOverdue ? "text-error" : "text-warning"}`} />
               <div>
-                <div className={`text-[12px] ${ampelKey === "pausiert" ? "text-error" : "text-warning"}`} style={{ fontWeight: 500 }}>
-                  {ampelKey === "pausiert" ? "SRK-Frist überschritten – Leistungen pausiert" : "SRK-Zertifikat fehlt, Frist läuft"}
+                <div className={`text-[12px] ${isOverdue ? "text-error" : "text-warning"}`} style={{ fontWeight: 500 }}>
+                  {isOverdue ? "SRK Kurs überfällig – Risiko Leistungs-Pause" : "SRK Kurs bald fällig"}
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">
-                  Frist: {grenze12Str}
-                  {daysToGrenze !== null && (
-                    <span> ({ampelKey === "pausiert" ? `${Math.abs(daysToGrenze)} Tage überschritten` : `noch ${daysToGrenze} Tage`})</span>
+                  Deadline: {deadline}
+                  {deadlineDays !== null && (
+                    <span> ({isOverdue ? `${Math.abs(deadlineDays)} Tage überfällig` : `Fällig in ${deadlineDays} Tagen`})</span>
                   )}
                 </div>
               </div>
@@ -2350,42 +2420,114 @@ function TableQualifikation({ a }: { a: Angehoeriger }) {
           </div>
           <div className="p-5 space-y-4">
             {/* Status */}
-            {/* Status — abgeleitet nach R21, nicht erfassbar */}
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Status</div>
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] ${sb.bg} ${sb.text} border ${sb.border}`} style={{ fontWeight: 500 }}>
-                <span className={`w-[5px] h-[5px] rounded-full ${sb.dot}`} />
-                {sb.label}
-              </span>
+              {isEditing ? (
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as "abgeschlossen" | "offen" | "ueberfaellig")}
+                  className={selectClass}
+                >
+                  {Object.entries(statusDropdownConfig).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              ) : (
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] ${statusBadgeConfig[status].bg} ${statusBadgeConfig[status].text} border ${statusBadgeConfig[status].border}`} style={{ fontWeight: 600 }}>
+                  <span className={`w-[5px] h-[5px] rounded-full ${statusBadgeConfig[status].dot}`} />
+                  {statusDropdownConfig[status]}
+                </span>
+              )}
             </div>
 
-            {/* Zertifikat — das einzige erhobene SRK-Feld (AN-G3) */}
+            {/* Angemeldet */}
             <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Zertifikat vorhanden</div>
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] border ${
-                a.srkZertifikatVorhanden === "ja"
-                  ? "bg-success/10 text-success border-success/20"
-                  : "bg-warning/10 text-warning border-warning/20"
-              }`} style={{ fontWeight: 500 }}>
-                {a.srkZertifikatVorhanden === "ja" ? "Ja" : "Nein"}
-              </span>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Angemeldet</div>
+              {isEditing ? (
+                <div className="flex gap-2">
+                  {[true, false].map((opt) => (
+                    <button
+                      key={String(opt)}
+                      type="button"
+                      onClick={() => setAngemeldet(opt)}
+                      className={`px-3 py-1.5 rounded-lg text-[12px] border transition-colors cursor-pointer ${
+                        angemeldet === opt
+                          ? opt ? "bg-success/10 text-success border-success/20" : "bg-muted text-foreground border-border"
+                          : "bg-card text-muted-foreground border-border hover:bg-secondary/60"
+                      }`}
+                      style={{ fontWeight: angemeldet === opt ? 500 : 400 }}
+                    >
+                      {opt ? "Ja" : "Nein"}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border ${
+                  angemeldet ? "bg-primary/[0.06] text-primary border-primary/15" : "bg-muted text-muted-foreground border-border"
+                }`} style={{ fontWeight: 500 }}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${angemeldet ? "bg-primary" : "bg-muted-foreground/40"}`} />
+                  {angemeldet ? "Ja" : "Nein"}
+                </span>
+              )}
             </div>
 
-            {/* Frist — AN-F8 plus zwölf Monate. Ohne Eintrittsdatum keine Frist. */}
+            {/* Deadline */}
             <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Frist</div>
-              <div className="text-[13px] text-foreground" style={{ fontWeight: 450 }}>
-                {grenze12Str}
-                {daysToGrenze !== null && ampelKey !== "kein_gate" && (
-                  <span className="text-muted-foreground"> · {daysToGrenze >= 0 ? `noch ${daysToGrenze} Tage` : `${Math.abs(daysToGrenze)} Tage überschritten`}</span>
-                )}
-              </div>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Deadline</div>
+              {isEditing ? (
+                <DateField wertFormat="display" bereich="any" value={deadline || null} onChange={v => setDeadline((v as string) ?? "")} />
+              ) : (
+                <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-1.5 text-[13px] text-foreground" style={{ fontWeight: 450 }}>
+                    <CalendarDays className="w-3.5 h-3.5 text-muted-foreground" />
+                    {deadline}
+                  </div>
+                  {status !== "abgeschlossen" && deadlineDays !== null && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                      isOverdue
+                        ? "bg-error/10 text-error border border-error/15"
+                        : isSoonDeadline
+                          ? "bg-warning/10 text-warning border border-warning/15"
+                          : "bg-muted text-muted-foreground border border-border"
+                    }`} style={{ fontWeight: 500 }}>
+                      {isOverdue ? `${Math.abs(deadlineDays)} Tage überfällig` : `Fällig in ${deadlineDays} Tagen`}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Eintrittsdatum — der Anker der Frist */}
+            {/* Abgeschlossen am */}
             <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Eintrittsdatum</div>
-              <div className="text-[13px] text-foreground" style={{ fontWeight: 450 }}>{a.eintrittsdatum || "—"}</div>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5" style={{ fontWeight: 500 }}>Abgeschlossen am</div>
+              {isEditing ? (
+                <DateField
+                  wertFormat="display"
+                  bereich="past"
+                  value={abgeschlossenAm && abgeschlossenAm !== "—" ? abgeschlossenAm : null}
+                  onChange={v => setAbgeschlossenAm((v as string) ?? "")}
+                  disabled={status !== "abgeschlossen"}
+                />
+              ) : (
+                <div className="flex items-center gap-1.5 text-[13px]" style={{ fontWeight: 450 }}>
+                  {abgeschlossenAm && abgeschlossenAm !== "—" ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                      <span className="text-foreground">{abgeschlossenAm}</span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground/60">—</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Nachweis hochladen */}
+            <div className="pt-1">
+              <button className="inline-flex items-center gap-1.5 text-[12px] text-primary hover:text-primary-hover transition-colors cursor-pointer" style={{ fontWeight: 450 }}>
+                <Upload className="w-3.5 h-3.5" />
+                Nachweis hochladen
+              </button>
             </div>
           </div>
         </div>
@@ -2410,7 +2552,7 @@ function TableQualifikation({ a }: { a: Angehoeriger }) {
                 </div>
                 <div className="pt-0.5">
                   <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Vertragsunterzeichnung</div>
-                  <div className="text-[13px] text-foreground mt-0.5" style={{ fontWeight: 500 }}>{a.eintrittsdatum}</div>
+                  <div className="text-[13px] text-foreground mt-0.5" style={{ fontWeight: 500 }}>{detail.eintrittsdatum}</div>
                 </div>
               </div>
 
