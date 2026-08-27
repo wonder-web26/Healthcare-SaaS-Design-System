@@ -22,6 +22,7 @@ import {
   type PositionsUnterschrift,
 } from "../../../lib/schulung/nachweis-store";
 import { toast } from "sonner";
+import { exportiereSchulungsnachweisPDF, ladeSchulungsnachweisHerunter } from "../../../lib/schulung/pdf-export";
 
 /* ══════════════════════════════════════════
    TYPEN
@@ -106,21 +107,35 @@ export function SchulungsnachweisPage() {
   }
 
   const positionen = bereitePositionenAuf(nachweis);
-  const gruppen = gruppiereNachBereich(positionen);
   const unterschreibbar = positionen.filter(p => p.qualErlaubt);
-  const unterschrieben = unterschreibbar.filter(p => p.unterschrift !== null);
+  // Es werden nur die dem Angehörigen zugewiesenen (ausführbaren) Positionen
+  // angezeigt und geschult — Kategorie-A-Leistungen erbringt die Spitex selbst.
+  const gruppen = gruppiereNachBereich(unterschreibbar);
   const istAbgeschlossen = nachweis.status === "abgeschlossen";
-  const kannAbschliessen = unterschrieben.length === unterschreibbar.length && unterschreibbar.length > 0;
   const fehlQualifikation = !nachweis.angehoerigerQualifikation;
+  const signaturDataUrl = nachweis.unterschriften[0]?.signaturDataUrl ?? null;
 
-  const handleAbschliessen = async () => {
-    const result = await nachweisAbschliessen(nachweis.id, unterschreibbar.map(p => p.nr), nachweis.ausbildendeName);
-    if (result.ok) {
-      toast("Schulungsnachweis abgeschlossen");
-      refresh();
-    } else {
-      toast(result.fehler ?? "Fehler beim Abschliessen");
+  // Eine Unterschrift bestätigt die Anleitung zu allen Positionen: auf jede
+  // unterschreibbare Position anwenden, dann den Nachweis abschliessen.
+  const handleUnterschreiben = async (dataUrl: string) => {
+    for (const p of unterschreibbar) {
+      if (!p.unterschrift) positionUnterschreiben(nachweis.id, p.nr, dataUrl, nachweis.angehoerigerName);
     }
+    const result = await nachweisAbschliessen(nachweis.id, unterschreibbar.map(p => p.nr), nachweis.ausbildendeName);
+    if (result.ok) { toast("Initialschulung abgeschlossen"); refresh(); }
+    else { toast(result.fehler ?? "Fehler beim Abschliessen"); }
+  };
+
+  const handlePdf = async () => {
+    // gruppen enthält bereits nur die zugewiesenen (ausführbaren) Positionen —
+    // Kategorie-A-Leistungen erbringt die Spitex selbst, sie gehören nicht ins
+    // Dokument und werden nicht geschult.
+    const gruppenPdf = gruppen.map(g => ({
+      bereich: g.bereich,
+      positionen: g.positionen.map(p => ({ nr: p.nr, bezeichnung: p.bezeichnung, klvKategorie: p.klvKategorie, schritte: p.schritte })),
+    }));
+    const blob = await exportiereSchulungsnachweisPDF(nachweis, gruppenPdf, signaturDataUrl);
+    ladeSchulungsnachweisHerunter(blob, nachweis.id);
   };
 
   return (
@@ -159,8 +174,8 @@ export function SchulungsnachweisPage() {
 
       {/* Bestätigungstext */}
       <div style={{ padding: "12px 20px", background: "var(--bg-secondary)", borderRadius: 10, marginBottom: 16, fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-        Die Pflegende Angehörige bestätigt mit ihrer Unterschrift je Position, dass sie ausführlich in der
-        Durchführung der aufgeführten Pflegeleistungen angeleitet wurde und die Anleitungen verstanden hat.
+        Die pflegende Angehörige bestätigt mit ihrer Unterschrift, dass sie ausführlich in der Durchführung
+        der unten aufgeführten Pflegeleistungen angeleitet wurde und die Anleitungen verstanden hat.
       </div>
 
       {/* Hinweis: fehlende Qualifikation */}
@@ -173,18 +188,9 @@ export function SchulungsnachweisPage() {
         </div>
       )}
 
-      {/* Fortschritt */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 20 }}>
-        <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-          {unterschrieben.length} von {unterschreibbar.length} Positionen unterschrieben
-        </span>
-        <span style={{
-          padding: "2px 10px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500,
-          background: istAbgeschlossen ? "var(--status-success-bg)" : kannAbschliessen ? "var(--brand-primary-light)" : "var(--bg-secondary)",
-          color: istAbgeschlossen ? "var(--status-success)" : kannAbschliessen ? "var(--brand-primary)" : "var(--text-tertiary)",
-        }}>
-          {istAbgeschlossen ? "Abgeschlossen" : kannAbschliessen ? "Bereit zum Abschluss" : `${unterschrieben.length}/${unterschreibbar.length}`}
-        </span>
+      {/* Positionsanzahl */}
+      <div style={{ marginBottom: 16, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+        {unterschreibbar.length} {unterschreibbar.length === 1 ? "Leistungsposition" : "Leistungspositionen"} für diese Betreuung
       </div>
 
       {/* Positionen nach Bereich */}
@@ -196,31 +202,46 @@ export function SchulungsnachweisPage() {
             </div>
             <div className="flex flex-col" style={{ gap: 8 }}>
               {gruppe.positionen.map(pos => (
-                <PositionsKarte
-                  key={pos.nr}
-                  position={pos}
-                  nachweisId={nachweis.id}
-                  istAbgeschlossen={istAbgeschlossen}
-                  benutzer={nachweis.angehoerigerName}
-                  onUnterschrieben={refresh}
-                />
+                <PositionsZeile key={pos.nr} position={pos} />
               ))}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Abschluss-Button */}
-      {!istAbgeschlossen && kannAbschliessen && (
-        <div style={{ marginTop: 24, padding: "16px 20px", background: "var(--brand-primary-light)", borderRadius: 12, textAlign: "center" }}>
-          <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", marginBottom: 10 }}>
-            Alle {unterschreibbar.length} Positionen unterschrieben. Nachweis abschliessen?
+      {/* Unterschrift + Abschluss / PDF */}
+      <div style={{ marginTop: 24, padding: 20, background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 12 }}>
+        {istAbgeschlossen ? (
+          <div>
+            <div className="flex items-center" style={{ gap: 6, marginBottom: 12 }}>
+              <CheckCircle2 style={{ width: 16, height: 16, color: "var(--status-success)" }} />
+              <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--status-success-text)" }}>
+                Abgeschlossen{nachweis.abgeschlossenAm ? ` am ${new Date(nachweis.abgeschlossenAm).toLocaleDateString("de-CH")}` : ""} · {nachweis.angehoerigerName}
+              </span>
+            </div>
+            {signaturDataUrl && (
+              <img src={signaturDataUrl} alt="Unterschrift" style={{ height: 60, background: "white", border: "0.5px solid var(--border-default)", borderRadius: 8, padding: 4, marginBottom: 12 }} />
+            )}
+            <button onClick={handlePdf} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 22px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}>
+              <Download style={{ width: 15, height: 15 }} /> PDF herunterladen
+            </button>
           </div>
-          <button onClick={handleAbschliessen} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 24px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}>
-            <Lock style={{ width: 14, height: 14 }} /> Nachweis abschliessen
-          </button>
-        </div>
-      )}
+        ) : unterschreibbar.length === 0 ? (
+          <div style={{ fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
+            Keine unterschreibbaren Positionen — bitte Qualifikation prüfen.
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize: "var(--text-body)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 4 }}>
+              Unterschrift der pflegenden Angehörigen
+            </div>
+            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 12 }}>
+              Mit der Unterschrift wird die Anleitung zu allen {unterschreibbar.length} Positionen bestätigt und die Initialschulung abgeschlossen.
+            </div>
+            <SignaturPad onSign={handleUnterschreiben} onCancel={() => {}} />
+          </div>
+        )}
+      </div>
 
       {/* Versionsangaben */}
       <div style={{ marginTop: 32, padding: "10px 16px", background: "var(--bg-secondary)", borderRadius: 8, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
@@ -232,116 +253,42 @@ export function SchulungsnachweisPage() {
 }
 
 /* ══════════════════════════════════════════
-   POSITIONSKARTE mit Unterschrift
+   POSITIONSZEILE — Leistungsposition mit sichtbaren Ausführungsschritten
    ══════════════════════════════════════════ */
 
-function PositionsKarte({ position, nachweisId, istAbgeschlossen, benutzer, onUnterschrieben }: {
-  position: AufbereitetePosition;
-  nachweisId: string;
-  istAbgeschlossen: boolean;
-  benutzer: string;
-  onUnterschrieben: () => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [showSignPad, setShowSignPad] = useState(false);
-  const istUnterschrieben = !!position.unterschrift;
+function PositionsZeile({ position }: { position: AufbereitetePosition }) {
   const nichtErlaubt = !position.qualErlaubt;
-
   return (
-    <div style={{
-      padding: "12px 16px", borderRadius: 10,
-      background: nichtErlaubt ? "var(--bg-secondary)" : "var(--bg-elevated)",
-      border: `0.5px solid ${istUnterschrieben ? "var(--status-success)" : nichtErlaubt ? "var(--status-danger)" : "var(--border-default)"}`,
-      opacity: nichtErlaubt ? 0.7 : 1,
-    }}>
-      {/* Kopfzeile */}
-      <div className="flex items-start justify-between cursor-pointer" onClick={() => setExpanded(!expanded)}>
-        <div className="flex items-start" style={{ gap: 10, flex: 1 }}>
-          {istUnterschrieben ? (
-            <CheckCircle2 style={{ width: 18, height: 18, color: "var(--status-success)", flexShrink: 0, marginTop: 1 }} />
-          ) : nichtErlaubt ? (
-            <AlertTriangle style={{ width: 18, height: 18, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
-          ) : (
-            <ClipboardList style={{ width: 18, height: 18, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 1 }} />
-          )}
-          <div>
-            <div className="flex items-center flex-wrap" style={{ gap: 6 }}>
-              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontFamily: "monospace" }}>{position.nr}</span>
-              <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>{position.bezeichnung}</span>
-              {position.klvKategorie ? (
-                <span style={{ fontSize: "var(--text-meta)", padding: "1px 6px", borderRadius: 4, background: "var(--bg-secondary)", color: "var(--text-tertiary)", fontWeight: 500 }}>
-                  {KAT_LABEL[position.klvKategorie] ?? position.klvKategorie}
-                </span>
-              ) : (
-                <span style={{ fontSize: "var(--text-meta)", padding: "1px 6px", borderRadius: 4, background: "var(--status-warning-bg)", color: "var(--status-warning-text)", fontWeight: 500 }}>
-                  Kategorie nicht erfasst
-                </span>
-              )}
-            </div>
-            {nichtErlaubt && position.qualGrund && (
-              <div style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)", marginTop: 2 }}>
-                {position.qualGrund}
-              </div>
+    <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", opacity: nichtErlaubt ? 0.6 : 1 }}>
+      <div className="flex items-start" style={{ gap: 10 }}>
+        <ClipboardList style={{ width: 16, height: 16, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 2 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="flex items-center flex-wrap" style={{ gap: 6 }}>
+            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontFamily: "monospace" }}>{position.nr}</span>
+            <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>{position.bezeichnung}</span>
+            {position.klvKategorie && (
+              <span style={{ fontSize: "var(--text-meta)", padding: "1px 6px", borderRadius: 4, background: "var(--bg-secondary)", color: "var(--text-tertiary)", fontWeight: 500 }}>
+                {KAT_LABEL[position.klvKategorie] ?? position.klvKategorie}
+              </span>
+            )}
+            {nichtErlaubt && (
+              <span style={{ fontSize: "var(--text-meta)", padding: "1px 6px", borderRadius: 4, background: "var(--status-warning-bg)", color: "var(--status-warning-text)", fontWeight: 500 }}>
+                Qualifikation prüfen
+              </span>
             )}
           </div>
-        </div>
-        {expanded ? <ChevronUp style={{ width: 14, height: 14, color: "var(--text-tertiary)" }} /> : <ChevronDown style={{ width: 14, height: 14, color: "var(--text-tertiary)" }} />}
-      </div>
-
-      {/* Expanded: Schritte + Unterschrift */}
-      {expanded && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "0.5px solid var(--border-default)" }}>
-          {/* Ausführungsschritte */}
+          {/* Ausführungsschritte — direkt sichtbar (was exakt zu tun ist) */}
           {position.schritteVorhanden ? (
-            <ol style={{ margin: "0 0 10px 18px", padding: 0, fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.7 }}>
+            <ol style={{ margin: "8px 0 0 18px", padding: 0, fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.7 }}>
               {position.schritte.map((s, i) => <li key={i}>{s}</li>)}
             </ol>
           ) : (
-            <div className="flex items-center" style={{ gap: 6, marginBottom: 10, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
+            <div className="flex items-center" style={{ gap: 6, marginTop: 6, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
               <Info style={{ width: 12, height: 12 }} /> Keine Ausführungsschritte hinterlegt
             </div>
           )}
-
-          {/* Unterschrift */}
-          {istUnterschrieben && position.unterschrift ? (
-            <div style={{ padding: "8px 12px", background: "var(--status-success-bg)", borderRadius: 8 }}>
-              <div className="flex items-center" style={{ gap: 6, marginBottom: 4 }}>
-                <Check style={{ width: 12, height: 12, color: "var(--status-success)" }} />
-                <span style={{ fontSize: "var(--text-meta)", color: "var(--status-success)", fontWeight: 500 }}>
-                  Unterschrieben am {new Date(position.unterschrift.unterschriebenAm).toLocaleDateString("de-CH")} von {position.unterschrift.unterschriebenVon}
-                </span>
-              </div>
-              {position.unterschrift.signaturDataUrl && (
-                <img src={position.unterschrift.signaturDataUrl} alt="Unterschrift" style={{ height: 40, opacity: 0.7 }} />
-              )}
-            </div>
-          ) : nichtErlaubt ? (
-            <div style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)", fontStyle: "italic" }}>
-              Gemäss Qualifikation nicht zulässig — nicht unterschreibbar
-            </div>
-          ) : istAbgeschlossen ? null : showSignPad ? (
-            <SignaturPad
-              onSign={(dataUrl) => {
-                const result = positionUnterschreiben(nachweisId, position.nr, dataUrl, benutzer);
-                if (result.ok) {
-                  setShowSignPad(false);
-                  onUnterschrieben();
-                  toast(`Position ${position.nr} unterschrieben`);
-                }
-              }}
-              onCancel={() => setShowSignPad(false)}
-            />
-          ) : (
-            <button
-              onClick={() => setShowSignPad(true)}
-              className="inline-flex items-center cursor-pointer"
-              style={{ gap: 6, padding: "8px 16px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
-            >
-              <Pen style={{ width: 12, height: 12 }} /> Unterschreiben
-            </button>
-          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

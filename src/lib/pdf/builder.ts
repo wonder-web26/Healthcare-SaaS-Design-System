@@ -22,6 +22,15 @@ const CRIT_W = 232;
 const CELL_W = 30;
 const CX0 = X0 + CRIT_W;
 
+/** Decodes a base64 PNG data-URL into bytes for pdf-lib embedPng. */
+function dataUrlToBytes(dataUrl: string): Uint8Array {
+  const base64 = dataUrl.split(",")[1] ?? "";
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
 export interface DocMeta {
   org: string;
   title: string;
@@ -142,9 +151,10 @@ export class PdfBuilder {
     this.y -= 26;
   }
 
-  metaGrid(fields: MetaField[], interval: IntervalField): void {
+  metaGrid(fields: MetaField[], interval?: IntervalField): void {
     const cw = W / 2, lw = 92;
-    for (let r = 0; r < 2; r++) {
+    const rows = Math.ceil(fields.length / 2);
+    for (let r = 0; r < rows; r++) {
       this.hline(X0, this.y, X1, 0.35, HAIR);
       this.y -= 13;
       for (let i = 0; i < 2; i++) {
@@ -156,13 +166,15 @@ export class PdfBuilder {
       }
       this.y -= 7;
     }
-    this.hline(X0, this.y, X1, 0.35, HAIR);
-    this.y -= 13;
-    this.text(X0, this.y, interval.label, this.plex, 7.5, MUT);
-    this.text(X0 + lw, this.y, interval.value, this.plex, 9, INK);
-    const vw = this.width(this.plex, 9, interval.value);
-    this.text(X0 + lw + vw + 8, this.y, interval.qualifier, this.plex, 7.5, MUT);
-    this.y -= 7;
+    if (interval) {
+      this.hline(X0, this.y, X1, 0.35, HAIR);
+      this.y -= 13;
+      this.text(X0, this.y, interval.label, this.plex, 7.5, MUT);
+      this.text(X0 + lw, this.y, interval.value, this.plex, 9, INK);
+      const vw = this.width(this.plex, 9, interval.value);
+      this.text(X0 + lw + vw + 8, this.y, interval.qualifier, this.plex, 7.5, MUT);
+      this.y -= 7;
+    }
     this.hline(X0, this.y, X1, 0.35, HAIR);
     this.y -= 20;
   }
@@ -309,6 +321,41 @@ export class PdfBuilder {
       this.y -= tls.length * 10 + 14;
     }
     this.hline(X0, this.y + 6, X1, 0.35, HAIR);
+  }
+
+  /**
+   * Signature block that embeds a drawn signature (PNG data-URL).
+   * Layout: confirmation wording, the drawn signature, then a baseline with the
+   * signer's name and role on the left and the signing date on the right.
+   */
+  async signatureImage(title: string, dataUrl: string, name: string, role: string, date: string, wording: string): Promise<void> {
+    this.space(170);
+    this.section(title);
+    // Confirmation statement — this is what the signature certifies.
+    const tls = this.wrap(wording, this.plex, 8, W - 4);
+    tls.forEach((ln, i) => this.text(X0, this.y - i * 11, ln, this.plex, 8, SEC));
+    this.y -= tls.length * 11 + 18;
+    // Drawn signature.
+    try {
+      const png = await this.doc.embedPng(dataUrlToBytes(dataUrl));
+      const w = 190;
+      const h = png.width ? (png.height / png.width) * w : 60;
+      this.space(h + 40);
+      this.page.drawImage(png, { x: X0, y: this.y - h, width: w, height: h });
+      this.y -= h + 6;
+    } catch {
+      // Bild nicht einbettbar → Platz für die Signaturlinie freihalten.
+      this.space(56);
+      this.y -= 50;
+    }
+    // Signature baseline with name/role left and date right.
+    this.hline(X0, this.y, X0 + 260, 0.5, INK);
+    this.y -= 12;
+    this.text(X0, this.y, name, this.plexM, 9, INK);
+    const nw = this.width(this.plexM, 9, name);
+    this.text(X0 + nw + 8, this.y, role, this.plex, 7.5, MUT);
+    this.rightText(X1, this.y, `Datum: ${date}`, this.plex, 8.5, SEC);
+    this.y -= 16;
   }
 
   // ── finalize: footer with the now-known total page count ──────────────────
