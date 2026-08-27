@@ -1,10 +1,15 @@
 /**
- * interRAI Assessment Store
+ * interRAI Formular Store
  *
- * Person-centric, in-memory store for the new interRAI HC formulare.
- * A Person carries lifecycle state (mandat | patient). An assessment
- * references a person by stable personId — it never changes when the
- * person's state transitions from mandat to patient.
+ * Three long-lived objects, cleanly separated:
+ *   Klient (Person) — stable, outlives every Fall; carries master data.
+ *   Fall            — the clinical care episode; carries the Fallnummer and
+ *                     bundles all forms. Opened with the Anmeldung, closed with
+ *                     the Entlassung. A Wiedereintritt opens a NEW Fall.
+ *   Formular        — a single form; references its Fall via fallId, and the
+ *                     Klient transitively via Fall.klientId (never directly).
+ *
+ * The Klient's lifecycle state is DERIVED (klientZustand), not stored.
  *
  * Survives navigation within a session. Lost on page reload (no
  * persistence layer in the prototype).
@@ -20,17 +25,38 @@ import { GEGENWART_ISO } from "../gegenwart";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type PersonZustand = "mandat" | "patient";
-
 export interface Person {
   id: string;
   vorname: string;
   nachname: string;
-  zustand: PersonZustand;
   /** Onboarding case ID, if the person entered through onboarding */
   onboardingId?: string;
   /** Patient record ID, assigned during or after onboarding */
   patientId?: string;
+}
+
+/**
+ * Triage decided when the SDA is locked — governs which follow-up forms are
+ * allowed. Stays null until then; filled in a later step, never derived here.
+ */
+export type FallTriage = "interrai_hc" | "nur_sda" | null;
+
+/**
+ * Fall — the clinical care episode. Opened with the Anmeldung, closed with the
+ * Entlassung. Carries the immutable Fallnummer and bundles all forms. A
+ * Wiedereintritt of the same Klient opens a NEW Fall with a NEW Fallnummer.
+ */
+export interface Fall {
+  id: string;
+  /** Assigned by the store, never typed; immutable once set. */
+  fallnummer: string;
+  /** The Klient (Person) this episode belongs to — was `personId`. */
+  klientId: string;
+  /** ISO date — the creation of the first form (the Anmeldung). */
+  eroeffnetAm: string;
+  /** ISO date — set when the Entlassung is locked; null while the Fall is open. */
+  geschlossenAm: string | null;
+  triage: FallTriage;
 }
 
 /** Assessment occasion — values correspond to item A8 in the seed. */
@@ -86,7 +112,8 @@ export interface GespraechAbschnitt {
 
 export interface Formular {
   id: string;
-  personId: string;
+  /** The Fall this form belongs to. The Klient is reached via Fall.klientId. */
+  fallId: string;
   anlass: AssessmentAnlass;
   status: AssessmentStatus;
   erstelltAm: string;
@@ -166,7 +193,11 @@ export function revealVorschlaege(assessmentId: string): void {
 // ── In-memory stores ─────────────────────────────────────────────────────────
 
 const persons = new Map<string, Person>();
+const faelle = new Map<string, Fall>();
 const formulare = new Map<string, Formular>();
+
+/** Three-letter organisation code for Fallnummern. Defined here, nowhere else. */
+const ORG_KUERZEL = "SKA"; // Spitex Kaufmann AG
 
 /** Conversation segments store — keyed by gespraechId */
 const gespraeche = new Map<string, GespraechAbschnitt[]>();
@@ -177,22 +208,30 @@ import { GESPRAECH_HUBER } from "./demo/gespraech-huber";
 import { VORSCHLAEGE_HUBER } from "./demo/vorschlaege-huber";
 
 function initDemo() {
-  // Fritz Huber — mandate in onboarding, not yet converted
+  // Fritz Huber — im Onboarding, noch nicht konvertiert (Zustand wird abgeleitet)
   persons.set("PERS-001", {
     id: "PERS-001",
     vorname: "Fritz",
     nachname: "Huber",
-    zustand: "mandat",
     onboardingId: "OB-2026-105",
   });
 
-  // Steiner, Hans-Rudolf — active patient, already converted
+  // Anna Müller — aktive Patientin, bereits konvertiert (trägt patientId)
   persons.set("PERS-002", {
     id: "PERS-002",
     vorname: "Anna",
     nachname: "Müller",
-    zustand: "patient",
     patientId: "P-2026-0041",
+  });
+
+  // Rosa Bianchi — Wiedereintritt: EIN Klient (eine Versichertennummer), ZWEI
+  // Fälle mit verschiedenen Fallnummern. Beleg, dass das Modell den
+  // Wiedereintritt trägt.
+  persons.set("PERS-003", {
+    id: "PERS-003",
+    vorname: "Rosa",
+    nachname: "Bianchi",
+    patientId: "P-2026-0049",
   });
 
   // Walter Frei entfernt — hing an OB-2026-011, einer Kennung ausserhalb des
@@ -207,15 +246,26 @@ function initDemo() {
     vorschlaegeMap[v.feldCode] = v;
   }
 
-  // Fritz Huber: Erstabklärung with AI suggestions from conversation
+  // Ein Fall je Formular. Die Fallnummer wird vergeben (vergibFallnummer), nie
+  // getippt. Reihenfolge bestimmt die laufende Nummer je Jahr.
+  const fallHuber = eroeffneFall("PERS-001", "2026-02-28");   // SKA-2026-0001
+  const fallMueller = eroeffneFall("PERS-002", "2026-02-15"); // SKA-2026-0002
+
+  // Wiedereintritt Bianchi: erster Fall im Vorjahr (eigener Nummernkreis),
+  // abgeschlossen; zweiter Fall im laufenden Jahr, offen.
+  const fallBianchiAlt = eroeffneFall("PERS-003", "2025-05-10"); // SKA-2025-0001
+  fallBianchiAlt.geschlossenAm = "2025-11-30";
+  const fallBianchiNeu = eroeffneFall("PERS-003", "2026-03-02"); // SKA-2026-0003
+
+  // Fritz Huber: Erstabklärung mit KI-Vorschlägen aus dem Gespräch
   formulare.set("NEU-ASS-001", {
     id: "NEU-ASS-001",
-    personId: "PERS-001",
+    fallId: fallHuber.id,
     anlass: "erstabklaerung",
     status: "in_bearbeitung",
     erstelltAm: "2026-02-28T10:00:00",
     zuletztBearbeitetAm: "2026-03-01T14:30:00",
-    answers: {},
+    answers: { A5b: fallHuber.fallnummer },
     vorschlaege: vorschlaegeMap,
     bestaetigungen: {},
     gespraechId: "GES-HUBER-001",
@@ -224,15 +274,49 @@ function initDemo() {
     abgeschlossenVon: null,
   });
 
-  // Steiner, Hans-Rudolf: Erstabklärung — no suggestions (both states in demo)
+  // Anna Müller: Erstabklärung — ohne Vorschläge (beide Zustände in der Demo)
   formulare.set("NEU-ASS-002", {
     id: "NEU-ASS-002",
-    personId: "PERS-002",
+    fallId: fallMueller.id,
     anlass: "erstabklaerung",
     status: "in_bearbeitung",
     erstelltAm: "2026-02-15T09:00:00",
     zuletztBearbeitetAm: "2026-02-28T16:00:00",
-    answers: {},
+    answers: { A5b: fallMueller.fallnummer },
+    vorschlaege: {},
+    bestaetigungen: {},
+    gespraechId: null,
+    vorschlaegeVerfuegbar: false,
+    abgeschlossenAm: null,
+    abgeschlossenVon: null,
+  });
+
+  // Rosa Bianchi, abgeschlossener Vorfall — gehört zum GESCHLOSSENEN Fall
+  formulare.set("NEU-ASS-003", {
+    id: "NEU-ASS-003",
+    fallId: fallBianchiAlt.id,
+    anlass: "erstabklaerung",
+    status: "abgeschlossen",
+    erstelltAm: "2025-05-10T09:00:00",
+    zuletztBearbeitetAm: "2025-11-30T11:00:00",
+    answers: { A5b: fallBianchiAlt.fallnummer },
+    vorschlaege: {},
+    bestaetigungen: {},
+    gespraechId: null,
+    vorschlaegeVerfuegbar: false,
+    abgeschlossenAm: "2025-11-30T11:00:00",
+    abgeschlossenVon: "Sandra Weber",
+  });
+
+  // Rosa Bianchi, laufender Wiedereintritt — gehört zum OFFENEN Fall
+  formulare.set("NEU-ASS-004", {
+    id: "NEU-ASS-004",
+    fallId: fallBianchiNeu.id,
+    anlass: "wiedereintritt",
+    status: "in_bearbeitung",
+    erstelltAm: "2026-03-02T09:00:00",
+    zuletztBearbeitetAm: "2026-03-02T09:00:00",
+    answers: { A5b: fallBianchiNeu.fallnummer },
     vorschlaege: {},
     bestaetigungen: {},
     gespraechId: null,
@@ -258,12 +342,12 @@ export function getPersonByOnboardingId(obId: string): Person | undefined {
 }
 
 /**
- * Returns the person linked to an onboarding case, creating a lightweight
- * mandate person on first use if none was seeded. This keeps the InterRAI
- * tab actionable for every onboarding — a Bedarfsabklärung can be created for
- * the patient of any case, not only the two demo cases that ship with a
- * seeded person. The assessment-creation path itself stays the single
- * createAssessment() below; this only ensures a person to attach it to.
+ * Returns the Klient linked to an onboarding case, creating a lightweight one
+ * on first use if none was seeded. This keeps the Bedarfsabklärung tab
+ * actionable for every onboarding — a form can be created for the patient of
+ * any case, not only the demo cases that ship with a seeded Klient. Opening the
+ * Fall and creating the form stay in offenenFallSicherstellen / createAssessment
+ * below; this only ensures a Klient to attach a Fall to.
  */
 export function getOrCreatePersonForOnboarding(
   obId: string,
@@ -273,7 +357,7 @@ export function getOrCreatePersonForOnboarding(
   const existing = getPersonByOnboardingId(obId);
   if (existing) return existing;
   const id = `PERS-${String(persons.size + 1).padStart(3, "0")}`;
-  const p: Person = { id, vorname, nachname, zustand: "mandat", onboardingId: obId };
+  const p: Person = { id, vorname, nachname, onboardingId: obId };
   persons.set(id, p);
   return p;
 }
@@ -289,11 +373,77 @@ export function getAllPersons(): Person[] {
   return [...persons.values()];
 }
 
-export function updatePersonZustand(personId: string, zustand: PersonZustand, patientId?: string): void {
-  const p = persons.get(personId);
+/** Sets the patient record ID on a Klient (the only mutation at conversion). */
+export function setPatientId(klientId: string, patientId: string): void {
+  const p = persons.get(klientId);
   if (!p) return;
-  p.zustand = zustand;
-  if (patientId) p.patientId = patientId;
+  p.patientId = patientId;
+}
+
+/**
+ * Derived lifecycle state of a Klient — never stored. `aktiv` once the Klient
+ * carries a patientId (converted), otherwise `im_onboarding`. Deliberately the
+ * same statement as the old stored flag, only computed. Derivation from the
+ * Arbeitsvertrag follows in a later step.
+ */
+export function klientZustand(klientId: string): "im_onboarding" | "aktiv" {
+  return persons.get(klientId)?.patientId ? "aktiv" : "im_onboarding";
+}
+
+// ── Fall API ───────────────────────────────────────────────────────────────
+
+/**
+ * Forms a Fallnummer `{ORG}-{JJJJ}-{NNNN}`. THE single place a Fallnummer is
+ * built. NNNN is four digits, restarts at 1 each calendar year, taken from the
+ * highest number already assigned in that year across the store.
+ */
+export function vergibFallnummer(eroeffnetAm: string): string {
+  const jahr = eroeffnetAm.slice(0, 4);
+  const prefix = `${ORG_KUERZEL}-${jahr}-`;
+  let hoechste = 0;
+  for (const f of faelle.values()) {
+    if (f.fallnummer.startsWith(prefix)) {
+      const n = parseInt(f.fallnummer.slice(prefix.length), 10);
+      if (!Number.isNaN(n)) hoechste = Math.max(hoechste, n);
+    }
+  }
+  return `${prefix}${String(hoechste + 1).padStart(4, "0")}`;
+}
+
+export function getFall(id: string): Fall | undefined {
+  return faelle.get(id);
+}
+
+export function getFaelleFuerKlient(klientId: string): Fall[] {
+  return [...faelle.values()].filter((f) => f.klientId === klientId);
+}
+
+/** The single open Fall of a Klient (geschlossenAm === null), if any. */
+export function offenerFallFuerKlient(klientId: string): Fall | undefined {
+  return [...faelle.values()].find((f) => f.klientId === klientId && f.geschlossenAm === null);
+}
+
+/**
+ * Opens a new Fall for a Klient. Assigns the Fallnummer here and nowhere else;
+ * it is immutable afterwards (no setter exists).
+ */
+export function eroeffneFall(klientId: string, eroeffnetAm: string = GEGENWART_ISO): Fall {
+  const id = `FALL-${String(faelle.size + 1).padStart(3, "0")}`;
+  const fall: Fall = {
+    id,
+    fallnummer: vergibFallnummer(eroeffnetAm),
+    klientId,
+    eroeffnetAm,
+    geschlossenAm: null,
+    triage: null,
+  };
+  faelle.set(id, fall);
+  return fall;
+}
+
+/** Returns the Klient's open Fall, opening one if none exists. */
+export function offenenFallSicherstellen(klientId: string, eroeffnetAm: string = GEGENWART_ISO): Fall {
+  return offenerFallFuerKlient(klientId) ?? eroeffneFall(klientId, eroeffnetAm);
 }
 
 // ── Assessment API ───────────────────────────────────────────────────────────
@@ -302,25 +452,47 @@ export function getAssessment(id: string): Formular | undefined {
   return formulare.get(id);
 }
 
-export function getAssessmentsForPerson(personId: string): Formular[] {
-  return [...formulare.values()].filter((a) => a.personId === personId);
+/** All forms belonging to one Fall. */
+export function formulareFuerFall(fallId: string): Formular[] {
+  return [...formulare.values()].filter((f) => f.fallId === fallId);
+}
+
+/** All forms belonging to a Klient, across every Fall of that Klient. */
+export function formulareFuerKlient(klientId: string): Formular[] {
+  const fallIds = new Set(getFaelleFuerKlient(klientId).map((f) => f.id));
+  return [...formulare.values()].filter((f) => fallIds.has(f.fallId));
+}
+
+/** Resolves the Klient of a form via its Fall (never stored on the form). */
+export function klientFuerFormular(f: Formular): Person | undefined {
+  const fall = faelle.get(f.fallId);
+  return fall ? persons.get(fall.klientId) : undefined;
 }
 
 export function getAllAssessments(): Formular[] {
   return [...formulare.values()];
 }
 
-export function createAssessment(personId: string, anlass: AssessmentAnlass): Formular {
+/**
+ * Creates a form inside an existing Fall. A form without a Fall is invalid:
+ * an unknown fallId throws rather than silently opening a Fall. The internal
+ * case-number field (A5b) is pre-filled from the Fall and not user input.
+ */
+export function createAssessment(fallId: string, anlass: AssessmentAnlass): Formular {
+  const fall = faelle.get(fallId);
+  if (!fall) {
+    throw new Error(`createAssessment: unbekannte fallId "${fallId}" — ein Formular ohne Fall ist unzulässig`);
+  }
   const id = `NEU-ASS-${String(formulare.size + 1).padStart(3, "0")}`;
   const now = new Date().toISOString();
   const a: Formular = {
     id,
-    personId,
+    fallId,
     anlass,
     status: "in_bearbeitung",
     erstelltAm: now,
     zuletztBearbeitetAm: now,
-    answers: {},
+    answers: { A5b: fall.fallnummer },
     vorschlaege: {},
     bestaetigungen: {},
     gespraechId: null,

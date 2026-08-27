@@ -11,7 +11,9 @@ import { ClipboardList, Play, Plus, CheckCircle2, AlertTriangle, Search, Message
 import { LeerZustand } from "../ui/LeerZustand";
 import {
   type Person,
-  getAssessmentsForPerson,
+  offenerFallFuerKlient,
+  offenenFallSicherstellen,
+  formulareFuerFall,
   getOpenFieldCount,
   getActiveFieldCount,
   getAnlassLabel,
@@ -29,7 +31,9 @@ interface AssessmentStatusViewProps {
 
 export function AssessmentStatusView({ person, returnTo }: AssessmentStatusViewProps) {
   const navigate = useNavigate();
-  const assessments = getAssessmentsForPerson(person.id);
+  // Scoped to the Klient's open Fall — forms of a closed Fall never appear here.
+  const offenerFall = offenerFallFuerKlient(person.id);
+  const assessments = offenerFall ? formulareFuerFall(offenerFall.id) : [];
 
   const handleOpen = (assessmentId: string, scrollToSuggestion?: boolean) => {
     const base = `/interrai-neu/${assessmentId}?returnTo=${encodeURIComponent(returnTo)}`;
@@ -37,7 +41,9 @@ export function AssessmentStatusView({ person, returnTo }: AssessmentStatusViewP
   };
 
   const handleStartNew = () => {
-    const a = createAssessment(person.id, assessments.length === 0 ? "erstabklaerung" : "re_assessment");
+    const fall = offenenFallSicherstellen(person.id);
+    const anlass = formulareFuerFall(fall.id).length === 0 ? "erstabklaerung" : "re_assessment";
+    const a = createAssessment(fall.id, anlass);
     handleOpen(a.id);
   };
 

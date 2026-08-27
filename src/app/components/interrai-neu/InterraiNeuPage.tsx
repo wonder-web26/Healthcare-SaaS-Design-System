@@ -57,7 +57,8 @@ import { validiereFeld, maskiereAHV, maskiereZiffern, ICD_HINWEIS, type Validier
 import { MODUL_ZERTIFIZIERUNG } from "../../../lib/stammdaten/modul-zertifizierung";
 import {
   getAssessment,
-  getPerson,
+  klientFuerFormular,
+  klientZustand,
   updateAssessmentAnswers,
   getOpenFieldCount,
   getActiveFieldCount,
@@ -595,16 +596,15 @@ export function InterraiNeuPage() {
   // Return origin, carried in the URL (survives reload, visible when debugging).
   // Fallback when none is present: the patient view's interRAI tab, else the
   // list — the button never leads nowhere. The label names the destination.
+  // Klient über den Fall des Formulars (nie direkt am Formular gespeichert).
+  const person = assessment ? klientFuerFormular(assessment) : undefined;
   const returnZiel = searchParams.get("returnTo")
-    || (assessment && getPerson(assessment.personId)?.patientId
-        ? ansichtPfad(getPerson(assessment.personId)!.patientId, "interrai-hc")
-        : "/interrai");
+    || (person?.patientId ? ansichtPfad(person.patientId, "interrai-hc") : "/interrai");
   // Navigationsrahmen §E: Beschriftung nennt das ZIEL, nicht die Handlung.
   const returnLabel = returnZiel.startsWith("/onboarding") ? "Onboardings"
     : returnZiel.startsWith("/patienten") ? "Patienten"
     : returnZiel.startsWith("/interrai") ? "Übersicht"
     : "Zurück";
-  const person = assessment ? getPerson(assessment.personId) : undefined;
 
   const [activeBereich, setActiveBereich] = useState(
     interraiHcSchweiz.bereiche[0].code
@@ -630,7 +630,7 @@ export function InterraiNeuPage() {
 
   const recording = useRecording();
   const isReadOnly = assessment ? istAbgeschlossen(assessment) : false;
-  const isRecordingThisPerson = recording.phase === "recording" && recording.session?.personId === assessment?.personId;
+  const isRecordingThisPerson = recording.phase === "recording" && recording.session?.personId === person?.id;
 
   // Compute per-field suggestion map from assessment vorschlaege
   const vorschlaegeMap = useMemo(() => {
@@ -997,8 +997,8 @@ export function InterraiNeuPage() {
             </span>
             {/* Zustand als Info-Marke mit Symbol (Farbe nie einziges Merkmal) */}
             <StatusMarke
-              label={person.zustand === "patient" ? "Patient" : "Mandat"}
-              variante={person.zustand === "patient" ? "erfolg" : "info"}
+              label={klientZustand(person.id) === "aktiv" ? "Patient" : "Mandat"}
+              variante={klientZustand(person.id) === "aktiv" ? "erfolg" : "info"}
             />
           </>
         )}

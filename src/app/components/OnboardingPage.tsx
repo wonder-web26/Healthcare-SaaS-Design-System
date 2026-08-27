@@ -62,7 +62,7 @@ import { toast } from "sonner";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { useRecording } from "../recording/RecordingContext";
 import { Mic } from "lucide-react";
-import { getPersonByOnboardingId, getAssessmentsForPerson, createAssessment } from "../../lib/interrai/store";
+import { getPersonByOnboardingId, offenenFallSicherstellen, formulareFuerFall, createAssessment } from "../../lib/interrai/store";
 import { useCurrentUser } from "../auth";
 import { ONBOARDING_STATUS_CFG, ONBOARDING_STATUS_WERTE, type OnboardingStatus } from "../../lib/onboarding/status";
 import { getStatus, setzeStatus, getGrund } from "../../lib/onboarding/status-store";
@@ -614,8 +614,9 @@ export function OnboardingPage() {
       gespraechHinweisGezeigt = true;
       toast("Aus dem Gespräch entstehen Vorschläge für die Bedarfsabklärung (interRAI), Pflegeplanung und KLV-Verordnung.");
     }
-    const assessments = getAssessmentsForPerson(person.id);
-    const target = assessments.find(a => a.status === "in_bearbeitung") ?? createAssessment(person.id, "erstabklaerung");
+    const fall = offenenFallSicherstellen(person.id);
+    const formulareDesFalls = formulareFuerFall(fall.id);
+    const target = formulareDesFalls.find(a => a.status === "in_bearbeitung") ?? createAssessment(fall.id, "erstabklaerung");
     recording.startRecording(person.id, target.id, `${person.vorname} ${person.nachname}`);
   };
 

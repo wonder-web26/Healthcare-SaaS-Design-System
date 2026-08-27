@@ -2,9 +2,9 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { Search, AlertTriangle, X, ChevronDown, Check } from "lucide-react";
 import {
-  getAllAssessments, getPerson, getOpenFieldCount, getActiveFieldCount,
+  getAllAssessments, klientFuerFormular, klientZustand, getOpenFieldCount, getActiveFieldCount,
   getAnlassLabel, getStatusLabel,
-  type PersonZustand, type Person, type Formular, type AssessmentAnlass,
+  type Person, type Formular, type AssessmentAnlass,
 } from "../../../lib/interrai/store";
 import { isoZuAnzeige } from "../../../lib/datum";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "../ui/DataTable";
@@ -34,9 +34,10 @@ function ableitenKennzeichen(a: EnrichedAssessment, bezug: Date): { stale: boole
 
 /* ── Zustand-Pille (fachliche Kategorie, nicht Abweichung — Text trägt die Bedeutung,
    Farbe bleibt zurückhaltend). ── */
-const ZUSTAND_PILL: Record<PersonZustand, { label: string; bg: string; color: string }> = {
-  mandat: { label: "Mandat", bg: "var(--status-warning-bg)", color: "var(--status-warning-text)" },
-  patient: { label: "Patient", bg: "var(--status-success-bg)", color: "var(--status-success-text)" },
+type KlientZustand = ReturnType<typeof klientZustand>;
+const ZUSTAND_PILL: Record<KlientZustand, { label: string; bg: string; color: string }> = {
+  im_onboarding: { label: "Mandat", bg: "var(--status-warning-bg)", color: "var(--status-warning-text)" },
+  aktiv: { label: "Patient", bg: "var(--status-success-bg)", color: "var(--status-success-text)" },
 };
 
 /* Assessment angereichert um Person + Feldzahlen (Basis für Liste und Ableitungen). */
@@ -52,12 +53,12 @@ const sortName = (a: EnrichedAssessment) => a.person ? `${a.person.nachname} ${a
 /* ── Status-Chips: kombinierbar, mit UND verknüpft. Status und Zustand sind je für sich
    ausschliessend; sinnvoll kombiniert wird über die Gruppen hinweg (z. B. „In Bearbeitung"
    + „Patient"). Jedes Prädikat ist rein. ── */
-type StatusChipId = "in_bearbeitung" | "abgeschlossen" | "mandat" | "patient";
+type StatusChipId = "in_bearbeitung" | "abgeschlossen" | "im_onboarding" | "patient";
 const STATUS_CHIPS: { id: StatusChipId; label: string; praedikat: (a: EnrichedAssessment) => boolean }[] = [
   { id: "in_bearbeitung", label: "In Bearbeitung", praedikat: a => a.status === "in_bearbeitung" },
   { id: "abgeschlossen", label: "Abgeschlossen", praedikat: a => a.status === "abgeschlossen" },
-  { id: "mandat", label: "Mandat", praedikat: a => a.person?.zustand === "mandat" },
-  { id: "patient", label: "Patient", praedikat: a => a.person?.zustand === "patient" },
+  { id: "im_onboarding", label: "Mandat", praedikat: a => !!a.person && klientZustand(a.person.id) === "im_onboarding" },
+  { id: "patient", label: "Patient", praedikat: a => !!a.person && klientZustand(a.person.id) === "aktiv" },
 ];
 
 /* ── Filterzustand: eine Struktur an einem Ort. Kein Segment (keine Verantwortlichen im
@@ -167,7 +168,7 @@ export function InterRAIListPage() {
   /* ── Ableitungen ── */
   const enriched = useMemo<EnrichedAssessment[]>(() => getAllAssessments().map(a => ({
     ...a,
-    person: getPerson(a.personId),
+    person: klientFuerFormular(a),
     openFields: getOpenFieldCount(a),
     activeFields: getActiveFieldCount(a),
   })), []);
@@ -204,7 +205,7 @@ export function InterRAIListPage() {
     ableitenKennzeichen(a, BEZUGSDATUM).stale ? "color-mix(in srgb, var(--status-warning-bg), transparent 68%)" : undefined;
 
   const zustandPille = (a: EnrichedAssessment) => {
-    const z = a.person ? ZUSTAND_PILL[a.person.zustand] : null;
+    const z = a.person ? ZUSTAND_PILL[klientZustand(a.person.id)] : null;
     if (!z) return null;
     return <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: z.bg, color: z.color, whiteSpace: "nowrap" }}>{z.label}</span>;
   };

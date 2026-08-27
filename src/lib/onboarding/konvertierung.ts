@@ -15,7 +15,7 @@ import { konvertiereRhythmusSubjekt, generiereRhythmusTickets, getTicketsFuerSub
 import { protokolliereAufteilung } from "./aufteilung-log";
 import { erstelleNachweis } from "../schulung/nachweis-store";
 import { getKlvVerordnungen } from "../klv/store";
-import { getPersonByOnboardingId, updatePersonZustand } from "../interrai/store";
+import { getPersonByOnboardingId, setPatientId } from "../interrai/store";
 import { schliessePatientOnboardingAb } from "../patienten/store";
 import { schliesseAngehoerigenOnboardingAb } from "../angehoerige/store";
 import { GEGENWART, GEGENWART_ISO } from "../gegenwart";
@@ -111,16 +111,18 @@ export function konvertiereOnboarding(
   const angehoerigerDatensatz = schliesseAngehoerigenOnboardingAb(onboardingId);
   const angehoerigerId = angehoerigerDatensatz?.id ?? "";
 
-  // 2. Update person state — assessments reference the person, not the
-  //    onboarding or patient. The assessment itself stays untouched.
+  // 2. Set the patient record ID on the Klient — the only mutation at
+  //    conversion. The lifecycle state (klientZustand) is derived from it, no
+  //    longer stored. Forms reference their Fall, not the Klient, and stay
+  //    untouched.
   const person = getPersonByOnboardingId(onboardingId);
   if (person && patientId) {
-    updatePersonZustand(person.id, "patient", patientId);
+    setPatientId(person.id, patientId);
   }
 
-  // InterRAI assessments are no longer rewritten during conversion.
-  // They reference the person by stable personId. The person's zustand
-  // changes above; the assessment remains unchanged.
+  // InterRAI forms are no longer rewritten during conversion. They reference
+  // their Fall by stable fallId; the Klient gains a patientId above, which
+  // flips klientZustand to "aktiv". The forms remain unchanged.
   const konvertierteBA: string[] = [];
 
   const konvertiertePP: string[] = [];

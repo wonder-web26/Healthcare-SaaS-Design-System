@@ -59,7 +59,7 @@ import {
   useKlvVerordnungen, positionHinzufuegen, positionAendern, positionEntfernen, positionenSetzen,
 } from "../../lib/klv/store";
 import { useRecording } from "../recording/RecordingContext";
-import { getPersonByOnboardingId, getOrCreatePersonForOnboarding, createAssessment } from "../../lib/interrai/store";
+import { getPersonByOnboardingId, getOrCreatePersonForOnboarding, offenenFallSicherstellen, createAssessment } from "../../lib/interrai/store";
 import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
 import type { KLVLeistung, KLVEinheit, Pflegediagnose, Massnahme, Pflegeziel, AerztlicheDiagnose } from "../../types/klinische-artefakte";
 import { NANDA_KATALOG } from "../../lib/mocks/nanda-enp-katalog";
@@ -1423,7 +1423,9 @@ function OnboardingTabBA({ onboardingId, patientVorname, patientNachname }: { on
     // danach über den Reiter wieder auffindbar, nicht verwaist.
     const erfassen = () => {
       const p = getOrCreatePersonForOnboarding(onboardingId, patientVorname || "Patient", patientNachname || "");
-      const a = createAssessment(p.id, "erstabklaerung");
+      // Kein Formular ohne Fall: für den Klienten den offenen Fall sicherstellen.
+      const fall = offenenFallSicherstellen(p.id);
+      const a = createAssessment(fall.id, "erstabklaerung");
       navigate(`/interrai-neu/${a.id}?returnTo=${encodeURIComponent(returnTo)}`);
     };
     return (
