@@ -66,7 +66,7 @@ import {
   formatDateTime,
   confirmVorschlag,
   getGespraech,
-  type NeuAssessment,
+  type Formular,
   type Vorschlag,
   type GespraechAbschnitt,
   type Bestaetigung,

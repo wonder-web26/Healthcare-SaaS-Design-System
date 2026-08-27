@@ -1,7 +1,7 @@
 /**
  * interRAI Assessment Store
  *
- * Person-centric, in-memory store for the new interRAI HC assessments.
+ * Person-centric, in-memory store for the new interRAI HC formulare.
  * A Person carries lifecycle state (mandat | patient). An assessment
  * references a person by stable personId — it never changes when the
  * person's state transitions from mandat to patient.
@@ -84,7 +84,7 @@ export interface GespraechAbschnitt {
   text: string;
 }
 
-export interface NeuAssessment {
+export interface Formular {
   id: string;
   personId: string;
   anlass: AssessmentAnlass;
@@ -110,7 +110,7 @@ export interface NeuAssessment {
 }
 
 /** Returns true if the assessment is completed and immutable. */
-export function istAbgeschlossen(a: NeuAssessment): boolean {
+export function istAbgeschlossen(a: Formular): boolean {
   return a.status === "abgeschlossen";
 }
 
@@ -131,7 +131,7 @@ export interface KlassifizierterVorschlag {
  * Classifies every suggestion against the current answer state.
  * Recomputed on every call — never cached.
  */
-export function klassifiziereVorschlaege(assessment: NeuAssessment): {
+export function klassifiziereVorschlaege(assessment: Formular): {
   abweichungen: KlassifizierterVorschlag[];
   neueWerte: KlassifizierterVorschlag[];
   gestuetzt: KlassifizierterVorschlag[];
@@ -158,7 +158,7 @@ export function klassifiziereVorschlaege(assessment: NeuAssessment): {
 
 /** Makes suggestions available for review (called after recording stops). */
 export function revealVorschlaege(assessmentId: string): void {
-  const a = assessments.get(assessmentId);
+  const a = formulare.get(assessmentId);
   if (!a || istAbgeschlossen(a)) return;
   a.vorschlaegeVerfuegbar = true;
 }
@@ -166,7 +166,7 @@ export function revealVorschlaege(assessmentId: string): void {
 // ── In-memory stores ─────────────────────────────────────────────────────────
 
 const persons = new Map<string, Person>();
-const assessments = new Map<string, NeuAssessment>();
+const formulare = new Map<string, Formular>();
 
 /** Conversation segments store — keyed by gespraechId */
 const gespraeche = new Map<string, GespraechAbschnitt[]>();
@@ -208,7 +208,7 @@ function initDemo() {
   }
 
   // Fritz Huber: Erstabklärung with AI suggestions from conversation
-  assessments.set("NEU-ASS-001", {
+  formulare.set("NEU-ASS-001", {
     id: "NEU-ASS-001",
     personId: "PERS-001",
     anlass: "erstabklaerung",
@@ -225,7 +225,7 @@ function initDemo() {
   });
 
   // Steiner, Hans-Rudolf: Erstabklärung — no suggestions (both states in demo)
-  assessments.set("NEU-ASS-002", {
+  formulare.set("NEU-ASS-002", {
     id: "NEU-ASS-002",
     personId: "PERS-002",
     anlass: "erstabklaerung",
@@ -298,22 +298,22 @@ export function updatePersonZustand(personId: string, zustand: PersonZustand, pa
 
 // ── Assessment API ───────────────────────────────────────────────────────────
 
-export function getAssessment(id: string): NeuAssessment | undefined {
-  return assessments.get(id);
+export function getAssessment(id: string): Formular | undefined {
+  return formulare.get(id);
 }
 
-export function getAssessmentsForPerson(personId: string): NeuAssessment[] {
-  return [...assessments.values()].filter((a) => a.personId === personId);
+export function getAssessmentsForPerson(personId: string): Formular[] {
+  return [...formulare.values()].filter((a) => a.personId === personId);
 }
 
-export function getAllAssessments(): NeuAssessment[] {
-  return [...assessments.values()];
+export function getAllAssessments(): Formular[] {
+  return [...formulare.values()];
 }
 
-export function createAssessment(personId: string, anlass: AssessmentAnlass): NeuAssessment {
-  const id = `NEU-ASS-${String(assessments.size + 1).padStart(3, "0")}`;
+export function createAssessment(personId: string, anlass: AssessmentAnlass): Formular {
+  const id = `NEU-ASS-${String(formulare.size + 1).padStart(3, "0")}`;
   const now = new Date().toISOString();
-  const a: NeuAssessment = {
+  const a: Formular = {
     id,
     personId,
     anlass,
@@ -328,7 +328,7 @@ export function createAssessment(personId: string, anlass: AssessmentAnlass): Ne
     abgeschlossenAm: null,
     abgeschlossenVon: null,
   };
-  assessments.set(id, a);
+  formulare.set(id, a);
   return a;
 }
 
@@ -336,7 +336,7 @@ export function updateAssessmentAnswers(
   assessmentId: string,
   answers: Record<string, string | null>,
 ): void {
-  const a = assessments.get(assessmentId);
+  const a = formulare.get(assessmentId);
   if (!a || istAbgeschlossen(a)) return;
   a.answers = answers;
   a.zuletztBearbeitetAm = new Date().toISOString();
@@ -357,7 +357,7 @@ export function confirmVorschlag(
    *  knows it (the store's own answer may already reflect the new value). */
   vorherManuellerWert?: string | null,
 ): void {
-  const a = assessments.get(assessmentId);
+  const a = formulare.get(assessmentId);
   if (!a || istAbgeschlossen(a)) return;
   const v = a.vorschlaege[feldCode];
   if (!v) return;
@@ -388,7 +388,7 @@ export function confirmVorschlag(
  * @returns the number of discarded suggestions, or -1 if already completed
  */
 export function abschliessenAssessment(assessmentId: string, person: string): number {
-  const a = assessments.get(assessmentId);
+  const a = formulare.get(assessmentId);
   if (!a || istAbgeschlossen(a)) return -1;
 
   const now = new Date().toISOString();
@@ -424,7 +424,7 @@ export function abschliessenAssessment(assessmentId: string, person: string): nu
 // ── Computed helpers ─────────────────────────────────────────────────────────
 
 /** Returns the number of active (non-skipped) fields that have no answer yet. */
-export function getOpenFieldCount(assessment: NeuAssessment): number {
+export function getOpenFieldCount(assessment: Formular): number {
   const stats = getInputFieldStats();
   const skip = evaluateSkipLogic(assessment.answers);
   let open = 0;
@@ -441,7 +441,7 @@ export function getOpenFieldCount(assessment: NeuAssessment): number {
 }
 
 /** Total active (non-skipped) fields for an assessment. */
-export function getActiveFieldCount(assessment: NeuAssessment): number {
+export function getActiveFieldCount(assessment: Formular): number {
   const stats = getInputFieldStats();
   const skip = evaluateSkipLogic(assessment.answers);
   let active = 0;

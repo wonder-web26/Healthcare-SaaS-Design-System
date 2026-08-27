@@ -4,7 +4,7 @@ import { Search, AlertTriangle, X, ChevronDown, Check } from "lucide-react";
 import {
   getAllAssessments, getPerson, getOpenFieldCount, getActiveFieldCount,
   getAnlassLabel, getStatusLabel,
-  type PersonZustand, type Person, type NeuAssessment, type AssessmentAnlass,
+  type PersonZustand, type Person, type Formular, type AssessmentAnlass,
 } from "../../../lib/interrai/store";
 import { isoZuAnzeige } from "../../../lib/datum";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "../ui/DataTable";
@@ -40,7 +40,7 @@ const ZUSTAND_PILL: Record<PersonZustand, { label: string; bg: string; color: st
 };
 
 /* Assessment angereichert um Person + Feldzahlen (Basis für Liste und Ableitungen). */
-type EnrichedAssessment = NeuAssessment & {
+type EnrichedAssessment = Formular & {
   person: Person | undefined;
   openFields: number;
   activeFields: number;

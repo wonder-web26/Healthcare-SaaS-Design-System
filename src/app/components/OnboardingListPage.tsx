@@ -7,7 +7,7 @@ import { leerZuletzt } from "../../lib/sortierung";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
 import { AuswahlDropdown } from "./ui/AuswahlDropdown";
 import { ListenGeruest } from "./ui/ListenGeruest";
-import { type OnboardingFall as OnboardingCase, onboardingFaelle as cases } from "../../lib/onboarding/faelle";
+import { type Onboarding as OnboardingCase, onboardingFaelle as cases } from "../../lib/onboarding/faelle";
 import { gegenwart } from "../../lib/gegenwart";
 
 /* ── Alle Ableitungen laufen gegen die Gegenwart statt gegen new Date(), damit

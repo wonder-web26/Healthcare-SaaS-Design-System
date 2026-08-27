@@ -1,5 +1,10 @@
 /**
- * Onboarding-Fälle (Mock) — EINE Quelle für Liste und Assistent.
+ * Onboarding-Vorgänge (Mock) — EINE Quelle für Liste und Assistent.
+ *
+ * Der Typ heisst `Onboarding`: er beschreibt den befristeten Prozess von der
+ * Anfrage bis zur Vertragsunterzeichnung — nicht den klinischen Fall (der ist
+ * eine eigene Entität im interRAI-Store). Die Kennung `OB-JJJJ-NNN` ist die
+ * Onboarding-Kennung.
  *
  * Zuvor lag diese Liste privat in OnboardingListPage; sie ist hierher gezogen,
  * damit Liste und Onboarding-Assistent dieselben Personen und dieselben
@@ -10,7 +15,7 @@
 import { type OnboardingStatus } from "./status";
 import { type NotizReferenz } from "../notizen/notizen";
 
-export interface OnboardingFall {
+export interface Onboarding {
   id: string;
   patientVorname: string;
   patientNachname: string;
@@ -43,7 +48,7 @@ export interface OnboardingFall {
    (P-2026-004x) — nicht auf einen eigenen Kennungsraum. Der Patient trägt
    umgekehrt die onboardingId seines Falls, damit patientFuerOnboarding()
    trifft. angehoerigerId verweist ebenso auf den Angehörigenbestand. */
-export const onboardingFaelle: OnboardingFall[] = [
+export const onboardingFaelle: Onboarding[] = [
   { id: "OB-2026-101", patientNachname: "Steiner", patientVorname: "Hans-Rudolf", patientId: "P-2026-0041", angehoeriger: "Vera Steiner", angehoerigerId: "A-2026-0101", currentStep: 6, pflichtdokErledigt: 7, pflichtdokGefordert: 8, pendenzenOffen: 3, pendenzenUeberfaellig: 1, validFrom: "2026-07-28", responsibleUserId: "keller", status: "in_bearbeitung", offen: 3, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", eintrittsdatum: "18.02.2026", letzteAenderung: "30.07.2026", kanton: "ZH" },
   { id: "OB-2026-102", patientNachname: "Hübscher-Wiederkehr", patientVorname: "Marie-Louise", patientId: "P-2026-0042", angehoeriger: "Beatrice Hübscher-Wiederkehr", angehoerigerId: "A-2026-0102", currentStep: 8, pflichtdokErledigt: 9, pflichtdokGefordert: 9, pendenzenOffen: 1, pendenzenUeberfaellig: 0, validFrom: "2026-08-01", responsibleUserId: "keller", status: "in_bearbeitung", offen: 1, abrechnungsstopp: false, verantwortlich: "Maria Keller", verantwortlichInitialen: "MK", eintrittsdatum: "20.02.2026", letzteAenderung: "29.07.2026", kanton: "SG" },
   { id: "OB-2026-103", patientNachname: "Rexhepi", patientVorname: "Fatmire", patientId: "P-2026-0043", angehoeriger: "Arben Rexhepi", angehoerigerId: "A-2026-0103", currentStep: 2, pflichtdokErledigt: 4, pflichtdokGefordert: 9, pendenzenOffen: 5, pendenzenUeberfaellig: 2, validFrom: "2026-08-03", responsibleUserId: "weber", status: "in_bearbeitung", offen: 5, abrechnungsstopp: true, abrechnungsstoppGrund: "Spezialbewilligung Migrationsamt noch ausstehend", verantwortlich: "Sandra Weber", verantwortlichInitialen: "SW", eintrittsdatum: "10.02.2026", letzteAenderung: "28.07.2026", kanton: "ZH" },
@@ -87,12 +92,12 @@ export function naechsteFallKennung(): string {
   return neu;
 }
 
-export function fallById(id: string | undefined | null): OnboardingFall | undefined {
+export function fallById(id: string | undefined | null): Onboarding | undefined {
   return id ? onboardingFaelle.find(f => f.id === id) : undefined;
 }
 
 /* ── Personen-Referenzen (Art + Kennung) und Namensauflösung aus der Quelle ── */
-export function patientRef(f: OnboardingFall): NotizReferenz { return { art: "patient", kennung: f.patientId }; }
-export function angehoerigerRef(f: OnboardingFall): NotizReferenz { return { art: "angehoeriger", kennung: f.angehoerigerId }; }
-export function patientAnzeigeName(f: OnboardingFall): string { return `${f.patientVorname} ${f.patientNachname}`; }
-export function angehoerigerAnzeigeName(f: OnboardingFall): string { return f.angehoeriger; }
+export function patientRef(f: Onboarding): NotizReferenz { return { art: "patient", kennung: f.patientId }; }
+export function angehoerigerRef(f: Onboarding): NotizReferenz { return { art: "angehoeriger", kennung: f.angehoerigerId }; }
+export function patientAnzeigeName(f: Onboarding): string { return `${f.patientVorname} ${f.patientNachname}`; }
+export function angehoerigerAnzeigeName(f: Onboarding): string { return f.angehoeriger; }
