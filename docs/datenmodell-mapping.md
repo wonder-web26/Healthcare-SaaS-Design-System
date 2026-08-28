@@ -63,3 +63,27 @@ Klienten (Peter Ammann).
   `nameHash`, `ahvHash`, verschlüsselte Spalten. Produktionsthemen.
 - **Dokumentierte Produktionsdefekte** — weder `caseNumberAtLock = NULL` bei
   Registrierungen noch `SpitexOnboarding.phase`, das nie fortschreitet.
+
+---
+
+## Benannte Abweichungen: Registrierung ↔ Patient (Herkunft `klient`)
+
+Das Registrierungsformular liest `klient`-Items aus dem **Patienten** durch und
+schreibt zurück (`src/lib/interrai/katalog/sda-herkunft.ts`). Drei Items lassen
+sich mit dem heutigen Patientenfeld **nicht** sauber durchlesen; sie werden
+**formularseitig** geführt (im Formular erfasst, beim Sperren materialisiert) —
+bewusst, statt Strings zu zerlegen oder Labels rückwärts auf Codes zu mappen.
+
+| Item | Patientenfeld heute | Warum untauglich | Auflösungsweg |
+|---|---|---|---|
+| `iA10` Wohnort PLZ/Ort | `adresse` (ein String inkl. Strasse) | BB6 will nur PLZ+Ort | **`adresse` in `plz` und `ort` trennen** (eigene Felder am Patienten) |
+| `CHA7a` Grundversicherung | `krankenkasse` (Label, aus Code) | Freitext-Name ≠ abgeleitetes Label | **Krankenkasse als Code führen** (Label nur zur Anzeige ableiten) |
+| `iB4` Sprache | `sprache` (Label) | Auswahl-Code ≠ Label | **Sprache als Code führen** (Label nur zur Anzeige ableiten) |
+
+**Folge — sichtbar dokumentiert, nicht stillschweigend:** Damit sind **Wohnort,
+Krankenkasse und Sprache doppelt erfasst** — im Onboarding (Patient) **und** im
+Registrierungsformular, nebeneinander, und sie **können auseinanderlaufen**. Das
+ist der Preis für den kleinen Umbau (kein Zerlegen/Rückmappen). Er ist
+vertretbar, entfällt aber erst, wenn die drei Felder oben nach dem Auflösungsweg
+umgestellt sind — dann werden auch diese drei Items durchgelesen statt doppelt
+geführt.
