@@ -104,7 +104,7 @@ export const demoSteinerPatient: PatientFormData = {
   // BB11: das bisherige "ja" war nicht auflösbar. Neu gesetzt auf 0 — die beiden
   // dokumentierten Eingriffe liegen 2019 und 2022 und damit weit ausserhalb der
   // 90-Tage-Periode; die Anamnese nennt keinen jüngeren Spitalaufenthalt.
-  spitalaufenthalte: "0", operationen: "Hüft-Totalprothese rechts (2019), Katarakt beidseits (2022)",
+  operationen: "Hüft-Totalprothese rechts (2019), Katarakt beidseits (2022)",
   // BB9: der bisherige Freitext war kein Listenwert. Neu gesetzt auf 1 — eigene
   // Wohnung im 2. Obergeschoss mit Lift, zu zweit bewohnt.
   allergien: "Penicillin",
@@ -115,14 +115,9 @@ export const demoSteinerPatient: PatientFormData = {
   wohnsituation: "1",
   formZusammenleben: "2",
   neuZusammenlebend: "0",
-  wohnvorgeschichtePflegeheim: "0",
-  wohnvorgeschichteBetreutesWohnen: "0",
-  wohnvorgeschichtePsychischeProbleme: "0",
-  wohnvorgeschichtePsychiatrie: "0",
-  wohnvorgeschichteGeistigeBehinderung: "0",
   etage: "2", liftVorhanden: "ja", treppen: "ja", personenImHaushalt: "2",
   anamneseText: "Zunehmende Gangunsicherheit, benötigt Unterstützung bei Körperpflege und Medikamentenmanagement. Kognitiv orientiert, Stimmung stabil.",
-  stimmungAktuell: "stabil", behandlungszielFokus: "Erhalt der Selbständigkeit, Sturzprävention",
+  stimmungAktuell: "stabil",
   atlAssessment: {
     ...emptyPatientForm.atlAssessment,
     "Körperpflege": { ja: true, bemerkungen: "Hilfe beim Duschen an drei Tagen pro Woche" },

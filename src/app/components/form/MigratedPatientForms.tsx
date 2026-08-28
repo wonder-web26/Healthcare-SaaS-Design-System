@@ -17,6 +17,8 @@ import { Combobox as FormSelect } from "./Combobox";
 import { FormField } from "./FormField";
 import { DateField } from "./DateField";
 import type { PatientFormData } from "../StepPatient";
+import { toast } from "sonner";
+import { leseVorgemapptesFeld, schreibeVorgemapptesFeld } from "../../../lib/interrai/vormapping";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
 import { SDA_WOHNSITUATION_OPTIONS } from "../../../lib/stammdaten/sda-wohnsituation";
@@ -260,29 +262,35 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
  * stehen unter eigener Zwischenüberschrift, damit erkennbar bleibt, was aus
  * dem Katalog stammt und was nicht.
  */
-export function TabWohnenUmfeldV2({ data, touched, onUpdate, onBlur }: TabProps) {
+export function TabWohnenUmfeldV2({ data, touched, onUpdate }: TabProps) {
   const t = (f: string) => touched.has(f);
   const bWohnsituation = katalogFeldBreite(SDA_WOHNSITUATION_OPTIONS);
   const bZusammenleben = katalogFeldBreite(SDA_ZUSAMMENLEBEN_OPTIONS);
-  const bJaNein = katalogFeldBreite(SDA_JA_NEIN_OPTIONS);
-
-  /** BB15a–e: fünf unabhängige Ja/Nein-Angaben auf derselben Werteliste. */
-  const wohnvorgeschichte: { feld: keyof PatientFormData; label: string }[] = [
-    { feld: "wohnvorgeschichtePflegeheim", label: "Alters- und Pflegeheim" },
-    { feld: "wohnvorgeschichteBetreutesWohnen", label: "Begleitetes oder betreutes Wohnen" },
-    { feld: "wohnvorgeschichtePsychischeProbleme", label: "Einrichtung für Personen mit psychischen Problemen" },
-    { feld: "wohnvorgeschichtePsychiatrie", label: "Psychiatrische Klinik oder Psychiatrieabteilung eines Spitals" },
-    { feld: "wohnvorgeschichteGeistigeBehinderung", label: "Einrichtung für Personen mit einer geistigen Behinderung" },
-  ];
 
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={Home} label="Wohnsituation" first />
-      <div style={bWohnsituation.zelle}>
-        <FormSelect label="Wohnsituation zur Zeit der Abklärung" required steuerelementMaxBreite={bWohnsituation.steuerelement}
-          value={data.wohnsituation || null} onChange={v => onUpdate("wohnsituation", v || "")} options={SDA_WOHNSITUATION_OPTIONS} placeholder="Bitte wählen"
-          hint="Wohnort für die Zeit, in der Spitex-Leistungen bezogen werden. Weilt die Person aktuell im Spital, wird der Ort erfasst, an dem die Leistung beginnen soll."
-          error={t("wohnsituation") && !filled(data.wohnsituation) ? "Pflichtfeld" : undefined} />
+      {/* Wohnsituation und Form des Zusammenlebens nebeneinander; Personen im
+          Haushalt unter der Wohnsituation. Neu zusammenlebend und die Wohn-
+          Vorgeschichte sind ins Registrierungsformular herausgelöst. */}
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", alignItems: "start" }}>
+        <div className="flex flex-col" style={{ rowGap: "var(--space-3)" }}>
+          <div style={bWohnsituation.zelle}>
+            <FormSelect label="Wohnsituation zur Zeit der Abklärung" required steuerelementMaxBreite={bWohnsituation.steuerelement}
+              value={data.wohnsituation || null} onChange={v => onUpdate("wohnsituation", v || "")} options={SDA_WOHNSITUATION_OPTIONS} placeholder="Bitte wählen"
+              hint="Wohnort für die Zeit, in der Spitex-Leistungen bezogen werden. Weilt die Person aktuell im Spital, wird der Ort erfasst, an dem die Leistung beginnen soll."
+              error={t("wohnsituation") && !filled(data.wohnsituation) ? "Pflichtfeld" : undefined} />
+          </div>
+          <div style={{ maxWidth: FELD_MAX.schmal }}>
+            <FormSelect label="Personen im Haushalt" value={data.personenImHaushalt || null} onChange={v => onUpdate("personenImHaushalt", v || "")} options={PERSONEN} placeholder="Wählen" hint="Inklusive Patient" />
+          </div>
+        </div>
+        <div style={bZusammenleben.zelle}>
+          <FormSelect label="Form des Zusammenlebens" required steuerelementMaxBreite={bZusammenleben.steuerelement}
+            value={data.formZusammenleben || null} onChange={v => onUpdate("formZusammenleben", v || "")} options={SDA_ZUSAMMENLEBEN_OPTIONS} placeholder="Bitte wählen"
+            hint="Massgebend ist die Situation für die Dauer der Abklärung. Vorübergehende Rahmenbedingungen zählen nicht — etwa wenn die Tochter nur bleibt, bis die Spitex-Leistung angelaufen ist."
+            error={t("formZusammenleben") && !filled(data.formZusammenleben) ? "Pflichtfeld" : undefined} />
+        </div>
       </div>
 
       <SectionHeader icon={Home} label="Ergänzende Angaben zum Zugang" />
@@ -291,38 +299,6 @@ export function TabWohnenUmfeldV2({ data, touched, onUpdate, onBlur }: TabProps)
         <SegmentedControl label="Lift vorhanden" value={data.liftVorhanden} onChange={v => onUpdate("liftVorhanden", v)} options={JA_NEIN} />
         <SegmentedControl label="Treppen" value={data.treppen} onChange={v => onUpdate("treppen", v)} options={JA_NEIN} />
       </div>
-
-      <SectionHeader icon={Users} label="Zusammenleben" />
-      <div style={bZusammenleben.zelle}>
-        <FormSelect label="Form des Zusammenlebens" required steuerelementMaxBreite={bZusammenleben.steuerelement}
-          value={data.formZusammenleben || null} onChange={v => onUpdate("formZusammenleben", v || "")} options={SDA_ZUSAMMENLEBEN_OPTIONS} placeholder="Bitte wählen"
-          hint="Massgebend ist die Situation für die Dauer der Abklärung. Vorübergehende Rahmenbedingungen zählen nicht — etwa wenn die Tochter nur bleibt, bis die Spitex-Leistung angelaufen ist."
-          error={t("formZusammenleben") && !filled(data.formZusammenleben) ? "Pflichtfeld" : undefined} />
-      </div>
-      <div style={{ marginTop: "var(--space-4)" }}>
-        <div style={bJaNein.zelle}>
-          <FormSelect label="Lebt die Person neu mit jemand anderem zusammen" required steuerelementMaxBreite={bJaNein.steuerelement}
-            value={data.neuZusammenlebend || null} onChange={v => onUpdate("neuZusammenlebend", v || "")} options={SDA_JA_NEIN_OPTIONS} placeholder="Bitte wählen"
-            hint="Verglichen mit vor 90 Tagen oder seit der letzten Beurteilung. Auch wenn die Partnerin oder der Partner in dieser Zeit verstorben ist."
-            error={t("neuZusammenlebend") && !filled(data.neuZusammenlebend) ? "Pflichtfeld" : undefined} />
-        </div>
-      </div>
-
-      <SectionHeader icon={Users} label="Ergänzende Angaben" />
-      <div style={{ maxWidth: FELD_MAX.schmal }}>
-        <FormSelect label="Personen im Haushalt" value={data.personenImHaushalt || null} onChange={v => onUpdate("personenImHaushalt", v || "")} options={PERSONEN} placeholder="Wählen" hint="Inklusive Patient" />
-      </div>
-
-      <SectionHeader icon={Home} label="Wohn-Vorgeschichte der letzten 5 Jahre" />
-      <div className="flex flex-col" style={{ rowGap: "var(--space-3)" }}>
-        {wohnvorgeschichte.map(({ feld, label }) => (
-          <div key={feld} style={bJaNein.zelle}>
-            <FormSelect label={label} required steuerelementMaxBreite={bJaNein.steuerelement}
-              value={(data[feld] as string) || null} onChange={v => onUpdate(feld, v || "")} options={SDA_JA_NEIN_OPTIONS} placeholder="Bitte wählen"
-              error={t(feld) && !filled(data[feld] as string) ? "Pflichtfeld" : undefined} />
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -330,9 +306,17 @@ export function TabWohnenUmfeldV2({ data, touched, onUpdate, onBlur }: TabProps)
 /* ══════════════════════════════════════════
    TAB 3: ANAMNESE (migrated)
    ══════════════════════════════════════════ */
-export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
+export function TabAnamneseV2({ data, touched, onUpdate, onBlur, onboardingId }: TabProps & { onboardingId?: string }) {
   const t = (f: string) => touched.has(f);
-  // expandedAnamnese state entfernt — Erweiterte Anamnese ist dauerhaft sichtbar
+  const [, forceAnamnese] = useState(0);
+  // BB11 spitalaufenthalte ist vorgemappt (iA13) → Wert aus dem Registrierungs-
+  // formular; Schreiben legt es bei Bedarf an (§2). Ohne Onboarding kein Ziel.
+  const spital = onboardingId ? String(leseVorgemapptesFeld(onboardingId, "spitalaufenthalte") ?? "") : "";
+  const setSpital = (v: string) => {
+    if (!onboardingId) return;
+    try { schreibeVorgemapptesFeld(onboardingId, "spitalaufenthalte", v); forceAnamnese((n) => n + 1); }
+    catch (e) { toast(e instanceof Error ? e.message : "Nicht speicherbar"); }
+  };
 
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
@@ -354,7 +338,7 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zeit seit dem letzten Spitalaufenthalt" value={data.spitalaufenthalte || null} onChange={v => onUpdate("spitalaufenthalte", v || "")} options={SDA_SPITALAUFENTHALT_OPTIONS} placeholder="Bitte wählen" /></div>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zeit seit dem letzten Spitalaufenthalt" value={spital || null} onChange={v => setSpital(v || "")} options={SDA_SPITALAUFENTHALT_OPTIONS} placeholder="Bitte wählen" /></div>
         <TextareaInput label="Operationen" value={data.operationen} onChange={v => onUpdate("operationen", v)} placeholder="z.B. Hüft-TEP rechts (2024), Knie-TEP links (2022), Appendektomie (2018)" rows={4} />
       </div>
 
@@ -385,7 +369,7 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
           </div>
         )}
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Stimmung" value={data.stimmungAktuell || null} onChange={v => onUpdate("stimmungAktuell", v || "")} options={STIMMUNG} placeholder="Stimmung einschätzen" /></div>
-        <TextareaInput label="Behandlungsziel" value={data.behandlungszielFokus} onChange={v => onUpdate("behandlungszielFokus", v)} placeholder="Hauptziel der Pflege und Betreuung" />
+        {/* BB8 Behandlungsziel (behandlungszielFokus) ins Registrierungsformular herausgelöst. */}
       </div>
     </div>
   );

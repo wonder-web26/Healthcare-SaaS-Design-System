@@ -199,23 +199,17 @@ export interface PatientFormData {
   brille: string;
   hoergeraet: string;
   chronischeErkrankungen: string;
-  /** BB11 — Code aus lib/stammdaten/sda-spitalaufenthalt. */
-  spitalaufenthalte: string;
+  // BB11 spitalaufenthalte ist vorgemappt (iA13) und lebt im Registrierungsformular.
   operationen: string;
   allergien: string;
-  /* Reiter Wohnen — BB9, BB10, BB15 */
+  /* Reiter Wohnen — BB9, BB10a (klient, durchgelesen). BB10b und BB15a–e sind ins
+     Registrierungsformular herausgelöst. */
   /** BB9 — Code aus lib/stammdaten/sda-wohnsituation. */
   wohnsituation: string;
   /** BB10a — Code aus lib/stammdaten/sda-zusammenleben. */
   formZusammenleben: string;
-  /** BB10b — Code aus lib/stammdaten/sda-ja-nein. */
+  /** BB10b — Patientenfeld, im Registrierungsformular erfasst; hier ohne Eingabe. */
   neuZusammenlebend: string;
-  /* BB15a–e — Wohn-Vorgeschichte der letzten fünf Jahre, je Code aus sda-ja-nein. */
-  wohnvorgeschichtePflegeheim: string;
-  wohnvorgeschichteBetreutesWohnen: string;
-  wohnvorgeschichtePsychischeProbleme: string;
-  wohnvorgeschichtePsychiatrie: string;
-  wohnvorgeschichteGeistigeBehinderung: string;
   etage: string;
   liftVorhanden: string;
   treppen: string;
@@ -229,7 +223,7 @@ export interface PatientFormData {
   sturzLetzte6Monate: string;
   sturzVorEinemJahr: string;
   stimmungAktuell: string;
-  behandlungszielFokus: string;
+  // BB8 behandlungszielFokus entfernt (nur im Registrierungsformular).
 
   /* Tab 4 – Aktivitäten (ATL) */
   atlAssessment: Record<string, ATLEntry>;
@@ -315,17 +309,11 @@ export const emptyPatientForm: PatientFormData = {
   brille: "nein",
   hoergeraet: "nein",
   chronischeErkrankungen: "",
-  spitalaufenthalte: "",
   operationen: "",
   allergien: "",
   wohnsituation: "",
   formZusammenleben: "",
   neuZusammenlebend: "",
-  wohnvorgeschichtePflegeheim: "",
-  wohnvorgeschichteBetreutesWohnen: "",
-  wohnvorgeschichtePsychischeProbleme: "",
-  wohnvorgeschichtePsychiatrie: "",
-  wohnvorgeschichteGeistigeBehinderung: "",
   etage: "",
   liftVorhanden: "nein",
   treppen: "nein",
@@ -337,7 +325,6 @@ export const emptyPatientForm: PatientFormData = {
   sturzLetzte6Monate: "nein",
   sturzVorEinemJahr: "nein",
   stimmungAktuell: "",
-  behandlungszielFokus: "",
 
   atlAssessment: buildEmptyATL(),
 
@@ -435,15 +422,11 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
     case "wohnen": {
+      // neuZusammenlebend und die Wohn-Vorgeschichte sind herausgelöst; hier nur
+      // noch Wohnsituation und Form des Zusammenlebens.
       const checks = [
         filled(data.wohnsituation),
         filled(data.formZusammenleben),
-        filled(data.neuZusammenlebend),
-        filled(data.wohnvorgeschichtePflegeheim),
-        filled(data.wohnvorgeschichteBetreutesWohnen),
-        filled(data.wohnvorgeschichtePsychischeProbleme),
-        filled(data.wohnvorgeschichtePsychiatrie),
-        filled(data.wohnvorgeschichteGeistigeBehinderung),
       ];
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
@@ -722,7 +705,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
             ? <VitaldatenTab patientId={onboardingId} />
             : <OhneFallkennung />)}
           {activeTab === "anamnese" && (
-            <TabAnamneseV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
+            <TabAnamneseV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} onboardingId={onboardingId} />
           )}
           {activeTab === "aktivitaeten" && (
             <TabAktivitaetenV2 data={data} onUpdateATL={updateATL} />
