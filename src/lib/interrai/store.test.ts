@@ -27,6 +27,7 @@ import {
   type EroeffnungsErgebnis,
 } from "./store";
 import { SDA_KATALOG } from "./katalog/sda-katalog";
+import { SDA_HERKUNFT } from "./katalog/sda-herkunft";
 
 const grundVon = (r: EroeffnungsErgebnis): string => (r.zulaessig ? "" : r.grund);
 
@@ -246,6 +247,19 @@ for (const [code, route] of ROUTEN) {
   const hc = createFormular(fHc.id, "interrai_hc");
   for (const item of SDA_KATALOG) hc.answers[item.iCode] = "x";
   assert.ok(getOpenFieldCount(hc) > 0, "HC mit 31 i-Code-Antworten bleibt unvollständig");
+}
+
+// ── Herkunftszuordnung: jeder i-Code genau eine Herkunft (§1/V6) ─────────────
+{
+  const herk = SDA_HERKUNFT as Record<string, string>;
+  assert.equal(Object.keys(herk).length, SDA_KATALOG.length); // alle 31
+  for (const item of SDA_KATALOG) {
+    assert.ok(["klient", "fall", "formular"].includes(herk[item.iCode]), `${item.iCode} ohne gültige Herkunft`);
+  }
+  const zaehle = (h: string) => SDA_KATALOG.filter((i) => herk[i.iCode] === h).length;
+  assert.equal(zaehle("fall"), 1);      // iA5d
+  assert.equal(zaehle("klient"), 13);
+  assert.equal(zaehle("formular"), 17);
 }
 
 console.log("store.test.ts: alle Zusicherungen erfüllt");
