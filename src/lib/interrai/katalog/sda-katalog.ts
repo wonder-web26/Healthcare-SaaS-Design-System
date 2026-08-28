@@ -1,19 +1,29 @@
 // AUTOGENERIERT – nicht von Hand bearbeiten.
-// Quelle: 20211106_TABE_SDA_V1_5.xlsx, Blatt iCODES (Spitex Schweiz), unverändert übernommen.
+// Quelle: 20211106_TABE_SDA_V1_5.xlsx, Blatt iCODES (Spitex Schweiz), unveraendert uebernommen.
 //
 // Formular «Stammdaten und Angaben (SDA)», produktiv der Formulartyp `registration`.
 // 31 Items in zwei Bereichen: AA Informationen zur Anmeldung, BB Stammdaten und Angaben.
 //
-// WICHTIG
-// - Schlüssel ist ausschliesslich `iCode`. Die sichtbare Nummer ist NICHT daraus ableitbar:
-//   BB1a traegt iA1c, BB1b traegt iA1a, AA2 traegt iB2. Es gibt kein Muster.
-// - 18 Items teilt das SDA mit dem interRAI HC unter anderer sichtbarer Nummer,
-//   aber unter demselben i-Code. Ueber den i-Code gespeichert, wird nichts doppelt erfasst.
-// - `scaleRoh` ist der Wortlaut der Antwortspalte aus der Quelle. `optionen` ist nur
-//   dort gefuellt, wo jede Zeile eindeutig dem Muster «N. Text» folgt. Wo nicht,
-//   bleibt die Liste leer und `scaleRoh` ist massgebend.
-// - BB16 «Einschaetzung der Situation» steuert die Route des Falls. Das Mapping
-//   gehoert nicht in dieses Modul, sondern bleibt an einer Stelle im Code.
+// SCHLUESSEL IST AUSSCHLIESSLICH `iCode`.
+// Die sichtbare Nummer ist NICHT daraus ableitbar: BB1a traegt iA1c, BB1b traegt iA1a,
+// AA2 traegt iB2, BB12 traegt CHB3. Es gibt kein Muster.
+// 18 Items teilt das SDA mit dem interRAI HC unter anderer sichtbarer Nummer,
+// aber unter demselben i-Code.
+//
+// GRUPPEN
+// Sechs Nummernpraefixe fassen mehrere Items zusammen. Vier Gruppentitel stehen als
+// eigene Zeile in der Quelle (BB5, BB7, BB10, BB17). BB15 ist zugleich Item und Kopf
+// seiner Untereinträge. Fuer BB1 fuehrt die Quelle KEINEN Titel — `titel` ist dort
+// bewusst null und darf nicht erfunden werden.
+//
+// BEREICHS-PRAEZISIERUNG
+// Je Bereich existiert im Ausdruck ein Freitextfeld «Individuelle Praezisierungen».
+// Es ist KEIN Item der Quelle und deshalb nicht in diesem Katalog. Es ist ein Systemfeld
+// je Formular und Bereich. Anders als beim interRAI HC liegt die Praezisierung beim SDA
+// auf Bereichsebene, nicht auf Itemebene.
+//
+// `scaleRoh` ist der Wortlaut der Antwortspalte. `optionen` ist nur dort gefuellt, wo
+// jede Zeile eindeutig dem Muster «N. Text» folgt. Sonst ist `scaleRoh` massgebend.
 
 export type SdaItemTyp = 'auswahl' | 'freitext' | 'datum' | 'unterschrift'
 
@@ -22,21 +32,38 @@ export type SdaAntwortOption = {
   readonly text: string
 }
 
+export type SdaGruppe = {
+  readonly nummer: string
+  readonly titel: string | null
+  readonly bereich: string
+}
+
 export type SdaItem = {
   readonly iCode: string
   readonly nummer: string
   readonly bereich: string
+  readonly gruppe: string | null
   readonly text: string
   readonly typ: SdaItemTyp
   readonly optionen: readonly SdaAntwortOption[]
   readonly scaleRoh: string
 }
 
+export const SDA_GRUPPEN: readonly SdaGruppe[] = [
+  { nummer: 'BB1', titel: null, bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN' },
+  { nummer: 'BB10', titel: 'Form des Zusammenlebens', bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN' },
+  { nummer: 'BB15', titel: 'Wohn-Vorgeschichte in den letzten 5 Jahren Kodieren Sie alle Einrichtungen, in denen die Person in den letzten 5 Jahren vor der Eröffnung des Dossiers gelebt hat (B1 AA2).', bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN' },
+  { nummer: 'BB17', titel: 'Verantwortliche Personen', bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN' },
+  { nummer: 'BB5', titel: 'Nummern', bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN' },
+  { nummer: 'BB7', titel: 'Versicherungen', bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN' },
+] as const
+
 export const SDA_KATALOG: readonly SdaItem[] = [
   {
     iCode: 'CHAA1',
     nummer: 'AA1',
     bereich: 'BEREICH AA: INFORMATIONEN ZUR ANMELDUNG',
+    gruppe: null,
     text: 'Eröffnungsgrund',
     typ: 'auswahl',
     optionen: [
@@ -49,6 +76,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iB2',
     nummer: 'AA2',
     bereich: 'BEREICH AA: INFORMATIONEN ZUR ANMELDUNG',
+    gruppe: null,
     text: 'Datum der Eröffnung des Dossiers',
     typ: 'datum',
     optionen: [],
@@ -58,6 +86,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'CHAA3',
     nummer: 'AA3',
     bereich: 'BEREICH AA: INFORMATIONEN ZUR ANMELDUNG',
+    gruppe: null,
     text: 'Anmeldende Person, Institution',
     typ: 'auswahl',
     optionen: [
@@ -77,6 +106,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA1c',
     nummer: 'BB1a',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB1',
     text: 'Name',
     typ: 'freitext',
     optionen: [],
@@ -86,6 +116,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA1a',
     nummer: 'BB1b',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB1',
     text: 'Vorname(n)',
     typ: 'freitext',
     optionen: [],
@@ -95,6 +126,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA2',
     nummer: 'BB2',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Geschlecht',
     typ: 'auswahl',
     optionen: [
@@ -108,6 +140,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA3',
     nummer: 'BB3',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Geburtsdatum',
     typ: 'datum',
     optionen: [],
@@ -117,6 +150,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA4',
     nummer: 'BB4',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Zivilstand',
     typ: 'auswahl',
     optionen: [
@@ -131,6 +165,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA5a',
     nummer: 'BB5a',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB5',
     text: 'Versicherten-Nummer',
     typ: 'freitext',
     optionen: [],
@@ -140,6 +175,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA5d',
     nummer: 'BB5b',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB5',
     text: 'Interne Fallnummer',
     typ: 'freitext',
     optionen: [],
@@ -149,6 +185,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA10',
     nummer: 'BB6',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Wohnort: Postleitzahl, Ort',
     typ: 'freitext',
     optionen: [],
@@ -158,6 +195,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'CHA7a',
     nummer: 'BB7a',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB7',
     text: 'Krankenkasse: Grundversicherung',
     typ: 'freitext',
     optionen: [],
@@ -167,6 +205,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'CHA7b',
     nummer: 'BB7b',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB7',
     text: 'Krankenkasse: Zusatzversicherung',
     typ: 'freitext',
     optionen: [],
@@ -176,6 +215,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'CHA7c',
     nummer: 'BB7c',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB7',
     text: 'Invaliden-, Unfall-, Militärversicherung',
     typ: 'freitext',
     optionen: [],
@@ -185,6 +225,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iB1a',
     nummer: 'BB8',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Ziele der Person - Notieren Sie das primäre Behandlungsziel',
     typ: 'freitext',
     optionen: [],
@@ -194,6 +235,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA11b',
     nummer: 'BB9',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Wohnsituation zur Zeit der Abklärung',
     typ: 'auswahl',
     optionen: [
@@ -217,6 +259,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA12a',
     nummer: 'BB10a',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB10',
     text: 'Form des Zusammenlebens',
     typ: 'auswahl',
     optionen: [
@@ -235,6 +278,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA12b',
     nummer: 'BB10b',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB10',
     text: 'Lebt die Person neu mit jemand anderem zusammen (im Vergleich zu vor 90 Tagen oder seit der letzten Beurteilung) – z.B. zog bei jemandem ein, jemand zog bei der Person ein',
     typ: 'auswahl',
     optionen: [
@@ -247,6 +291,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iA13',
     nummer: 'BB11',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Zeit seit dem letzten Spitalaufenthalt Kodieren Sie den letzten Aufenthalt in den LETZTEN 90 TAGEN',
     typ: 'auswahl',
     optionen: [
@@ -263,6 +308,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'CHB3',
     nummer: 'BB12',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Staatsangehörigkeit',
     typ: 'freitext',
     optionen: [],
@@ -272,6 +318,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iB4',
     nummer: 'BB13',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Üblicherweise gesprochene Sprache',
     typ: 'auswahl',
     optionen: [
@@ -303,6 +350,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iB11',
     nummer: 'BB14',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Übersetzer/in notwendig',
     typ: 'auswahl',
     optionen: [
@@ -315,6 +363,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iB5',
     nummer: 'BB15',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Wohn-Vorgeschichte in den letzten 5 Jahren Kodieren Sie alle Einrichtungen, in denen die Person in den letzten 5 Jahren vor der Eröffnung des Dossiers gelebt hat (B1 AA2).',
     typ: 'freitext',
     optionen: [],
@@ -324,6 +373,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iB5a',
     nummer: 'BB15a',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB15',
     text: 'Alters- und Pflegeheim',
     typ: 'auswahl',
     optionen: [
@@ -336,6 +386,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iB5b',
     nummer: 'BB15b',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB15',
     text: 'Begleitetes oder betreutes Wohnen',
     typ: 'auswahl',
     optionen: [
@@ -348,6 +399,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iB5e',
     nummer: 'BB15c',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB15',
     text: 'Einrichtung für Personen mit psychischen Problemen, z.B. Wohngruppen für Menschen mit psychischen Erkrankungen',
     typ: 'auswahl',
     optionen: [
@@ -360,6 +412,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iB5c',
     nummer: 'BB15d',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB15',
     text: 'Psychiatrische Klinik oder Psychiatrieabteilung eines Spitals',
     typ: 'auswahl',
     optionen: [
@@ -372,6 +425,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'iB5d',
     nummer: 'BB15e',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB15',
     text: 'Einrichtung für Personen mit einer geistigen Behinderung',
     typ: 'auswahl',
     optionen: [
@@ -384,6 +438,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'CHBB16',
     nummer: 'BB16',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: null,
     text: 'Einschätzung der Situation',
     typ: 'auswahl',
     optionen: [
@@ -401,6 +456,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'CHBB17a',
     nummer: 'BB17a',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB17',
     text: 'Unterschrift der Personen, die mit dem Formular SDA gearbeitet haben.',
     typ: 'unterschrift',
     optionen: [],
@@ -410,6 +466,7 @@ export const SDA_KATALOG: readonly SdaItem[] = [
     iCode: 'CHBB17b',
     nummer: 'BB17b',
     bereich: 'BEREICH BB: STAMMDATEN UND ANGABEN',
+    gruppe: 'BB17',
     text: 'Unterschrift der zuständigen Person, die das Formular SDA abschliesst',
     typ: 'datum',
     optionen: [],
@@ -424,7 +481,7 @@ export function sdaItem(iCode: string): SdaItem | undefined {
   return NACH_ICODE.get(iCode)
 }
 
-/** Nur fuer Anzeige und Debugging. Niemals als Schluessel verwenden. */
+/** Nur fuer Anzeige und Fehlersuche. Niemals als Schluessel verwenden. */
 export function sdaItemNachNummer(nummer: string): SdaItem | undefined {
   return NACH_NUMMER.get(nummer)
 }
@@ -432,3 +489,11 @@ export function sdaItemNachNummer(nummer: string): SdaItem | undefined {
 export const SDA_BEREICHE: readonly string[] = Array.from(
   new Set(SDA_KATALOG.map((i) => i.bereich)),
 )
+
+export function sdaItemsFuerBereich(bereich: string): readonly SdaItem[] {
+  return SDA_KATALOG.filter((i) => i.bereich === bereich)
+}
+
+export function sdaGruppe(nummer: string): SdaGruppe | undefined {
+  return SDA_GRUPPEN.find((g) => g.nummer === nummer)
+}
