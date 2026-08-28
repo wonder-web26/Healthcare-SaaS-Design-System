@@ -882,11 +882,11 @@ export function getStatusLabel(status: FormularStatus): string {
 /** Display label for a form type (used in the list). */
 export function getTypLabel(typ: FormularTyp): string {
   switch (typ) {
-    case "registration": return "Registrierung";
+    case "registration": return "interRAI SDA";
     case "interrai_hc": return "interRAI HC";
     case "interrai_cmh": return "interRAI CMH";
     case "housekeeping": return "Hauswirtschaft";
-    case "discharge": return "Entlassung";
+    case "discharge": return "interRAI Entlassung";
   }
 }
 
