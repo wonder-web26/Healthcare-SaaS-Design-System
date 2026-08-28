@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { Search, AlertTriangle, X, ChevronDown, Check } from "lucide-react";
 import {
   getAllAssessments, klientFuerFormular, klientZustand, getOpenFieldCount, getActiveFieldCount,
-  getAnlassLabel, getStatusLabel,
+  getAnlassLabel, getStatusLabel, getTypLabel,
   type Person, type Formular, type AssessmentAnlass,
 } from "../../../lib/interrai/store";
 import { isoZuAnzeige } from "../../../lib/datum";
@@ -53,10 +53,10 @@ const sortName = (a: EnrichedAssessment) => a.person ? `${a.person.nachname} ${a
 /* ── Status-Chips: kombinierbar, mit UND verknüpft. Status und Zustand sind je für sich
    ausschliessend; sinnvoll kombiniert wird über die Gruppen hinweg (z. B. „In Bearbeitung"
    + „Patient"). Jedes Prädikat ist rein. ── */
-type StatusChipId = "in_bearbeitung" | "abgeschlossen" | "im_onboarding" | "patient";
+type StatusChipId = "in_bearbeitung" | "gesperrt" | "im_onboarding" | "patient";
 const STATUS_CHIPS: { id: StatusChipId; label: string; praedikat: (a: EnrichedAssessment) => boolean }[] = [
   { id: "in_bearbeitung", label: "In Bearbeitung", praedikat: a => a.status === "in_bearbeitung" },
-  { id: "abgeschlossen", label: "Abgeschlossen", praedikat: a => a.status === "abgeschlossen" },
+  { id: "gesperrt", label: "Gesperrt", praedikat: a => a.status === "gesperrt" },
   { id: "im_onboarding", label: "Mandat", praedikat: a => !!a.person && klientZustand(a.person.id) === "im_onboarding" },
   { id: "patient", label: "Patient", praedikat: a => !!a.person && klientZustand(a.person.id) === "aktiv" },
 ];
@@ -84,8 +84,8 @@ function filterAssessments(list: EnrichedAssessment[], f: FilterZustand): Enrich
 /* ── Sortierung: jede Spalte; Kennzeichen nach Rangfolge, „zuletzt" chronologisch,
    „offen" numerisch, sonst alphabetisch. Leerwerte immer ans Ende. Standard: zuletzt
    bearbeitet, neueste zuerst. ── */
-type SortKey = "kennzeichen" | "person" | "anlass" | "status" | "offen" | "zuletzt";
-const SORT_LABEL: Record<SortKey, string> = { kennzeichen: "Kennzeichen", person: "Person", anlass: "Anlass", status: "Status", offen: "offenen Feldern", zuletzt: "zuletzt bearbeitet" };
+type SortKey = "kennzeichen" | "person" | "typ" | "status" | "offen" | "zuletzt";
+const SORT_LABEL: Record<SortKey, string> = { kennzeichen: "Kennzeichen", person: "Person", typ: "Formular", status: "Status", offen: "offenen Feldern", zuletzt: "zuletzt bearbeitet" };
 
 function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): number {
   if (la && lb) return 0;
@@ -100,7 +100,7 @@ function sortAssessments(list: EnrichedAssessment[], key: SortKey, dir: "asc" | 
     switch (key) {
       case "kennzeichen": return f * (staleRang(a) - staleRang(b)) || b.zuletztBearbeitetAm.localeCompare(a.zuletztBearbeitetAm);
       case "person": return leerZuletzt(!a.person, !b.person, f, () => sortName(a).localeCompare(sortName(b), "de"));
-      case "anlass": return f * (getAnlassLabel(a.anlass).localeCompare(getAnlassLabel(b.anlass), "de") || a.zuletztBearbeitetAm.localeCompare(b.zuletztBearbeitetAm));
+      case "typ": return f * (getTypLabel(a.typ).localeCompare(getTypLabel(b.typ), "de") || a.zuletztBearbeitetAm.localeCompare(b.zuletztBearbeitetAm));
       case "status": return f * (a.status.localeCompare(b.status) || a.zuletztBearbeitetAm.localeCompare(b.zuletztBearbeitetAm));
       case "offen": return f * ((a.openFields - b.openFields) || a.zuletztBearbeitetAm.localeCompare(b.zuletztBearbeitetAm));
       case "zuletzt": default: return f * a.zuletztBearbeitetAm.localeCompare(b.zuletztBearbeitetAm);
@@ -226,16 +226,16 @@ export function InterRAIListPage() {
           {zustandPille(a)}
         </span>
       ) },
-    { id: "anlass", label: "Anlass", anteil: 20, minCh: 18, align: "left", sortierbar: true,
-      render: a => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{getAnlassLabel(a.anlass)}</span> },
+    { id: "typ", label: "Formular", anteil: 20, minCh: 18, align: "left", sortierbar: true,
+      render: a => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{getTypLabel(a.typ)}{a.typ === "hc" ? ` · ${getAnlassLabel(a.anlass)}` : ""}</span> },
     { id: "status", label: "Status", anteil: 12, minCh: 13, align: "left", sortierbar: true,
       // Farbe nur für die Abweichung (Kennzeichen). Status selbst zurückhaltend: „In
       // Bearbeitung" neutral (Arbeitsnorm), „Abgeschlossen" als positiver Abschluss.
-      render: a => { const done = a.status === "abgeschlossen"; return (
+      render: a => { const done = a.status === "gesperrt"; return (
         <span style={{ padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap", background: done ? "var(--status-success-bg)" : "var(--bg-secondary)", color: done ? "var(--status-success-text)" : "var(--text-secondary)" }}>{getStatusLabel(a.status)}</span>
       ); } },
     { id: "offen", label: "Offen", anteil: 8, minCh: 10, align: "right", sortierbar: true,
-      render: a => a.status === "abgeschlossen"
+      render: a => a.status === "gesperrt"
         ? <span style={{ fontFamily: "monospace", fontSize: "0.8125rem", color: "var(--text-tertiary)" }}>–</span>
         : <span style={{ whiteSpace: "nowrap" }}><span style={{ fontFamily: "monospace", fontVariantNumeric: "tabular-nums", fontSize: "0.8125rem", color: a.openFields === 0 ? "var(--status-success-text)" : "var(--text-primary)", fontWeight: a.openFields === 0 ? "var(--weight-medium)" : "var(--weight-regular)" }}>{a.openFields}</span><span style={{ marginLeft: 4, fontSize: "0.75rem", color: "var(--text-tertiary)" }}>offen</span></span> },
     { id: "zuletzt", label: "Zuletzt bearbeitet", anteil: 22, minCh: 20, align: "left", sortierbar: true,

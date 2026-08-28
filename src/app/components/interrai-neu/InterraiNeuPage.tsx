@@ -62,8 +62,8 @@ import {
   updateAssessmentAnswers,
   getOpenFieldCount,
   getActiveFieldCount,
-  abschliessenAssessment,
-  istAbgeschlossen,
+  sperreFormular,
+  istGesperrt,
   formatDateTime,
   confirmVorschlag,
   getGespraech,
@@ -74,6 +74,7 @@ import {
 } from "../../../lib/interrai/store";
 import { ansichtPfad } from "../Patient360Page";
 import { useRecording } from "../../recording/RecordingContext";
+import { toast } from "sonner";
 import { AppButton } from "../ui/AppButton";
 import { StatusMarke } from "../ui/StatusMarke";
 import { AbklaerungszusammenfassungPanel } from "./abklaerung/AbklaerungszusammenfassungPanel";
@@ -629,7 +630,7 @@ export function InterraiNeuPage() {
   const [abschlussDialogOpen, setAbschlussDialogOpen] = useState(false);
 
   const recording = useRecording();
-  const isReadOnly = assessment ? istAbgeschlossen(assessment) : false;
+  const isReadOnly = assessment ? istGesperrt(assessment) : false;
   const isRecordingThisPerson = recording.phase === "recording" && recording.session?.personId === person?.id;
 
   // Compute per-field suggestion map from assessment vorschlaege
@@ -817,12 +818,14 @@ export function InterraiNeuPage() {
     setPendingSkipClear(null);
   }, []);
 
-  // Sync answers back to store whenever they change (survives navigation)
+  // Sync answers back to store whenever they change (survives navigation).
+  // Never for a locked form: updateAssessmentAnswers now throws on a gesperrt
+  // form, and this effect also runs on mount when merely VIEWING one.
   useEffect(() => {
-    if (assessmentId) {
+    if (assessmentId && !isReadOnly) {
       updateAssessmentAnswers(assessmentId, answers);
     }
-  }, [answers, assessmentId]);
+  }, [answers, assessmentId, isReadOnly]);
 
   /** Set which item's legend appears in the sticky bar (fed by the scroll
    *  effect below). Clears the dropdown when the active item changes. */
@@ -1104,7 +1107,7 @@ export function InterraiNeuPage() {
         {assessment && isReadOnly && (
           <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--status-success-text, #1a7f37)" }}>
             <Check style={{ width: 12, height: 12 }} />
-            Abgeschlossen {assessment.abgeschlossenAm ? formatDateTime(assessment.abgeschlossenAm) : ""} · {assessment.abgeschlossenVon ?? ""}
+            Gesperrt {assessment.gesperrtAm ? formatDateTime(assessment.gesperrtAm) : ""} · {assessment.gesperrtVon ?? ""}
           </span>
         )}
         {/* Completion action — Primärknopf des Vorgangs (Dark Sky) */}
@@ -1584,9 +1587,15 @@ export function InterraiNeuPage() {
                 <AppButton variant="sekundaer" onClick={() => setAbschlussDialogOpen(false)}>Abbrechen</AppButton>
                 <AppButton variant="primaer" onClick={() => {
                   if (!assessmentId) return;
-                  // Sync current answers to store before completing
+                  // Sync current answers to store before locking
                   updateAssessmentAnswers(assessmentId, answers);
-                  abschliessenAssessment(assessmentId, "Sandra Weber");
+                  // Locking requires completeness — surface the reason instead of crashing.
+                  try {
+                    sperreFormular(assessmentId, "Sandra Weber");
+                  } catch (e) {
+                    toast(e instanceof Error ? e.message : "Sperren nicht möglich");
+                    return;
+                  }
                   setAbschlussDialogOpen(false);
                   // Reload answers from store (now includes S1/S2)
                   const updated = getAssessment(assessmentId);

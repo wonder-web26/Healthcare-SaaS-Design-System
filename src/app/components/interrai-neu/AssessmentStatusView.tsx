@@ -9,6 +9,7 @@
 import { useNavigate } from "react-router";
 import { ClipboardList, Play, Plus, CheckCircle2, AlertTriangle, Search, MessageSquare } from "lucide-react";
 import { LeerZustand } from "../ui/LeerZustand";
+import { toast } from "sonner";
 import {
   type Person,
   offenerFallFuerKlient,
@@ -19,7 +20,7 @@ import {
   getAnlassLabel,
   getStatusLabel,
   formatDateTime,
-  createAssessment,
+  erstelleNaechstesFormular,
   klassifiziereVorschlaege,
 } from "../../../lib/interrai/store";
 
@@ -42,9 +43,12 @@ export function AssessmentStatusView({ person, returnTo }: AssessmentStatusViewP
 
   const handleStartNew = () => {
     const fall = offenenFallSicherstellen(person.id);
-    const anlass = formulareFuerFall(fall.id).length === 0 ? "erstabklaerung" : "re_assessment";
-    const a = createAssessment(fall.id, anlass);
-    handleOpen(a.id);
+    try {
+      const a = erstelleNaechstesFormular(fall.id);
+      handleOpen(a.id);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Formular kann nicht erstellt werden");
+    }
   };
 
   if (assessments.length === 0) {
@@ -69,7 +73,7 @@ export function AssessmentStatusView({ person, returnTo }: AssessmentStatusViewP
           const openFields = getOpenFieldCount(a);
           const activeFields = getActiveFieldCount(a);
           const filledFields = activeFields - openFields;
-          const isComplete = a.status === "abgeschlossen";
+          const isComplete = a.status === "gesperrt";
           const vorschlaegeCount = Object.keys(a.vorschlaege).length;
           const hasVorschlaege = a.vorschlaegeVerfuegbar && vorschlaegeCount > 0;
           const classification = hasVorschlaege ? klassifiziereVorschlaege(a) : null;
@@ -105,7 +109,7 @@ export function AssessmentStatusView({ person, returnTo }: AssessmentStatusViewP
                   </div>
                   <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>
                     {isComplete
-                      ? `Abgeschlossen am ${a.abgeschlossenAm ? formatDateTime(a.abgeschlossenAm) : formatDateTime(a.zuletztBearbeitetAm)} · ${a.abgeschlossenVon ?? ""}`
+                      ? `Gesperrt am ${a.gesperrtAm ? formatDateTime(a.gesperrtAm) : formatDateTime(a.zuletztBearbeitetAm)} · ${a.gesperrtVon ?? ""}`
                       : `${openFields} offen · ${filledFields}/${activeFields} erfasst · Zuletzt ${formatDateTime(a.zuletztBearbeitetAm)}`
                     }
                   </div>

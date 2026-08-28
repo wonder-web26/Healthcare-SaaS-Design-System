@@ -59,7 +59,7 @@ import {
   useKlvVerordnungen, positionHinzufuegen, positionAendern, positionEntfernen, positionenSetzen,
 } from "../../lib/klv/store";
 import { useRecording } from "../recording/RecordingContext";
-import { getPersonByOnboardingId, getOrCreatePersonForOnboarding, offenenFallSicherstellen, createAssessment } from "../../lib/interrai/store";
+import { getPersonByOnboardingId, getOrCreatePersonForOnboarding, offenenFallSicherstellen, erstelleNaechstesFormular } from "../../lib/interrai/store";
 import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
 import type { KLVLeistung, KLVEinheit, Pflegediagnose, Massnahme, Pflegeziel, AerztlicheDiagnose } from "../../types/klinische-artefakte";
 import { NANDA_KATALOG } from "../../lib/mocks/nanda-enp-katalog";
@@ -1424,9 +1424,14 @@ function OnboardingTabBA({ onboardingId, patientVorname, patientNachname }: { on
     const erfassen = () => {
       const p = getOrCreatePersonForOnboarding(onboardingId, patientVorname || "Patient", patientNachname || "");
       // Kein Formular ohne Fall: für den Klienten den offenen Fall sicherstellen.
+      // Das erste Formular des Falls ist das SDA (die Anmeldung).
       const fall = offenenFallSicherstellen(p.id);
-      const a = createAssessment(fall.id, "erstabklaerung");
-      navigate(`/interrai-neu/${a.id}?returnTo=${encodeURIComponent(returnTo)}`);
+      try {
+        const a = erstelleNaechstesFormular(fall.id);
+        navigate(`/interrai-neu/${a.id}?returnTo=${encodeURIComponent(returnTo)}`);
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Bedarfsabklärung kann nicht erstellt werden");
+      }
     };
     return (
       <LeerZustand

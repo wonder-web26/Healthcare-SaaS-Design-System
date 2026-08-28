@@ -62,7 +62,7 @@ import { toast } from "sonner";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { useRecording } from "../recording/RecordingContext";
 import { Mic } from "lucide-react";
-import { getPersonByOnboardingId, offenenFallSicherstellen, formulareFuerFall, createAssessment } from "../../lib/interrai/store";
+import { getPersonByOnboardingId, offenenFallSicherstellen, formulareFuerFall, erstelleNaechstesFormular } from "../../lib/interrai/store";
 import { useCurrentUser } from "../auth";
 import { ONBOARDING_STATUS_CFG, ONBOARDING_STATUS_WERTE, type OnboardingStatus } from "../../lib/onboarding/status";
 import { getStatus, setzeStatus, getGrund } from "../../lib/onboarding/status-store";
@@ -616,7 +616,11 @@ export function OnboardingPage() {
     }
     const fall = offenenFallSicherstellen(person.id);
     const formulareDesFalls = formulareFuerFall(fall.id);
-    const target = formulareDesFalls.find(a => a.status === "in_bearbeitung") ?? createAssessment(fall.id, "erstabklaerung");
+    let target = formulareDesFalls.find(a => a.status === "in_bearbeitung");
+    if (!target) {
+      try { target = erstelleNaechstesFormular(fall.id); }
+      catch (e) { toast(e instanceof Error ? e.message : "Formular kann nicht erstellt werden"); return; }
+    }
     recording.startRecording(person.id, target.id, `${person.vorname} ${person.nachname}`);
   };
 
