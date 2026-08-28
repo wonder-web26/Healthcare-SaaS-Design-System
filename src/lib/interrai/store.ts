@@ -25,6 +25,8 @@ import { GEGENWART_ISO } from "../gegenwart";
 // Route nach BB16 — die EINE bestehende Mapping-Quelle wird wiederverwendet,
 // nicht neu implementiert (siehe lib/stammdaten/sda-einschaetzung-situation.ts).
 import { sdaRoute, type FallRoute } from "../stammdaten/sda-einschaetzung-situation";
+// SDA-Katalog: massgebend für die Vollständigkeit des Registrierungsformulars.
+import { SDA_KATALOG } from "./katalog/sda-katalog";
 
 /** Re-Export, damit Konsumenten die Route über den Store beziehen. */
 export type { FallRoute };
@@ -298,8 +300,17 @@ function initDemo() {
   const lockSeed = (f: Formular, am: string) => wendeSperreAn(f, "Sandra Weber", am);
   const registrieren = (fall: Fall, bb16: string, am: string): Formular => {
     const r = createFormular(fall.id, "registration");
-    r.answers["BB16"] = bb16;
-    lockSeed(r, am); // vergibt Fallnummer, setzt route + openedAt, sperrt
+    const klient = persons.get(fall.klientId);
+    // Antworten i-Code-geschlüsselt (SDA). Nur Codes aus dem Katalog; Stammdaten
+    // aus dem Klienten vorbefüllt (Name/Vorname).
+    r.answers["CHBB16"] = bb16;           // BB16 Einschätzung der Situation → route
+    r.answers["CHAA1"] = "1";             // AA1 Eröffnungsgrund: Eintritt
+    r.answers["iB2"] = am.slice(0, 10);   // AA2 Datum der Eröffnung des Dossiers
+    if (klient) {
+      r.answers["iA1c"] = klient.nachname; // BB1a Name
+      r.answers["iA1a"] = klient.vorname;  // BB1b Vorname
+    }
+    lockSeed(r, am); // vergibt Fallnummer (iA5d), setzt route + openedAt, sperrt
     return r;
   };
 
@@ -581,9 +592,10 @@ export function kannFormularEroeffnen(fallId: string, typ: FormularTyp): Eroeffn
   }
 }
 
-/** Internal case-number field per type — BB5b (registration) / A5b (interRAI HC),
- *  same i-code iA5d. No i-code layer yet, so we write the answer key directly. */
-const FALLNUMMER_FELD: Partial<Record<FormularTyp, string>> = { registration: "BB5b", interrai_hc: "A5b" };
+/** Internal case-number field per type. The registration is i-code-keyed → iA5d
+ *  (nummer BB5b); the HC keeps its visible code A5b (HC answers are not i-code
+ *  keyed in this step). Both denote the same "Interne Fallnummer" item. */
+const FALLNUMMER_FELD: Partial<Record<FormularTyp, string>> = { registration: "iA5d", interrai_hc: "A5b" };
 
 /**
  * Creates a form of `typ` inside an existing Fall — THE single creation path.
@@ -728,7 +740,9 @@ function wendeSperreAn(a: Formular, gesperrtVon: string, jetzt: string): void {
   if (!fall) throw new Error(`wendeSperreAn: unbekannte fallId "${a.fallId}"`);
 
   if (a.typ === "registration") {
-    const code = a.answers["BB16"];
+    // BB16 wird über seinen i-Code CHBB16 geführt (Antworten des SDA sind
+    // i-Code-geschlüsselt), nicht über die sichtbare Nummer.
+    const code = a.answers["CHBB16"];
     if (code == null || code === "") {
       throw new Error("Registrierung ohne codiertes BB16 — Route nicht bestimmbar, keine Fallnummer");
     }
@@ -737,8 +751,8 @@ function wendeSperreAn(a: Formular, gesperrtVon: string, jetzt: string): void {
     if (fall.fallnummer === null) fall.fallnummer = vergibFallnummer(jetzt);
     if (fall.route === null) fall.route = sdaRoute(code);
     fall.openedAt = jetzt;
-    // Das Registrierungsformular trägt seine Fallnummer (i-Code iA5d / BB5b).
-    a.answers["BB5b"] = fall.fallnummer;
+    // Das Registrierungsformular trägt seine Fallnummer unter dem i-Code iA5d.
+    a.answers["iA5d"] = fall.fallnummer;
   }
 
   a.vorschlaege = {};
@@ -773,6 +787,16 @@ export function sperreFormular(formularId: string, gesperrtVon: string): void {
 
 /** Returns the number of active (non-skipped) fields that have no answer yet. */
 export function getOpenFieldCount(assessment: Formular): number {
+  // Typabhängig: die Registrierung zählt gegen den SDA-Katalog (Schlüssel iCode),
+  // nicht gegen den HC. Ein Item gilt als beantwortet, wenn ein Wert vorliegt;
+  // Unterschriftenfelder zählen mit.
+  if (assessment.typ === "registration") {
+    return SDA_KATALOG.filter((item) => {
+      const v = assessment.answers[item.iCode];
+      return v == null || v === "";
+    }).length;
+  }
+  if (assessment.typ !== "interrai_hc") return 0; // kein Katalog für cmh/housekeeping/discharge
   const stats = getInputFieldStats();
   const skip = evaluateSkipLogic(assessment.answers);
   let open = 0;
@@ -788,8 +812,10 @@ export function getOpenFieldCount(assessment: Formular): number {
   return open;
 }
 
-/** Total active (non-skipped) fields for an assessment. */
+/** Total active (non-skipped) fields for an assessment — typabhängig. */
 export function getActiveFieldCount(assessment: Formular): number {
+  if (assessment.typ === "registration") return SDA_KATALOG.length;
+  if (assessment.typ !== "interrai_hc") return 0;
   const stats = getInputFieldStats();
   const skip = evaluateSkipLogic(assessment.answers);
   let active = 0;

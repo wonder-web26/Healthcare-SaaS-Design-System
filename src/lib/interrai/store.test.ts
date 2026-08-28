@@ -20,11 +20,13 @@ import {
   fallStatus,
   brecheFallAb,
   getFall,
+  getOpenFieldCount,
   updateAssessmentAnswers,
   type Fall,
   type Formular,
   type EroeffnungsErgebnis,
 } from "./store";
+import { SDA_KATALOG } from "./katalog/sda-katalog";
 
 const grundVon = (r: EroeffnungsErgebnis): string => (r.zulaessig ? "" : r.grund);
 
@@ -36,7 +38,7 @@ const frischerFall = (jahr = "2099", klient?: string): Fall => {
 /** Registriert und sperrt: vergibt Fallnummer + route, öffnet den Fall. */
 function registriere(fall: Fall, bb16: string): Formular {
   const r = createFormular(fall.id, "registration");
-  r.answers["BB16"] = bb16;
+  r.answers["CHBB16"] = bb16; // BB16 über seinen i-Code
   r.status = "vollstaendig"; // HC-gebundene Zählung → synthetisch
   sperreFormular(r.id, "Test");
   return r;
@@ -63,7 +65,7 @@ assert.equal(klientZustand("PERS-004"), "aktiv");
   const r = createFormular(f.id, "registration");
   assert.equal(getFall(f.id)!.fallnummer, null); // registering → keine Nummer
   assert.equal(fallStatus(f.id), "registering");
-  r.answers["BB16"] = "1";
+  r.answers["CHBB16"] = "1";
   sperre(r);
   assert.ok(getFall(f.id)!.fallnummer, "nach dem Sperren hat der Fall eine Nummer");
   assert.equal(fallStatus(f.id), "open");
@@ -73,9 +75,9 @@ assert.equal(klientZustand("PERS-004"), "aktiv");
 {
   const f = frischerFall();
   const r = registriere(f, "1");
-  // Die Registrierung trägt ihre Fallnummer (BB5b) — nicht dauerhaft NULL.
-  assert.equal(r.answers["BB5b"], getFall(f.id)!.fallnummer);
-  assert.ok(r.answers["BB5b"]);
+  // Die Registrierung trägt ihre Fallnummer unter dem i-Code iA5d — nicht NULL.
+  assert.equal(r.answers["iA5d"], getFall(f.id)!.fallnummer);
+  assert.ok(r.answers["iA5d"]);
 }
 
 // ── V6: interRAI-Sperrung ohne Wirkung auf den Fall ──────────────────────────
@@ -223,6 +225,27 @@ for (const [code, route] of ROUTEN) {
   const f = frischerFall();
   const r = registriere(f, "1");
   assert.throws(() => updateAssessmentAnswers(r.id, { x: "1" }), /gesperrt/);
+}
+
+// ── Typabhängige Vollständigkeit (§4) + i-Code-Schlüsselung (§5) ─────────────
+{
+  // Registrierung zählt gegen den SDA-Katalog.
+  const fReg = frischerFall();
+  const reg = createFormular(fReg.id, "registration"); // in Bearbeitung
+  assert.ok(getOpenFieldCount(reg) > 0, "leere Registrierung ist unvollständig");
+  for (const item of SDA_KATALOG) reg.answers[item.iCode] = "x";
+  assert.equal(getOpenFieldCount(reg), 0, "31 beantwortete Items → vollständig");
+  // i-Code-Schlüsselung: BB1a liegt unter iA1c, nicht unter der Nummer BB1a.
+  assert.ok("iA1c" in reg.answers);
+  assert.ok(!("BB1a" in reg.answers));
+
+  // Dieselben 31 i-Code-Antworten auf einem HC → NICHT vollständig
+  // (der HC zählt gegen den HC-Katalog, nicht die i-Codes).
+  const fHc = frischerFall();
+  registriere(fHc, "1"); // route somatic
+  const hc = createFormular(fHc.id, "interrai_hc");
+  for (const item of SDA_KATALOG) hc.answers[item.iCode] = "x";
+  assert.ok(getOpenFieldCount(hc) > 0, "HC mit 31 i-Code-Antworten bleibt unvollständig");
 }
 
 console.log("store.test.ts: alle Zusicherungen erfüllt");

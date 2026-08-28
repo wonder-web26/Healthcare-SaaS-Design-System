@@ -67,11 +67,15 @@ import {
   formatDateTime,
   confirmVorschlag,
   getGespraech,
+  getTypLabel,
   type Formular,
+  type FormularTyp,
+  type Person,
   type Vorschlag,
   type GespraechAbschnitt,
   type Bestaetigung,
 } from "../../../lib/interrai/store";
+import { SDA_KATALOG, SDA_BEREICHE, type SdaItem } from "../../../lib/interrai/katalog/sda-katalog";
 import { ansichtPfad } from "../Patient360Page";
 import { useRecording } from "../../recording/RecordingContext";
 import { toast } from "sonner";
@@ -586,6 +590,148 @@ function scrollItemIntoView(container: HTMLElement | null, itemCode: string) {
   container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   Katalog-Verzweigung: Registrierung (SDA-Katalog) und Hinweisfläche.
+   Kein zweiter Renderer — die Auswahl anhand von Formular.typ liegt in diesem
+   Modul; InterraiNeuPage verzweigt darauf, bevor der HC-Zweig rendert.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Anzeigewert eines SDA-Items (Auswahl → Optionstext). */
+function sdaAnzeige(item: SdaItem, value: string): string {
+  if (!value) return "";
+  if (item.typ === "auswahl") return item.optionen.find((o) => o.code === value)?.text ?? value;
+  return value;
+}
+
+/** Eingabe für ein SDA-Item nach seinem Typ. Optionen und Texte NUR aus dem Katalog. */
+function SdaItemInput({ item, value, onChange, disabled }: {
+  item: SdaItem; value: string; onChange: (v: string) => void; disabled: boolean;
+}) {
+  if (disabled) {
+    return <span style={{ fontSize: 13, color: "var(--text-primary)" }}>{sdaAnzeige(item, value) || "—"}</span>;
+  }
+  if (item.typ === "auswahl" && item.optionen.length > 0) {
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        style={{ ...inputStyle, maxWidth: 460, cursor: "pointer" }}>
+        <option value="">— bitte wählen —</option>
+        {item.optionen.map((o) => <option key={o.code} value={o.code}>{o.code}. {o.text}</option>)}
+      </select>
+    );
+  }
+  if (item.typ === "datum") {
+    return (
+      <div style={{ maxWidth: 200 }}>
+        <DateField wertFormat="iso" bereich="any" value={value || null} onChange={(v) => onChange((v as string) ?? "")} />
+      </div>
+    );
+  }
+  return (
+    <>
+      <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
+        style={{ ...inputStyle, maxWidth: 460 }}
+        placeholder={item.typ === "unterschrift" ? "Name der unterzeichnenden Person" : "Freitext"} />
+      {item.typ === "auswahl" && item.optionen.length === 0 && item.scaleRoh && (
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4, whiteSpace: "pre-line" }}>{item.scaleRoh}</div>
+      )}
+    </>
+  );
+}
+
+/** Registrierungsformular — rendert den SDA-Katalog (2 Bereiche, 31 Items). */
+function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
+  assessmentId: string; returnZiel: string; returnLabel: string; person: Person | undefined;
+}) {
+  const navigate = useNavigate();
+  const [, force] = useState(0);
+  const assessment = getAssessment(assessmentId);
+  const readOnly = assessment ? istGesperrt(assessment) : true;
+  const [answers, setAnswers] = useState<Record<string, string | null>>(() => (assessment ? { ...assessment.answers } : {}));
+
+  useEffect(() => {
+    if (assessmentId && !readOnly) updateAssessmentAnswers(assessmentId, answers);
+  }, [answers, assessmentId, readOnly]);
+
+  if (!assessment) return <div style={{ padding: 32, color: "var(--text-secondary)" }}>Formular nicht gefunden.</div>;
+
+  const setAnswer = (iCode: string, v: string) => { if (!readOnly) setAnswers((p) => ({ ...p, [iCode]: v })); };
+  const offen = SDA_KATALOG.filter((i) => { const v = answers[i.iCode]; return v == null || v === ""; }).length;
+
+  const sperren = () => {
+    updateAssessmentAnswers(assessmentId, answers);
+    try {
+      sperreFormular(assessmentId, "Sandra Weber");
+      toast("Registrierung gesperrt — die Fallnummer wurde vergeben.");
+      navigate(returnZiel);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Sperren nicht möglich");
+      force((n) => n + 1);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--bg-app, #f5f5f7)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 20px", background: "var(--bg-elevated)", borderBottom: "0.5px solid var(--border-default)", flexShrink: 0, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => navigate(returnZiel)} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 6, padding: 0, background: "none", border: "none", fontSize: "var(--text-small)", fontWeight: 450, color: "var(--text-secondary)", fontFamily: "inherit" }}>
+          <ArrowLeft style={{ width: 16, height: 16 }} /> <span>{returnLabel}</span>
+        </button>
+        {person && (<><span style={{ color: "var(--border-default)" }}>·</span><span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>{person.vorname} {person.nachname}</span></>)}
+        <span style={{ color: "var(--border-default)" }}>·</span>
+        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>Registrierung (SDA)</span>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+          {readOnly ? (
+            <span className="inline-flex items-center" style={{ gap: 4, fontSize: 12, color: "var(--status-success-text)" }}><Check style={{ width: 13, height: 13 }} /> Gesperrt</span>
+          ) : (
+            <>
+              <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{offen} von {SDA_KATALOG.length} offen</span>
+              <AppButton variant="primaer" onClick={sperren}>Abschliessen</AppButton>
+            </>
+          )}
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        <div style={{ maxWidth: 820, margin: "0 auto", padding: "20px 24px 64px" }}>
+          {SDA_BEREICHE.map((bereich) => (
+            <div key={bereich} style={{ marginBottom: 28 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 12 }}>{bereich}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {SDA_KATALOG.filter((i) => i.bereich === bereich).map((item) => (
+                  <div key={item.iCode}>
+                    <label style={{ display: "block", fontSize: 13, color: "var(--text-primary)", marginBottom: 4 }}>
+                      <span style={{ color: "var(--text-tertiary)", fontFamily: "monospace", marginRight: 6 }}>{item.nummer}</span>{item.text}
+                    </label>
+                    <SdaItemInput item={item} value={(answers[item.iCode] as string) ?? ""} onChange={(v) => setAnswer(item.iCode, v)} disabled={readOnly} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Hinweisfläche für Formulartypen ohne Katalog (cmh, housekeeping, discharge). */
+function KeinKatalogHinweis({ typ, returnZiel, returnLabel }: { typ: FormularTyp; returnZiel: string; returnLabel: string; }) {
+  const navigate = useNavigate();
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg-app, #f5f5f7)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 20px", background: "var(--bg-elevated)", borderBottom: "0.5px solid var(--border-default)" }}>
+        <button type="button" onClick={() => navigate(returnZiel)} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 6, padding: 0, background: "none", border: "none", fontSize: "var(--text-small)", color: "var(--text-secondary)", fontFamily: "inherit" }}>
+          <ArrowLeft style={{ width: 16, height: 16 }} /> <span>{returnLabel}</span>
+        </button>
+      </div>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 32 }}>
+        <div style={{ maxWidth: 420 }}>
+          <div style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)", marginBottom: 8 }}>{getTypLabel(typ)}</div>
+          <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>Für diesen Formulartyp ist noch kein Katalog hinterlegt. Er wird in einem späteren Schritt ergänzt.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function InterraiNeuPage() {
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -950,6 +1096,15 @@ export function InterraiNeuPage() {
     didEntryScrollRef.current = true;
     scrollToField(first);
   }, [assessment?.vorschlaegeVerfuegbar, vorschlaegeMap, searchParams, fieldIndex, scrollToField]);
+
+  // ── Katalog-Verzweigung nach Formulartyp (nach allen Hooks) ──────────────
+  //  registration → SDA-Katalog; interrai_hc → HC-Zweig unten; sonst Hinweis.
+  if (assessment && assessment.typ === "registration") {
+    return <RegistrierungView assessmentId={assessment.id} returnZiel={returnZiel} returnLabel={returnLabel} person={person} />;
+  }
+  if (assessment && assessment.typ !== "interrai_hc") {
+    return <KeinKatalogHinweis typ={assessment.typ} returnZiel={returnZiel} returnLabel={returnLabel} />;
+  }
 
   return (
     <div

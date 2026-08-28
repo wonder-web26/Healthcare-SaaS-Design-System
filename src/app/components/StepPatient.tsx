@@ -530,7 +530,7 @@ const tabDefs = [
   { key: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
   { key: "anamnese", label: "Anamnese", icon: Stethoscope },
   { key: "aktivitaeten", label: "ATL", icon: Activity },
-  { key: "interrai", label: "InterRAI", icon: ClipboardList },
+  { key: "interrai", label: "Bedarfsabklärung", icon: ClipboardList },
   { key: "pflegeplanung", label: "Pflegeplan", icon: ClipboardList },
   { key: "klv", label: "KLV", icon: FileText },
   { key: "workflow", label: "Betreuung", icon: ClipboardList },
