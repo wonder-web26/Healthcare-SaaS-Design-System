@@ -22,9 +22,12 @@ import {
   getItem,
 } from "./instrument";
 import { GEGENWART_ISO } from "../gegenwart";
-// Triage nach BB16 — die EINE bestehende fachliche Regel wird wiederverwendet,
+// Route nach BB16 — die EINE bestehende Mapping-Quelle wird wiederverwendet,
 // nicht neu implementiert (siehe lib/stammdaten/sda-einschaetzung-situation.ts).
-import { sdaVerlangtInterrai } from "../stammdaten/sda-einschaetzung-situation";
+import { sdaRoute, type FallRoute } from "../stammdaten/sda-einschaetzung-situation";
+
+/** Re-Export, damit Konsumenten die Route über den Store beziehen. */
+export type { FallRoute };
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,27 +42,37 @@ export interface Person {
 }
 
 /**
- * Triage decided when the SDA is locked — governs which follow-up forms are
- * allowed. Stays null until then; filled in a later step, never derived here.
+ * Fall lifecycle status — DERIVED from which forms are locked, never stored
+ * (see fallStatus). Matches SpitexCareCase.status in the production schema.
+ *   registering — registration form exists but is not locked yet
+ *   open        — registration locked, no locked discharge
+ *   discharged  — discharge locked
+ *   aborted     — registration aborted, no case number minted
  */
-export type FallTriage = "interrai_hc" | "nur_sda" | null;
+export type FallStatus = "registering" | "open" | "discharged" | "aborted";
 
 /**
- * Fall — the clinical care episode. Opened with the Anmeldung, closed with the
- * Entlassung. Carries the immutable Fallnummer and bundles all forms. A
- * Wiedereintritt of the same Klient opens a NEW Fall with a NEW Fallnummer.
+ * Fall — the clinical care episode (SpitexCareCase). Two events touch it: the
+ * registration form locking OPENS it (mints the Fallnummer, sets openedAt and
+ * route); the discharge form locking closes it (closedAt). An interRAI form
+ * locking has DELIBERATELY no effect. A Wiedereintritt is a new Fall.
  */
 export interface Fall {
   id: string;
-  /** Assigned by the store, never typed; immutable once set. */
-  fallnummer: string;
-  /** The Klient (Person) this episode belongs to — was `personId`. */
+  /** Minted when the registration form LOCKS; null while `registering`/`aborted`. */
+  fallnummer: string | null;
+  /** The Klient (Person) this episode belongs to. */
   klientId: string;
-  /** ISO date — the creation of the first form (the Anmeldung). */
-  eroeffnetAm: string;
-  /** ISO date — set when the Entlassung is locked; null while the Fall is open. */
-  geschlossenAm: string | null;
-  triage: FallTriage;
+  /** BB16 route, set when the registration locks; null before that. */
+  route: FallRoute;
+  /** ISO — the shell was created (with the registration form). */
+  erstelltAm: string;
+  /** ISO — set when the registration LOCKS (the case truly opens). */
+  openedAt: string | null;
+  /** ISO — set when the discharge LOCKS. */
+  closedAt: string | null;
+  /** ISO — set if the registration is aborted (status → aborted). */
+  abgebrochenAm: string | null;
 }
 
 /** Assessment occasion — values correspond to item A8 in the seed. */
@@ -72,11 +85,17 @@ export type AssessmentAnlass =
   | "einsatzabbruch"      // A8=6
   | "andere";             // A8=7
 /**
- * The four form kinds a Fall can contain. Lifecycle, locking, protocolling and
- * fall membership are identical for all four; only the catalogue and renderer
- * differ (those live in the seed/renderer, not the entity).
+ * Form kinds a Fall can contain (SpitexFormInstance.type in production).
+ * Lifecycle, locking, protocolling and fall membership are identical for all;
+ * only the catalogue and renderer differ. The Leistungsplanungsblatt is NOT a
+ * form here — it is a separate object (SpitexServicePlan), not built yet.
  */
-export type FormularTyp = "sda" | "hc" | "lpb" | "entlassung";
+export type FormularTyp =
+  | "registration"    // Anmeldung (war 'sda')
+  | "interrai_hc"     // interRAI HC (war 'hc')
+  | "interrai_cmh"    // interRAI CMH — psychiatrisches Instrument
+  | "housekeeping"    // hauswirtschaftliche Abklärung
+  | "discharge";      // Entlassung (war 'entlassung')
 
 /**
  * Form lifecycle. `vollstaendig` is reached when the open-field count is zero;
@@ -139,9 +158,12 @@ export interface Formular {
   /** Per Fall AND typ, starting at 1. For hc: 1 = Erstassessment, ≥2 =
    *  Reassessment. Assigned on creation, immutable — never derived from a date. */
   laufnummer: number;
-  /** Only for typ 'hc': the immediately preceding locked hc OF THE SAME FALL;
-   *  null otherwise. Makes the Entlassung the boundary of data carry-over. */
+  /** Only for typ 'interrai_hc': the immediately preceding locked hc OF THE SAME
+   *  FALL; null otherwise. Makes the discharge the boundary of data carry-over. */
   vorgaengerId: string | null;
+  /** Reassessment occasion (SpitexFormInstance.reason). 'first' when
+   *  laufnummer === 1; for reassessments set on creation when known, else null. */
+  reason: "first" | "periodic" | "significant_change" | "return_from_hospital" | null;
   anlass: AssessmentAnlass;
   status: FormularStatus;
   erstelltAm: string;
@@ -253,15 +275,10 @@ function initDemo() {
     patientId: "P-2026-0041",
   });
 
-  // Rosa Bianchi — EIN Klient (eine Versichertennummer) mit mehreren Fällen:
-  // Angehörigenfall (B), geschlossener Vorgängerfall und offener Wiedereintritt
-  // (C). Beleg, dass das Modell Angehörigenfall und Wiedereintritt trägt.
-  persons.set("PERS-003", {
-    id: "PERS-003",
-    vorname: "Rosa",
-    nachname: "Bianchi",
-    patientId: "P-2026-0049",
-  });
+  // Rosa Bianchi — Klient für den Wiedereintritt (Fall C).
+  persons.set("PERS-003", { id: "PERS-003", vorname: "Rosa", nachname: "Bianchi", patientId: "P-2026-0049" });
+  // Peter Ammann — Klient für die Systemgrenze (Fall D, palliativ).
+  persons.set("PERS-004", { id: "PERS-004", vorname: "Peter", nachname: "Ammann", patientId: "P-2026-0050" });
 
   // Walter Frei entfernt — hing an OB-2026-011, einer Kennung ausserhalb des
   // Fallverzeichnisses. Seine Bedarfsabklärung BA-2026-030 ist mit entfallen.
@@ -271,61 +288,55 @@ function initDemo() {
 
   // Build vorschlaege map from demo data
   const vorschlaegeMap: Record<string, Vorschlag> = {};
-  for (const v of VORSCHLAEGE_HUBER) {
-    vorschlaegeMap[v.feldCode] = v;
-  }
+  for (const v of VORSCHLAEGE_HUBER) vorschlaegeMap[v.feldCode] = v;
 
-  // ── Demo-Fälle (Schritt 2) ──────────────────────────────────────────────
-  //  Jedes Formular entsteht über createFormular (die EINE Erzeugung, prüft die
-  //  Eröffnungsregeln), Sperren über wendeSperreAn (setzt gesperrtAm/Von,
-  //  Triage bzw. Fallschluss). So gelten die Regeln bereits im Seed.
+  // ── Demo-Fälle (produktive Terminologie) ────────────────────────────────
+  //  Jedes Formular über createFormular (prüft die Eröffnungsregeln), Sperren
+  //  über wendeSperreAn. Die Fallnummer entsteht beim SPERREN der Registrierung,
+  //  nicht beim Anlegen. §7 (ein offener Fall pro Klient): Fall C erhält einen
+  //  eigenen Klienten (nicht den von Fall B), da sonst beide offen wären.
   const lockSeed = (f: Formular, am: string) => wendeSperreAn(f, "Sandra Weber", am);
+  const registrieren = (fall: Fall, bb16: string, am: string): Formular => {
+    const r = createFormular(fall.id, "registration");
+    r.answers["BB16"] = bb16;
+    lockSeed(r, am); // vergibt Fallnummer, setzt route + openedAt, sperrt
+    return r;
+  };
 
-  // Fall A — Standardweg (Huber): SDA gesperrt (BB16=1 → interRAI HC), HC laufend.
-  const fallA = eroeffneFall("PERS-001", "2026-02-28");    // SKA-2026-0001
-  const sdaA = createFormular(fallA.id, "sda");
-  sdaA.answers["BB16"] = "1";
-  lockSeed(sdaA, "2026-02-28T11:00:00");                   // Triage → interrai_hc
-  const hcA = createFormular(fallA.id, "hc");              // laufnummer 1, in Bearbeitung
+  // Fall A — Standardweg (Huber): Registrierung gesperrt (BB16=1 → somatic),
+  //  Status open, interRAI HC laufnummer 1 (reason first) in Bearbeitung.
+  const fallA = eroeffneFall("PERS-001", "2026-02-28");
+  registrieren(fallA, "1", "2026-02-28T11:00:00");        // SKA-2026-0001, route somatic
+  const hcA = createFormular(fallA.id, "interrai_hc");    // laufnummer 1, reason first
   hcA.gespraechId = "GES-HUBER-001";
   hcA.vorschlaege = vorschlaegeMap;
 
-  // Fall A' — Standardweg (Anna Müller, aktive Patientin P-2026-0041): SDA
-  //  gesperrt, HC laufend. Hält den interRAI-Reiter an diesem Patienten aktiv.
-  const fallAM = eroeffneFall("PERS-002", "2026-02-15");   // SKA-2026-0002
-  const sdaAM = createFormular(fallAM.id, "sda");
-  sdaAM.answers["BB16"] = "1";
-  lockSeed(sdaAM, "2026-02-20T09:00:00");
-  createFormular(fallAM.id, "hc");                         // laufnummer 1, in Bearbeitung
+  // Fall B — Hauswirtschaftsfall (Anna Müller, P-2026-0041): Registrierung
+  //  gesperrt (BB16=6 → housekeeping), Status open, KEIN interRAI HC.
+  const fallB = eroeffneFall("PERS-002", "2026-03-01");
+  registrieren(fallB, "6", "2026-03-01T10:00:00");        // SKA-2026-0002, route housekeeping
 
-  // Fall B — Angehörigenfall (Rosa Bianchi): SDA gesperrt (BB16=5 → nur SDA),
-  //  KEIN HC, LPB laufend. Beleg, dass ein Fall ohne interRAI HC vollständig ist.
-  const fallB = eroeffneFall("PERS-003", "2026-03-01");    // SKA-2026-0003
-  const sdaB = createFormular(fallB.id, "sda");
-  sdaB.answers["BB16"] = "5";
-  lockSeed(sdaB, "2026-03-01T10:00:00");                   // Triage → nur_sda
-  createFormular(fallB.id, "lpb");                         // laufnummer 1, in Bearbeitung
-
-  // Fall C — Wiedereintritt (Rosa Bianchi). Vorgängerfall vollständig gesperrt
-  //  inkl. Entlassung → geschlossen.
-  const fallCalt = eroeffneFall("PERS-003", "2025-05-10"); // SKA-2025-0001
-  const sdaCalt = createFormular(fallCalt.id, "sda");
-  sdaCalt.answers["BB16"] = "1";
-  lockSeed(sdaCalt, "2025-05-10T10:00:00");
-  const hcCalt = createFormular(fallCalt.id, "hc");        // laufnummer 1
+  // Fall C — Wiedereintritt (Rosa Bianchi). Erst der geschlossene Vorgängerfall
+  //  (Registrierung + HC + Entlassung gesperrt → discharged), DANN der neue
+  //  offene Fall — sonst hätte der Klient zwei offene Fälle (§7).
+  const fallCalt = eroeffneFall("PERS-003", "2025-05-10");
+  registrieren(fallCalt, "1", "2025-05-10T10:00:00");     // SKA-2025-0001, somatic
+  const hcCalt = createFormular(fallCalt.id, "interrai_hc"); // laufnummer 1
   lockSeed(hcCalt, "2025-08-01T10:00:00");
-  const entlCalt = createFormular(fallCalt.id, "entlassung");
-  lockSeed(entlCalt, "2025-11-30T11:00:00");               // schliesst fallCalt
+  const entlCalt = createFormular(fallCalt.id, "discharge");
+  lockSeed(entlCalt, "2025-11-30T11:00:00");              // schliesst fallCalt (discharged)
 
-  //  Zweiter, offener Fall: HC laufnummer 2 mit vorgaengerId auf das HC
-  //  DESSELBEN Falls (nicht auf das aus dem geschlossenen Vorgängerfall).
-  const fallCneu = eroeffneFall("PERS-003", "2026-03-02"); // SKA-2026-0004
-  const sdaCneu = createFormular(fallCneu.id, "sda");
-  sdaCneu.answers["BB16"] = "1";
-  lockSeed(sdaCneu, "2026-03-02T09:00:00");
-  const hcCneu1 = createFormular(fallCneu.id, "hc");       // laufnummer 1
+  const fallCneu = eroeffneFall("PERS-003", "2026-03-02");
+  registrieren(fallCneu, "1", "2026-03-02T09:00:00");     // SKA-2026-0003, somatic
+  const hcCneu1 = createFormular(fallCneu.id, "interrai_hc"); // laufnummer 1
   lockSeed(hcCneu1, "2026-03-10T09:00:00");
-  createFormular(fallCneu.id, "hc");                       // laufnummer 2, vorgaengerId → hcCneu1
+  const hcCneu2 = createFormular(fallCneu.id, "interrai_hc"); // laufnummer 2, vorgaengerId → hcCneu1
+  hcCneu2.reason = "periodic";
+
+  // Fall D — Systemgrenze (Peter Ammann): Registrierung gesperrt (BB16=3 →
+  //  palliative). Kein Abklärungsformular eröffnungsfähig.
+  const fallD = eroeffneFall("PERS-004", "2026-01-15");
+  registrieren(fallD, "3", "2026-01-15T10:00:00");        // SKA-2026-0004, route palliative
 }
 
 // initDemo() wird am Dateiende aufgerufen — es nutzt createFormular, dessen
@@ -399,14 +410,15 @@ export function klientZustand(klientId: string): "im_onboarding" | "aktiv" {
 /**
  * Forms a Fallnummer `{ORG}-{JJJJ}-{NNNN}`. THE single place a Fallnummer is
  * built. NNNN is four digits, restarts at 1 each calendar year, taken from the
- * highest number already assigned in that year across the store.
+ * highest number already minted in that year. Called only when a registration
+ * form locks (the case truly opens).
  */
-export function vergibFallnummer(eroeffnetAm: string): string {
-  const jahr = eroeffnetAm.slice(0, 4);
+export function vergibFallnummer(datum: string): string {
+  const jahr = datum.slice(0, 4);
   const prefix = `${ORG_KUERZEL}-${jahr}-`;
   let hoechste = 0;
   for (const f of faelle.values()) {
-    if (f.fallnummer.startsWith(prefix)) {
+    if (f.fallnummer && f.fallnummer.startsWith(prefix)) {
       const n = parseInt(f.fallnummer.slice(prefix.length), 10);
       if (!Number.isNaN(n)) hoechste = Math.max(hoechste, n);
     }
@@ -422,32 +434,70 @@ export function getFaelleFuerKlient(klientId: string): Fall[] {
   return [...faelle.values()].filter((f) => f.klientId === klientId);
 }
 
-/** The single open Fall of a Klient (geschlossenAm === null), if any. */
+/**
+ * Derived lifecycle status of a Fall — never stored (see FallStatus). It follows
+ * from which forms are locked, plus the abort marker.
+ */
+export function fallStatus(fallId: string): FallStatus {
+  const fall = faelle.get(fallId);
+  if (!fall) throw new Error(`fallStatus: unbekannter Fall "${fallId}"`);
+  if (fall.abgebrochenAm) return "aborted";
+  const forms = formulareFuerFall(fallId);
+  const reg = forms.find((f) => f.typ === "registration");
+  if (!reg || reg.status !== "gesperrt") return "registering";
+  if (forms.some((f) => f.typ === "discharge" && f.status === "gesperrt")) return "discharged";
+  return "open";
+}
+
+/** The Klient's one open (registering or open) Fall, if any. */
 export function offenerFallFuerKlient(klientId: string): Fall | undefined {
-  return [...faelle.values()].find((f) => f.klientId === klientId && f.geschlossenAm === null);
+  return [...faelle.values()].find((f) => {
+    if (f.klientId !== klientId) return false;
+    const st = fallStatus(f.id);
+    return st === "registering" || st === "open";
+  });
 }
 
 /**
- * Opens a new Fall for a Klient. Assigns the Fallnummer here and nowhere else;
- * it is immutable afterwards (no setter exists).
+ * Opens the SHELL of a new Fall (status `registering`, NO Fallnummer yet — that
+ * is minted when the registration form locks). Enforces ONE OPEN FALL PER
+ * KLIENT: throws, naming the existing case, if the Klient already has a
+ * registering/open Fall.
  */
-export function eroeffneFall(klientId: string, eroeffnetAm: string = GEGENWART_ISO): Fall {
+export function eroeffneFall(klientId: string, erstelltAm: string = GEGENWART_ISO): Fall {
+  const bestehend = offenerFallFuerKlient(klientId);
+  if (bestehend) {
+    const kennung = bestehend.fallnummer ?? "in Registrierung, noch keine Fallnummer";
+    throw new Error(`Klient "${klientId}" hat bereits einen offenen Fall (${kennung})`);
+  }
   const id = `FALL-${String(faelle.size + 1).padStart(3, "0")}`;
   const fall: Fall = {
     id,
-    fallnummer: vergibFallnummer(eroeffnetAm),
+    fallnummer: null,
     klientId,
-    eroeffnetAm,
-    geschlossenAm: null,
-    triage: null,
+    route: null,
+    erstelltAm,
+    openedAt: null,
+    closedAt: null,
+    abgebrochenAm: null,
   };
   faelle.set(id, fall);
   return fall;
 }
 
-/** Returns the Klient's open Fall, opening one if none exists. */
-export function offenenFallSicherstellen(klientId: string, eroeffnetAm: string = GEGENWART_ISO): Fall {
-  return offenerFallFuerKlient(klientId) ?? eroeffneFall(klientId, eroeffnetAm);
+/** Aborts a registering Fall — status → aborted, no Fallnummer is minted. */
+export function brecheFallAb(fallId: string): void {
+  const fall = faelle.get(fallId);
+  if (!fall) throw new Error(`brecheFallAb: unbekannter Fall "${fallId}"`);
+  if (fallStatus(fallId) !== "registering") {
+    throw new Error("Nur ein Fall in Registrierung kann abgebrochen werden");
+  }
+  fall.abgebrochenAm = new Date().toISOString();
+}
+
+/** Returns the Klient's open Fall, opening a shell if none exists. */
+export function offenenFallSicherstellen(klientId: string, erstelltAm: string = GEGENWART_ISO): Fall {
+  return offenerFallFuerKlient(klientId) ?? eroeffneFall(klientId, erstelltAm);
 }
 
 // ── Assessment API ───────────────────────────────────────────────────────────
@@ -477,6 +527,26 @@ export function getAllAssessments(): Formular[] {
   return [...formulare.values()];
 }
 
+/** The three assessment forms — at most one may be open at a time per Fall. */
+const ABKLAERUNG_TYPEN = new Set<FormularTyp>(["interrai_hc", "interrai_cmh", "housekeeping"]);
+
+/** Which route admits which assessment form. */
+const ROUTE_FUER_TYP: Record<"interrai_hc" | "interrai_cmh" | "housekeeping", Exclude<FallRoute, null>> = {
+  interrai_hc: "somatic",
+  interrai_cmh: "mental_health",
+  housekeeping: "housekeeping",
+};
+
+/** Reason an assessment of `typ` is not admissible under the Fall's route. */
+function routeGrund(route: FallRoute, typ: "interrai_hc" | "interrai_cmh" | "housekeeping"): string {
+  if (route === "declined") return "Die Klientin hat eine umfassende Bedarfsabklärung abgelehnt";
+  if (route === "palliative" || route === "paediatric" || route === "isolated_therapeutic") {
+    return `Für diese Situation (Route ${route}) ist ein Instrument erforderlich, das die Software nicht abbildet`;
+  }
+  if (route === null) return "Die Registrierung ist noch nicht gesperrt (keine Route bestimmt)";
+  return `Die Route ${route} lässt ${typ} nicht zu`;
+}
+
 /**
  * Eligibility to open a form of `typ` in a Fall — a pure MODEL rule, not UI
  * logic. createFormular calls this and refuses on { zulaessig: false }, so a
@@ -485,41 +555,45 @@ export function getAllAssessments(): Formular[] {
 export function kannFormularEroeffnen(fallId: string, typ: FormularTyp): EroeffnungsErgebnis {
   const fall = faelle.get(fallId);
   if (!fall) return { zulaessig: false, grund: `Unbekannter Fall "${fallId}"` };
-  if (fall.geschlossenAm !== null) return { zulaessig: false, grund: "Der Fall ist geschlossen" };
+  const st = fallStatus(fallId);
+  if (st === "discharged") return { zulaessig: false, grund: "Der Fall ist entlassen" };
+  if (st === "aborted") return { zulaessig: false, grund: "Der Fall ist abgebrochen" };
 
   const forms = formulareFuerFall(fallId);
-  const sdaGesperrt = forms.some((f) => f.typ === "sda" && f.status === "gesperrt");
+  const registrierungGesperrt = forms.some((f) => f.typ === "registration" && f.status === "gesperrt");
+  const offenesAbklaerungsformular = forms.some((f) => ABKLAERUNG_TYPEN.has(f.typ) && f.status !== "gesperrt");
 
   switch (typ) {
-    case "sda":
-      if (forms.some((f) => f.typ === "sda")) return { zulaessig: false, grund: "Der Fall hat bereits ein SDA" };
+    case "registration":
+      if (forms.some((f) => f.typ === "registration")) return { zulaessig: false, grund: "Der Fall hat bereits eine Registrierung" };
       return { zulaessig: true };
-    case "hc":
-      if (!sdaGesperrt) return { zulaessig: false, grund: "Kein gesperrtes SDA vorhanden" };
-      if (fall.triage !== "interrai_hc") return { zulaessig: false, grund: "Die Triage lässt kein interRAI HC zu" };
-      if (forms.some((f) => f.typ === "hc" && f.status !== "gesperrt")) return { zulaessig: false, grund: "Es ist bereits ein HC dieses Falls offen" };
+    case "interrai_hc":
+    case "interrai_cmh":
+    case "housekeeping":
+      if (!registrierungGesperrt) return { zulaessig: false, grund: "Registrierung ist noch nicht gesperrt" };
+      if (fall.route !== ROUTE_FUER_TYP[typ]) return { zulaessig: false, grund: routeGrund(fall.route, typ) };
+      if (offenesAbklaerungsformular) return { zulaessig: false, grund: "Es ist bereits ein Abklärungsformular dieses Falls offen" };
       return { zulaessig: true };
-    case "lpb":
-      if (!sdaGesperrt) return { zulaessig: false, grund: "Kein gesperrtes SDA vorhanden" };
-      return { zulaessig: true };
-    case "entlassung":
-      if (forms.some((f) => f.typ === "entlassung")) return { zulaessig: false, grund: "Es existiert bereits eine Entlassung" };
+    case "discharge":
+      if (forms.some((f) => f.typ === "discharge")) return { zulaessig: false, grund: "Es existiert bereits eine Entlassung" };
       if (forms.length === 0 || !forms.every((f) => f.status === "gesperrt")) return { zulaessig: false, grund: "Es sind noch nicht alle Formulare des Falls gesperrt" };
       return { zulaessig: true };
   }
 }
 
-/** Internal case-number field per type — BB5b (SDA) / A5b (HC), same i-code
- *  iA5d. No i-code layer yet, so we write the per-type answer key directly. */
-const FALLNUMMER_FELD: Partial<Record<FormularTyp, string>> = { sda: "BB5b", hc: "A5b" };
+/** Internal case-number field per type — BB5b (registration) / A5b (interRAI HC),
+ *  same i-code iA5d. No i-code layer yet, so we write the answer key directly. */
+const FALLNUMMER_FELD: Partial<Record<FormularTyp, string>> = { registration: "BB5b", interrai_hc: "A5b" };
 
 /**
  * Creates a form of `typ` inside an existing Fall — THE single creation path.
  * It calls kannFormularEroeffnen and throws on an illegal combination, so no
  * caller can create a form the rules forbid. `laufnummer` (per Fall AND typ)
- * and, for hc, `vorgaengerId` (the last locked hc of the SAME Fall) are set
- * here and are immutable. The internal case-number field is pre-filled from the
- * Fall (SDA and HC).
+ * and, for interrai_hc, `vorgaengerId` (the last locked hc of the SAME Fall)
+ * are set here and are immutable. `reason` is 'first' for laufnummer 1, else
+ * null. The case-number field is filled once the Fall has a Fallnummer (i.e. an
+ * interRAI form after the registration locked; the registration itself gets it
+ * at lock time).
  */
 export function createFormular(fallId: string, typ: FormularTyp): Formular {
   const pruefung = kannFormularEroeffnen(fallId, typ);
@@ -533,7 +607,7 @@ export function createFormular(fallId: string, typ: FormularTyp): Formular {
   const gesperrteHc = gleicherTyp
     .filter((f) => f.status === "gesperrt")
     .sort((a, b) => a.laufnummer - b.laufnummer);
-  const vorgaengerId = typ === "hc" && gesperrteHc.length ? gesperrteHc[gesperrteHc.length - 1].id : null;
+  const vorgaengerId = typ === "interrai_hc" && gesperrteHc.length ? gesperrteHc[gesperrteHc.length - 1].id : null;
 
   const id = `NEU-ASS-${String(formulare.size + 1).padStart(3, "0")}`;
   const now = new Date().toISOString();
@@ -544,11 +618,12 @@ export function createFormular(fallId: string, typ: FormularTyp): Formular {
     typ,
     laufnummer,
     vorgaengerId,
-    anlass: typ === "hc" && laufnummer > 1 ? "re_assessment" : "erstabklaerung",
+    reason: laufnummer === 1 ? "first" : null,
+    anlass: typ === "interrai_hc" && laufnummer > 1 ? "re_assessment" : "erstabklaerung",
     status: "in_bearbeitung",
     erstelltAm: now,
     zuletztBearbeitetAm: now,
-    answers: feld ? { [feld]: fall.fallnummer } : {},
+    answers: feld && fall.fallnummer ? { [feld]: fall.fallnummer } : {},
     vorschlaege: {},
     bestaetigungen: {},
     gespraechId: null,
@@ -567,8 +642,8 @@ export function createFormular(fallId: string, typ: FormularTyp): Formular {
  * createFormular — callers surface the thrown reason to the user.
  */
 export function erstelleNaechstesFormular(fallId: string): Formular {
-  const hatSda = formulareFuerFall(fallId).some((f) => f.typ === "sda");
-  return createFormular(fallId, hatSda ? "hc" : "sda");
+  const hatRegistrierung = formulareFuerFall(fallId).some((f) => f.typ === "registration");
+  return createFormular(fallId, hatRegistrierung ? "interrai_hc" : "registration");
 }
 
 export function updateAssessmentAnswers(
@@ -621,8 +696,8 @@ export function confirmVorschlag(
   a.zuletztBearbeitetAm = new Date().toISOString();
 }
 
-/** For hc: pre-fill the signature/date fields (S1/S2) so completeness doesn't
- *  stall on them — the historical convenience of the old abschliessenAssessment. */
+/** For interRAI HC: pre-fill the signature/date fields (S1/S2) so completeness
+ *  doesn't stall on them — the historical convenience of the old completion. */
 function prefillSignaturHc(a: Formular, person: string): void {
   if (a.answers["S1"] == null || a.answers["S1"] === "") a.answers["S1"] = person;
   if (a.answers["S2a"] == null || a.answers["S2a"] === "") a.answers["S2a"] = person;
@@ -639,26 +714,31 @@ function markiereVollstaendig(a: Formular): void {
 
 /**
  * Applies the lock to a form: discards remaining suggestions, sets status
- * gesperrt + protocol fields, and runs the type-specific side effects — an SDA
- * sets Fall.triage (immutable, from BB16), an Entlassung closes the Fall.
- * Shared by the runtime sperreFormular (after its gates) and the demo seed
- * (which sets gesperrt forms directly, bypassing the completeness gate). The
- * SDA-without-triage guard lives here so it holds for BOTH paths.
+ * gesperrt + protocol fields, and runs the type-specific side effects on the
+ * FALL — and ONLY the registration and discharge touch the Fall:
+ *   registration → mint the Fallnummer, set route (from BB16) and openedAt;
+ *                  the form's case-number field is filled here, not left null.
+ *   discharge    → set closedAt.
+ * An interRAI form locking deliberately has no effect on the Fall.
+ * The Fallnummer is minted BEFORE the form's gesperrt state is written.
+ * Shared by the runtime sperreFormular (after its gates) and the demo seed.
  */
 function wendeSperreAn(a: Formular, gesperrtVon: string, jetzt: string): void {
   const fall = faelle.get(a.fallId);
   if (!fall) throw new Error(`wendeSperreAn: unbekannte fallId "${a.fallId}"`);
 
-  if (a.typ === "sda") {
+  if (a.typ === "registration") {
     const code = a.answers["BB16"];
     if (code == null || code === "") {
-      throw new Error("SDA ohne codiertes BB16 — kein gültiges SDA, Triage nicht bestimmbar");
+      throw new Error("Registrierung ohne codiertes BB16 — Route nicht bestimmbar, keine Fallnummer");
     }
-    // Triage NUR hier und nur einmal gesetzt (unveränderlich). Die fachliche
-    // Zuordnung stammt aus sdaVerlangtInterrai, wird nicht dupliziert.
-    if (fall.triage === null) {
-      fall.triage = sdaVerlangtInterrai(code) ? "interrai_hc" : "nur_sda";
-    }
+    // FALL ZUERST: Fallnummer vergeben, Route und openedAt setzen — DANN das
+    // Formular sperren (nicht den dokumentierten Produktionsdefekt nachbauen).
+    if (fall.fallnummer === null) fall.fallnummer = vergibFallnummer(jetzt);
+    if (fall.route === null) fall.route = sdaRoute(code);
+    fall.openedAt = jetzt;
+    // Das Registrierungsformular trägt seine Fallnummer (i-Code iA5d / BB5b).
+    a.answers["BB5b"] = fall.fallnummer;
   }
 
   a.vorschlaege = {};
@@ -667,8 +747,8 @@ function wendeSperreAn(a: Formular, gesperrtVon: string, jetzt: string): void {
   a.gesperrtVon = gesperrtVon;
   a.zuletztBearbeitetAm = jetzt;
 
-  if (a.typ === "entlassung") {
-    fall.geschlossenAm = jetzt;
+  if (a.typ === "discharge") {
+    fall.closedAt = jetzt;
   }
 }
 
@@ -681,7 +761,7 @@ export function sperreFormular(formularId: string, gesperrtVon: string): void {
   if (!a) throw new Error(`sperreFormular: unbekanntes Formular "${formularId}"`);
   if (a.status === "gesperrt") throw new Error("Formular ist bereits gesperrt");
 
-  if (a.typ === "hc") prefillSignaturHc(a, gesperrtVon);
+  if (a.typ === "interrai_hc") prefillSignaturHc(a, gesperrtVon);
   markiereVollstaendig(a);
   if (a.status !== "vollstaendig") {
     throw new Error("Formular ist nicht vollständig — Sperren nicht zulässig");
@@ -754,10 +834,11 @@ export function getStatusLabel(status: FormularStatus): string {
 /** Display label for a form type (used in the list). */
 export function getTypLabel(typ: FormularTyp): string {
   switch (typ) {
-    case "sda": return "SDA";
-    case "hc": return "interRAI HC";
-    case "lpb": return "Leistungsplanungsblatt";
-    case "entlassung": return "Entlassung";
+    case "registration": return "Registrierung";
+    case "interrai_hc": return "interRAI HC";
+    case "interrai_cmh": return "interRAI CMH";
+    case "housekeeping": return "Hauswirtschaft";
+    case "discharge": return "Entlassung";
   }
 }
 

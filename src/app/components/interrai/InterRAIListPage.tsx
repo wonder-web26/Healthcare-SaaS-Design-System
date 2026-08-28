@@ -227,7 +227,7 @@ export function InterRAIListPage() {
         </span>
       ) },
     { id: "typ", label: "Formular", anteil: 20, minCh: 18, align: "left", sortierbar: true,
-      render: a => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{getTypLabel(a.typ)}{a.typ === "hc" ? ` · ${getAnlassLabel(a.anlass)}` : ""}</span> },
+      render: a => <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{getTypLabel(a.typ)}{a.typ === "interrai_hc" ? ` · ${getAnlassLabel(a.anlass)}` : ""}</span> },
     { id: "status", label: "Status", anteil: 12, minCh: 13, align: "left", sortierbar: true,
       // Farbe nur für die Abweichung (Kennzeichen). Status selbst zurückhaltend: „In
       // Bearbeitung" neutral (Arbeitsnorm), „Abgeschlossen" als positiver Abschluss.

@@ -1,0 +1,2630 @@
+// ############################################################################
+//
+//  SPIT — COMPLETE DATA MODEL
+//  Swiss Spitex (home-care) platform · multi-tenant · certified clinical core
+//
+//  Paste into https://dbdiagram.io to render.
+//
+//  ------------------------------------------------------------------------
+//  HOW TO READ THIS FILE
+//  ------------------------------------------------------------------------
+//  Nine table groups, in the order a real journey runs:
+//
+//    1  PLATFORM        provider-owned. Plans, add-ons, role templates.
+//    2  TENANT & IDENTITY   organisation, offices, users, login, invitations.
+//    3  PEOPLE          patient, relative-as-carer, employment, contacts.
+//    4  CERTIFIED CORE  care case, forms, answers, CAPs, scales.  ** BUILT **
+//    5  CLINICAL PLAN   diagnoses, goals, care plan, observations, medication.
+//    6  FUNDING         mandate, tariffs, cantonal participation.
+//    7  DELIVERY        service plan, visits, what actually happened.
+//    8  MONEY           billables, invoices, prescriptions.
+//    9  WORK & DOCS     workflow, tasks, documents, signing, audit.
+//
+//  ------------------------------------------------------------------------
+//  BUILD STATE — verified against `develop`, 27 Aug 2026
+//  ------------------------------------------------------------------------
+//    [BUILT]     exists in Prisma and works
+//    [PARTIAL]   exists, incomplete
+//    [TICKETED]  designed, has a WON number, not written
+//    [TARGET]    proposed, two-year model, no ticket
+//
+//  ------------------------------------------------------------------------
+//  WHAT THIS FILE CHANGES ABOUT THE EXISTING SCHEMA
+//  ------------------------------------------------------------------------
+//  Existing tables are shown AS THEY ARE unless a column is tagged [TARGET] or
+//  [TICKETED]. Those tags mark PROPOSALS, not current state.
+//
+//  Proposed changes to tables that already exist:
+//    Task                       + category, origin, relativeId, workflowStepId
+//                               + affectedPerson becomes a reference (free text today)
+//                               + TaskStatus gains `cancelled`
+//    Patient                    + noKnownAllergies
+//                               - gpName, emergencyContact*, socialOfficeContact
+//                                 MIGRATE OUT to Contact + PatientContact (WON-157)
+//    InsurancePolicy            + category, GLN, card number, model, billing method
+//                                 `insurer` (plain string) stays until replaced
+//    Contract                   + signing evidence columns (WON-156)
+//                                 caseId is UNCHANGED and still points at onboarding
+//    Diagnosis                  + NANDA catalogue link, relatedTo, evidencedBy,
+//                                 origin, sourceCapCode, confirmedBy, status
+//    ActionItem                 + enpInterventionId
+//    SpitexServicePlanPosition  + careMandateId NOT NULL  ← the load-bearing one
+//                                 (that table does not exist yet, so this is
+//                                  free today and a migration later)
+//
+//  DELIBERATE SIMPLIFICATIONS, so the diagram stays readable:
+//    - ownerId / createdBy / updatedBy are omitted from most tables. They exist
+//      on nearly every real table and follow the same pattern everywhere.
+//    - Not every index is reproduced; only the ones that carry meaning.
+//    - Some enums are shown as varchar with the values in a note.
+//    - CustomField and Definition are stubs — their real columns are not
+//      reproduced here.
+//
+//  NOTHING IN THE CERTIFIED CORE IS CHANGED. Group 4 is described as built.
+//
+//  ------------------------------------------------------------------------
+//  V2 — PRODUCTION REVIEW, 27 AUG 2026 (evening)
+//  ------------------------------------------------------------------------
+//  A production review against DomoCare and the project spec found two
+//  design errors and a set of rule violations. All verified against
+//  `develop` before changing anything here:
+//
+//  P0  THE MONEY MODEL WAS WRONG. `Tariff` labelled the FEDERAL KLV Art. 7a
+//      insurer contributions (76.90/63.00/52.60 CHF/h, national since 2020)
+//      as a cantonal Bern tariff, and residual financing (Restfinanzierung,
+//      Art. 25a KVG) had no home — so canton/municipality invoices had no
+//      source of amounts. Replaced by THREE layers:
+//        KlvContributionRate   GLOBAL   what the insurer pays (national)
+//        CantonalParticipationRule GLOBAL what the patient pays (cantonal)
+//        OrgServiceRate        TENANT   the organisation's full-cost rate —
+//                                       the residual = full cost − insurer
+//                                       − patient, invoiced to canton/muni
+//      BillableItem gains payerType: ONE VisitService fans out to up to
+//      three billables. All rate figures are SEED DATA TO BE VERIFIED
+//      against the current KLV / tariff agreements, never trusted from a
+//      reverse-engineered UI.
+//
+//  P1  THE CARER COULD NOT RECORD CARE. The employed relative is a Relative,
+//      not a User — yet every performer column pointed at User. Pending D36
+//      (is an employed relative a User?): Employment.userId added, Visit
+//      gains relativeId with an exactly-one rule, TimesheetEntry.visitId
+//      links payroll to delivered care.
+//
+//  Corrected against the repo: OrgInvitation.invitedEmail is PLAINTEXT
+//  today (target: encrypted + hash); ScopeRule is ORG_OFFICE/CROSS_ORG;
+//  Organization.passwordHash is the provisioning bootstrap credential;
+//  Organization.emailDomain is the BREVO SENDING DOMAIN, not SSO;
+//  the entry-log actor column is `userId uuid`.
+//
+//  Rule 4 sweep: `deleted` removed from status enums (deletedAt IS the
+//  deletion); zemisNumber, Appointment address, diagnosis narrative and
+//  task text encrypted or explicitly flagged.
+//
+//  New tables: KlvContributionRate, OrgServiceRate, PatientDocument,
+//  Consent, MedicationStatusChange. Removed: Tariff.
+//
+//  ------------------------------------------------------------------------
+//  FOUR RULES THAT EXPLAIN MOST OF THE SHAPE
+//  ------------------------------------------------------------------------
+//  1  TENANCY. Every business row carries organizationId. Row-level security
+//     in Postgres AND an application interceptor, both always on. Nobody
+//     hand-writes a tenant filter. Out-of-scope reads return 404, never 403.
+//     Global catalogue tables are the ONLY exception and are marked GLOBAL.
+//     officeId lives on ROOT business tables; child rows (answers, results,
+//     visit services, workflow steps …) scope through their parent FK — the
+//     "no exceptions" wording in 02-ENGINEERING §3 is overstated and should
+//     be rewritten to say exactly this.
+//
+//  2  RESIDENCY. Patient audio, transcripts, documents, signatures and keys
+//     never leave Switzerland. PII is encrypted (Bytes columns); lookups go
+//     through a separate SHA-256 hash column. Erasure destroys the key rather
+//     than the row, so the audit trail survives.
+//
+//  3  CLINICIAN IN THE LOOP. AI proposes; a person confirms. `confirmedBy` is
+//     always a human. The one deliberate exception is a workflow step closed
+//     by a certified fact, where completedBy is NULL and the fact is recorded
+//     instead — because there is no human to name.
+//
+//  4  THE ONE-WAY ARROW. The certified layer is written by nurses and by the
+//     algorithm engine, and by nothing else. Workflow, billing and documents
+//     READ it. A visit never reopens a form; an invoice never edits a plan.
+//
+// ############################################################################
+
+
+// ############################################################################
+//  GROUP 1 — PLATFORM  (provider-owned, GLOBAL, no tenant column)
+// ############################################################################
+
+Table Plan {
+  id          uuid [pk]
+  key         varchar [not null]
+  name        varchar [not null]
+  description varchar
+  price       decimal
+  isActive    boolean [not null, default: true]
+  createdAt   timestamptz [not null]
+
+  Note: '''
+  [BUILT] GLOBAL — no organizationId, no RLS.
+  A commercial subscription tier. What an organisation buys.
+  Readable from every tenant by design; that is not a leak.
+  '''
+}
+
+Table AddOn {
+  id              uuid [pk]
+  key             varchar [not null]
+  name            varchar [not null]
+  description     varchar
+  isMetered       boolean [not null, default: false]
+  defaultQuantity int
+  isActive        boolean [not null, default: true]
+
+  Note: '''
+  [BUILT] GLOBAL. An optional capability sold on top of a plan — the AI
+  features, an integration, a second instrument.
+  `isMetered` marks add-ons billed by quantity rather than presence.
+  Every AI feature sits behind one of these from day one.
+  '''
+}
+
+Table PlanAddOn {
+  id      uuid [pk]
+  planId  uuid [not null]
+  addOnId uuid [not null]
+  Note: '[BUILT] GLOBAL. Which add-ons a plan includes by default.'
+}
+
+Table RoleTemplate {
+  id             uuid [pk]
+  name           varchar [not null]
+  scopeRule      varchar [not null, note: 'ORG_OFFICE | CROSS_ORG — verified in code. This is REACH only; WHICH offices comes from OfficeMembership, and per-record ownership comes from ownerId + visibilityLevel (omitted here for readability).']
+  allowedActions json    [not null]
+  version        int     [not null]
+  isActive       boolean [not null, default: true]
+
+  Note: '''
+  [BUILT] GLOBAL. A named bundle of permissions — nurse, back office, HR,
+  management, provider admin.
+
+  Two independent axes: WHAT you may do (allowedActions) and HOW FAR it
+  reaches (scopeRule). A nurse with `own` sees her own patients; the same
+  action with `organization` sees all of them.
+
+  Versioned, never edited in place — a permission change must not silently
+  re-scope people already assigned.
+  '''
+}
+
+
+// ############################################################################
+//  GROUP 2 — TENANT & IDENTITY
+//  The journey starts here: an organisation is provisioned, a user is
+//  invited, they log in, and everything they touch is scoped to them.
+// ############################################################################
+
+Table Organization {
+  id              uuid [pk]
+  slug            varchar [not null]
+  name            varchar [not null]
+  status          varchar [not null]
+  settings        json
+  adminEmailHash  varchar
+  passwordHash    varchar
+  emailDomain     varchar [note: 'the BREVO SENDING DOMAIN (verified in code only by the email service). NOT an SSO gate — SSO is provider- and domain-agnostic. Confusable with OrganizationEmailDomain, which holds the DNS records for the same purpose; consolidate.']
+  domainVerified  boolean [not null, default: false]
+  createdAt       timestamptz [not null]
+  deletedAt       timestamptz
+
+  Note: '''
+  [BUILT] THE TENANT. One Spitex organisation. The root of every isolation
+  boundary in the system.
+
+  Provisioning is the ONLY flow that runs outside tenant context, and it is a
+  dedicated audited path rather than a general escape hatch.
+
+  adminEmailHash + passwordHash are the PROVISIONING BOOTSTRAP CREDENTIAL —
+  written once by organizations.service when the tenant is created, never
+  leaving the service layer. Documented here because a password on a tenant
+  row is a smell an auditor will ask about; the answer is "first-admin
+  bootstrap", and moving it onto the first User row is the cleaner target.
+  '''
+  indexes { (slug) [unique] }
+}
+
+Table Office {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  name           varchar [not null]
+  code           varchar
+  timezone       varchar [not null]
+  isActive       boolean [not null, default: true]
+  deletedAt      timestamptz
+
+  Note: '''
+  [BUILT] A branch or site. THE SECOND ISOLATION WALL.
+
+  organizationId keeps tenants apart; officeId keeps branches apart inside a
+  tenant. A nurse in the Bern office should not browse Zurich clients even
+  though both are the same customer.
+
+  Almost every business table carries officeId for this reason.
+  '''
+  indexes { (organizationId, code) [unique] }
+}
+
+Table User {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  email          Bytes   [not null, note: 'ENCRYPTED']
+  emailHash      varchar [not null, note: 'SHA-256 — this is what login looks up']
+  name           Bytes   [note: 'ENCRYPTED']
+  status         varchar [not null]
+  isActive       boolean [not null, default: true]
+  language       varchar [note: 'de-CH | fr-CH | it-CH | en']
+  ssoProvider    varchar
+  ssoSub         varchar
+  mfaEnabled     boolean [not null, default: false]
+  mfaSecret      Bytes   [note: 'ENCRYPTED']
+  mfaVerified    boolean [not null, default: false]
+  lastLoginAt    timestamptz
+  createdAt      timestamptz [not null]
+  deletedAt      timestamptz
+
+  Note: '''
+  [BUILT] A staff member. Belongs to exactly one organisation.
+
+  THE ENCRYPTED-PLUS-HASH PATTERN, used everywhere in this schema: the value
+  is encrypted at rest and unusable in a WHERE clause, so a separate
+  deterministic hash column carries the lookup. Login matches emailHash and
+  decrypts email only after.
+
+  Deactivating a user never reassigns their records — an admin does that
+  deliberately.
+  '''
+  indexes {
+    (emailHash) [unique, note: 'GLOBAL across tenants — D38, decided 28 Aug. One email, one organisation: login resolves before the tenant is known, so the lookup must land on exactly one user. Relaxing later is a dropped constraint; tightening later is an account merge — this is the safe direction. Costs: locum nurses, shared Treuhand accountants and a relative serving two orgs need a second address. Invite/registration failures must stay generic so existence in another tenant never leaks.']
+    (organizationId, emailHash)
+  }
+}
+
+Table OfficeMembership {
+  id             uuid [pk]
+  userId         uuid [not null]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  department     varchar
+  isPrimary      boolean [not null, default: false]
+  isActive       boolean [not null, default: true]
+  invitationId   uuid
+
+  Note: '''
+  [BUILT] Which offices a user works in. A person can span several; one is
+  primary. This is what the `office` scope rule resolves against.
+  '''
+  indexes { (userId, officeId) [unique] }
+}
+
+Table UserRoleAssignment {
+  id             uuid [pk]
+  userId         uuid [not null]
+  organizationId uuid [not null]
+  templateId     uuid [not null]
+  officeId       uuid
+  grantedBy      uuid
+  revokedAt      timestamptz
+  revokedBy      uuid
+
+  Note: '''
+  [BUILT] Grants a role template to a user, optionally narrowed to one office.
+
+  REVOKED, NEVER DELETED. "Who could see this record last March" has to remain
+  answerable, which a delete makes impossible.
+  '''
+  indexes { (userId, templateId, officeId) }
+}
+
+Table OrgInvitation {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  invitedEmail   varchar [not null, note: 'PLAINTEXT TODAY in Prisma — verified. Target: encrypted Bytes.']
+  invitedEmailHash varchar [note: '[TARGET] SHA-256 — REQUIRED. The SSO check sequence matches a pending invitation by email; without this hash that lookup needs a full-table decrypt. The same encrypted-plus-hash pattern used everywhere else, missed here.']
+  invitedById    uuid    [not null]
+  status         varchar [not null, note: 'pending | accepted | expired | revoked']
+  token          varchar [not null]
+  expiresAt      timestamptz [not null]
+  acceptedAt     timestamptz
+
+  Note: '''
+  [BUILT] STAGE 1 OF THE JOURNEY. An invitation email creates this row plus a
+  pending membership and role assignment, and consumes a licence seat.
+
+  On first login the token is validated against expiresAt — the validity gate —
+  and the pending rows activate. An expired token consumes nothing.
+  '''
+  indexes {
+    (token) [unique]
+    (organizationId, invitedEmailHash, status)
+  }
+}
+
+Table RefreshToken {
+  id             uuid [pk]
+  userId         uuid [not null]
+  organizationId uuid [not null]
+  tokenHash      varchar [not null, note: 'the raw token is never stored']
+  deviceId       varchar
+  expiresAt      timestamptz [not null]
+  rotatedAt      timestamptz
+  revokedAt      timestamptz
+
+  Note: '''
+  [BUILT] Session continuity. Rotated on every use — a replayed old token
+  revokes the whole chain, which is how token theft is detected.
+  '''
+  indexes { (tokenHash) [unique] }
+}
+
+Table OrgLicense {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  totalSeats     int  [not null]
+  seatsUsed      int  [not null]
+  billingStatus  varchar [not null]
+  expiresAt      timestamptz
+  Note: '[BUILT] Seat count. An invitation consumes a seat at issue, not at acceptance, so seats cannot be oversold by mass-inviting.'
+}
+
+Table OrganizationPlan {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  planId         uuid [not null]
+  createdAt      timestamptz [not null]
+  deletedAt      timestamptz
+  Note: '[BUILT] Which plan this tenant is on.'
+}
+
+Table OrganizationAddOn {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  addOnId        uuid [not null]
+  quantity       int
+  grantedBy      uuid
+  deletedAt      timestamptz
+  Note: '[BUILT] THE ENTITLEMENT GATE. Every optional feature checks here before it runs — AI, integrations, the second instrument, the workflow engine.'
+}
+
+Table OrganizationEmailDomain {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  domain         varchar [not null]
+  brevoDomainId  varchar
+  dnsRecords     json
+  verified       boolean [not null, default: false]
+  verifiedAt     timestamptz
+  Note: '[BUILT] Verified sending domain, so system email leaves as the customer rather than as us. DNS records are stored so the UI can show what is still missing.'
+}
+
+
+// ############################################################################
+//  GROUP 3 — PEOPLE
+//  The client, the family member employed to care for them, and everyone
+//  else the record needs to name.
+// ############################################################################
+
+Table Patient {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+
+  firstName   Bytes [not null, note: 'ENCRYPTED']
+  lastName    Bytes [not null, note: 'ENCRYPTED']
+  nameHash    varchar [not null, note: 'SHA-256 — search and duplicate detection']
+  dateOfBirth date
+  gender      varchar
+  nationality varchar
+  homeTown    varchar
+  maritalStatus  varchar
+  residenceStatus varchar [note: 'B, C, G … DRIVES THE PERMIT COMPLIANCE GATE']
+
+  ahvNumber Bytes   [note: 'ENCRYPTED. Swiss social insurance number.']
+  ahvHash   varchar [note: 'SHA-256. THE CASE IDENTITY — all forms of a case carry it.']
+
+  email Bytes [note: 'ENCRYPTED']
+  phone Bytes [note: 'ENCRYPTED']
+  addressStreet Bytes [note: 'ENCRYPTED']
+  addressZip  varchar
+  addressCity varchar
+  canton      varchar
+
+  language        varchar
+  needsInterpreter boolean
+  noKnownAllergies boolean [note: '[TARGET] a CHECKED absence, which is not the same as no allergy rows']
+
+  externalId varchar [note: '[TARGET] the patient ID in a system being migrated from']
+  deceasedAt date [note: '[TARGET] a deceased client must stop generating tasks, visits and invoices']
+  resuscitationDecision varchar [note: '[TARGET] unknown | yes | no — SAFETY-CRITICAL. A nurse at a collapsed client needs this on the first screen.']
+  advanceDirectiveExists boolean [note: '[TARGET] Patientenverfügung on file']
+  advanceDirectiveDate date [note: '[TARGET]']
+  accessNote Bytes [note: '[TARGET] ENCRYPTED — key box code, the dog, the neighbour with the key']
+  careAddressStreet Bytes [note: '[TARGET] ENCRYPTED — where care is DELIVERED when it differs from home']
+  careAddressZip varchar [note: '[TARGET]']
+  careAddressCity varchar [note: '[TARGET]']
+  elEntitled boolean [note: '[TARGET] Ergänzungsleistungen — changes who is invoiced']
+  elCaseNumber Bytes [note: '[TARGET] ENCRYPTED']
+  heDegree varchar [note: '[TARGET] Hilflosenentschädigung: none | light | medium | severe — interacts with participation']
+
+  status varchar [not null, note: 'DEFECT: written in_onboarding at intake and never advances']
+
+  encryptionKeyId uuid [note: 'per-patient key. Destroying it crypto-shreds this record.']
+
+  createdAt timestamptz [not null]
+  deletedAt timestamptz
+
+  Note: '''
+  [BUILT] THE CLIENT.
+
+  ENCRYPTION: every personal field is a Bytes column. Lookups go through
+  nameHash and ahvHash. Erasure destroys encryptionKeyId, which renders the
+  ciphertext inert while leaving the audit trail and the row structure intact.
+
+  KNOWN DEFECT: `status` is set to in_onboarding when the mandate is created
+  and never moves — not on a locked registration, not on an open case, not on
+  a locked assessment. A fully assessed patient is indistinguishable from one
+  registered a minute ago.
+
+  MIGRATING OUT [TICKETED WON-157]: gpName, emergencyContactName,
+  emergencyContactPhone, emergencyContactRelation, socialOfficeContact all
+  become Contact + PatientContact rows. emergencyContactPhone is currently a
+  PLAIN STRING beside an encrypted name — a shadow column, and a real defect.
+
+  Height and weight were removed correctly (they are observations) but were
+  removed to nowhere. They belong in Observation.
+
+  RE-IDENTIFICATION NOTE: dateOfBirth + addressZip + gender + canton are all
+  plaintext beside encrypted names — a classic re-identification triple.
+  Decide deliberately: accept and document in 02-ENGINEERING §13.1, or keep
+  birthYear plaintext for age logic and encrypt the full date.
+  '''
+  indexes {
+    (organizationId, ahvHash) [unique]
+    (organizationId, nameHash)
+  }
+}
+
+Table Relative {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  firstName Bytes [not null, note: 'ENCRYPTED']
+  lastName  Bytes [not null, note: 'ENCRYPTED']
+  nameHash  varchar [not null]
+  gender    varchar
+  dateOfBirth date
+  ahvNumber Bytes   [note: 'ENCRYPTED']
+  ahvHash   varchar
+  nationality varchar
+  residenceStatus varchar [note: 'B triggers the Spezialbewilligung HARD GATE. G triggers a medium gate.']
+  maritalStatus varchar
+  addressStreet Bytes [note: 'ENCRYPTED']
+  status varchar [not null]
+  createdAt timestamptz [not null]
+  deletedAt timestamptz
+
+  Note: '''
+  [BUILT] THE FAMILY MEMBER EMPLOYED AS THE CARER. This is the product's
+  distinguishing concept and a mature competitor has no equivalent object.
+
+  A daughter caring for her father is EMPLOYED BY THE ORGANISATION. That brings
+  a contract, a work permit, withholding tax, child allowances, payroll and a
+  timesheet — a whole HR strand hanging off a clinical record.
+
+  `residenceStatus` is not descriptive. Permit B on a carer creates a legal
+  obligation at the Migrationsamt that BLOCKS CONTRACT SIGNING until confirmed.
+  '''
+  indexes { (organizationId, nameHash) }
+}
+
+Table RelativePatient {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  relativeId uuid [not null]
+  patientId  uuid [not null]
+  relationshipType varchar [not null]
+  isBilledCarer boolean [not null, default: false]
+  startDate date
+  endDate   date
+  deletedAt timestamptz
+
+  Note: '''
+  [BUILT] Which carer looks after which client. MANY-TO-MANY: one carer can
+  serve several clients, and a client can have several carers.
+
+  `isBilledCarer` marks the one whose time is billed, which is not always the
+  same as the one most involved.
+
+  A carer taking a SECOND client gets a second onboarding but NOT a second
+  employment and NOT a second relative workflow.
+  '''
+  indexes { (relativeId, patientId) [unique] }
+}
+
+Table Employment {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  relativeId uuid [not null]
+  functionRole varchar
+  startDate date [not null]
+  hourlyWage decimal
+  bankName varchar
+  iban Bytes [note: 'ENCRYPTED']
+  withholdingTax boolean
+  withholdingTaxRate decimal
+  taxMunicipality varchar
+  bvgInsured boolean [note: 'occupational pension']
+  uvgInsured boolean [note: 'accident insurance']
+  socialOfficeInvolved varchar
+  userId uuid [note: '[TARGET, D36] the carer’s own login. The recommended answer to D36: an employed relative BECOMES a User with a restricted role template — reusing seats, RLS, audit and the mobile app — and this column is the bridge.']
+  deletedAt timestamptz
+
+  Note: '''
+  [BUILT] THE EMPLOYMENT CONTRACT with the carer. One per relative, surviving
+  the case that created it.
+
+  If the client is discharged, the withholding tax registration is still
+  outstanding — which is exactly why the relative workflow is anchored to the
+  relative and not to the care case.
+
+  OPEN (D1): does employment end when the last case closes? Recommended answer
+  is that discharge raises an HR task and a human ends the contract, because
+  Swiss notice periods do not care about case status.
+  '''
+  indexes { (organizationId, relativeId) }
+}
+
+Table Dependent {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  employmentId uuid [not null]
+  dependentType varchar [not null, note: 'partner | child']
+  firstName Bytes [note: 'ENCRYPTED']
+  lastName  Bytes [note: 'ENCRYPTED']
+  dateOfBirth date
+  ahvNumber Bytes [note: 'ENCRYPTED']
+  zemisNumber Bytes [note: 'ENCRYPTED — the federal migration-register identifier of a named person; as sensitive as AHV. Was plaintext: Rule 4 violation.']
+  residenceStatus varchar
+  employed boolean
+  allowanceType varchar
+  deletedAt timestamptz
+
+  Note: '[BUILT] Partner and children of an employed carer. Exists because child allowances and withholding-tax rates depend on them — a payroll requirement, not a clinical one.'
+}
+
+Table TimesheetEntry {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  employmentId uuid [not null]
+  entryDate date [not null]
+  minutes   int  [not null]
+  startTime time [note: '[TARGET] the per-day unique below forbids split shifts (morning + evening); either this column joins the key or the uniqueness goes']
+  visitId uuid [note: '[TARGET] links payroll to delivered care, so the timesheet can be reconciled against visits — the note below claims the same hour appears in both, and until v2 there was no way to prove it']
+  deletedAt timestamptz
+  Note: '[BUILT] Hours worked by an employed carer — the PAYROLL side. Distinct from VisitService, which is the BILLING side. The same hour can appear in both and they are not interchangeable.'
+  indexes { (employmentId, entryDate) [unique, note: 'today — blocks split shifts, see startTime'] }
+}
+
+Table Contact {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  contactType varchar [not null, note: 'doctors_office | authority | social_service | private_person']
+  lastName  Bytes [note: 'ENCRYPTED. For an institution this IS the institution name.']
+  firstName Bytes [note: 'ENCRYPTED. Person types only.']
+  affiliation varchar
+  email  Bytes [note: 'ENCRYPTED']
+  phone  Bytes [note: 'ENCRYPTED']
+  mobile Bytes [note: 'ENCRYPTED']
+  addressStreet Bytes [note: 'ENCRYPTED']
+  addressZip varchar
+  addressCity varchar
+  canton varchar
+  profession varchar
+  gln varchar [note: 'Swiss healthcare identifier. MANDATORY for a prescriber.']
+  zsr varchar [note: 'practice billing number']
+  languagePreferred varchar
+  remark Bytes [note: 'ENCRYPTED']
+  userId uuid
+  isActive boolean [not null, default: true]
+  deletedAt timestamptz
+
+  Note: '''
+  [TICKETED WON-157] ANY PERSON OR ORGANISATION THE RECORD NAMES — a daughter,
+  a GP, a guardian, a physiotherapist, a neighbour with the key, a social
+  services office.
+
+  ONE TABLE, FOUR TYPES. A practice and a daughter share name, address, phone
+  and email; only gln, zsr and whether a first name applies differ. Four tables
+  would mean four forms and four searches.
+
+  A CONTACT EXISTS INDEPENDENTLY OF ANY PATIENT. A GP is recorded once and
+  linked to everyone in their practice.
+
+  TENANT-SCOPED — two organisations serving the same GP each hold their own
+  row. Sharing across tenants would breach isolation.
+
+  ERASURE IS PER-LINK: a shredded patient takes with them contacts that exist
+  only for them. A GP linked to eight patients survives.
+  '''
+  indexes { (organizationId, contactType, isActive) (organizationId, gln) }
+}
+
+Table PatientContact {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId uuid [not null]
+  contactId uuid [not null]
+  relationshipType varchar [note: 'daughter, son, guardian … for a private person']
+  professionalRole varchar [note: 'treating physician, specialist … for institutional types']
+  isEmergencyContact boolean [not null, default: false]
+  emergencyPriority  int
+  isKeyHolder        boolean [not null, default: false]
+  isPrimaryContact   boolean [not null, default: false]
+  hasAdminGuardianship  boolean [not null, default: false]
+  hasHealthGuardianship boolean [not null, default: false]
+  mayReceiveInformation boolean [not null, default: false]
+  validFrom  date
+  validUntil date
+  notes Bytes [note: 'ENCRYPTED']
+  deletedAt timestamptz
+
+  Note: '''
+  [TICKETED WON-157] THE ROLE LIVES HERE, NEVER ON THE CONTACT.
+
+  Dr Weber is the treating physician for one client and a specialist for
+  another. Erika is her father's daughter AND his emergency contact AND holds
+  his key. Put the role on Contact and either the doctor is created eight times
+  or seven of the eight roles are wrong.
+
+  THE TWO GUARDIANSHIP FLAGS ARE THE HIGHEST-VALUE FIELDS IN THE OBJECT. Swiss
+  law separates guardianship for financial matters from guardianship for health
+  matters. UNDER HEALTH GUARDIANSHIP THE GUARDIAN CONSENTS TO TREATMENT, NOT
+  THE CLIENT — which decides who signs, who may be told what, and who
+  authorises the assessment recording.
+
+  `mayReceiveInformation` is separate from `isEmergencyContact` on purpose.
+  Being called in an emergency is not consent to discuss a diagnosis, and the
+  assistant checks this flag before naming a contact in a summary.
+  '''
+  indexes {
+    (patientId, contactId, relationshipType) [unique, note: 'NULL-UNSAFE as written: relationshipType is NULL for professional contacts and Postgres treats NULLs as distinct, so the same GP can be linked unlimited times. Implement as a unique on (patientId, contactId, COALESCE(relationshipType, professionalRole, ’’)) or partial uniques per type.']
+    (organizationId, patientId, isEmergencyContact, emergencyPriority)
+  }
+}
+
+Table InsurancePolicy {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId uuid [not null]
+  category varchar [not null, note: '[TARGET] kvg | uvg | vvg | ivg | mvg | international']
+  insurerContactId uuid [note: '[TARGET]']
+  insurerGln   varchar [note: '[TARGET] REQUIRED — Swiss billing does not work without it']
+  recipientGln varchar [note: '[TARGET] where the invoice goes; often differs from the insurer']
+  insurer varchar [not null, note: 'EXISTS TODAY as a plain string — the insurerContactId above is the [TARGET] replacement, not a rename']
+  policyNumber Bytes [note: 'ENCRYPTED — it is Bytes in Prisma today']
+  cardNumber Bytes [note: '[TARGET] ENCRYPTED']
+  insuranceModel varchar [note: '[TARGET] standard | hmo | telmed | hausarzt']
+  billingMethod varchar [note: '[TARGET] tiers_payant | tiers_garant']
+  coverageType varchar
+  isPrimary boolean [not null, default: false]
+  validFrom  date
+  validUntil date
+  deletedAt timestamptz
+
+  Note: '''
+  [PARTIAL] Exists as one flat model. The [TARGET] columns are the expansion.
+
+  A patient legitimately holds several at once: KVG basic, VVG supplementary,
+  and UVG after an accident. `isPrimary` is not enough to choose between them —
+  the MANDATE names which policy funds it.
+  '''
+  indexes { (organizationId, patientId, category) }
+}
+
+
+// ############################################################################
+//  GROUP 4 — CERTIFIED CORE          ** BUILT AND VERIFIED **
+//
+//  This is what Spitex Schweiz certifies. A full assessment has been filled,
+//  computed and locked end to end on a running system, and a certified
+//  competitor's completed assessment reproduces through this engine exactly:
+//  23/23 CAPs with trigger levels, 5/5 printed scales.
+//
+//  NOTHING ELSE IN THIS FILE WRITES TO THESE TABLES.
+// ############################################################################
+
+Table SpitexFormCatalog {
+  id      uuid [pk]
+  code    varchar [not null, note: 'interrai_hc | interrai_cmh | sda | entlassung | hauswirtschaft']
+  version varchar [not null]
+  locale  varchar [not null]
+  structure json  [not null]
+  checksum  varchar [not null]
+  publishedAt timestamptz
+  validationStatus varchar [not null]
+
+  Note: '''
+  [BUILT] GLOBAL — no organizationId, no RLS. Spitex Schweiz publishes it;
+  every tenant reads the same rows.
+
+  DEFINITIONS ARE DOCUMENTS, PATIENT DATA IS ROWS. The whole instrument —
+  253 certified items, sections, option sets, skip rules, validations,
+  reassessment exclusions — lives as JSON in the repo and is seeded here.
+  Answers stay relational.
+
+  `checksum` drives drift detection in CI: if the seeded JSON and the file
+  disagree, the build fails rather than silently serving a stale instrument.
+
+  Rows are NEVER MUTATED. A form instance pins the version it was filled
+  against, so an assessment from last March still renders as it did then.
+  '''
+  indexes { (code, version, locale) [unique] }
+}
+
+Table SpitexAlgorithmCatalog {
+  id      uuid [pk]
+  code    varchar [not null, note: 'CAP_FALLS, DRS, MAPLE, xFALLS …']
+  kind    varchar [not null, note: 'derived | scale | cap']
+  version varchar [not null]
+  computeOrder int [not null]
+  definition json
+
+  Note: '''
+  [BUILT] GLOBAL. The 42 published algorithms: 24 CAPs, 18 scales, 1 derived
+  variable. Ported to TypeScript in `packages/spitex-algorithms`.
+
+  THREE COMPUTE PASSES IN A FIXED ORDER — derived variables (10), then scales
+  (20), then CAPs (30) — because several CAPs consume scale output. The order
+  is not negotiable and is enforced by computeOrder.
+
+  These are DETERMINISTIC ALGORITHMS, not inference. Same answers, same result,
+  reproducible in five years. This is why there is no clinical reasoning model
+  anywhere in this schema: Spitex Schweiz already publishes the answer.
+  '''
+  indexes { (code, version) [unique] }
+}
+
+Table SpitexCareCase {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId uuid [not null]
+  caseNumber varchar [note: 'minted when the registration form locks; NEVER manually editable']
+  insuredNumber varchar [note: 'AHV hash. No AHV → 8-digit BUR + 5-digit sequence.']
+  status varchar [not null, note: 'registering | open | discharged | aborted']
+  route  varchar [note: 'somatic | mental_health | palliative | paediatric | isolated_therapeutic | housekeeping | declined']
+  openedAt   timestamptz
+  closedAt   timestamptz
+  createdAt  timestamptz [not null]
+  deletedAt  timestamptz
+
+  Note: '''
+  [BUILT] THE CLINICAL SPINE. One episode of care, registration to discharge.
+
+  LIFECYCLE, and only two events touch it:
+    registration form locks  → case OPENS, number minted, route set
+    discharge form locks     → case DISCHARGED, closedAt stamped
+    abort on registration    → case ABORTED, no number minted
+  An interRAI assessment locking DELIBERATELY HAS NO EFFECT here.
+
+  `registering` is a shell state that exists because the case opens when the
+  registration form locks, but that form needs a case to belong to.
+
+  STATUS IS DERIVED from which forms are locked, never set from a dropdown.
+
+  ONE OPEN CASE PER PATIENT, enforced by a partial unique index. Note that this
+  constraint belongs to the clinical episode and NOT to funding — several
+  mandates run in parallel underneath one case.
+
+  A return after discharge is a NEW case number under the same insured number.
+  '''
+  indexes {
+    (organizationId, caseNumber) [unique]
+    (organizationId, patientId, status)
+  }
+}
+
+Table SpitexFormInstance {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  careCaseId uuid [not null]
+  formCatalogId uuid [not null, note: 'pins the exact instrument version']
+  type   varchar [not null, note: 'registration | interrai_hc | interrai_cmh | housekeeping | discharge']
+  status varchar [not null, note: 'in_progress → complete → locked']
+  reason varchar [note: 'first | periodic | significant_change | return_from_hospital']
+  round  int
+  workedOnBy uuid
+  completedAt timestamptz
+  lockedAt    timestamptz
+  lockedBy    uuid
+  closedSignatureDate date
+  caseNumberAtLock varchar [note: 'DEFECT — permanently NULL on registration forms, see below']
+  createdAt timestamptz [not null]
+
+  Note: '''
+  [BUILT] ONE FILLED FORM.
+
+  LOCKING IS ABSOLUTE. Only a COMPLETE form may lock; once locked it is
+  permanently immutable, enforced by a database trigger with NO REOPEN PATH.
+  A correction is a new form that supersedes it. Post-lock writes return 409.
+
+  Only ONE OPEN interRAI form per case, by partial unique index.
+
+  KNOWN DEFECT (rule C1): the lock stamps caseNumberAtLock from the case, but
+  the call that OPENS the case and mints the number runs afterwards. The
+  registration form is the form that opens the case, so it always reads NULL —
+  and is then immutable, so it can never be corrected for cases already
+  created. Fix the ordering; decide separately what to do with existing rows.
+  '''
+  indexes { (organizationId, careCaseId, type, status) }
+}
+
+Table SpitexFormAnswer {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  formInstanceId uuid [not null]
+  internalCode varchar [not null, note: 'THE i-CODE — iJ1g, CHBB16. What algorithms bind to.']
+  answerCode   varchar [note: 'the coded value']
+  answerText   Bytes   [note: 'ENCRYPTED when the item is PII-flagged']
+  answerNumeric decimal
+  noAnswer boolean [not null, default: false, note: 'THE X CODE — a recorded refusal']
+  source varchar [not null, note: 'manual | ai_suggested | copy_forward']
+  aiConfidence decimal
+  evidenceQuote Bytes [note: 'ENCRYPTED transcript span — "show your work"']
+  confirmedBy uuid [note: 'ALWAYS A PERSON. Never the machine.']
+  confirmedAt timestamptz
+  updatedAt timestamptz
+
+  Note: '''
+  [BUILT] ONE ANSWER TO ONE ITEM.
+
+  THE i-CODE IS THE PERMANENT IDENTIFIER and the display code is NOT derivable
+  from it — A6 is iA10, A10 is iB1a, M1 is iM14. Never compute one from the
+  other; there is no pattern.
+
+  THE X CODE IS NOT NULL AND NOT ZERO. It records that a person declined to
+  answer, and it BLOCKS every CAP and scale that depends on that item.
+
+  `confirmedBy` IS THE CLINICIAN-IN-THE-LOOP GUARANTEE. AI writes
+  source=ai_suggested with an evidence span; only a human sets confirmedBy.
+  One column, and it is what makes the record defensible.
+  '''
+  indexes { (formInstanceId, internalCode) [unique] }
+}
+
+Table SpitexFormEntryLog {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  formInstanceId uuid [not null]
+  userId uuid [not null, note: 'the actor — verified name and type in Prisma (an earlier revision here had actorUserId timestamptz, wrong twice)']
+  action varchar [not null, note: 'entry | change | complete | lock']
+  itemCode varchar
+  previousValue Bytes [note: 'ENCRYPTED — a logged change to a free-text item must not land as plaintext']
+  newValue      Bytes [note: 'ENCRYPTED']
+  createdAt   timestamptz [not null]
+
+  Note: '''
+  [BUILT] THE IN-FORM CHANGE LOG, required at item S1 (iU1) per login.
+  Separate from AuditLog, and required by the specification in its own right.
+
+  Verified live: a fill → complete → lock cycle produced 33 rows — 31 entries
+  plus complete plus lock — each with actor and timestamp, and overwriting an
+  answer four times produced a reconstructable chain.
+
+  Writing X over an existing X logs NOTHING: a no-op guard, confirmed rather
+  than assumed.
+
+  STILL OPEN: the S1 dialog does not render this yet, so the rule is met in
+  substance but not on screen.
+  '''
+  indexes { (formInstanceId, createdAt) }
+}
+
+Table SpitexFormSectionAck {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  formInstanceId uuid [not null]
+  sectionCode varchar [not null, note: 'A … S']
+  acknowledgedBy uuid [not null]
+  acknowledgedAt timestamptz [not null]
+
+  Note: '''
+  [BUILT] REASSESSMENT ONLY. Prior answers copy forward, so the nurse must
+  ACTIVELY ACKNOWLEDGE ALL 19 SECTIONS even where nothing changed. Locking is
+  blocked until every section has a row — there is no confirm-all shortcut, by
+  design.
+
+  Seven items never copy forward: A8, A9, A10, A11, A12a, A12b, A13.
+  '''
+  indexes { (formInstanceId, sectionCode) [unique] }
+}
+
+Table SpitexFormSnapshot {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  formInstanceId uuid [not null]
+  masterData json [not null, note: 'ENCRYPTED payload']
+  createdAt timestamptz [not null]
+  Note: '[BUILT] The client master data AS IT STOOD when the form locked. A later address change must not alter a closed form, and this is what guarantees it.'
+}
+
+Table SpitexCapResult {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  formInstanceId uuid [not null]
+  capCode varchar [not null]
+  triggerLevel int [note: '0 not triggered · 1 · 2 highest']
+  notComputable boolean [not null, default: false]
+  blockingItems varchar [note: 'the i-Codes coded X that prevented computation']
+  algorithmId uuid [not null, note: 'the exact version that produced this']
+  computedAt timestamptz [not null]
+
+  Note: '''
+  [BUILT] ONE COMPUTED PROBLEM FLAG. 23 rows per assessment today, 24 once the
+  Medication CAP is ported.
+
+  EVERY CAP GETS A ROW, and the three states are three different clinical
+  statements:
+    triggered      → a problem to act on
+    not triggered  → displayed as a client STRENGTH, never omitted
+    not computable → displayed WITH THE BLOCKING QUESTIONS NAMED
+
+  Written INSIDE the lock transaction as a bulk insert, so a locked assessment
+  can never exist without its results.
+
+  Results are DISPLAYED AS SOON AS THEY ARE COMPUTABLE, before the form is
+  complete — a requirement, not an optimisation.
+
+  algorithmId is pinned so a result stays explicable after an algorithm update.
+  '''
+  indexes { (formInstanceId, capCode) [unique] }
+}
+
+Table SpitexScaleResult {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  formInstanceId uuid [not null]
+  scaleCode varchar [not null, note: 'NEVER TRANSLATED — English in all three languages']
+  score decimal
+  notComputable boolean [not null, default: false]
+  blockingItems varchar
+  algorithmId uuid [not null]
+  computedAt timestamptz [not null]
+  Note: '[BUILT] 18 rows — 17 scales plus the derived xFALLS, which is stored but never displayed as a result. Scales are computed BEFORE CAPs because several CAPs consume them.'
+  indexes { (formInstanceId, scaleCode) [unique] }
+}
+
+
+// ############################################################################
+//  GROUP 5 — CLINICAL PLAN
+//  What the assessment means, and what will be done about it.
+//  The evidence chain: CAP → nursing diagnosis → goal → measure → service.
+// ############################################################################
+
+Table NandaDiagnosisCatalog {
+  id uuid [pk]
+  nandaCode varchar [not null, note: '00276, 00080 …']
+  edition varchar [not null, note: '2024-2026']
+  locale  varchar [not null]
+  title      varchar [not null]
+  definition varchar [not null]
+  domainCode varchar [not null, note: '13 domains']
+  classCode  varchar [not null, note: '48 classes']
+
+  Note: '''
+  [TARGET] GLOBAL. The 277 NANDA-I nursing diagnoses, licensed, in hand.
+
+  DELIVERY IS ALWAYS COMPLETE, NEVER DIFFERENTIAL — a retired diagnosis simply
+  disappears from the next edition. So a patient Diagnosis row must PIN
+  (nandaCode, edition) and never resolve live against the current catalogue.
+  Same discipline as pinning algorithmId on a CAP result.
+  '''
+  indexes { (nandaCode, edition, locale) [unique] }
+}
+
+Table NandaCharacteristic {
+  id uuid [pk]
+  nandaDiagnosisCatalogId uuid [not null]
+  kind varchar [not null, note: 'defining | related_factor | risk_factor | risk_population | associated_condition']
+  itemText varchar [not null]
+  itemKind varchar [not null, note: 'heading | multi_select | single_select']
+  sortOrder int
+
+  Note: '''
+  [TARGET] GLOBAL. 2,210 defining characteristics, 967 related factors,
+  1,044 risk factors, 637 risk populations, 547 associated conditions.
+
+  THIS IS WHAT PRE-FILLS THE NURSING DIAGNOSIS FORM. Pick a diagnosis and the
+  "related to" and "evidenced by" fields populate from here, and the nurse
+  edits rather than composes.
+  '''
+  indexes { (nandaDiagnosisCatalogId, kind, sortOrder) }
+}
+
+Table EnpInterventionCatalog {
+  id uuid [pk]
+  enpInterventionId varchar [not null]
+  edition varchar [not null]
+  locale  varchar [not null]
+  text varchar [not null]
+  careSecondsGeneral int [note: 'THE EFFORT ESTIMATE, in care-seconds']
+  careSecondsSpecial int
+
+  Note: '''
+  [TARGET] GLOBAL. 1,459 ENP interventions linked to the diagnoses, plus 5,201
+  action-guiding detail interventions beneath them.
+
+  THE TIME VALUES ARE THE INTERESTING PART. Each intervention carries an effort
+  estimate in care-seconds — a second, independent source for how long a
+  nursing action takes, directly comparable to the KLV standard minutes on a
+  service position.
+  '''
+  indexes { (enpInterventionId, edition, locale) [unique] }
+}
+
+Table EnpGoalCatalog {
+  id uuid [pk]
+  enpGoalId varchar [not null]
+  edition varchar [not null]
+  locale  varchar [not null]
+  text varchar [not null]
+  evaluationScaleId varchar [note: 'a 5-step evaluation scale']
+  Note: '[TARGET] GLOBAL. 1,419 ENP goals with evaluation scales attached.'
+  indexes { (enpGoalId, edition, locale) [unique] }
+}
+
+Table NandaDiagnosisIntervention {
+  nandaDiagnosisCatalogId uuid [not null]
+  enpInterventionCatalogId uuid [not null]
+  sortOrder int
+  Note: '[TARGET] GLOBAL. 4,629 diagnosis→intervention links. THIS IS THE NARROWING MAPPING, ALREADY AUTHORED — we do not have to build it, we have to expose it.'
+  indexes { (nandaDiagnosisCatalogId, enpInterventionCatalogId) [pk] }
+}
+
+Table EnpInterventionGoal {
+  enpInterventionCatalogId uuid [not null]
+  enpGoalCatalogId uuid [not null]
+  sortOrder int
+  isActive boolean [not null, default: true]
+  Note: '[TARGET] GLOBAL. MAS_ZIEL — 2,944 intervention→goal links from the licensed database. The second leg of the chain: a diagnosis proposes interventions (PROB_MAS), an intervention proposes goals (this table), and PROB_ZIEL_HIDE then removes the goals that make no clinical sense for that diagnosis. Was in 09-TARGET-SCHEMA and dropped by accident when the full model was assembled — restored in v2.1.'
+  indexes { (enpInterventionCatalogId, enpGoalCatalogId) [pk] }
+}
+
+Table NandaDiagnosisGoalHidden {
+  nandaDiagnosisCatalogId uuid [not null]
+  enpGoalCatalogId uuid [not null]
+  Note: '[TARGET] GLOBAL. 408 suppressions. Goals reach a diagnosis transitively through interventions, which is broad; some make no clinical sense for that diagnosis. IGNORING THIS TABLE PRODUCES WRONG SUGGESTIONS, which is worse than offering none.'
+  indexes { (nandaDiagnosisCatalogId, enpGoalCatalogId) [pk] }
+}
+
+Table Diagnosis {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId  uuid [not null]
+  careCaseId uuid
+  diagnosisType varchar [not null, note: 'nursing | medical']
+  code varchar
+  nandaCatalogId uuid [note: '[TARGET] pinned catalogue row']
+  nandaEdition varchar [note: '[TARGET]']
+  relatedTo   Bytes [note: '[TARGET] ENCRYPTED — clinical narrative about a named patient. PRE-FILLED from NandaCharacteristic']
+  evidencedBy Bytes [note: '[TARGET] ENCRYPTED — PRE-FILLED from NandaCharacteristic']
+  resources   Bytes [note: '[TARGET] ENCRYPTED']
+  origin varchar [note: 'manual | cap_mapping — cap_mapping BLOCKED on the Zuordnungslisten']
+  sourceCapCode varchar [note: '[TARGET] which triggered CAP produced this']
+  confirmedBy uuid [note: 'ALWAYS A PERSON']
+  status varchar [note: '[TARGET] active | resolved']
+  description varchar
+  deletedAt timestamptz
+
+  Note: '''
+  [PARTIAL] THE NURSING DIAGNOSIS — the clinical middle of the evidence chain.
+
+  Today a code string and a type with no catalogue behind it. The [TARGET]
+  columns connect it to NANDA.
+
+  THE MISSING LINK: the official CAP → NANDA allocation lists (Zuordnungslisten)
+  have not arrived from Spitex Schweiz. Until they do, `origin` is always
+  `manual` and there is NO AUTOMATIC STEP from a triggered CAP to a diagnosis.
+  We hold the vocabulary; we do not yet hold the bridge.
+  '''
+  indexes { (organizationId, patientId, diagnosisType) }
+}
+
+Table MedicalDiagnosis {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId uuid [not null]
+  title varchar [not null]
+  icdCatalogId uuid [note: 'pinned catalogue row — code + edition + locale, not a free string']
+  diagnosedOn date
+  description Bytes [note: 'ENCRYPTED']
+  isPriority boolean [not null, default: false]
+  status varchar [not null, note: 'active | passive']
+  parentDiagnosisId uuid [note: 'sub-diagnoses']
+  deletedAt timestamptz
+
+  Note: '''
+  [TARGET] THE DOCTOR DIAGNOSIS, with an ICD catalogue behind it.
+
+  This is the half of SpitexPositionJustification that proves INSURANCE
+  ELIGIBILITY. A service position needs both a nursing diagnosis and a doctor
+  diagnosis, and today the doctor half cannot be validated because there is no
+  catalogue.
+
+  ACTIVE vs PASSIVE IS NOT SOFT DELETE. A passive diagnosis is history that
+  still explains a past service position.
+  '''
+  indexes { (organizationId, patientId, status) }
+}
+
+Table IcdCatalog {
+  id uuid [pk]
+  code varchar [not null]
+  edition varchar [not null, note: 'ICD-10-GM is revised YEARLY — the edition is part of identity']
+  locale varchar [not null]
+  title varchar [not null]
+  chapter varchar
+  isBillable boolean [not null, default: true]
+  Note: '[TARGET] GLOBAL. ICD-10-GM. v1 keyed this on code alone with a locale column — one code, three languages, yearly editions: impossible. Same pinning discipline as the NANDA catalogue.'
+  indexes { (code, edition, locale) [unique] }
+}
+
+Table CarePlan {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  careCaseId uuid [not null]
+  status varchar [not null]
+  deletedAt timestamptz
+  Note: '[BUILT] The container for the measures answering the assessment. One per case.'
+}
+
+Table ActionItem {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  diagnosisId uuid [not null]
+  carePlanId  uuid [not null]
+  description varchar
+  frequency varchar
+  validFrom  date
+  validUntil date
+  status varchar [not null]
+  enpInterventionId uuid [note: '[TARGET] the ENP intervention chosen from']
+  deletedAt timestamptz
+  Note: '[BUILT] A CARE MEASURE hanging off a diagnosis. What will actually be done. Becomes billable service positions downstream.'
+}
+
+Table ActionLog {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  actionItemId uuid [not null]
+  performedBy uuid
+  performedAt timestamptz
+  outcome varchar
+  note varchar
+  deletedAt timestamptz
+  Note: '''
+  [BUILT BUT UNUSED] Was meant to record that a measure was carried out.
+  Nothing writes to it.
+
+  OPEN (D31): Visit + VisitService does this job properly. Either this table
+  is retired, or it becomes strictly the care-plan measure log its name
+  suggests. Keeping both guarantees two answers to "was this delivered".
+  '''
+}
+
+Table TreatmentGoal {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId  uuid [not null]
+  careCaseId uuid [not null, note: 'v2: NOT NULL — a goal belongs to an episode; one that outlives its case is a new goal in the next case']
+  title varchar [not null]
+  description varchar
+  letter varchar [note: 'A, B, C … display only']
+  status varchar [not null, note: 'active | achieved | cancelled']
+  enpGoalId uuid
+  deletedAt timestamptz
+
+  Note: '''
+  [TARGET] THE THREAD THAT ANSWERS "WHY".
+
+  A small object that is linked from everywhere: medical diagnoses, nursing
+  diagnoses, medication, procedures, observations, the mandate and service
+  positions.
+
+  Ask "why is this medication prescribed" and the answer is a goal. Ask "what
+  is this service for" and the answer is a goal.
+  '''
+  indexes { (organizationId, patientId, status) }
+}
+
+Table TreatmentGoalLink {
+  id uuid [pk]
+  organizationId uuid [not null]
+  treatmentGoalId uuid [not null]
+  targetType varchar [not null, note: 'medical_diagnosis | nursing_diagnosis | medication | service_plan_position | observation | care_mandate']
+  targetId   uuid [not null]
+  Note: '''
+  [TARGET] A POLYMORPHIC LINK, chosen over seven near-identical join tables.
+  The cost is no FK integrity on targetId. ACCEPT IT HERE AND NOWHERE ELSE —
+  the certified tables keep real foreign keys, because that is where an
+  examiner looks.
+  '''
+  indexes { (treatmentGoalId) (organizationId, targetType, targetId) }
+}
+
+Table Observation {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId uuid [not null]
+  type varchar [not null, note: 'weight | blood_pressure | heart_rate | oxygen_saturation | height | blood_glucose | temperature | respiratory_rate']
+  measuredAt timestamptz [not null]
+  valuePrimary   decimal [not null]
+  valueSecondary decimal [note: 'diastolic — blood pressure only']
+  valueTertiary  decimal
+  unit varchar [not null]
+  interpretation varchar [note: 'abnormally_low | normal | abnormally_high']
+  visitId uuid [note: '[TARGET] a vital taken during a visit belongs to it, like ProgressNote']
+  source varchar [note: '[TARGET] manual | device']
+  context json [note: 'posture, body site, fasting state, supplemental oxygen …']
+  note Bytes [note: 'ENCRYPTED']
+  recordedBy uuid [not null]
+  deletedAt timestamptz
+
+  Note: '''
+  [TARGET] VITALS AS TYPED MEASUREMENTS.
+
+  THE ASSESSMENT READS HEIGHT AND WEIGHT FROM HERE. iK1ab and iK1bb pre-fill
+  from the most recent observation instead of asking the nurse to re-enter what
+  she measured last week. Still a PRE-FILL — the nurse confirms, and the
+  evidence link points at an Observation row rather than a transcript span.
+
+  Height and weight were correctly removed from Patient because they are
+  observations. They were removed TO NOWHERE. This is where they live.
+
+  DO NOT ADD A BMI TYPE. BMI is computed by the certified algorithm package
+  from confirmed answers; a stored BMI would be a second answer to a question
+  that already has an official one.
+
+  `context` is JSON deliberately — eight types with genuinely different
+  qualifiers and no shared shape.
+  '''
+  indexes { (organizationId, patientId, type, measuredAt) }
+}
+
+Table Medication {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId uuid [not null]
+  productCode varchar [note: 'Compendium / GTIN']
+  productName varchar [not null]
+  route varchar [not null, note: '~90 values — p.o., i.v., i.m., s.c., topical, inhalation …']
+  baseUnit varchar [not null, note: 'Tabl, Kap, Tr, ml, mg, Amp, Supp, Pfl, Hub, IU …']
+  scheduleType varchar [not null, note: '#-#-#-# | single | periodic | day_plan | week_plan | free | rate | reserve']
+  schedule json [not null, note: 'dose per slot; shape follows scheduleType']
+  startDate date [not null]
+  endDate   date
+  instructions Bytes [note: 'ENCRYPTED']
+  approvedByContactId uuid [not null, note: 'normally the GP — a Contact']
+  reserveIndication varchar [note: 'for schedule type `reserve`: WHEN the dose may be given']
+  status varchar [not null, note: 'active | on_hold | stopped | completed | cancelled | entered_in_error']
+  deletedAt timestamptz
+
+  Note: '''
+  [TARGET] THE MEDICATION LIST. Our nurses administer prepared medication under
+  KLV code 10602 and there is currently nowhere to record what.
+
+  The `#-#-#-#` schedule is the Swiss morning-noon-evening-night matrix and is
+  the common case.
+
+  AN INTERACTION CHECK IS NOT CLINICAL REASONING. It is a deterministic lookup
+  against a licensed drug database — the same category as a CAP — so it does
+  not conflict with the no-reasoning-model rule. It does need the database
+  procured, which is a purchase before it is a build.
+  '''
+  indexes { (organizationId, patientId, status) }
+}
+
+Table MedicationAdministration {
+  id uuid [pk]
+  organizationId uuid [not null]
+  medicationId uuid [not null]
+  visitId uuid [note: 'LINKS THE DRUG TO DELIVERED CARE']
+  scheduledFor timestamptz [not null]
+  administeredAt timestamptz
+  administeredBy uuid
+  outcome varchar [not null, note: 'given | given_with_changes | refused | omitted']
+  note Bytes [note: 'ENCRYPTED']
+  Note: '[TARGET] One scheduled dose and what happened to it. A refusal or an omission is a clinical fact and gets a row — absence of a row means nobody looked.'
+  indexes { (organizationId, medicationId, scheduledFor) (visitId) }
+}
+
+Table MedicationStatusChange {
+  id uuid [pk]
+  organizationId uuid [not null]
+  medicationId uuid [not null]
+  changeKind varchar [not null, note: 'paused | stopped | activated | changed | increased | decreased | started | ended | no_change | not_comparable']
+  changedByUserId uuid [not null]
+  changedAt timestamptz [not null]
+  reason Bytes [note: 'ENCRYPTED']
+  Note: '[TARGET] "Increased on 3 May by Dr X" is a CLINICAL FACT, not an audit event — it belongs in the record, not only in AuditLog. The competitor tracks ten change kinds; a medication list without its history is a snapshot, not a record.'
+  indexes { (organizationId, medicationId, changedAt) }
+}
+
+Table Allergy {
+  id uuid [pk]
+  organizationId uuid [not null]
+  officeId uuid [not null]
+  patientId uuid [not null]
+  substanceName varchar [not null]
+  substanceCode varchar [note: 'NULL when hand-entered — and a hand-entered allergy is NOT interaction-checked']
+  category varchar [not null, note: 'biological | environmental | food | medication']
+  kind varchar [not null, note: 'allergy | intolerance']
+  severity varchar [not null, note: 'none | mild | moderate | severe']
+  description Bytes [note: 'ENCRYPTED']
+  deletedAt timestamptz
+  Note: '[TARGET] Feeds the medication interaction check. Note Patient.noKnownAllergies: a CHECKED absence is a clinical statement, and it is not the same as having no rows here.'
+  indexes { (organizationId, patientId) }
+}
+
+Table ProgressNote {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId uuid [not null]
+  visitId uuid
+  noteType varchar [not null, note: 'clinical | admin | evaluation']
+  isImportant boolean [not null, default: false]
+  occurredAt timestamptz [not null]
+  treatmentGoalId uuid
+  body Bytes [not null, note: 'ENCRYPTED. Max 15,000 chars.']
+  editedAfterCreation boolean [not null, default: false]
+  createdBy uuid [not null]
+  deletedAt timestamptz
+
+  Note: '''
+  [TARGET] THE NARRATIVE RECORD. What the nurse observed, in her words.
+
+  A VISIT REQUIRES AT LEAST ONE. Undocumented delivered care is not defensible.
+
+  EDIT RULE: a non-admin may edit only as the author within 24 hours, or as the
+  managing user; admins any time. Every edit sets editedAfterCreation, which
+  the UI shows.
+
+  "REWRITE WITH AI" (concise / professional / translate) belongs here and is
+  the cheapest AI feature in the system — it reformats text a human wrote and a
+  human keeps. Not clinical reasoning.
+
+  AN IMPORTANT NOTE SHOULD RAISE A WORKFLOW TASK. The machinery already exists.
+  '''
+  indexes { (organizationId, patientId, occurredAt) (visitId) }
+}
+
+Table Activity {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId uuid [not null]
+  category varchar [not null]
+  item varchar [not null]
+  applies varchar
+  note varchar
+  appliesHistory json
+  deletedAt timestamptz
+  Note: '[BUILT] Legacy ATL activity-of-daily-living entries. OPEN (D4): archive read-only, or migrate as a sixth form type? They have no interRAI form behind them.'
+}
+
+
+// ############################################################################
+//  GROUP 6 — FUNDING
+//  Who pays, under which law, at what rate. Sits BETWEEN the care case and
+//  the service plan, and it is the piece the current model is missing.
+// ############################################################################
+
+Table CareMandate {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  careCaseId uuid [not null, note: 'MANY mandates to ONE case']
+  patientId  uuid [not null]
+  mandateType varchar [not null, note: 'insurance_covered | private_services']
+  legislation varchar [not null, note: 'kvg_ltc | kvg_atp | uvg | ivg | mvg | vvg | international | coo | org | self_pay']
+  reasonOfCare varchar [not null, note: 'illness | accident | birth_defect | maternity | prevention']
+  status varchar [not null, note: 'active | completed — no `deleted` value: deletedAt IS the deletion (Rule 4)']
+  endReason varchar [note: 'why it completed — discharge, payer change, death']
+  canton varchar [not null]
+  municipalityBfs varchar [not null, note: 'the BFS-Gemeindenummer, not a name — residual financing is keyed on it']
+  participationModel varchar [not null, note: 'cantonal | fixed | none']
+  participationFixedAmount decimal [note: 'when participationModel = fixed']
+  debtorModel varchar [not null, note: 'tiers_payant (bill the insurer) | tiers_garant (bill the patient) | customer']
+  insurancePolicyId uuid
+  insurerCaseRef varchar
+  validFrom  date [not null]
+  validUntil date [note: 'usually NULL; set for acute/transitional care']
+  orgServiceRateId uuid [note: 'the organisation full-cost rate card in force — see OrgServiceRate']
+  travelFlatRate decimal
+  prescriberContactId uuid [note: 'the doctor. MUST HAVE A GLN.']
+  primaryIcdCatalogId uuid [note: 'FK into IcdCatalog, pinned edition — not a free string']
+  providerZsr varchar [not null, note: 'the ORGANISATION billing number']
+  deletedAt timestamptz
+
+  Note: '''
+  [TARGET] THE FUNDING ARRANGEMENT — and the single most important addition in
+  this file.
+
+  WHY IT CANNOT LIVE ON THE CARE CASE: a patient can be under KVG long-term
+  care AND UVG accident cover at the same time. Different legislation,
+  different debtor, different rates, different prescriber. Several active
+  mandates in parallel are normal, so no unique constraint here.
+
+  A KLV POSITION ON ITS OWN HAS MINUTES BUT NO MONEY. The mandate names the
+  three payers whose rates turn minutes into francs — see the three rate
+  tables below.
+
+  LEGISLATION RULES TO ENFORCE ON WRITE:
+    C services (Grundpflege) are NOT allowed against an IVG mandate.
+    N services only against a private mandate.
+    NO MEDICAL PRESCRIPTION on a private mandate.
+
+  SEQUENCE: signed AFTER onboarding (it needs the prescriber, insurance, ZSR
+  and rates onboarding produces) and BEFORE the service plan (which needs a
+  mandate to price against).
+  '''
+  indexes {
+    (organizationId, careCaseId, status)
+    (organizationId, patientId, status)
+  }
+}
+
+Table KlvContributionRate {
+  id uuid [pk]
+  legislation varchar [not null, note: 'kvg_ltc | kvg_atp']
+  category varchar [not null, note: 'A | B | C']
+  chfPerHour decimal [not null]
+  validFrom  date [not null]
+  validUntil date
+  Note: '''
+  [TARGET] GLOBAL. WHAT THE INSURER PAYS — the federal KLV Art. 7a
+  contribution. NATIONAL: the same number in every canton, which is exactly
+  what an earlier revision of this file got wrong by labelling these figures
+  a "Bern tariff" (they were read off a competitor UI that captioned them
+  that way).
+
+  For shape, the contributions in force since 1 Jan 2020:
+  A 76.90 · B 63.00 · C 52.60 CHF/hour. SEED DATA TO BE VERIFIED against the
+  current KLV before any invoice is issued — never trusted from a
+  reverse-engineered screen.
+
+  Versioned by date, never mutated.
+  '''
+  indexes { (legislation, category, validFrom) [unique] }
+}
+
+Table CantonalParticipationRule {
+  id uuid [pk]
+  canton varchar [not null]
+  validFrom  date [not null]
+  validUntil date
+  kind varchar [not null, note: 'per_day | per_5min | percentage | pro_rata | none']
+  amount decimal
+  percentage decimal
+  dailyCap decimal
+  minimumAge int
+  note varchar
+  Note: '''
+  [TARGET] GLOBAL. WHAT THE PATIENT PAYS — capped by Art. 25a KVG at 20% of
+  the highest federal contribution, with each canton setting its rule inside
+  that cap. 26 cantons, 26 rules, real numbers, none derivable.
+
+  Shape (SEED DATA TO BE VERIFIED, same warning as the KLV rates):
+  ZH CHF 7.65/day · BE pro-rata CHF 15.35 from age 65 · BS CHF 0.64 per 5
+  min capped 7.65 · SO CHF 1.28 per 5 min capped 15.35 · SG and ZG 20%
+  capped 15.35 · SZ 10% capped 7.65 · TG 10% capped 15.35 · GE CHF 10/day ·
+  AI CHF 7.70/day · UR hourly · FR, NE, VD, VS, TI NONE.
+
+  THE FIVE "NONE" CANTONS ARE THE TRAP — a rules engine that defaults will
+  silently charge patients who owe nothing.
+  '''
+  indexes { (canton, validFrom) [unique] }
+}
+
+Table OrgServiceRate {
+  id uuid [pk]
+  organizationId uuid [not null]
+  officeId uuid
+  canton varchar [not null]
+  municipalityBfs varchar [note: 'when the residual contract is municipal rather than cantonal — see D37']
+  category varchar [not null, note: 'A | B | C | N']
+  fullCostChfPerHour decimal [not null, note: 'the Vollkosten/Normkosten rate this organisation has agreed with its canton or municipality']
+  validFrom  date [not null]
+  validUntil date
+  deletedAt timestamptz
+  Note: '''
+  [TARGET] TENANT-SCOPED — this is the organisation's OWN negotiated price
+  list and must never be global (an earlier revision leaked it as reference
+  data, which would have priced every tenant at one number and shown each
+  organisation the others' rates).
+
+  WHAT THE CANTON / MUNICIPALITY PAYS — the residual (Restfinanzierung,
+  Art. 25a KVG):
+
+    residual = fullCost − KLV contribution − patient participation
+
+  Without this table the four canton/municipality invoice types have NO
+  SOURCE OF AMOUNTS. The N category is also here: private services are
+  priced by the organisation, not by law.
+
+  Who the counterparty is — canton or municipality, per organisation — is
+  D37, open.
+  '''
+  indexes { (organizationId, canton, category, validFrom) }
+}
+
+Table ServiceCatalog {
+  id uuid [pk]
+  code varchar [not null, note: '10114, 20009, 10001 …']
+  edition varchar [not null, note: '2023']
+  locale varchar [not null]
+  title varchar [not null]
+  category varchar [not null, note: 'hygiene | mobilisation | nutrition | elimination | therapy | housekeeping | psychiatric | assessment_coordination …']
+  serviceType varchar [not null, note: 'A | B | C | N — decides the tariff rate']
+  standardMinutes int
+  requiresQualification varchar [note: 'nurse | psy_nurse | FaGE | care_assistant | family_help | household_help']
+
+  Note: '''
+  [TICKETED WON-142] GLOBAL. THE NATIONAL SERVICE CATALOGUE. Roughly 130
+  positions across nursing, housekeeping and psychiatric care.
+
+  Example: 10114 "Hilfe An-/Auskleiden", type C, 15 standard minutes.
+
+  serviceType is the load-bearing column — it selects rateA/B/C/N on the
+  tariff, which is how minutes become money.
+
+  OPEN (D10): global or per-organisation? Leaning global since it is published
+  nationally, with organisations able to add free-entry services.
+  '''
+  indexes { (code, edition, locale) [unique] }
+}
+
+Table SpitexServicePlan {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  careCaseId uuid [not null]
+  status varchar [not null, note: 'draft | planned | active | paused | cancelled | completed']
+  assessmentKind varchar [note: 'none | first | reassessment']
+  assessmentDate date
+  validFrom date [not null]
+  validUntil date [not null]
+  detailedScheduling boolean [note: 'required for tick-off in the mobile app']
+  otherProviderZsr varchar
+  supersedesId uuid
+  deletedAt timestamptz
+
+  Note: '''
+  [TICKETED WON-142] THE LEISTUNGSPLANUNGSBLATT (LPB) — what care is intended,
+  in what rhythm, for how many minutes.
+
+  ONLY ONE ACTIVE PLAN PER CASE.
+
+  `paused` is real and matters: a client in hospital for three weeks is not
+  cancelled and is not receiving care.
+
+  Two rendered versions exist and they differ: a COMPLETE sheet and an INSURER
+  sheet. The difference is the answer to D7 — what may be shown to the basic
+  insurer.
+  '''
+  indexes { (organizationId, careCaseId, status) }
+}
+
+Table SpitexServicePlanPosition {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  servicePlanId uuid [not null]
+  serviceCatalogId uuid [not null]
+  careMandateId uuid [not null, note: 'WHICH FUNDING ARRANGEMENT PAYS FOR THIS. The column that makes a position priceable.']
+  quantity int [not null]
+  frequencyUnit varchar [not null, note: 'e once | t2..t7 days per week | w weekly | m monthly']
+  durationMinutes int [not null]
+  includesTraining boolean [note: 'patient training adds 20% to the duration']
+  isTemporary boolean
+  temporaryFrom date
+  temporaryUntil date
+  minQualification varchar
+  performedBy varchar [not null, note: 'S Spitex | I informal network | A other provider | V refused']
+  schedulePreference json [note: 'recurrence, weekdays, time-of-day band, strict-time flag']
+  workInstruction varchar
+  deletedAt timestamptz
+
+  Note: '''
+  [TICKETED WON-142] ONE PLANNED SERVICE.
+
+  `careMandateId` IS THE CRITICAL ADDITION. One plan spans several mandates,
+  position by position — the basic insurer funds one line and an accident
+  insurer another. Without it a position has minutes but no price.
+
+  `schedulePreference` plans an ACTUAL VISIT, not just a rhythm: which
+  weekdays, which time-of-day band with real hours, and whether the timing is
+  strict.
+  '''
+  indexes { (servicePlanId) (organizationId, careMandateId) }
+}
+
+Table SpitexPositionJustification {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  servicePlanPositionId uuid [not null]
+  diagnosisId uuid [note: 'the NURSING diagnosis']
+  medicalDiagnosisId uuid [note: '[TARGET] the DOCTOR diagnosis']
+  role varchar [not null, note: 'nurse | doctor']
+  confirmedBy uuid [not null, note: 'ALWAYS A PERSON']
+  confirmedAt timestamptz [not null]
+
+  Note: '''
+  [TICKETED WON-142] WHY THIS SERVICE IS BILLABLE.
+
+  THE TABLE THAT ANSWERS AN INSURER. Eligibility needs BOTH a nursing diagnosis
+  and a doctor diagnosis, which is why this is many-to-many rather than a
+  column on the position.
+
+  The full chain an insurer can demand: this service → because of this nursing
+  diagnosis → backed by this doctor diagnosis → derived from this triggered CAP
+  → computed from this assessment → locked on this date → by this nurse.
+  EVERY LINK IS A ROW, and it has to still work in five years.
+  '''
+  indexes { (servicePlanPositionId) }
+}
+
+Table Appointment {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId uuid
+  caregiverId uuid
+  careCaseId uuid
+  appointmentType varchar
+  status varchar [not null]
+  address Bytes [note: 'ENCRYPTED — was plaintext (Rule 4), and a shadow copy of Patient.addressStreet that can drift. Better: derive from the patient + a careLocation enum.']
+  scheduledStart timestamptz
+  scheduledEnd   timestamptz
+  startedAt timestamptz
+  completedAt timestamptz
+  cancelledAt timestamptz
+  cancellationReason varchar
+  source varchar
+  externalEventId varchar
+  deletedAt timestamptz
+
+  Note: '''
+  [BUILT] A CALENDAR ENTRY. Says a visit was SCHEDULED.
+
+  IT DOES NOT SAY CARE WAS DELIVERED, and that distinction is the largest gap
+  in the current model. Everything downstream — billables, invoices, the
+  Arbeitskontrolle proof form — depends on delivered care, not on the diary.
+  '''
+  indexes { (organizationId, patientId, scheduledStart) }
+}
+
+Table Visit {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId uuid [not null]
+  careCaseId uuid [not null]
+  staffUserId uuid [note: 'the employed staff member who delivered it — NULLABLE since v2']
+  relativeId  uuid [note: '[TARGET, D36] the EMPLOYED RELATIVE who delivered it. EXACTLY ONE of staffUserId / relativeId is set (DB CHECK). v1 had staffUserId NOT NULL → User, which meant the product’s own defining user could not record the care she is employed to deliver. If D36 lands on "relatives become Users", this column retires and Employment.userId carries the link.']
+  visitDate date [not null]
+  overnight boolean [not null, default: false]
+  startedAt timestamptz [not null]
+  endedAt   timestamptz [not null]
+  durationMinutes int [not null]
+  careLocation varchar [not null, note: 'patient_home | care_address | doctors_practice | teleconsultation | care_plan_coordination | other — coordination is billable A-time WITHOUT the patient present']
+  executionQuality varchar [not null, note: 'not_started | partial | complete | with_changes | cancelled']
+  appointmentId uuid [note: 'the calendar entry fulfilled, if any. NULLABLE — unplanned visits happen.']
+  deletedAt timestamptz
+
+  Note: '''
+  [TARGET] WHAT ACTUALLY HAPPENED. The single biggest missing object.
+
+  THIS IS WHERE "ARE THEY DOING THEIR DUTIES" IS ANSWERED. Compare the plan
+  against the visits: seven planned washes, five delivered, two refused, one
+  that took ten minutes longer. That comparison is the supervision report, the
+  Arbeitskontrolle evidence, and the billing basis, all from the same rows.
+
+  TICKED OFF BLOCK BY BLOCK, never a whole day at once — a nurse confirms what
+  she just did, not what she plans to do.
+
+  REQUIRES AT LEAST ONE PROGRESS NOTE.
+  '''
+  indexes {
+    (organizationId, patientId, visitDate)
+    (organizationId, staffUserId, visitDate)
+  }
+}
+
+Table VisitService {
+  id uuid [pk]
+  organizationId uuid [not null]
+  visitId uuid [not null]
+  serviceCatalogId uuid [not null]
+  careMandateId uuid [not null]
+  servicePlanPositionId uuid [note: 'the planned position fulfilled. NULL for an ad-hoc service.']
+  timeBlock varchar [not null, note: 'morning 07-12 | afternoon 12-18 | evening 18-22 | night 22-07 | anytime | unplanned_today']
+  serviceType varchar [not null, note: 'A | B | C | N — PINNED from the catalogue at delivery. SASIS rounding is per type, and the catalogue is editioned; re-deriving later re-rounds history.']
+  plannedMinutes int
+  actualMinutes  int [not null]
+  billedMinutes  int [not null]
+  deviationReason varchar [note: 'REQUIRED when actual differs from planned']
+  performedBy varchar [note: 'S | I | A | V. AN EMPLOYED RELATIVE IS S — she is Spitex for billing even though she is family for interRAI. I = unpaid informal network only.']
+  comment Bytes [note: 'ENCRYPTED']
+  deletedAt timestamptz
+
+  Note: '''
+  [TARGET] ONE SERVICE ACTUALLY PERFORMED IN A VISIT. The row that turns a plan
+  into a charge.
+
+  SASIS ROUNDING LIVES HERE, NOT ON THE INVOICE: per service TYPE, per VISIT,
+  round UP to 5 minutes, minimum 10 minutes. Stored in billedMinutes and NEVER
+  recomputed downstream — otherwise a tariff revision silently re-rounds
+  historical care.
+
+  performedBy = V (refused) STILL WRITES A ROW. A refusal is a fact about the
+  visit and it is what explains a gap between plan and delivery.
+
+  performedBy = A (another provider) is the insurer-export boundary: services
+  delivered by anyone other than Spitex may not go to the basic insurer.
+  '''
+  indexes { (visitId) (organizationId, careMandateId) }
+}
+
+
+// ############################################################################
+//  GROUP 8 — MONEY
+//  Delivered care becomes a charge, charges become invoices, invoices go to
+//  eight different kinds of payer.
+// ############################################################################
+
+Table MedicalPrescription {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  careMandateId uuid [not null]
+  servicePlanId uuid [not null]
+  type varchar [not null, note: 'medical_prescription | supplement — a SUPPLEMENT SKIPS sent_to_doctor in the state machine']
+  status varchar [not null, note: 'created → signed_by_nurse → sent_to_doctor → received_signed_from_doctor → sent_to_insurance → decision_received → ended | cancelled']
+  validFrom  date [not null]
+  validUntil date [not null]
+  signedByNurseId uuid
+  signedByNurseAt timestamptz
+  doctorContactId uuid [not null, note: 'MUST HAVE A GLN']
+  doctorSignedAt timestamptz
+  sentToInsuranceAt timestamptz
+  insuranceDecisionAt timestamptz
+  insuranceDecision varchar
+  generatedDocumentId uuid [note: 'the UNSIGNED prescription artefact']
+  signedDocumentId uuid [note: '[v2] the doctor-signed return is a SECOND artefact — same pattern as Contract. The original is never overwritten.']
+  deletedAt timestamptz
+
+  Note: '''
+  [TARGET] THE DOCTOR'S ORDER — a state machine with a real-world round trip,
+  not two dates.
+
+  Generated FROM the service plan. The nurse signs, it goes to the doctor, comes
+  back signed, goes to the insurer, and a decision comes back. Each step is a
+  status and each has a timestamp because each can be chased.
+
+  FLAGGED RED TWO WEEKS BEFORE EXPIRY — which should be a generated workflow
+  task, not a UI colour.
+
+  PRECONDITIONS: the organisation ZSR and a prescribing doctor on the mandate.
+  NO PRESCRIPTION IS POSSIBLE ON A PRIVATE MANDATE.
+  '''
+  indexes { (organizationId, careMandateId, status) }
+}
+
+Table BillableItem {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  patientId uuid [not null]
+  careMandateId uuid [not null]
+  visitServiceId uuid [note: 'NULL for participation, travel and rounding — those are derived, not delivered']
+  payerType varchar [not null, note: 'insurer | patient | canton | municipality | private — THE v2 COLUMN. One VisitService FANS OUT to up to three billables: the insurer’s KLV contribution, the patient’s capped participation, and the residual to canton or municipality.']
+  category varchar [not null, note: 'klv_a | klv_b | klv_b2 | klv_c | private_service | patient_participation | travel_costs | short_visit_compensation | customer_fee | pabe_overcoverage | children_pabe_public | rounding']
+  serviceDate date [not null]
+  quantity decimal [not null]
+  unitPrice decimal [not null]
+  klvRateId uuid [note: 'PINNED KlvContributionRate row, when payerType = insurer']
+  orgRateId uuid [note: 'PINNED OrgServiceRate row, when the residual or a private price applies']
+  amount decimal [not null]
+  currency varchar [not null, default: 'CHF']
+  debtorModel varchar [not null]
+  status varchar [not null, note: 'to_invoice | invoiced | credited | cancelled']
+  invoiceId uuid
+  deletedAt timestamptz
+
+  Note: '''
+  [TARGET] WHAT MAY BE CHARGED. Generated automatically from visits.
+
+  BILLABLES COME FROM DELIVERED CARE, NOT FROM THE PLAN. The plan says seven
+  times a week; if the nurse visited five times, five are billed. If the client
+  refused on Tuesday, four. BILLING THE PLAN WOULD CHARGE AN INSURER FOR CARE
+  THAT DID NOT HAPPEN — a compliance problem, not an accounting one.
+
+  unitPrice AND THE RATE ROWS ARE PINNED AT GENERATION. A rate revision must
+  never retroactively change an amount already issued.
+
+  THE FAN-OUT IS THE POINT: one delivered KLV hour becomes up to three rows
+  with three payers — insurer (national contribution), patient (cantonal
+  rule, Art. 25a cap), canton or municipality (residual = full cost minus
+  the other two). v1 could not produce the third row at all.
+  '''
+  indexes {
+    (organizationId, patientId, serviceDate)
+    (organizationId, careMandateId, status)
+    (invoiceId)
+  }
+}
+
+Table Invoice {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  invoiceNumber varchar [not null]
+  invoiceType varchar [not null, note: 'insurance | private | patient_participation | patient_canton | patient_municipality | organisation_canton | organisation_municipality | credit_note']
+  status varchar [not null, note: 'draft | completed | validated | open | sent | partially_paid | paid | settled | refunded | rejected | cancelled | missing_information | error — no `deleted`: deletedAt IS the deletion (Rule 4)']
+  patientId uuid [not null]
+  careMandateId uuid
+  recipientContactId uuid
+  issueDate date [not null]
+  periodFrom date [not null]
+  periodTo   date [not null]
+  dueDate date
+  debtorModel varchar [not null]
+  totalAmount decimal [not null]
+  paidAmount decimal [note: '[v2] partial payments are a status AND an amount']
+  paidAt timestamptz
+  qrReference varchar [note: '[v2] the Swiss QR-bill reference — how a payment finds its invoice']
+  reminderLevel int [note: '[v2] 0..3 — dunning']
+  currency varchar [not null, default: 'CHF']
+  issuerIban varchar
+  issuerZsr varchar
+  issuerUid varchar
+  insuredNumberHash varchar [note: 'HASHED, never plaintext']
+  referringDoctorContactId uuid
+  copyToPatient boolean [not null, default: false]
+  transmission varchar [note: 'medidata | billcare | abacus | pdf | xml_45 | excel']
+  transmittedAt timestamptz
+  generatedDocumentId uuid
+  deletedAt timestamptz
+
+  Note: '''
+  [TARGET] THE BILL.
+
+  EIGHT INVOICE TYPES, NOT THREE PAYERS. Canton and municipality are SEPARATE
+  payers, and each can be billed TO THE PATIENT or TO THE ORGANISATION. Any
+  finance estimate built on "three payers" is built on the wrong number.
+
+  MEDIDATA AND BILLCARE ARE THE SWISS CLEARING HOUSES. If an invoice cannot go
+  through MediData, an organisation cannot use us as their billing system —
+  which makes it a MARKET-ENTRY REQUIREMENT, not an integration nice-to-have.
+
+  An invoice is an ARTEFACT: generated once, stored with a checksum, served
+  from storage, never re-rendered.
+  '''
+  indexes {
+    (organizationId, invoiceNumber) [unique]
+    (organizationId, patientId, issueDate)
+  }
+}
+
+
+// ############################################################################
+//  GROUP 9 — WORK, DOCUMENTS AND AUDIT
+//  How an organisation runs itself, what it produces on paper, and the
+//  trail that proves any of it happened.
+// ############################################################################
+
+Table WorkflowTemplate {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  key varchar [not null, note: 'ONBOARDING_STANDARD | RELATIVE_ONGOING']
+  version int [not null]
+  scope varchar [not null, note: 'case_onboarding | relative_ongoing']
+  definition json [not null, note: 'steps, dependsOn, skipIf, completion rules, default tasks with due offsets']
+  isActive boolean [not null, default: true]
+  deletedAt timestamptz
+
+  Note: '''
+  [TICKETED WON-152] HOW ONE ORGANISATION WORKS. Every organisation onboards
+  differently, so the steps are DATA, not code.
+
+  TENANT DATA, NOT A CATALOGUE. It looks like SpitexFormCatalog and is the
+  opposite case: the customer authors and edits this. RLS on, organizationId
+  present.
+
+  AN EDIT PUBLISHES A NEW ROW. Rows are never mutated, and a running instance
+  pins the version it started under — otherwise "3 of 15 steps" silently
+  becomes "3 of 17" and completion history rewrites itself.
+
+  NO COMPLIANCE GATE EVER APPEARS IN THIS JSON. If a gate were configuration,
+  an organisation could delete it.
+  '''
+  indexes { (organizationId, key, version) [unique] }
+}
+
+Table WorkflowInstance {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  templateId uuid [not null, note: 'pinned at the starting version, NEVER repointed']
+  scope varchar [not null]
+  careCaseId uuid [note: 'NULL for a relative_ongoing workflow']
+  relativeId uuid
+  status varchar [not null, note: 'active | completed | cancelled']
+  cancelReason varchar
+  previousInstanceId uuid [note: 'reserved, unused — for future recurrence']
+  startedAt timestamptz [not null]
+  endedAt timestamptz
+  deletedAt timestamptz
+
+  Note: '''
+  [TICKETED WON-152] ONE CASE'S COPY OF A TEMPLATE.
+
+  TWO WORKFLOWS, TWO ANCHORS:
+    case_onboarding  starts when the CARE CASE OPENS, spans BOTH people —
+                     the carer's HR paperwork and the client's assessment are
+                     both prerequisites for starting care
+    relative_ongoing starts when onboarding closes SUCCESSFULLY, anchored to
+                     the relative, and OUTLIVES THE CASE — if the client is
+                     discharged the withholding tax is still outstanding
+
+  "Successfully" is load-bearing: an ABORTED onboarding must not start a
+  relative workflow.
+
+  completed leaves open tasks alone; cancelled CANCELS them with a reason.
+  Nothing is ever deleted.
+  '''
+  indexes { (organizationId, careCaseId) (organizationId, relativeId, scope, status) }
+}
+
+Table WorkflowStep {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  workflowInstanceId uuid [not null]
+  stepKey varchar [not null]
+  title varchar [not null]
+  stepOrder int [not null]
+  origin varchar [not null, note: 'template (configurable) | gate (NOT configurable)']
+  gateCode varchar
+  status varchar [not null, note: 'not_applicable | blocked | pending | in_progress | done | skipped']
+  isMandatory boolean [not null, default: true]
+  blockedBy varchar [note: 'outstanding step keys']
+  skipReason varchar [note: 'MANDATORY when skipped']
+  completedBy uuid [note: 'a person — for a manual step']
+  completedByDerivation varchar [note: 'object:id/fact — for a derived step. e.g. interrai_hc:frm-01/locked']
+  completedAt timestamptz
+  deletedAt timestamptz
+
+  Note: '''
+  [TICKETED WON-152] ONE STEP IN ONE ONBOARDING.
+
+  TWO SOURCES OF STEPS AND THEY MUST NOT MERGE:
+    template — the organisation decides. Configurable.
+    gate     — Swiss law decides. NOT removable, reorderable or skippable.
+
+  THE GATE EXAMPLE: a carer holding permit B creates a Spezialbewilligung
+  obligation that BLOCKS CONTRACT SIGNING until the Migrationsamt confirmation
+  is uploaded. It is injected at instantiation and cannot be edited away — not
+  through the template API, not by the assistant, not by any write path.
+
+  The permit case produces BOTH a gate and a task: the gate is a wall, the task
+  chases the paperwork, and neither substitutes for the other.
+
+  EXACTLY ONE of completedBy / completedByDerivation is set. A step closed by a
+  certified fact has no human to name, and inventing one would be worse.
+
+  A STEP NEVER ALTERS CERTIFIED DATA. Closing a step cannot lock, unlock or
+  change a form, a case status or a service plan. The arrow runs one way.
+  '''
+  indexes { (workflowInstanceId, stepKey) [unique] }
+}
+
+Table Task {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  careCaseId uuid
+  taskType varchar [note: 'nullable today. AUTO: srk_registration, re_assessment, permit_b_registration, withholding_tax_registration, child_allowance_application, wage_adjustment_after_srk · MANUAL: key, request, problem, report']
+  title varchar [not null, note: 'PLAINTEXT — routinely names patients. Rule 4 sweep: encrypt, or accept explicitly in 02-ENGINEERING §13.1.']
+  description varchar [note: 'PLAINTEXT — same decision as title']
+  category varchar [note: '[TICKETED] clinical | hr | administrative | service']
+  origin varchar [note: '[TICKETED] auto | manual — SERVER-STAMPED, never from the payload']
+  relativeId uuid [note: '[TICKETED] anchors HR work to the employment, not to a case that will close']
+  workflowStepId uuid [note: '[TICKETED] answers "why does this task exist" a year later']
+  affectedPerson varchar [note: 'FREE TEXT TODAY — becomes a reference']
+  assignedTo uuid
+  dueDate date [note: 'REQUIRED for auto tasks — one without a due date never surfaces in a sorted list']
+  status varchar [not null, note: 'open | in_progress | done | cancelled']
+  priority varchar
+  deletedAt timestamptz
+
+  Note: '''
+  [BUILT, BEING EXTENDED] ONE OBJECT, MANY TYPES, ONE SCREEN.
+
+  Auto-generated workflow tasks and human-opened service tickets live in the
+  SAME table, discriminated by `origin`. The Servicedesk screen already renders
+  both; no second triage screen is built.
+
+  ALL TASKS FOR A WORKFLOW ARE CREATED AT WORKFLOW START, so the nurse sees the
+  full picture on day one. A task may exist for a step that is still blocked —
+  intended, and the screen marks it as not yet startable.
+
+  COMPLETING A TASK DOES NOT COMPLETE ITS STEP. Steps close by their own rule.
+  Otherwise two mechanisms race to close the same thing.
+
+  `origin` is SERVER-STAMPED and POST /tickets rejects auto types — otherwise a
+  client can manufacture a task no workflow owns.
+  '''
+  indexes { (organizationId, status, dueDate) (workflowStepId) }
+}
+
+Table TaskComment {
+  id uuid [pk]
+  organizationId uuid [not null]
+  officeId uuid [not null]
+  taskId uuid [not null]
+  authorId uuid [not null]
+  body varchar [note: 'PLAINTEXT — routinely names patients; same Rule 4 decision as Task.title']
+  deletedAt timestamptz
+  Note: '[BUILT] Discussion on a task. User-supplied text that reaches the assistant — treat as data, never as instructions.'
+}
+
+Table SpitexOnboarding {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  careCaseId uuid [not null]
+  phase varchar [note: 'DEFECT: written "preparation" and never advances. Plain string, not an enum.']
+  currentStep varchar
+  assignedNurseId uuid
+  deletedAt timestamptz
+  Note: '''
+  [BUILT] Tracks where a case is in onboarding. Onboarding lasts about two
+  weeks; the case lasts about eighteen months — deliberately different axes.
+
+  KNOWN DEFECT: `phase` never leaves "preparation". The only other writer is a
+  manual PATCH.
+
+  OPEN (D21): does this survive, or become derived from WorkflowInstance? It is
+  not a competing source of truth today — it is an unmaintained field.
+  '''
+  indexes { (organizationId, careCaseId) [unique] }
+}
+
+Table DocumentTemplate {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  key varchar [not null, note: 'employment_contract | service_plan_insurer | invoice_patient | assessment_printout …']
+  version int [not null]
+  locale varchar [not null, note: 'LOCALE IS PART OF THE KEY, not a runtime switch']
+  kind varchar [not null, note: 'artefact | report']
+  rendererKey varchar [not null, note: 'html (Handlebars → Playwright) | base_pdf | docx']
+  body json [not null]
+  isActive boolean [not null, default: true]
+  deletedAt timestamptz
+
+  Note: '''
+  [TICKETED WON-153] ONE TEMPLATE FOR ONE DOCUMENT TYPE. Versioned, never
+  mutated — a document generated last March must remain explicable.
+
+  ARTEFACT vs REPORT IS THE CONSEQUENTIAL DECISION:
+    artefact — contract, invoice, locked service plan. Generated ONCE, stored
+               for ever, SERVED FROM STORAGE, never re-rendered. Re-rendering
+               next year with a changed template and a newer library produces a
+               DIFFERENT document, and history has been quietly rewritten.
+    report   — yearly counts, open registrations. Regenerating is CORRECT.
+  WHEN IN DOUBT, ARTEFACT. The failure is asymmetric.
+
+  THE COPYRIGHT LIVES IN A SHARED PARTIAL, not per template. Spitex Schweiz
+  require it on every report generated from the forms, and in a partial it
+  cannot be omitted by forgetting.
+  '''
+  indexes { (organizationId, key, version, locale) [unique] }
+}
+
+Table GeneratedDocument {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  documentTemplateId uuid [not null]
+  kind varchar [not null]
+  status varchar [not null, note: 'generated | signed | superseded']
+  entityType varchar [not null, note: 'contract | service_plan | invoice | care_case | relative']
+  entityId uuid [not null]
+  objectKey varchar [not null, note: 'Swiss object storage — NEVER the database']
+  checksum varchar [not null]
+  fileName varchar [not null, note: 'DETERMINISTIC and containing NO personal data — a case number, never a surname']
+  locale varchar [not null]
+  supersedesId uuid
+  generatedBy uuid [not null]
+  generatedAt timestamptz [not null]
+  deletedAt timestamptz
+
+  Note: '''
+  [TICKETED WON-153] ONE PRODUCED FILE.
+
+  The CHECKSUM is what proves the file served today is the file generated then.
+
+  Reports are NOT stored — no row. This table holds artefacts and their signed
+  copies.
+
+  A MISSING MANDATORY VALUE FAILS THE JOB and names the field. It never renders
+  an empty line: a contract with a blank wage is worse than no contract,
+  because someone will act on it.
+
+  OPEN (D26): retention, and how a patient's erasure reaches a contract that
+  names them. The least obvious hole in the crypto-shredding guarantee.
+  '''
+  indexes { (organizationId, entityType, entityId) (checksum) }
+}
+
+Table Contract {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  caseId uuid [not null, note: 'UNIQUE. FK to SpitexOnboarding, NOT to the care case. One contract per onboarding.']
+  relativeId uuid [note: '[TICKETED WON-156] the employed carer signing — ADDITION, does not replace caseId']
+  status varchar [not null, note: 'draft | generated | signed | superseded']
+  generatedDocumentId uuid [note: '[TICKETED] the unsigned artefact']
+  signedDocumentId uuid [note: '[TICKETED] a SECOND artefact — the generated file is never overwritten']
+  signedAt timestamptz
+  signerContactId uuid [note: '[TICKETED] WHO signed']
+  signedByUserId uuid [note: '[TICKETED] WHOSE session — who operated the device']
+  documentChecksumAtSigning varchar [note: '[TICKETED] THE LOAD-BEARING EVIDENCE']
+  scrolledToEnd boolean [note: '[TICKETED] the pad stays locked until true']
+  deviceInfo varchar
+  appVersion varchar
+  deletedAt timestamptz
+
+  Note: '''
+  [PARTIAL, EXTENDED BY WON-156] THE EMPLOYMENT CONTRACT WITH THE CARER.
+
+  SIGNED IN PERSON ON A TABLET CANVAS — no third-party provider, no
+  per-signature cost, no extra data processor, nothing leaving Switzerland.
+
+  A canvas signature is a SIMPLE electronic signature and employment contracts
+  are form-free, so it is valid. BUT THE DRAWING ALONE PROVES ALMOST NOTHING.
+  Its weight comes entirely from the evidence columns above, and above all from
+  `documentChecksumAtSigning` — without it a signature proves someone drew a
+  line, not WHAT they agreed to.
+
+  RAW CANVAS STROKES ARE NEVER STORED. The rendered image inside the signed PDF
+  is the record; keeping strokes invites replaying them onto another document.
+
+  IMMUTABLE ONCE SIGNED. A correction is a NEW contract that supersedes it —
+  the same rule as a locked assessment.
+
+  Generated BEFORE the visit and signs OFFLINE, uploading when signal returns.
+  A server round trip at the kitchen table means a weak signal wastes a visit.
+  '''
+  indexes {
+    (caseId) [unique]
+    (organizationId, relativeId, status)
+  }
+}
+
+Table PatientDocument {
+  id uuid [pk]
+  organizationId uuid [not null]
+  officeId uuid [not null]
+  patientId uuid [not null]
+  careCaseId uuid
+  progressNoteId uuid [note: 'when it is a photo attached to a note — wound pictures are routine']
+  docType varchar [not null, note: 'advance_directive | discharge_report | lab_report | medication_plan | referral | image | wound_photo | other — the competitor lists ~35']
+  discipline varchar
+  status varchar [not null, note: 'provisional | final | replaced | entered_in_error']
+  isImportant boolean [not null, default: false]
+  objectKey varchar [not null, note: 'SWISS object storage, encrypted — never the database, never a foreign cloud']
+  checksum varchar [not null]
+  fileName varchar [not null]
+  mimeType varchar
+  uploadedBy uuid [not null]
+  uploadedAt timestamptz [not null]
+  deletedAt timestamptz
+  Note: '''
+  [TARGET] A FILE SOMEONE UPLOADS TO A PATIENT RECORD — the object v1 simply
+  did not have. Document is external Drive/SharePoint metadata;
+  GeneratedDocument is files WE produce; OnboardingDocument is onboarding
+  paperwork. A nurse photographing a wound or filing a hospital discharge
+  letter had nowhere to put it.
+
+  Retention and the erasure path are D26 — a patient’s crypto-shredding must
+  reach these files too.
+  '''
+  indexes { (organizationId, patientId, docType) (checksum) }
+}
+
+Table Consent {
+  id uuid [pk]
+  organizationId uuid [not null]
+  officeId uuid [not null]
+  patientId uuid [not null]
+  purpose varchar [not null, note: 'treatment | data_sharing | assessment_recording | photo — the recording consent is what the TRANSCRIPTION PIPELINE must check before any audio is captured (Rules 2 and 3)']
+  status varchar [not null, note: 'active | declined | revoked']
+  grantedByContactId uuid [note: 'WHO consented — under health guardianship the GUARDIAN consents, not the client; PatientContact.hasHealthGuardianship decides who this may be']
+  grantedByPatient boolean [not null, default: false]
+  validFrom date [not null]
+  validUntil date
+  revokedAt timestamptz
+  evidenceDocumentId uuid [note: 'the signed consent form — a PatientDocument or GeneratedDocument']
+  deletedAt timestamptz
+  Note: '''
+  [TARGET] CONSENT AS A ROW, NOT A CHECKBOX. Closes D27. Three consumers from
+  day one: the treatment relationship itself, the assessment recording (the
+  audio pipeline must refuse to start without an active assessment_recording
+  consent), and later cross-organisation sharing — the eventual PatientShare
+  object widens RLS only through one of these.
+  '''
+  indexes { (organizationId, patientId, purpose, status) }
+}
+
+Table Document {
+  id             uuid [pk]
+  organizationId uuid [not null]
+  officeId       uuid [not null]
+  userId uuid
+  connectionId uuid
+  provider varchar [not null, note: 'google_drive | microsoft_graph']
+  externalId varchar [not null]
+  externalUrl varchar
+  subjectType varchar
+  subjectId uuid
+  documentType varchar
+  title varchar
+  mimeType varchar
+  sizeBytes int
+  lastModifiedExternal timestamptz
+  deletedAt timestamptz
+
+  Note: '''
+  [BUILT] METADATA ONLY for a file living in the customer's Drive or SharePoint.
+  WE NEVER STORE THE CONTENT — that is the privacy boundary of the integration
+  layer.
+
+  Distinct from GeneratedDocument, which is a file WE produce and store
+  encrypted in Swiss object storage. One is synced; the other is generated.
+  '''
+  indexes { (organizationId, provider, externalId) [unique] }
+}
+
+Table OnboardingDocument {
+  id uuid [pk]
+  organizationId uuid [not null]
+  officeId uuid [not null]
+  caseId uuid [not null, note: 'FK to SpitexOnboarding, NOT to the care case']
+  docType varchar [not null]
+  fileName varchar
+  size int
+  status varchar [not null]
+  isMandatory boolean
+  externalUrl varchar
+  uploadedAt timestamptz
+  deletedAt timestamptz
+  Note: '[BUILT] Paperwork required during onboarding — permits, certificates, bank details. `isMandatory` is what a compliance gate checks before it releases contract signing.'
+}
+
+Table UserDocumentConnection {
+  id uuid [pk]
+  organizationId uuid [not null]
+  officeId uuid [not null]
+  userId uuid [not null]
+  provider varchar [not null]
+  externalAccountEmail Bytes [note: 'ENCRYPTED']
+  accessToken Bytes [note: 'ENCRYPTED']
+  refreshToken Bytes [note: 'ENCRYPTED']
+  tokenExpiresAt timestamptz
+  scopes varchar
+  deletedAt timestamptz
+  Note: '[BUILT] OAuth link to a document provider. TOKENS ARE ALWAYS ENCRYPTED and never logged. The refresh worker is the reusable core for every future connector.'
+}
+
+Table UserCalendarConnection {
+  id uuid [pk]
+  organizationId uuid [not null]
+  officeId uuid [not null]
+  userId uuid [not null]
+  provider varchar [not null]
+  externalAccountEmail Bytes [note: 'ENCRYPTED']
+  accessToken Bytes [note: 'ENCRYPTED']
+  refreshToken Bytes [note: 'ENCRYPTED']
+  tokenExpiresAt timestamptz
+  scopes varchar
+  deletedAt timestamptz
+  Note: '[BUILT] OAuth link to a calendar. FREE/BUSY ONLY by design — we never read event content, which keeps a nurse’s private diary out of the system.'
+}
+
+Table CalendarEvent {
+  id uuid [pk]
+  organizationId uuid [not null]
+  userId uuid [not null]
+  connectionId uuid [not null]
+  externalId varchar [not null]
+  startTime timestamptz [not null]
+  endTime timestamptz [not null]
+  title varchar [note: 'usually absent — free/busy only']
+  Note: '[BUILT] A busy block synced from an external calendar. Used for scheduling availability, not for reading what someone is doing.'
+}
+
+Table DocumentSyncLog {
+  id uuid [pk]
+  organizationId uuid [not null]
+  userId uuid
+  connectionId uuid
+  provider varchar
+  status varchar
+  itemsSynced int
+  errorMessage varchar
+  trigger varchar
+  startedAt timestamptz
+  Note: '[BUILT] One sync run. Exists so a customer asking "why has my folder not updated" gets an answer rather than a shrug.'
+}
+
+Table CustomField {
+  id uuid [pk]
+  organizationId uuid [not null]
+  Note: '[BUILT] Per-organisation extra fields on standard entities. Lets a customer extend a record without a schema change — but NEVER on certified data, where the item set is fixed by Spitex Schweiz.'
+}
+
+Table Definition {
+  id uuid [pk]
+  organizationId uuid [not null]
+  Note: '[BUILT] The definition of a custom field: label, type, options, section, whether it is PII, whether it reaches the assistant. Capped per organisation per entity.'
+}
+
+Table Notification {
+  id uuid [pk]
+  organizationId uuid [not null]
+  recipientId uuid [not null]
+  eventKey varchar [not null]
+  category varchar
+  relatedType varchar
+  relatedId uuid
+  title varchar
+  body varchar
+  channels varchar [note: 'in_app | email']
+  emailSentAt timestamptz
+  readAt timestamptz
+  Note: '[BUILT] In-app and email delivery. Localised to the recipient’s language, which is why User.language exists.'
+  indexes { (organizationId, recipientId, readAt) }
+}
+
+Table AuditLog {
+  id uuid [pk]
+  organizationId uuid [not null]
+  actorUserId uuid
+  action varchar [not null, note: 'read | write | delete | login | denied | export']
+  targetType varchar
+  targetId uuid
+  metadata json
+  createdAt timestamptz [not null]
+
+  Note: '''
+  [BUILT] EVERY ACCESS, INCLUDING READS AND DENIALS.
+
+  NO FOREIGN KEYS — DELIBERATELY. It must survive the deletion of the user and
+  even the organisation it describes. APPEND-ONLY: UPDATE and DELETE are
+  revoked at the database level.
+
+  NEVER CONTAINS RAW PII — identifiers only. That is what lets it survive a
+  crypto-shredding erasure intact: the trail remains, the content does not.
+
+  Distinct from SpitexFormEntryLog, which is the in-form clinical change log
+  required by the certification specification in its own right. Two logs, two
+  purposes, both mandatory.
+  '''
+  indexes { (organizationId, createdAt) (organizationId, targetType, targetId) }
+}
+
+
+// ############################################################################
+//  RELATIONSHIPS
+// ############################################################################
+
+// --- platform & tenancy ---
+Ref: PlanAddOn.planId > Plan.id
+Ref: PlanAddOn.addOnId > AddOn.id
+Ref: OrganizationPlan.organizationId > Organization.id
+Ref: OrganizationPlan.planId > Plan.id
+Ref: OrganizationAddOn.organizationId > Organization.id
+Ref: OrganizationAddOn.addOnId > AddOn.id
+Ref: OrgLicense.organizationId > Organization.id
+Ref: OrganizationEmailDomain.organizationId > Organization.id
+Ref: Office.organizationId > Organization.id
+Ref: User.organizationId > Organization.id
+Ref: OfficeMembership.userId > User.id
+Ref: OfficeMembership.officeId > Office.id
+Ref: OfficeMembership.invitationId > OrgInvitation.id
+Ref: UserRoleAssignment.userId > User.id
+Ref: UserRoleAssignment.templateId > RoleTemplate.id
+Ref: UserRoleAssignment.officeId > Office.id
+Ref: OrgInvitation.organizationId > Organization.id
+Ref: OrgInvitation.invitedById > User.id
+Ref: RefreshToken.userId > User.id
+
+// --- people ---
+Ref: Patient.organizationId > Organization.id
+Ref: Patient.officeId > Office.id
+Ref: Relative.organizationId > Organization.id
+Ref: RelativePatient.relativeId > Relative.id
+Ref: RelativePatient.patientId > Patient.id
+Ref: Employment.relativeId > Relative.id
+Ref: Dependent.employmentId > Employment.id
+Ref: TimesheetEntry.employmentId > Employment.id
+Ref: PatientContact.patientId > Patient.id
+Ref: PatientContact.contactId > Contact.id
+Ref: Contact.userId > User.id
+Ref: InsurancePolicy.patientId > Patient.id
+Ref: InsurancePolicy.insurerContactId > Contact.id
+
+// --- certified core ---
+Ref: SpitexCareCase.patientId > Patient.id
+Ref: SpitexFormInstance.careCaseId > SpitexCareCase.id
+Ref: SpitexFormInstance.formCatalogId > SpitexFormCatalog.id
+Ref: SpitexFormAnswer.formInstanceId > SpitexFormInstance.id
+Ref: SpitexFormAnswer.confirmedBy > User.id
+Ref: SpitexFormEntryLog.formInstanceId > SpitexFormInstance.id
+Ref: SpitexFormSectionAck.formInstanceId > SpitexFormInstance.id
+Ref: SpitexFormSnapshot.formInstanceId > SpitexFormInstance.id
+Ref: SpitexCapResult.formInstanceId > SpitexFormInstance.id
+Ref: SpitexCapResult.algorithmId > SpitexAlgorithmCatalog.id
+Ref: SpitexScaleResult.formInstanceId > SpitexFormInstance.id
+Ref: SpitexScaleResult.algorithmId > SpitexAlgorithmCatalog.id
+
+// --- clinical plan ---
+Ref: NandaCharacteristic.nandaDiagnosisCatalogId > NandaDiagnosisCatalog.id
+Ref: NandaDiagnosisIntervention.nandaDiagnosisCatalogId > NandaDiagnosisCatalog.id
+Ref: NandaDiagnosisIntervention.enpInterventionCatalogId > EnpInterventionCatalog.id
+Ref: NandaDiagnosisGoalHidden.nandaDiagnosisCatalogId > NandaDiagnosisCatalog.id
+Ref: NandaDiagnosisGoalHidden.enpGoalCatalogId > EnpGoalCatalog.id
+Ref: EnpInterventionGoal.enpInterventionCatalogId > EnpInterventionCatalog.id
+Ref: EnpInterventionGoal.enpGoalCatalogId > EnpGoalCatalog.id
+Ref: Diagnosis.patientId > Patient.id
+Ref: Diagnosis.careCaseId > SpitexCareCase.id
+Ref: Diagnosis.nandaCatalogId > NandaDiagnosisCatalog.id
+Ref: MedicalDiagnosis.patientId > Patient.id
+Ref: MedicalDiagnosis.icdCatalogId > IcdCatalog.id
+Ref: MedicalDiagnosis.parentDiagnosisId > MedicalDiagnosis.id
+Ref: CarePlan.careCaseId > SpitexCareCase.id
+Ref: ActionItem.diagnosisId > Diagnosis.id
+Ref: ActionItem.carePlanId > CarePlan.id
+Ref: ActionItem.enpInterventionId > EnpInterventionCatalog.id
+Ref: ActionLog.actionItemId > ActionItem.id
+Ref: TreatmentGoal.patientId > Patient.id
+Ref: TreatmentGoal.careCaseId > SpitexCareCase.id
+Ref: TreatmentGoal.enpGoalId > EnpGoalCatalog.id
+Ref: TreatmentGoalLink.treatmentGoalId > TreatmentGoal.id
+Ref: Observation.patientId > Patient.id
+Ref: Medication.patientId > Patient.id
+Ref: Medication.approvedByContactId > Contact.id
+Ref: MedicationAdministration.medicationId > Medication.id
+Ref: MedicationAdministration.visitId > Visit.id
+Ref: Allergy.patientId > Patient.id
+Ref: ProgressNote.patientId > Patient.id
+Ref: ProgressNote.visitId > Visit.id
+Ref: ProgressNote.treatmentGoalId > TreatmentGoal.id
+Ref: Activity.patientId > Patient.id
+
+// --- funding ---
+Ref: CareMandate.careCaseId > SpitexCareCase.id
+Ref: CareMandate.patientId > Patient.id
+Ref: CareMandate.orgServiceRateId > OrgServiceRate.id
+Ref: CareMandate.insurancePolicyId > InsurancePolicy.id
+Ref: CareMandate.prescriberContactId > Contact.id
+
+// --- delivery ---
+Ref: SpitexServicePlan.careCaseId > SpitexCareCase.id
+Ref: SpitexServicePlan.supersedesId > SpitexServicePlan.id
+Ref: SpitexServicePlanPosition.servicePlanId > SpitexServicePlan.id
+Ref: SpitexServicePlanPosition.serviceCatalogId > ServiceCatalog.id
+Ref: SpitexServicePlanPosition.careMandateId > CareMandate.id
+Ref: SpitexPositionJustification.servicePlanPositionId > SpitexServicePlanPosition.id
+Ref: SpitexPositionJustification.diagnosisId > Diagnosis.id
+Ref: SpitexPositionJustification.medicalDiagnosisId > MedicalDiagnosis.id
+Ref: Appointment.patientId > Patient.id
+Ref: Appointment.careCaseId > SpitexCareCase.id
+Ref: Appointment.caregiverId > User.id
+Ref: Visit.patientId > Patient.id
+Ref: Visit.careCaseId > SpitexCareCase.id
+Ref: Visit.staffUserId > User.id
+Ref: Visit.appointmentId > Appointment.id
+Ref: VisitService.visitId > Visit.id
+Ref: VisitService.serviceCatalogId > ServiceCatalog.id
+Ref: VisitService.careMandateId > CareMandate.id
+Ref: VisitService.servicePlanPositionId > SpitexServicePlanPosition.id
+
+// --- money ---
+Ref: MedicalPrescription.careMandateId > CareMandate.id
+Ref: MedicalPrescription.servicePlanId > SpitexServicePlan.id
+Ref: MedicalPrescription.doctorContactId > Contact.id
+Ref: MedicalPrescription.generatedDocumentId > GeneratedDocument.id
+Ref: BillableItem.patientId > Patient.id
+Ref: BillableItem.careMandateId > CareMandate.id
+Ref: BillableItem.visitServiceId > VisitService.id
+Ref: BillableItem.klvRateId > KlvContributionRate.id
+Ref: BillableItem.orgRateId > OrgServiceRate.id
+Ref: BillableItem.invoiceId > Invoice.id
+Ref: Invoice.patientId > Patient.id
+Ref: Invoice.careMandateId > CareMandate.id
+Ref: Invoice.recipientContactId > Contact.id
+Ref: Invoice.generatedDocumentId > GeneratedDocument.id
+
+// --- work & docs ---
+Ref: WorkflowInstance.templateId > WorkflowTemplate.id
+Ref: WorkflowInstance.careCaseId > SpitexCareCase.id
+Ref: WorkflowInstance.relativeId > Relative.id
+Ref: WorkflowInstance.previousInstanceId > WorkflowInstance.id
+Ref: WorkflowStep.workflowInstanceId > WorkflowInstance.id
+Ref: WorkflowStep.completedBy > User.id
+Ref: Task.careCaseId > SpitexCareCase.id
+Ref: Task.relativeId > Relative.id
+Ref: Task.workflowStepId > WorkflowStep.id
+Ref: Task.assignedTo > User.id
+Ref: TaskComment.taskId > Task.id
+Ref: SpitexOnboarding.careCaseId > SpitexCareCase.id
+Ref: SpitexOnboarding.assignedNurseId > User.id
+Ref: GeneratedDocument.documentTemplateId > DocumentTemplate.id
+Ref: GeneratedDocument.supersedesId > GeneratedDocument.id
+Ref: Contract.caseId - SpitexOnboarding.id
+Ref: Contract.relativeId > Relative.id
+Ref: Contract.generatedDocumentId > GeneratedDocument.id
+Ref: Contract.signedDocumentId > GeneratedDocument.id
+Ref: Contract.signerContactId > Contact.id
+Ref: OnboardingDocument.caseId > SpitexOnboarding.id
+Ref: Document.connectionId > UserDocumentConnection.id
+Ref: Document.userId > User.id
+Ref: CalendarEvent.connectionId > UserCalendarConnection.id
+Ref: DocumentSyncLog.connectionId > UserDocumentConnection.id
+Ref: UserDocumentConnection.userId > User.id
+Ref: UserCalendarConnection.userId > User.id
+Ref: Notification.recipientId > User.id
+Ref: AuditLog.actorUserId > User.id
+Ref: OrgServiceRate.organizationId > Organization.id
+Ref: CareMandate.primaryIcdCatalogId > IcdCatalog.id
+Ref: Visit.relativeId > Relative.id
+Ref: Employment.userId > User.id
+Ref: TimesheetEntry.visitId > Visit.id
+Ref: Observation.visitId > Visit.id
+Ref: MedicationStatusChange.medicationId > Medication.id
+Ref: MedicalPrescription.signedDocumentId > GeneratedDocument.id
+Ref: PatientDocument.patientId > Patient.id
+Ref: PatientDocument.careCaseId > SpitexCareCase.id
+Ref: PatientDocument.progressNoteId > ProgressNote.id
+Ref: Consent.patientId > Patient.id
+Ref: Consent.grantedByContactId > Contact.id
