@@ -18,7 +18,7 @@
  *   repeat_dynamic  – P2: assessor enters count, then N groups rendered
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo, Fragment, type ReactNode } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, type ReactNode } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router";
 import {
   Info,
@@ -28,7 +28,9 @@ import {
   Plus,
   Search,
   ArrowLeft,
+  ArrowRight,
   ClipboardCheck,
+  Lock,
 } from "lucide-react";
 
 // Instrument access layer — all types and functions come from here.
@@ -76,7 +78,7 @@ import {
   type GespraechAbschnitt,
   type Bestaetigung,
 } from "../../../lib/interrai/store";
-import { SDA_KATALOG, SDA_BEREICHE, sdaGruppe, type SdaItem } from "../../../lib/interrai/katalog/sda-katalog";
+import { SDA_KATALOG, SDA_BEREICHE, SDA_GRUPPEN, sdaGruppe, sdaItem, type SdaItem } from "../../../lib/interrai/katalog/sda-katalog";
 import { sdaHerkunft, istPatientDurchgelesen, SDA_PATIENT_FELD } from "../../../lib/interrai/katalog/sda-herkunft";
 import { getPatient, patientFuerOnboarding, aktualisierePatient } from "../../../lib/patienten/store";
 import { ansichtPfad } from "../Patient360Page";
@@ -599,53 +601,296 @@ function scrollItemIntoView(container: HTMLElement | null, itemCode: string) {
    Modul; InterraiNeuPage verzweigt darauf, bevor der HC-Zweig rendert.
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* ── SDA-Registrierung: Ableitungs-Helfer (rein, kataloggetrieben) ────────────
+   Keine Bereichsnamen, Gruppentitel, Itemtexte oder Optionen als Literal — alle
+   Anzeigetexte stammen aus dem Katalog (styleguide-Verifikation 10). */
+
+const SDA_STOPWORTE = new Set(["und", "zur", "zum", "der", "die", "das", "für", "im", "in", "mit", "von", "zu", "den", "dem"]);
+
+/** Grossbuchstaben-Katalogtext in gemischte Schreibung (Füllwörter klein). */
+function titleCaseDe(s: string): string {
+  return s.trim().toLowerCase().split(/\s+/)
+    .map((w, i) => (i > 0 && SDA_STOPWORTE.has(w)) ? w : (w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+}
+
+/** Kurzcode, voller Name und Kurzbezeichnung eines Bereichs, rein aus dem
+ *  Katalogtext abgeleitet. `voll` ist die Bereichsüberschrift im Inhalt, `kurz`
+ *  die Kurzbezeichnung in der Bereichsleiste. */
+function bereichMeta(bereich: string): { code: string; voll: string; kurz: string } {
+  const m = bereich.match(/BEREICH\s+(\S+?):\s*(.*)$/);
+  const code = m?.[1] ?? bereich;
+  const voll = m ? titleCaseDe(m[2]) : bereich;
+  const kurzWort = voll.split(" ").find((w) => w.length > 4) ?? voll.split(" ")[0] ?? code;
+  return { code, voll, kurz: `${code} ${kurzWort}` };
+}
+
+const SDA_BEREICH_META = SDA_BEREICHE.map(bereichMeta);
+function bereichNachCode(code: string | null): string {
+  const i = SDA_BEREICH_META.findIndex((b) => b.code === code);
+  return SDA_BEREICHE[i >= 0 ? i : 0];
+}
+
 /** Anzeigewert eines SDA-Items (Auswahl → Optionstext). */
-function sdaAnzeige(item: SdaItem, value: string): string {
+function sdaAnzeigeWert(item: SdaItem, value: string): string {
   if (!value) return "";
   if (item.typ === "auswahl") return item.optionen.find((o) => o.code === value)?.text ?? value;
   return value;
 }
 
-/** Eingabe für ein SDA-Item nach seinem Typ. Optionen und Texte NUR aus dem Katalog. */
-function SdaItemInput({ item, value, onChange, disabled }: {
-  item: SdaItem; value: string; onChange: (v: string) => void; disabled: boolean;
+/** iA5d — vom System vergebene interne Fallnummer, nie editierbar. */
+const SDA_SYSTEMFELD = "iA5d";
+
+// ── kleine Bausteine ─────────────────────────────────────────────────────────
+
+/** Hilfe-Symbol, zeigt den Rohwortlaut der Antwortskala (scaleRoh) im Popover. */
+function SdaHilfe({ text }: { text: string }) {
+  const [offen, setOffen] = useState(false);
+  if (!text) return null;
+  return (
+    <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+      <button type="button" aria-label="Antwortskala anzeigen" aria-expanded={offen}
+        onClick={() => setOffen((o) => !o)} onBlur={() => setOffen(false)}
+        className="ui-fokusring inline-flex items-center justify-center cursor-pointer"
+        style={{ width: 22, height: 22, borderRadius: 999, border: "none", background: "transparent", color: "var(--text-tertiary)", fontFamily: "inherit" }}>
+        <Info style={{ width: 14, height: 14 }} />
+      </button>
+      {offen && (
+        <div role="tooltip" style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 20, width: 320, maxWidth: "80vw", padding: "10px 12px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 12, boxShadow: "var(--shadow-overlay)", fontSize: 12, color: "var(--text-secondary)", whiteSpace: "pre-line", lineHeight: 1.5 }}>
+          {text}
+        </div>
+      )}
+    </span>
+  );
+}
+
+/** Statische Wertanzeige. `locked` zeigt ein Schloss-Symbol; `note` (Hinweis auf
+ *  die Herkunft) steht in Blau. */
+function SdaStatic({ text, note, placeholder, locked }: { text: string; note?: string; placeholder?: string; locked?: boolean }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      {locked && <Lock aria-hidden style={{ width: 13, height: 13, color: "var(--text-tertiary)", flexShrink: 0 }} />}
+      <span style={{ fontSize: 14, color: text ? "var(--text-primary)" : "var(--text-tertiary)" }}>{text || placeholder || "—"}</span>
+      {note && <span style={{ fontSize: 12, fontWeight: 500, color: "var(--status-info)" }}>{note}</span>}
+    </div>
+  );
+}
+
+/** Sichtbare Antwortoptionen (§4) — niemals ein Dropdown, immer alle Optionen
+ *  sichtbar. Gewählte Option trägt drei Merkmale: kräftigere Kontur (Inset-Ring),
+ *  Hintergrundtönung, Häkchen. Eine „Andere"-Option blendet ein Freitextfeld ein. */
+function SdaOptionen({ item, value, onChange, andereWert, onAndereChange }: {
+  item: SdaItem; value: string; onChange: (v: string) => void; andereWert?: string; onAndereChange?: (v: string) => void;
 }) {
-  if (disabled) {
-    return <span style={{ fontSize: 13, color: "var(--text-primary)" }}>{sdaAnzeige(item, value) || "—"}</span>;
+  const opts = item.optionen;
+  const stapeln = opts.length >= 5;              // ab 5 untereinander
+  // Nur eine echte „bitte angeben"-Option (Andere: ___ / Andere, welche?) löst
+  // das Freitextfeld aus — NICHT eine Kategorie wie „Andere Spitexorganisation".
+  const andereOpt = opts.find((o) => /^andere\s*[:,]|welche/i.test(o.text.trim()));
+  const zeigeAndere = !!andereOpt && value === andereOpt.code && !!onAndereChange;
+
+  return (
+    <div>
+      <div style={{ display: "flex", flexDirection: stapeln ? "column" : "row", flexWrap: stapeln ? "nowrap" : "wrap", gap: 8 }}>
+        {opts.map((o) => {
+          const gewaehlt = value === o.code;
+          return (
+            <button key={o.code} type="button" role="radio" aria-checked={gewaehlt}
+              onClick={() => onChange(gewaehlt ? "" : o.code)}
+              className="ui-fokusring cursor-pointer"
+              style={{
+                display: "flex", alignItems: "flex-start", gap: 8, textAlign: "left",
+                padding: "8px 12px", borderRadius: 12, fontFamily: "inherit", fontSize: 14,
+                width: stapeln ? "100%" : "auto", maxWidth: stapeln ? 560 : undefined,
+                background: gewaehlt ? "var(--brand-primary-light)" : "var(--bg-elevated)",
+                border: "0.5px solid " + (gewaehlt ? "var(--brand-primary)" : "var(--border-default)"),
+                // Kräftigere Kontur ohne Layout-Sprung: Inset-Ring statt Rahmenbreite.
+                boxShadow: gewaehlt ? "inset 0 0 0 1px var(--brand-primary)" : "none",
+                color: gewaehlt ? "var(--brand-primary)" : "var(--text-primary)",
+              }}>
+              <span style={{ width: 16, height: 16, flexShrink: 0, marginTop: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                {gewaehlt && <Check style={{ width: 14, height: 14 }} />}
+              </span>
+              <span style={{ color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{o.code}</span>
+              <span style={{ color: gewaehlt ? "var(--brand-primary)" : "var(--text-primary)" }}>{o.text}</span>
+            </button>
+          );
+        })}
+      </div>
+      {zeigeAndere && (
+        <input type="text" value={andereWert ?? ""} onChange={(e) => onAndereChange!(e.target.value)}
+          className="ui-fokusring" aria-label="Andere — bitte angeben"
+          style={{ ...inputStyle, marginTop: 8, maxWidth: 400 }} placeholder="Bitte angeben" />
+      )}
+    </div>
+  );
+}
+
+/** Eingabeelement nach SdaItemTyp (§6). `note` erklärt einen nicht-editierbaren
+ *  Zustand (Systemfeld oder aus den Stammdaten übernommen). */
+function SdaFeld({ item, value, onChange, readOnly, note, andereWert, onAndereChange }: {
+  item: SdaItem; value: string; onChange: (v: string) => void; readOnly: boolean; note?: string;
+  andereWert?: string; onAndereChange?: (v: string) => void;
+}) {
+  const systemFeld = item.iCode === SDA_SYSTEMFELD;
+  if (systemFeld) {
+    return <SdaStatic text={value} note="vom System vergeben" placeholder="wird bei der Eröffnung vergeben" locked />;
+  }
+  if (readOnly) {
+    return <SdaStatic text={sdaAnzeigeWert(item, value)} note={note} locked={!!note} />;
   }
   if (item.typ === "auswahl" && item.optionen.length > 0) {
-    return (
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        style={{ ...inputStyle, maxWidth: 460, cursor: "pointer" }}>
-        <option value="">— bitte wählen —</option>
-        {item.optionen.map((o) => <option key={o.code} value={o.code}>{o.code}. {o.text}</option>)}
-      </select>
-    );
+    return <SdaOptionen item={item} value={value} onChange={onChange} andereWert={andereWert} onAndereChange={onAndereChange} />;
   }
   if (item.typ === "datum") {
-    return (
-      <div style={{ maxWidth: 200 }}>
-        <DateField wertFormat="iso" bereich="any" value={value || null} onChange={(v) => onChange((v as string) ?? "")} />
-      </div>
-    );
+    return <div style={{ maxWidth: 200 }}><DateField wertFormat="iso" bereich="any" value={value || null} onChange={(v) => onChange((v as string) ?? "")} /></div>;
   }
+  if (item.typ === "unterschrift") {
+    return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} style={{ ...inputStyle, maxWidth: 360 }} placeholder="Name der unterzeichnenden Person" />;
+  }
+  // Freitext (und Auswahl ohne Optionen): grosszügiges, mehrzeiliges Feld, damit
+  // auch lange Texte hineinpassen.
   return (
     <>
-      <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
-        style={{ ...inputStyle, maxWidth: 460 }}
-        placeholder={item.typ === "unterschrift" ? "Name der unterzeichnenden Person" : "Freitext"} />
+      <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={3}
+        style={{ ...inputStyle, fontSize: 14, maxWidth: 620, minHeight: 76, lineHeight: 1.5, resize: "vertical" }}
+        placeholder="Freitext" />
       {item.typ === "auswahl" && item.optionen.length === 0 && item.scaleRoh && (
-        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4, whiteSpace: "pre-line" }}>{item.scaleRoh}</div>
+        <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 4, whiteSpace: "pre-line" }}>{item.scaleRoh}</div>
       )}
     </>
   );
 }
 
-/** Registrierungsformular — rendert den SDA-Katalog (2 Bereiche, 31 Items). */
+/** Vollzeilen-Item (§6): Nummer gedämpft, Text, Hilfe-Symbol; Eingabe darunter. */
+function SdaItemZeile({ item, value, onChange, readOnly, note, andereWert, onAndereChange, hervorgehoben }: {
+  item: SdaItem; value: string; onChange: (v: string) => void; readOnly: boolean; note?: string;
+  andereWert?: string; onAndereChange?: (v: string) => void; hervorgehoben: boolean;
+}) {
+  return (
+    <div data-sda-item={item.iCode} style={{ borderRadius: 12, transition: "box-shadow 0.3s, background 0.3s", ...(hervorgehoben ? { background: "var(--brand-accent-light)", boxShadow: "0 0 0 2px var(--brand-accent)", padding: 8, margin: -8 } : null) }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span style={{ color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", fontSize: 12, flexShrink: 0 }}>{item.nummer}</span>
+        <span style={{ flex: 1, fontSize: 14, color: "var(--text-primary)", lineHeight: 1.45 }}>{item.text}</span>
+        <SdaHilfe text={item.scaleRoh} />
+      </div>
+      <div style={{ marginTop: 8 }}><SdaFeld item={item} value={value} onChange={onChange} readOnly={readOnly} note={note} andereWert={andereWert} onAndereChange={onAndereChange} /></div>
+    </div>
+  );
+}
+
+/** Untereintrag in einer Gruppenkarte (§5): Nummer + Bezeichnung als kleines
+ *  Label über dem Feld, eingerückt. */
+function SdaUnterZeile({ item, value, onChange, readOnly, note, andereWert, onAndereChange, hervorgehoben }: {
+  item: SdaItem; value: string; onChange: (v: string) => void; readOnly: boolean; note?: string;
+  andereWert?: string; onAndereChange?: (v: string) => void; hervorgehoben: boolean;
+}) {
+  return (
+    <div data-sda-item={item.iCode} style={{ borderRadius: 12, transition: "box-shadow 0.3s, background 0.3s", ...(hervorgehoben ? { background: "var(--brand-accent-light)", boxShadow: "0 0 0 2px var(--brand-accent)", padding: 8, margin: -8 } : null) }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
+        <span style={{ color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", fontSize: 12 }}>{item.nummer}</span>
+        <span style={{ fontSize: 14, color: "var(--text-primary)", lineHeight: 1.4 }}>{item.text}</span>
+        <SdaHilfe text={item.scaleRoh} />
+      </div>
+      <SdaFeld item={item} value={value} onChange={onChange} readOnly={readOnly} note={note} andereWert={andereWert} onAndereChange={onAndereChange} />
+    </div>
+  );
+}
+
+/** Ein Block je Karte: entweder ein Einzelitem oder eine Gruppe (mit optionalem
+ *  Kopf-Item wie BB15). Reihenfolge und Zugehörigkeit stammen aus dem Katalog. */
+type SdaBlock = { key: string; kopfItem: SdaItem | null; titel: string | null; nummer: string | null; eintraege: SdaItem[] };
+
+function bereichBloecke(items: readonly SdaItem[]): SdaBlock[] {
+  const bloecke: SdaBlock[] = [];
+  const istGruppenkopf = (it: SdaItem) => SDA_GRUPPEN.some((g) => g.nummer === it.nummer) && items.some((x) => x.gruppe === it.nummer);
+  const schluessel = (it: SdaItem) => it.gruppe ?? (istGruppenkopf(it) ? it.nummer : `S:${it.iCode}`);
+  let cur: SdaBlock | null = null;
+  for (const it of items) {
+    const key = schluessel(it);
+    if (!cur || cur.key !== key) {
+      const g = it.gruppe ? sdaGruppe(it.gruppe) : (istGruppenkopf(it) ? sdaGruppe(it.nummer) : undefined);
+      cur = { key, kopfItem: null, titel: g?.titel ?? null, nummer: g?.nummer ?? null, eintraege: [] };
+      bloecke.push(cur);
+    }
+    // Ein Item, dessen Nummer den Gruppennamen trägt (BB15), ist das Kopf-Item.
+    if (istGruppenkopf(it)) cur.kopfItem = it;
+    else cur.eintraege.push(it);
+  }
+  return bloecke;
+}
+
+/** Sperrdialog (§8) — listet die offenen Pflichtfelder je Bereich, höchstens
+ *  vier je Bereich sichtbar, mit Sprungzielen. */
+function SperrDialog({ gruppen, onSprung, onErstesFeld, onBereich, onAbbrechen, gesamtOffen }: {
+  gruppen: { bereich: string; meta: { code: string; voll: string; kurz: string }; items: SdaItem[] }[];
+  onSprung: (iCode: string) => void; onErstesFeld: () => void; onBereich: (code: string) => void; onAbbrechen: () => void; gesamtOffen: number;
+}) {
+  const [alleZeigen, setAlleZeigen] = useState<Record<string, boolean>>({});
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Sperren nicht möglich"
+      onClick={onAbbrechen}
+      style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(19,19,20,0.28)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ width: 480, maxWidth: "100%", maxHeight: "82vh", display: "flex", flexDirection: "column", background: "var(--bg-elevated)", borderRadius: 12, border: "0.5px solid var(--border-default)", boxShadow: "var(--shadow-overlay)" }}>
+        <div style={{ padding: "18px 20px 12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <AlertTriangle style={{ width: 18, height: 18, color: "var(--status-warning-text)" }} />
+            <span style={{ fontSize: 16, fontWeight: 500, color: "var(--text-primary)" }}>Sperren nicht möglich</span>
+          </div>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+            {gesamtOffen} {gesamtOffen === 1 ? "Pflichtfeld ist" : "Pflichtfelder sind"} noch nicht erfasst. Ein gesperrtes Formular lässt sich nicht mehr ändern, deshalb muss es vorher vollständig sein.
+          </p>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "0 20px" }}>
+          {gruppen.map(({ bereich, meta, items }) => {
+            const zeigeAlle = alleZeigen[meta.code];
+            const sichtbar = zeigeAlle ? items : items.slice(0, 4);
+            const rest = items.length - 4;
+            return (
+              <div key={bereich} style={{ padding: "12px 0", borderTop: "0.5px solid var(--border-default)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>{meta.voll} · {items.length} offen</span>
+                  <button type="button" onClick={() => onBereich(meta.code)} className="ui-fokusring cursor-pointer"
+                    style={{ background: "none", border: "none", fontFamily: "inherit", fontSize: 12, color: "var(--brand-accent)" }}>zum Bereich</button>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {sichtbar.map((it) => (
+                    <button key={it.iCode} type="button" onClick={() => onSprung(it.iCode)} className="ui-fokusring cursor-pointer"
+                      style={{ display: "flex", alignItems: "baseline", gap: 8, textAlign: "left", padding: "5px 8px", borderRadius: 8, background: "none", border: "none", fontFamily: "inherit", width: "100%" }}>
+                      <span style={{ color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", fontSize: 12, flexShrink: 0 }}>{it.nummer}</span>
+                      <span style={{ flex: 1, fontSize: 13, color: "var(--text-secondary)" }}>{it.text}</span>
+                      <ArrowRight style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
+                    </button>
+                  ))}
+                </div>
+                {!zeigeAlle && rest > 0 && (
+                  <button type="button" onClick={() => setAlleZeigen((p) => ({ ...p, [meta.code]: true }))} className="ui-fokusring cursor-pointer"
+                    style={{ marginTop: 6, marginLeft: 8, background: "none", border: "none", fontFamily: "inherit", fontSize: 12, color: "var(--brand-accent)" }}>
+                    {rest} weitere {rest === 1 ? "Pflichtfeld" : "Pflichtfelder"} · alle anzeigen
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, padding: "14px 20px", borderTop: "0.5px solid var(--border-default)" }}>
+          <AppButton variant="tertiaer" onClick={onAbbrechen}>Abbrechen</AppButton>
+          <AppButton variant="primaer" onClick={onErstesFeld}>Zum ersten offenen Feld</AppButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Registrierungsformular — rendert den SDA-Katalog als Bereichsseiten. Die
+ *  Muster (Bereichsseiten, sichtbare Optionen, Gruppenkarten, Sperrdialog)
+ *  liegen im gemeinsamen Modul; das interRAI HC bleibt in diesem Lauf unberührt. */
 function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
   assessmentId: string; returnZiel: string; returnLabel: string; person: Person | undefined;
 }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [, force] = useState(0);
   const rerender = () => force((n) => n + 1);
   const assessment = getAssessment(assessmentId);
@@ -657,11 +902,45 @@ function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
     : undefined;
   const [answers, setAnswers] = useState<Record<string, string | null>>(() => (assessment ? { ...assessment.answers } : {}));
 
+  // Aktiver Bereich lebt in der URL (verlinkbar, Browser-Zurück funktioniert).
+  const aktiverCode = SDA_BEREICH_META.some((b) => b.code === searchParams.get("bereich"))
+    ? searchParams.get("bereich")! : SDA_BEREICH_META[0].code;
+  const setAktiverCode = (code: string) => setSearchParams((prev) => { const p = new URLSearchParams(prev); p.set("bereich", code); return p; });
+
+  const contentRef = useRef<HTMLDivElement>(null);
+  const pendingScrollRef = useRef<string | null>(null);
+  const [hervorItem, setHervorItem] = useState<string | null>(null);
+  const [sperrDialog, setSperrDialog] = useState(false);
+
   useEffect(() => {
     if (assessmentId && !readOnly) updateAssessmentAnswers(assessmentId, answers);
   }, [answers, assessmentId, readOnly]);
 
+  // Bereichswechsel: Inhalt nach oben — ausser ein gezielter Sprung steht an.
+  useEffect(() => {
+    if (pendingScrollRef.current) return;
+    contentRef.current?.scrollTo(0, 0);
+  }, [aktiverCode]);
+
+  // Ausstehenden Sprung nach dem Rendern des neuen Bereichs ausführen.
+  useEffect(() => {
+    const iCode = pendingScrollRef.current;
+    if (!iCode) return;
+    pendingScrollRef.current = null;
+    requestAnimationFrame(() => {
+      const el = contentRef.current?.querySelector<HTMLElement>(`[data-sda-item="${iCode}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHervorItem(iCode);
+      setTimeout(() => setHervorItem((c) => (c === iCode ? null : c)), 1500);
+    });
+  }, [aktiverCode]);
+
   if (!assessment) return <div style={{ padding: 32, color: "var(--text-secondary)" }}>Formular nicht gefunden.</div>;
+
+  const aktiverBereich = bereichNachCode(aktiverCode);
+  const aktiveMeta = bereichMeta(aktiverBereich);
+  const aktiverIndex = SDA_BEREICH_META.findIndex((b) => b.code === aktiverCode);
+  const naechsteMeta = SDA_BEREICH_META[aktiverIndex + 1];
 
   const patFeld = (iCode: string): string => {
     const feld = SDA_PATIENT_FELD[iCode];
@@ -690,9 +969,54 @@ function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
   const praez = (bereich: string): string => String(answers[`PRAEZ::${bereich}`] ?? "");
   const setPraez = (bereich: string, v: string) => { if (!readOnly) setAnswers((prev) => ({ ...prev, [`PRAEZ::${bereich}`]: v })); };
 
-  // Vollständigkeit (Anzeige): Katalog-Items mit leerem effektiven Wert. Die
-  // Bereichs-Präzisierung zählt nicht mit.
-  const offen = SDA_KATALOG.filter((i) => !wert(i)).length;
+  // Vollständigkeit: ein Item gilt als erfasst, wenn sein effektiver Wert nicht
+  // leer ist. iA5d (Fallnummer) wird vom System vergeben und zählt als erfasst —
+  // konsistent mit getOpenFieldCount (siehe store.ts).
+  const istErfasst = (item: SdaItem): boolean => item.iCode === SDA_SYSTEMFELD || wert(item).trim() !== "";
+  const erfasstGesamt = SDA_KATALOG.filter(istErfasst).length;
+  const bereichStat = (bereich: string) => {
+    const its = SDA_KATALOG.filter((i) => i.bereich === bereich);
+    const e = its.filter(istErfasst).length;
+    return { gesamt: its.length, erfasst: e, komplett: e === its.length };
+  };
+  const fehlende = SDA_KATALOG.filter((i) => !istErfasst(i));
+  const fehlendeGruppen = SDA_BEREICH_META
+    .map((meta, i) => ({ bereich: SDA_BEREICHE[i], meta, items: fehlende.filter((it) => it.bereich === SDA_BEREICHE[i]) }))
+    .filter((g) => g.items.length > 0);
+
+  // Aus den Stammdaten übernommene (durchgelesene) Angaben werden hier nur
+  // angezeigt, nicht bearbeitet — geändert wird an der Quelle (Patientendaten).
+  const feldReadOnly = (it: SdaItem) => readOnly || istPatientDurchgelesen(it.iCode);
+  const feldNote = (it: SdaItem) => (!readOnly && istPatientDurchgelesen(it.iCode)) ? "aus Stammdaten" : undefined;
+  // Freitext zu einer „Andere"-Option (z. B. AA3, Sprache) — eigener Antwort-
+  // schlüssel, zählt nicht in die Katalog-Vollständigkeit.
+  const andereWert = (it: SdaItem) => String(answers[`${it.iCode}::andere`] ?? "");
+  const setAndere = (it: SdaItem, v: string) => { if (!readOnly) setAnswers((prev) => ({ ...prev, [`${it.iCode}::andere`]: v })); };
+
+  // Sprung zu einem Item, ggf. mit Bereichswechsel; danach kurze Hervorhebung.
+  const springeZuItem = (iCode: string) => {
+    const it = sdaItem(iCode);
+    if (!it) return;
+    setSperrDialog(false);
+    const zielMeta = bereichMeta(it.bereich);
+    if (zielMeta.code !== aktiverCode) {
+      pendingScrollRef.current = iCode;
+      setAktiverCode(zielMeta.code);
+    } else {
+      requestAnimationFrame(() => {
+        const el = contentRef.current?.querySelector<HTMLElement>(`[data-sda-item="${iCode}"]`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+        setHervorItem(iCode);
+        setTimeout(() => setHervorItem((c) => (c === iCode ? null : c)), 1500);
+      });
+    }
+  };
+
+  const speichern = () => {
+    if (readOnly) return;
+    updateAssessmentAnswers(assessmentId, answers);
+    toast("Gespeichert.");
+  };
 
   const sperren = () => {
     // Materialisierung: klient- und fall-Items mit ihrem aktuellen Wert als
@@ -714,71 +1038,142 @@ function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
     }
   };
 
+  // §1/§8: Sperren ist immer aktiv; die Prüfung passiert beim Klick.
+  const sperrenVersuchen = () => { if (fehlende.length > 0) setSperrDialog(true); else sperren(); };
+
+  const statusChip = (() => {
+    const map = { in_bearbeitung: { t: "In Bearbeitung", c: "var(--status-warning-text)", b: "var(--status-warning-bg)", I: null as ReactNode },
+      vollstaendig: { t: "Vollständig", c: "var(--status-success-text)", b: "var(--status-success-bg)", I: <Check style={{ width: 13, height: 13 }} /> },
+      gesperrt: { t: "Gesperrt", c: "var(--status-success-text)", b: "var(--status-success-bg)", I: <Lock style={{ width: 12, height: 12 }} /> } };
+    const s = map[assessment.status];
+    return (
+      <span className="inline-flex items-center" style={{ gap: 4, padding: "4px 12px", borderRadius: 999, fontSize: 12, fontWeight: 500, color: s.c, background: s.b }}>{s.I}{s.t}</span>
+    );
+  })();
+
+  const items = SDA_KATALOG.filter((i) => i.bereich === aktiverBereich);
+  const bloecke = bereichBloecke(items);
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--bg-app, #f5f5f7)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 20px", background: "var(--bg-elevated)", borderBottom: "0.5px solid var(--border-default)", flexShrink: 0, flexWrap: "wrap" }}>
-        <button type="button" onClick={() => navigate(returnZiel)} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 6, padding: 0, background: "none", border: "none", fontSize: "var(--text-small)", fontWeight: 450, color: "var(--text-secondary)", fontFamily: "inherit" }}>
-          <ArrowLeft style={{ width: 16, height: 16 }} /> <span>{returnLabel}</span>
-        </button>
-        {person && (<><span style={{ color: "var(--border-default)" }}>·</span><span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>{person.vorname} {person.nachname}</span></>)}
-        <span style={{ color: "var(--border-default)" }}>·</span>
-        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>Registrierung (SDA)</span>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-          {readOnly ? (
-            <span className="inline-flex items-center" style={{ gap: 4, fontSize: 12, color: "var(--status-success-text)" }}><Check style={{ width: 13, height: 13 }} /> Gesperrt</span>
-          ) : (
-            <>
-              <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{offen} von {SDA_KATALOG.length} offen</span>
-              <AppButton variant="primaer" onClick={sperren}>Abschliessen</AppButton>
-            </>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: "var(--bg-primary)" }}>
+      {/* §1 Kopfbereich — zweizeilig, bleibt beim Scrollen sichtbar */}
+      <div style={{ flexShrink: 0, background: "var(--bg-elevated)", borderBottom: "0.5px solid var(--border-default)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 20px 6px", flexWrap: "wrap" }}>
+          <button type="button" onClick={() => navigate(returnZiel)} className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 6, padding: 0, background: "none", border: "none", fontSize: "var(--text-small)", fontWeight: 450, color: "var(--text-secondary)", fontFamily: "inherit" }}>
+            <ArrowLeft style={{ width: 16, height: 16 }} /> <span>{returnLabel}</span>
+          </button>
+          {person && (<><span style={{ color: "var(--border-default)" }}>·</span><span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>{person.vorname} {person.nachname}</span></>)}
+          <span style={{ color: "var(--border-default)" }}>·</span>
+          <span style={{ fontSize: 13, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{fall?.fallnummer ?? "in Registrierung"}</span>
+          <div style={{ marginLeft: "auto" }}>{statusChip}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 12, padding: "0 20px 8px", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 16, fontWeight: 500, color: "var(--text-primary)" }}>{titleCaseDe(SDA_BEREICHE[SDA_BEREICHE.length - 1].replace(/^BEREICH\s+\S+?:\s*/, ""))}</div>
+            <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 1 }}>{getTypLabel(assessment.typ)} · {erfasstGesamt} von {SDA_KATALOG.length} erfasst</div>
+          </div>
+          {!readOnly && (
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <button type="button" onClick={speichern} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", fontFamily: "inherit", fontSize: 14, fontWeight: 500, color: "var(--brand-accent)" }}>Speichern</button>
+              <AppButton variant="primaer" onClick={sperrenVersuchen}>Sperren</AppButton>
+            </div>
           )}
         </div>
       </div>
-      <div style={{ flex: 1, overflowY: "auto" }}>
-        <div style={{ maxWidth: 820, margin: "0 auto", padding: "20px 24px 64px" }}>
-          {SDA_BEREICHE.map((bereich) => {
-            const items = SDA_KATALOG.filter((i) => i.bereich === bereich);
+
+      {/* Körper: Bereichsleiste links, Bereichsseite rechts */}
+      <div className="flex flex-col sm:flex-row" style={{ flex: 1, minHeight: 0 }}>
+        {/* §2 Bereichsleiste — voller Bereichstitel + Vollständigkeits-Anzeige */}
+        <nav aria-label="Bereiche" className="flex sm:flex-col shrink-0 sm:w-[252px]" style={{ gap: 6, padding: 12, borderBottom: "0.5px solid var(--border-default)", borderRight: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", overflowX: "auto" }}>
+          {SDA_BEREICH_META.map((meta, i) => {
+            const stat = bereichStat(SDA_BEREICHE[i]);
+            const aktiv = meta.code === aktiverCode;
+            const pct = stat.gesamt > 0 ? Math.round((stat.erfasst / stat.gesamt) * 100) : 0;
             return (
-              <div key={bereich} style={{ marginBottom: 28 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 12 }}>{bereich}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  {items.map((item) => {
-                    // §5 Gruppenkopf vor dem ersten Untereintrag einer Gruppe. Hat
-                    // die Gruppe ein eigenes Kopf-Item (BB15), entfällt der Titel.
-                    let kopf: ReactNode = null;
-                    if (item.gruppe && items.find((x) => x.gruppe === item.gruppe) === item) {
-                      const g = sdaGruppe(item.gruppe);
-                      const hatKopfItem = items.some((x) => x.gruppe === null && x.nummer === item.gruppe);
-                      if (g?.titel && !hatKopfItem) {
-                        kopf = <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginTop: 4 }}>{g.titel}</div>;
-                      }
-                    }
-                    const disabled = readOnly || sdaHerkunft(item.iCode) === "fall";
-                    return (
-                      <Fragment key={item.iCode}>
-                        {kopf}
-                        <div style={{ marginLeft: item.gruppe ? 20 : 0 }}>
-                          <label style={{ display: "block", fontSize: 13, color: "var(--text-primary)", marginBottom: 4 }}>
-                            <span style={{ color: "var(--text-tertiary)", fontFamily: "monospace", marginRight: 6 }}>{item.nummer}</span>{item.text}
-                          </label>
-                          <SdaItemInput item={item} value={wert(item)} onChange={(v) => setWert(item, v)} disabled={disabled} />
-                        </div>
-                      </Fragment>
-                    );
-                  })}
-                  {/* §4 Individuelle Präzisierungen — je Bereich, zählt nicht in die Vollständigkeit */}
-                  <div style={{ marginTop: 8 }}>
-                    <label style={{ display: "block", fontSize: 13, color: "var(--text-primary)", marginBottom: 4 }}>Individuelle Präzisierungen</label>
-                    {readOnly
-                      ? <span style={{ fontSize: 13, color: "var(--text-primary)" }}>{praez(bereich) || "—"}</span>
-                      : <input type="text" value={praez(bereich)} onChange={(e) => setPraez(bereich, e.target.value)} style={{ ...inputStyle, maxWidth: 460 }} placeholder="Freitext" />}
-                  </div>
+              <button key={meta.code} type="button" onClick={() => setAktiverCode(meta.code)} aria-current={aktiv ? "page" : undefined}
+                className="ui-fokusring cursor-pointer sm:w-full" style={{
+                  textAlign: "left", padding: "10px 12px", borderRadius: 12, border: "none", fontFamily: "inherit",
+                  background: aktiv ? "var(--bg-secondary)" : "transparent", minWidth: 208,
+                }}>
+                <div style={{ fontSize: 13, fontWeight: aktiv ? 500 : 400, color: "var(--text-primary)", lineHeight: 1.35 }}>{meta.code}. {meta.voll}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                  {stat.komplett ? (
+                    <span className="inline-flex items-center" style={{ gap: 4, padding: "2px 8px", borderRadius: 999, fontSize: 12, fontWeight: 500, color: "var(--status-success-text)", background: "var(--status-success-bg)" }}>
+                      <Check style={{ width: 12, height: 12 }} /> Vollständig
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 12, fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>{stat.erfasst} von {stat.gesamt} erfasst</span>
+                  )}
                 </div>
-              </div>
+                <div aria-hidden style={{ marginTop: 6, height: 4, borderRadius: 999, background: "var(--bg-tertiary)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, borderRadius: 999, background: stat.komplett ? "var(--status-success)" : "var(--brand-primary)", transition: "width 0.3s" }} />
+                </div>
+              </button>
             );
           })}
+        </nav>
+
+        {/* §3 Bereichsseite — nur der aktive Bereich */}
+        <div ref={contentRef} style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+          <div style={{ maxWidth: 760, margin: "0 auto", padding: "20px 24px 40px" }}>
+            <h2 style={{ fontSize: 12, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", margin: "0 0 16px" }}>{aktiverBereich}</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {bloecke.map((block) => (
+                <div key={block.key} style={{ background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 12, padding: "16px 18px" }}>
+                  {/* §5 Gruppenkopf: Nummer gedämpft + Titel. Kein Kopf, wenn ein
+                      Kopf-Item die Gruppe trägt (BB15) oder titel null ist (BB1). */}
+                  {!block.kopfItem && block.titel && (
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 12 }}>
+                      <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{block.nummer}</span>
+                      <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>{block.titel}</span>
+                    </div>
+                  )}
+                  {block.kopfItem && (
+                    <SdaItemZeile item={block.kopfItem} value={wert(block.kopfItem)} onChange={(v) => setWert(block.kopfItem!, v)} readOnly={feldReadOnly(block.kopfItem)} note={feldNote(block.kopfItem)} andereWert={andereWert(block.kopfItem)} onAndereChange={(v) => setAndere(block.kopfItem!, v)} hervorgehoben={hervorItem === block.kopfItem.iCode} />
+                  )}
+                  {block.eintraege.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: block.kopfItem ? 14 : 0, marginLeft: block.kopfItem ? 20 : 0 }}>
+                      {block.eintraege.map((it) => (
+                        (block.kopfItem || block.titel)
+                          ? <SdaUnterZeile key={it.iCode} item={it} value={wert(it)} onChange={(v) => setWert(it, v)} readOnly={feldReadOnly(it)} note={feldNote(it)} andereWert={andereWert(it)} onAndereChange={(v) => setAndere(it, v)} hervorgehoben={hervorItem === it.iCode} />
+                          : <SdaItemZeile key={it.iCode} item={it} value={wert(it)} onChange={(v) => setWert(it, v)} readOnly={feldReadOnly(it)} note={feldNote(it)} andereWert={andereWert(it)} onAndereChange={(v) => setAndere(it, v)} hervorgehoben={hervorItem === it.iCode} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* §7 Bereichs-Präzisierung — kein Zähler, keine Itemnummer */}
+              <div style={{ marginTop: 8, paddingTop: 16, borderTop: "0.5px solid var(--border-default)" }}>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>Individuelle Präzisierungen</div>
+                <div style={{ fontSize: 12, color: "var(--text-tertiary)", margin: "2px 0 8px" }}>Gilt für den ganzen Bereich {aktiveMeta.code}</div>
+                {readOnly
+                  ? <SdaStatic text={praez(aktiverBereich)} />
+                  : <textarea value={praez(aktiverBereich)} onChange={(e) => setPraez(aktiverBereich, e.target.value)} rows={3} style={{ ...inputStyle, fontSize: 14, maxWidth: 620, minHeight: 76, lineHeight: 1.5, resize: "vertical" }} placeholder="Freitext" />}
+              </div>
+            </div>
+
+            {/* §9 Fussbereich — Copyright-Vermerk links, Weiter rechts (nicht im letzten Bereich). */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 28, paddingTop: 16, borderTop: "0.5px solid var(--border-default)", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>© interRAI HC 1994–2022 (9.4) · www.interRAI.org</span>
+              {naechsteMeta && (
+                <AppButton variant="sekundaer" iconRight={ArrowRight} onClick={() => setAktiverCode(naechsteMeta.code)}>Weiter: Bereich {naechsteMeta.code}</AppButton>
+              )}
+            </div>
+          </div>
         </div>
       </div>
+
+      {sperrDialog && (
+        <SperrDialog
+          gruppen={fehlendeGruppen}
+          gesamtOffen={fehlende.length}
+          onSprung={springeZuItem}
+          onErstesFeld={() => { if (fehlende[0]) springeZuItem(fehlende[0].iCode); }}
+          onBereich={(code) => { setSperrDialog(false); setAktiverCode(code); }}
+          onAbbrechen={() => setSperrDialog(false)}
+        />
+      )}
     </div>
   );
 }

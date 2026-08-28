@@ -54,14 +54,15 @@ export interface Person {
 export type FallStatus = "registering" | "open" | "discharged" | "aborted";
 
 /**
- * Fall — the clinical care episode (SpitexCareCase). Two events touch it: the
- * registration form locking OPENS it (mints the Fallnummer, sets openedAt and
- * route); the discharge form locking closes it (closedAt). An interRAI form
- * locking has DELIBERATELY no effect. A Wiedereintritt is a new Fall.
+ * Fall — the clinical care episode (SpitexCareCase). The Fallnummer is minted at
+ * Fall creation (with the onboarding dataset). Two events touch the Fall later:
+ * the registration form locking OPENS it (sets openedAt and route); the discharge
+ * form locking closes it (closedAt). An interRAI form locking has DELIBERATELY no
+ * effect. A Wiedereintritt is a new Fall.
  */
 export interface Fall {
   id: string;
-  /** Minted when the registration form LOCKS; null while `registering`/`aborted`. */
+  /** Minted at Fall creation (eroeffneFall). null only in defensive edge cases. */
   fallnummer: string | null;
   /** The Klient (Person) this episode belongs to. */
   klientId: string;
@@ -473,21 +474,22 @@ export function offenerFallFuerKlient(klientId: string): Fall | undefined {
 }
 
 /**
- * Opens the SHELL of a new Fall (status `registering`, NO Fallnummer yet — that
- * is minted when the registration form locks). Enforces ONE OPEN FALL PER
- * KLIENT: throws, naming the existing case, if the Klient already has a
- * registering/open Fall.
+ * Opens the SHELL of a new Fall (status `registering`). The Fallnummer is minted
+ * HERE, beim Erstellen des Onboarding-Datensatzes — nicht erst beim Sperren der
+ * Registrierung. Das SDA-Feld iA5d liest sie ab dann durchgehend (nur lesend).
+ * Enforces ONE OPEN FALL PER KLIENT: throws, naming the existing case, if the
+ * Klient already has a registering/open Fall.
  */
 export function eroeffneFall(klientId: string, erstelltAm: string = GEGENWART_ISO): Fall {
   const bestehend = offenerFallFuerKlient(klientId);
   if (bestehend) {
-    const kennung = bestehend.fallnummer ?? "in Registrierung, noch keine Fallnummer";
+    const kennung = bestehend.fallnummer ?? "in Registrierung";
     throw new Error(`Klient "${klientId}" hat bereits einen offenen Fall (${kennung})`);
   }
   const id = `FALL-${String(faelle.size + 1).padStart(3, "0")}`;
   const fall: Fall = {
     id,
-    fallnummer: null,
+    fallnummer: vergibFallnummer(erstelltAm),
     klientId,
     route: null,
     erstelltAm,
@@ -762,8 +764,9 @@ function wendeSperreAn(a: Formular, gesperrtVon: string, jetzt: string): void {
     if (code == null || code === "") {
       throw new Error("Registrierung ohne codiertes BB16 — Route nicht bestimmbar, keine Fallnummer");
     }
-    // FALL ZUERST: Fallnummer vergeben, Route und openedAt setzen — DANN das
-    // Formular sperren (nicht den dokumentierten Produktionsdefekt nachbauen).
+    // Die Fallnummer wurde bereits bei der Fall-Erstellung vergeben; hier wird
+    // nur die Route (aus BB16) und openedAt gesetzt. Der Guard mint nur, falls ein
+    // Fall ausnahmsweise ohne Nummer existiert (Defensive, kein Regelfall).
     if (fall.fallnummer === null) fall.fallnummer = vergibFallnummer(jetzt);
     if (fall.route === null) fall.route = sdaRoute(code);
     fall.openedAt = jetzt;
@@ -807,7 +810,10 @@ export function getOpenFieldCount(assessment: Formular): number {
   // nicht gegen den HC. Ein Item gilt als beantwortet, wenn ein Wert vorliegt;
   // Unterschriftenfelder zählen mit.
   if (assessment.typ === "registration") {
+    // iA5d (Interne Fallnummer) wird vom System vergeben (bei der Fall-Erstellung)
+    // und ist kein vom Nutzer auszufüllendes Pflichtfeld — es zählt nicht als offen.
     return SDA_KATALOG.filter((item) => {
+      if (item.iCode === "iA5d") return false;
       const v = assessment.answers[item.iCode];
       return v == null || v === "";
     }).length;

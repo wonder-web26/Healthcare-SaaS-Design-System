@@ -24,7 +24,10 @@ const KLIENT_ICODES = [
   "iA1c", "iA1a", "iA2", "iA3", "iA4", "iA5a", "iA10", "CHB3", "iB4", "iB11", "CHA7a", "CHA7b", "CHA7c",
   // Patientenfelder, die die Pipeline befüllt und Patient360 anzeigt — daher
   // klient (durchgelesen), nicht formular. Kein Pipeline-Umbau, keine Doppelerfassung.
-  "iA11b", "iA12a", "iA12b", "iB2",
+  "iA11b", "iA12a", "iA12b",
+  // iB2 (AA2 Datum der Eröffnung des Dossiers) wird bewusst NICHT durchgelesen:
+  // es ist eine SDA-eigene Angabe, die im Registrierungsformular gesetzt wird
+  // (formular), nicht aus den Stammdaten gemappt.
 ] as const;
 const FALL_ICODES = ["iA5d"] as const;
 
@@ -59,7 +62,6 @@ export const SDA_PATIENT_FELD: Readonly<Record<string, string | null>> = {
   iA11b: "wohnsituation",
   iA12a: "formZusammenleben",
   iA12b: "neuZusammenlebend",
-  iB2: "aufnahmeDatum", // AA2 — die Pipeline speist aufnahmeDatum aus dossierEroeffnetAm
   // Abweichung — formularseitig, nicht durchgelesen:
   iA10: null, // Wohnort PLZ/Ort ≠ adresse (String inkl. Strasse)
   CHA7a: null, // Grundversicherung (Freitext) ≠ krankenkasse (Label)

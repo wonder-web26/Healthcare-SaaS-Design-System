@@ -60,15 +60,16 @@ assert.equal(klientZustand("PERS-001"), "im_onboarding");
 assert.equal(klientZustand("PERS-002"), "aktiv");
 assert.equal(klientZustand("PERS-004"), "aktiv");
 
-// ── V4: Fallnummer erst beim Sperren der Registrierung ───────────────────────
+// ── V4: Fallnummer bei Fall-Erstellung vergeben, beim Sperren unverändert ─────
 {
   const f = frischerFall();
+  const nummer = getFall(f.id)!.fallnummer;
+  assert.ok(nummer, "Fallnummer wird bei der Fall-Erstellung vergeben");
   const r = createFormular(f.id, "registration");
-  assert.equal(getFall(f.id)!.fallnummer, null); // registering → keine Nummer
-  assert.equal(fallStatus(f.id), "registering");
+  assert.equal(fallStatus(f.id), "registering"); // Registrierung noch nicht gesperrt
   r.answers["CHBB16"] = "1";
   sperre(r);
-  assert.ok(getFall(f.id)!.fallnummer, "nach dem Sperren hat der Fall eine Nummer");
+  assert.equal(getFall(f.id)!.fallnummer, nummer, "Sperren ändert die Nummer nicht");
   assert.equal(fallStatus(f.id), "open");
 }
 
@@ -150,13 +151,13 @@ for (const [code, route] of ROUTEN) {
   assert.throws(() => eroeffneFall(kl2), /bereits einen offenen Fall/);
 }
 
-// ── V13: Abbruch → aborted, keine Fallnummer ─────────────────────────────────
+// ── V13: Abbruch → aborted (Fallnummer bleibt, sie wurde bei Erstellung vergeben)
 {
   const f = frischerFall();
   createFormular(f.id, "registration"); // registering
   brecheFallAb(f.id);
   assert.equal(fallStatus(f.id), "aborted");
-  assert.equal(getFall(f.id)!.fallnummer, null);
+  assert.ok(getFall(f.id)!.fallnummer, "Nummer wurde bei Erstellung vergeben, Abbruch nimmt sie nicht zurück");
   // Ein offener Fall lässt sich nicht abbrechen.
   const g = frischerFall();
   registriere(g, "1");
@@ -258,8 +259,8 @@ for (const [code, route] of ROUTEN) {
   }
   const zaehle = (h: string) => SDA_KATALOG.filter((i) => herk[i.iCode] === h).length;
   assert.equal(zaehle("fall"), 1);      // iA5d
-  assert.equal(zaehle("klient"), 17);   // +iA11b/iA12a/iA12b/iB2 (Patientenfelder)
-  assert.equal(zaehle("formular"), 13);
+  assert.equal(zaehle("klient"), 16);   // +iA11b/iA12a/iA12b (Patientenfelder); iB2 ist formular
+  assert.equal(zaehle("formular"), 14); // inkl. iB2 (AA2 Eröffnungsdatum, SDA-eigen)
 }
 
 console.log("store.test.ts: alle Zusicherungen erfüllt");
