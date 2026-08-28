@@ -18,7 +18,7 @@
  *   repeat_dynamic  – P2: assessor enters count, then N groups rendered
  */
 
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, Fragment, type ReactNode } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router";
 import {
   Info,
@@ -68,6 +68,7 @@ import {
   confirmVorschlag,
   getGespraech,
   getTypLabel,
+  getFall,
   type Formular,
   type FormularTyp,
   type Person,
@@ -75,7 +76,9 @@ import {
   type GespraechAbschnitt,
   type Bestaetigung,
 } from "../../../lib/interrai/store";
-import { SDA_KATALOG, SDA_BEREICHE, type SdaItem } from "../../../lib/interrai/katalog/sda-katalog";
+import { SDA_KATALOG, SDA_BEREICHE, sdaGruppe, type SdaItem } from "../../../lib/interrai/katalog/sda-katalog";
+import { sdaHerkunft, istPatientDurchgelesen, SDA_PATIENT_FELD } from "../../../lib/interrai/katalog/sda-herkunft";
+import { getPatient, patientFuerOnboarding, aktualisierePatient } from "../../../lib/patienten/store";
 import { ansichtPfad } from "../Patient360Page";
 import { useRecording } from "../../recording/RecordingContext";
 import { toast } from "sonner";
@@ -644,8 +647,14 @@ function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
 }) {
   const navigate = useNavigate();
   const [, force] = useState(0);
+  const rerender = () => force((n) => n + 1);
   const assessment = getAssessment(assessmentId);
   const readOnly = assessment ? istGesperrt(assessment) : true;
+  const fall = assessment ? getFall(assessment.fallId) : undefined;
+  // Klient = Patient, über den bestehenden Personen-Link erreicht (kein Umbau).
+  const patient = person
+    ? (person.patientId ? getPatient(person.patientId) : (person.onboardingId ? patientFuerOnboarding(person.onboardingId) : undefined))
+    : undefined;
   const [answers, setAnswers] = useState<Record<string, string | null>>(() => (assessment ? { ...assessment.answers } : {}));
 
   useEffect(() => {
@@ -654,18 +663,54 @@ function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
 
   if (!assessment) return <div style={{ padding: 32, color: "var(--text-secondary)" }}>Formular nicht gefunden.</div>;
 
-  const setAnswer = (iCode: string, v: string) => { if (!readOnly) setAnswers((p) => ({ ...p, [iCode]: v })); };
-  const offen = SDA_KATALOG.filter((i) => { const v = answers[i.iCode]; return v == null || v === ""; }).length;
+  const patFeld = (iCode: string): string => {
+    const feld = SDA_PATIENT_FELD[iCode];
+    return feld && patient ? String((patient as unknown as Record<string, unknown>)[feld] ?? "") : "";
+  };
+  // Effektiver Wert: nach dem Sperren aus den (materialisierten) Antworten;
+  // davor je Herkunft aus Fall / Patient durchgelesen, sonst aus dem Formular.
+  const wert = (item: SdaItem): string => {
+    if (readOnly) return String(answers[item.iCode] ?? "");
+    const h = sdaHerkunft(item.iCode);
+    if (h === "fall") return fall?.fallnummer ?? "";
+    if (istPatientDurchgelesen(item.iCode)) return patFeld(item.iCode);
+    return String(answers[item.iCode] ?? "");
+  };
+  const setWert = (item: SdaItem, v: string) => {
+    if (readOnly) return;
+    const h = sdaHerkunft(item.iCode);
+    if (h === "fall") return; // nicht editierbar
+    if (istPatientDurchgelesen(item.iCode)) {
+      const feld = SDA_PATIENT_FELD[item.iCode]!;
+      if (patient) { aktualisierePatient(patient.id, { [feld]: v } as unknown as Parameters<typeof aktualisierePatient>[1]); rerender(); }
+      return;
+    }
+    setAnswers((prev) => ({ ...prev, [item.iCode]: v }));
+  };
+  const praez = (bereich: string): string => String(answers[`PRAEZ::${bereich}`] ?? "");
+  const setPraez = (bereich: string, v: string) => { if (!readOnly) setAnswers((prev) => ({ ...prev, [`PRAEZ::${bereich}`]: v })); };
+
+  // Vollständigkeit (Anzeige): Katalog-Items mit leerem effektiven Wert. Die
+  // Bereichs-Präzisierung zählt nicht mit.
+  const offen = SDA_KATALOG.filter((i) => !wert(i)).length;
 
   const sperren = () => {
-    updateAssessmentAnswers(assessmentId, answers);
+    // Materialisierung: klient- und fall-Items mit ihrem aktuellen Wert als
+    // Antwort schreiben — ab dem Sperren liest das Formular nur noch die Antworten.
+    const mat: Record<string, string | null> = { ...answers };
+    for (const item of SDA_KATALOG) {
+      const h = sdaHerkunft(item.iCode);
+      if (h === "fall") mat[item.iCode] = fall?.fallnummer ?? "";
+      else if (istPatientDurchgelesen(item.iCode)) mat[item.iCode] = patFeld(item.iCode);
+    }
+    updateAssessmentAnswers(assessmentId, mat);
     try {
       sperreFormular(assessmentId, "Sandra Weber");
       toast("Registrierung gesperrt — die Fallnummer wurde vergeben.");
       navigate(returnZiel);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Sperren nicht möglich");
-      force((n) => n + 1);
+      rerender();
     }
   };
 
@@ -691,21 +736,47 @@ function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
         <div style={{ maxWidth: 820, margin: "0 auto", padding: "20px 24px 64px" }}>
-          {SDA_BEREICHE.map((bereich) => (
-            <div key={bereich} style={{ marginBottom: 28 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 12 }}>{bereich}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {SDA_KATALOG.filter((i) => i.bereich === bereich).map((item) => (
-                  <div key={item.iCode}>
-                    <label style={{ display: "block", fontSize: 13, color: "var(--text-primary)", marginBottom: 4 }}>
-                      <span style={{ color: "var(--text-tertiary)", fontFamily: "monospace", marginRight: 6 }}>{item.nummer}</span>{item.text}
-                    </label>
-                    <SdaItemInput item={item} value={(answers[item.iCode] as string) ?? ""} onChange={(v) => setAnswer(item.iCode, v)} disabled={readOnly} />
+          {SDA_BEREICHE.map((bereich) => {
+            const items = SDA_KATALOG.filter((i) => i.bereich === bereich);
+            return (
+              <div key={bereich} style={{ marginBottom: 28 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 12 }}>{bereich}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {items.map((item) => {
+                    // §5 Gruppenkopf vor dem ersten Untereintrag einer Gruppe. Hat
+                    // die Gruppe ein eigenes Kopf-Item (BB15), entfällt der Titel.
+                    let kopf: ReactNode = null;
+                    if (item.gruppe && items.find((x) => x.gruppe === item.gruppe) === item) {
+                      const g = sdaGruppe(item.gruppe);
+                      const hatKopfItem = items.some((x) => x.gruppe === null && x.nummer === item.gruppe);
+                      if (g?.titel && !hatKopfItem) {
+                        kopf = <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginTop: 4 }}>{g.titel}</div>;
+                      }
+                    }
+                    const disabled = readOnly || sdaHerkunft(item.iCode) === "fall";
+                    return (
+                      <Fragment key={item.iCode}>
+                        {kopf}
+                        <div style={{ marginLeft: item.gruppe ? 20 : 0 }}>
+                          <label style={{ display: "block", fontSize: 13, color: "var(--text-primary)", marginBottom: 4 }}>
+                            <span style={{ color: "var(--text-tertiary)", fontFamily: "monospace", marginRight: 6 }}>{item.nummer}</span>{item.text}
+                          </label>
+                          <SdaItemInput item={item} value={wert(item)} onChange={(v) => setWert(item, v)} disabled={disabled} />
+                        </div>
+                      </Fragment>
+                    );
+                  })}
+                  {/* §4 Individuelle Präzisierungen — je Bereich, zählt nicht in die Vollständigkeit */}
+                  <div style={{ marginTop: 8 }}>
+                    <label style={{ display: "block", fontSize: 13, color: "var(--text-primary)", marginBottom: 4 }}>Individuelle Präzisierungen</label>
+                    {readOnly
+                      ? <span style={{ fontSize: 13, color: "var(--text-primary)" }}>{praez(bereich) || "—"}</span>
+                      : <input type="text" value={praez(bereich)} onChange={(e) => setPraez(bereich, e.target.value)} style={{ ...inputStyle, maxWidth: 460 }} placeholder="Freitext" />}
                   </div>
-                ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
