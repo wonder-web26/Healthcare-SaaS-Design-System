@@ -49,7 +49,7 @@ import {
 
 import { useNavigate } from "react-router";
 import { LeerZustand } from "./ui/LeerZustand";
-import { TabAnmeldungV2, TabPersonalienV2, TabSteuerV2, TabWohnenUmfeldV2, TabAnamneseV2, TabAbschlussV2 } from "./form/MigratedPatientForms";
+import { TabPersonalienV2, TabSteuerV2, TabWohnenUmfeldV2, TabAnamneseV2 } from "./form/MigratedPatientForms";
 import { FORMULAR_MAX } from "./form/feldbreiten";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
@@ -59,7 +59,7 @@ import {
   useKlvVerordnungen, positionHinzufuegen, positionAendern, positionEntfernen, positionenSetzen,
 } from "../../lib/klv/store";
 import { useRecording } from "../recording/RecordingContext";
-import { getPersonByOnboardingId, getOrCreatePersonForOnboarding, offenenFallSicherstellen, erstelleNaechstesFormular } from "../../lib/interrai/store";
+import { getPersonByOnboardingId, getOrCreatePersonForOnboarding, offenenFallSicherstellen, erstelleNaechstesFormular, registrierungFuerOnboarding, getOpenFieldCount } from "../../lib/interrai/store";
 import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
 import type { KLVLeistung, KLVEinheit, Pflegediagnose, Massnahme, Pflegeziel, AerztlicheDiagnose } from "../../types/klinische-artefakte";
 import { NANDA_KATALOG } from "../../lib/mocks/nanda-enp-katalog";
@@ -118,29 +118,13 @@ function istKontaktMitTelefon(kennung: string): boolean {
 }
 
 export interface PatientFormData {
-  /* Reiter Anmeldung – Bereich AA und BB16 */
-  /** AA1 — Code aus lib/stammdaten/sda-eroeffnungsgrund. Einzige Vorbelegung. */
-  eroeffnungsgrund: string;
+  /* AA1, AA3, BB16, BB17 und die anmeldende Person sind ins
+     Registrierungsformular (SDA) herausgelöst und leben nicht mehr hier. */
   /** AA2 — Datum der Eröffnung des Dossiers, alleinige Quelle des Aufnahmedatums. */
   dossierEroeffnetAm: string;
-  /** AA3 — Code aus lib/stammdaten/sda-anmeldende-institution. */
-  anmeldendeInstitution: string;
-  /** AA3 Code 8 — Institution als Freitext. */
-  anmeldendeInstitutionAndere: string;
-  anmeldendePersonName: string;
-  anmeldendePersonFunktion: string;
-  anmeldendePersonTelefon: string;
-  anmeldendePersonEmail: string;
-  /** BB16 — Code aus lib/stammdaten/sda-einschaetzung-situation. */
-  einschaetzungSituation: string;
   anmeldungPraezisierungen: string;
   /** Bereich BB · Individuelle Präzisierungen — Freitext, optional. */
   stammdatenPraezisierungen: string;
-  /** BB17a — Protokoll statt Unterschrift: wer am SDA gearbeitet hat, je einmal. */
-  sdaBearbeitende: SdaProtokollEintrag[];
-  /** BB17b — wer das SDA abgeschlossen hat. Leer, solange offen. */
-  sdaAbgeschlossenVon: string;
-  sdaAbgeschlossenAm: string;
 
   /* Tab 1 – Personalien */
   anrede: string;
@@ -279,21 +263,9 @@ function buildEmptyATL(): Record<string, ATLEntry> {
 }
 
 export const emptyPatientForm: PatientFormData = {
-  // AA1 ist laut Handbuch vorzubelegen — das einzige Feld des Reiters mit Wert.
-  eroeffnungsgrund: EROEFFNUNGSGRUND_STANDARD,
   dossierEroeffnetAm: "",
-  anmeldendeInstitution: "",
-  anmeldendeInstitutionAndere: "",
-  anmeldendePersonName: "",
-  anmeldendePersonFunktion: "",
-  anmeldendePersonTelefon: "",
-  anmeldendePersonEmail: "",
-  einschaetzungSituation: "",
   anmeldungPraezisierungen: "",
   stammdatenPraezisierungen: "",
-  sdaBearbeitende: [],
-  sdaAbgeschlossenVon: "",
-  sdaAbgeschlossenAm: "",
 
   anrede: "",
   name: "",
@@ -421,17 +393,10 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
     // optional, das Protokoll wird nicht erfasst. Er zählt deshalb nicht mit.
     case "abschluss":
       return { done: 0, total: 0 };
-    case "anmeldung": {
-      const checks = [
-        filled(data.eroeffnungsgrund),
-        isValidDate(data.dossierEroeffnetAm),
-        filled(data.anmeldendeInstitution),
-        filled(data.einschaetzungSituation),
-      ];
-      // AA3 Code 8: die Institution ist zusätzlich als Freitext zu erfassen.
-      if (data.anmeldendeInstitution === "8") checks.push(filled(data.anmeldendeInstitutionAndere));
-      return { done: checks.filter(Boolean).length, total: checks.length };
-    }
+    // Anmeldung ist ein Statusblock (SDA-Registrierung); Vollständigkeit wird
+    // ausserhalb aus dem Formular abgeleitet, hier zählt nichts mit.
+    case "anmeldung":
+      return { done: 0, total: 0 };
     case "personalien": {
       const checks = [
         filled(data.name),
@@ -510,7 +475,10 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
   }
 }
 
-function isTabComplete(tabKey: string, data: PatientFormData): boolean {
+function isTabComplete(tabKey: string, data: PatientFormData, anmeldungVollstaendig: boolean): boolean {
+  // Anmeldung ist jetzt ein Statusblock: Vollständigkeit wird aus dem
+  // Registrierungsformular abgeleitet, nicht aus Feldern dieses Reiters.
+  if (tabKey === "anmeldung") return anmeldungVollstaendig;
   const { done, total } = getTabCompletion(tabKey, data);
   if (total === 0) return false;
   return done === total;
@@ -598,11 +566,17 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
    * alle Items im Bereich BB kodiert sind. Der Reiter Anmeldung bleibt
    * vollständig pflichtig — AA1, AA2, AA3 und BB16 sind auch beim Abbruch zu
    * kodieren; nur die BB-Reiter entfallen. */
-  const istEinsatzabbruch = data.eroeffnungsgrund === EROEFFNUNGSGRUND_EINSATZABBRUCH;
+  // Registrierung (SDA) des Onboardings — Reitersperre, Anmeldung-Validität und
+  // Einsatzabbruch werden daraus ABGELEITET, nicht gespeichert (kein zweiter
+  // Lebenszyklus). Fehlt eine Antwort, wird nichts angenommen (§D).
+  const registrierung = onboardingId ? registrierungFuerOnboarding(onboardingId) : undefined;
+  const registrierungGesperrt = registrierung?.status === "gesperrt";
+  const anmeldungVollstaendig = registrierungGesperrt || (registrierung ? getOpenFieldCount(registrierung) === 0 : false);
+  const istEinsatzabbruch = registrierung?.answers["CHAA1"] === EROEFFNUNGSGRUND_EINSATZABBRUCH;
   const requiredTabs = istEinsatzabbruch
     ? ["anmeldung"]
     : ["anmeldung", "personalien", "steuer", "wohnen", "anamnese", "dokumente"];
-  const allRequiredComplete = requiredTabs.every((k) => isTabComplete(k, data));
+  const allRequiredComplete = requiredTabs.every((k) => isTabComplete(k, data, anmeldungVollstaendig));
 
   useEffect(() => {
     onValidityChange?.(allRequiredComplete);
@@ -613,34 +587,16 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
     []
   );
 
-  /* ── Abschluss und Sperrung ────────────────────────────────────────────────
-     Der Abschluss ist ein gespeicherter Zustand, kein gerechneter: einmal
-     gesetzt, bleibt er, auch wenn danach ein Pflichtfeld geleert wird.
-     Gesperrt sind ausschliesslich die SDA-Reiter. ── */
-  const sdaAbgeschlossen = data.sdaAbgeschlossenAm !== "";
-  const aktiverReiterGesperrt = sdaAbgeschlossen && SDA_REITER.includes(activeTab);
-
-  /**
-   * BB17a — ein Eintrag je Benutzerin, beim ersten Ändern eines SDA-Feldes.
-   * Wiederholte Änderungen derselben Person erzeugen keinen zweiten Eintrag.
-   * Als SDA-Änderung zählt jede Änderung, während ein SDA-Reiter offen ist.
-   */
-  const protokollErgaenzen = useCallback(
-    (bisher: SdaProtokollEintrag[]): SdaProtokollEintrag[] => {
-      if (!SDA_REITER.includes(activeTab)) return bisher;
-      const name = `${benutzer.vorname} ${benutzer.name}`;
-      if (bisher.some(e => e.benutzer === name)) return bisher;
-      return [...bisher, { benutzer: name, zeitpunkt: jetztAnzeige() }];
-    },
-    [activeTab, benutzer],
-  );
+  // Reitersperre: die SDA-Reiter sind gesperrt, sobald die Registrierung
+  // gesperrt ist — abgeleitet aus dem Formularstatus, kein eigenes Feld.
+  const aktiverReiterGesperrt = !!registrierungGesperrt && SDA_REITER.includes(activeTab);
 
   const updateField = useCallback(
     (field: keyof PatientFormData, value: string) => {
       if (aktiverReiterGesperrt) return;
-      onChange({ ...data, [field]: value, sdaBearbeitende: protokollErgaenzen(data.sdaBearbeitende) });
+      onChange({ ...data, [field]: value });
     },
-    [data, onChange, aktiverReiterGesperrt, protokollErgaenzen]
+    [data, onChange, aktiverReiterGesperrt]
   );
 
   /** Mehrere Felder in EINEM Zug — zwei getrennte Aufrufe im selben Rendertakt
@@ -649,9 +605,9 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
   const updateFields = useCallback(
     (patch: Partial<PatientFormData>) => {
       if (aktiverReiterGesperrt) return;
-      onChange({ ...data, ...patch, sdaBearbeitende: protokollErgaenzen(data.sdaBearbeitende) });
+      onChange({ ...data, ...patch });
     },
-    [data, onChange, aktiverReiterGesperrt, protokollErgaenzen]
+    [data, onChange, aktiverReiterGesperrt]
   );
 
   const updateATL = useCallback(
@@ -703,7 +659,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
         >
           {tabDefs.map((tab) => {
             const isActive = activeTab === tab.key;
-            const complete = isTabComplete(tab.key, data);
+            const complete = isTabComplete(tab.key, data, anmeldungVollstaendig);
 
             return (
               <button
@@ -750,9 +706,9 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {/* Gesperrte Reiter bleiben vollständig lesbar — nur die Bedienung ist
               stillgelegt. Keine Ausgrauung, kein Ausblenden. */}
           <div style={aktiverReiterGesperrt ? { pointerEvents: "none" } : undefined}>
-          {activeTab === "anmeldung" && (
-            <TabAnmeldungV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
-          )}
+          {activeTab === "anmeldung" && (onboardingId
+            ? <RegistrierungStatusBlock onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />
+            : <OhneFallkennung />)}
           {activeTab === "personalien" && (
             <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onUpdateMehrere={updateFields} onBlur={markTouched} />
           )}
@@ -782,27 +738,22 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
             : <OhneFallkennung />)}
           {activeTab === "workflow" && (onboardingId
             ? (() => {
-                // Patient-Workflow: Tickets ab Aufnahmedatum (= heute im Onboarding-Kontext)
-                // Triage nach BB16: verlangt der Wert keine Abklärung, fallen die
-                // beiden interRAI-Schritte weg — kein offener Schritt, keine Aufgabe.
-                generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, GEGENWART_ISO, undefined,
-                  sdaVerlangtInterrai(data.einschaetzungSituation) ? undefined : INTERRAI_SCHRITTE);
+                // Patient-Workflow: Tickets ab Aufnahmedatum (= heute im Onboarding-Kontext).
+                // Triage nach BB16 (CHBB16 aus dem Registrierungsformular): OHNE
+                // Antwort kein interRAI-Schritt (kein Standardwert, §D); verlangt
+                // der Wert keine Abklärung, fallen die beiden Schritte weg.
+                {
+                  const chbb16 = registrierung?.answers["CHBB16"] ?? "";
+                  generiereRhythmusTickets("patient", onboardingId, `${data.name || "Patient"}, ${data.vorname || ""}`, GEGENWART_ISO, undefined,
+                    (chbb16 !== "" && sdaVerlangtInterrai(chbb16)) ? undefined : INTERRAI_SCHRITTE);
+                }
                 return <RhythmusTimeline subjektTyp="patient" subjektId={onboardingId} />;
               })()
             : <OhneFallkennung />)}
           {activeTab === "dokumente" && <TabDokumente data={data} onChange={onChange} />}
-          {activeTab === "abschluss" && (
-            <TabAbschlussV2
-              data={data}
-              abschliessbar={allRequiredComplete}
-              onUpdate={updateField}
-              onAbschliessen={() => onChange({
-                ...data,
-                sdaAbgeschlossenVon: `${benutzer.vorname} ${benutzer.name}`,
-                sdaAbgeschlossenAm: jetztAnzeige(),
-              })}
-            />
-          )}
+          {activeTab === "abschluss" && (onboardingId
+            ? <RegistrierungStatusBlock onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />
+            : <OhneFallkennung />)}
           </div>
         </div>
       </div>
@@ -1443,6 +1394,57 @@ function OnboardingTabBA({ onboardingId, patientVorname, patientNachname }: { on
     );
   }
   return <AssessmentStatusView person={person} returnTo={returnTo} />;
+}
+
+/**
+ * §C — Anmeldung und Abschluss sind keine Eingabereiter mehr, sondern ein
+ * Statusblock: Stand des Registrierungsformulars (SDA), Zahl offener Felder,
+ * Verweis. Erfassen und Abschliessen geschehen im Formular selbst.
+ */
+function RegistrierungStatusBlock({ onboardingId, patientVorname, patientNachname }: { onboardingId: string; patientVorname: string; patientNachname: string }) {
+  const navigate = useNavigate();
+  const returnTo = `/onboarding/${onboardingId}?step=patient&tab=anmeldung`;
+  const reg = registrierungFuerOnboarding(onboardingId);
+
+  const erfassen = () => {
+    const p = getOrCreatePersonForOnboarding(onboardingId, patientVorname || "Patient", patientNachname || "");
+    const fall = offenenFallSicherstellen(p.id);
+    try {
+      const a = erstelleNaechstesFormular(fall.id);
+      navigate(`/interrai-neu/${a.id}?returnTo=${encodeURIComponent(returnTo)}`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Registrierung kann nicht erstellt werden");
+    }
+  };
+
+  if (!reg) {
+    return (
+      <LeerZustand
+        icon={Inbox}
+        titel="Noch keine Registrierung"
+        untertitel="Die Anmeldedaten (SDA) werden im Registrierungsformular erfasst und dort abgeschlossen."
+        aktion={{ label: "Registrierung erfassen", onClick: erfassen, icon: Plus }}
+      />
+    );
+  }
+
+  const gesperrt = reg.status === "gesperrt";
+  const offen = getOpenFieldCount(reg);
+  return (
+    <div style={{ maxWidth: 560, margin: "8px 0", padding: "16px 20px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)", marginBottom: 8 }}>Registrierung (SDA)</div>
+      <div className="inline-flex items-center" style={{ gap: 6, marginBottom: 6 }}>
+        <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500, background: gesperrt ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: gesperrt ? "var(--status-success-text)" : "var(--status-warning-text)" }}>
+          {gesperrt ? "Gesperrt" : "In Bearbeitung"}
+        </span>
+        {!gesperrt && <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{offen} Felder offen</span>}
+      </div>
+      <button type="button" onClick={() => navigate(`/interrai-neu/${reg.id}?returnTo=${encodeURIComponent(returnTo)}`)}
+        className="ui-fokusring inline-flex items-center cursor-pointer" style={{ marginTop: 8, gap: 6, padding: "8px 16px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 13, fontWeight: 500, border: "none", fontFamily: "inherit" }}>
+        <ClipboardList style={{ width: 14, height: 14 }} /> Registrierung öffnen
+      </button>
+    </div>
+  );
 }
 
 function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {

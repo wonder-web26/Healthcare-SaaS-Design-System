@@ -28,7 +28,6 @@ import { STAATSANGEHOERIGKEIT_OPTIONS, istSchweiz } from "../../../lib/stammdate
 import { AUFENTHALTSSTATUS_OPTIONS } from "../../../lib/stammdaten/aufenthaltsstatus";
 import { SDA_EROEFFNUNGSGRUND_OPTIONS } from "../../../lib/stammdaten/sda-eroeffnungsgrund";
 import { SDA_ANMELDENDE_INSTITUTION_OPTIONS, INSTITUTION_ANDERE } from "../../../lib/stammdaten/sda-anmeldende-institution";
-import { SDA_EINSCHAETZUNG_SITUATION_OPTIONS, sdaEinschaetzungFolge } from "../../../lib/stammdaten/sda-einschaetzung-situation";
 import { SDA_ZUSAMMENLEBEN_OPTIONS } from "../../../lib/stammdaten/sda-zusammenleben";
 import { SDA_JA_NEIN_OPTIONS } from "../../../lib/stammdaten/sda-ja-nein";
 import { SDA_SPRACHE_OPTIONS, SPRACHE_ANDERE } from "../../../lib/stammdaten/sda-sprache";
@@ -63,47 +62,8 @@ interface TabProps {
  * BB16 hat eine Triagefunktion; der Hilfetext unter dem Feld nennt die künftige
  * Folge, löst sie aber nicht aus. Dasselbe gilt für den Eröffnungsgrund 2.
  */
-export function TabAnmeldungV2({ data, touched, onUpdate, onBlur }: TabProps) {
-  const t = (f: string) => touched.has(f);
-  const istAndereInstitution = data.anmeldendeInstitution === INSTITUTION_ANDERE;
-  // Katalogfelder bemessen sich an ihrem längsten Wert — die Regel steht in feldbreiten.ts.
-  const bEroeffnungsgrund = katalogFeldBreite(SDA_EROEFFNUNGSGRUND_OPTIONS);
-  const bInstitution = katalogFeldBreite(SDA_ANMELDENDE_INSTITUTION_OPTIONS);
-  const bEinschaetzung = katalogFeldBreite(SDA_EINSCHAETZUNG_SITUATION_OPTIONS);
-
-  return (
-    <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
-      <SectionHeader icon={ClipboardList} label="Anmeldung" first />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={bEroeffnungsgrund.zelle}><FormSelect label="Eröffnungsgrund" required steuerelementMaxBreite={bEroeffnungsgrund.steuerelement} value={data.eroeffnungsgrund || null} onChange={v => onUpdate("eroeffnungsgrund", v || "")} options={SDA_EROEFFNUNGSGRUND_OPTIONS} placeholder="Bitte wählen" error={t("eroeffnungsgrund") && !filled(data.eroeffnungsgrund) ? "Pflichtfeld" : undefined} /></div>
-        <div><DateField label="Datum der Eröffnung des Dossiers" required steuerelementMaxBreite={FELD_MAX.schmal} wertFormat="display" value={data.dossierEroeffnetAm || null} onChange={v => onUpdate("dossierEroeffnetAm", (v as string) ?? "")} onBlur={() => onBlur("dossierEroeffnetAm")} /></div>
-      </div>
-
-      <SectionHeader icon={Phone} label="Anmeldende Stelle" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={bInstitution.zelle}><FormSelect label="Anmeldende Institution" required steuerelementMaxBreite={bInstitution.steuerelement} value={data.anmeldendeInstitution || null} onChange={v => onUpdate("anmeldendeInstitution", v || "")} options={SDA_ANMELDENDE_INSTITUTION_OPTIONS} placeholder="Bitte wählen" error={t("anmeldendeInstitution") && !filled(data.anmeldendeInstitution) ? "Pflichtfeld" : undefined} /></div>
-        {/* Bei Code 8 ist die Institution als Freitext zu erfassen. */}
-        {istAndereInstitution && <div><TextInput label="Welche Institution" required steuerelementMaxBreite={FELD_MAX.mittel} value={data.anmeldendeInstitutionAndere} onChange={v => onUpdate("anmeldendeInstitutionAndere", v)} onBlur={() => onBlur("anmeldendeInstitutionAndere")} placeholder="z.B. Beratungsstelle" error={t("anmeldendeInstitutionAndere") && !filled(data.anmeldendeInstitutionAndere) ? "Pflichtfeld" : undefined} /></div>}
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <div><TextInput label="Anmeldende Person" steuerelementMaxBreite={FELD_MAX.mittel} value={data.anmeldendePersonName} onChange={v => onUpdate("anmeldendePersonName", v)} placeholder="Optional — wer angerufen oder geschrieben hat" /></div>
-        <div><TextInput label="Funktion oder Rolle" steuerelementMaxBreite={FELD_MAX.mittel} value={data.anmeldendePersonFunktion} onChange={v => onUpdate("anmeldendePersonFunktion", v)} placeholder="Optional" /></div>
-        <div><TextInput label="Telefon" steuerelementMaxBreite={FELD_MAX.schmal} value={data.anmeldendePersonTelefon} onChange={v => onUpdate("anmeldendePersonTelefon", v)} placeholder="Optional" /></div>
-        <div><TextInput label="E-Mail" steuerelementMaxBreite={FELD_MAX.mittel} value={data.anmeldendePersonEmail} onChange={v => onUpdate("anmeldendePersonEmail", v)} placeholder="Optional" /></div>
-      </div>
-
-      <SectionHeader icon={Stethoscope} label="Einschätzung" />
-      <div style={bEinschaetzung.zelle}>
-        <FormSelect label="Einschätzung der Situation" required steuerelementMaxBreite={bEinschaetzung.steuerelement} value={data.einschaetzungSituation || null} onChange={v => onUpdate("einschaetzungSituation", v || "")} options={SDA_EINSCHAETZUNG_SITUATION_OPTIONS} placeholder="Bitte wählen"
-          hint={sdaEinschaetzungFolge(data.einschaetzungSituation) || undefined}
-          error={t("einschaetzungSituation") && !filled(data.einschaetzungSituation) ? "Pflichtfeld" : undefined} />
-      </div>
-      <div style={{ marginTop: "var(--space-4)" }}>
-        <TextareaInput label="Individuelle Präzisierungen" value={data.anmeldungPraezisierungen} onChange={v => onUpdate("anmeldungPraezisierungen", v)} placeholder="Optional" hint="Zusätzliche Informationen zum Bereich Anmeldung, die für Abklärung, Betreuung oder Pflege wesentlich sind." />
-      </div>
-    </div>
-  );
-}
+// TabAnmeldungV2 entfernt (§6): der Anmeldung-Reiter ist ein Statusblock, die
+// AA-/BB16-/BB17-Felder leben im Registrierungsformular (SDA).
 
 /* ══════════════════════════════════════════
    TAB 1: PERSONALIEN (migrated)
@@ -446,72 +406,6 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur }: TabProps) {
  * Das Protokoll ersetzt die beiden Unterschriften des Standards (Entscheid
  * 4.8.2026) und ist nicht bearbeitbar.
  */
-export function TabAbschlussV2({ data, abschliessbar, onUpdate, onAbschliessen }: {
-  data: PatientFormData;
-  abschliessbar: boolean;
-  onUpdate: (feld: keyof PatientFormData, wert: string) => void;
-  onAbschliessen: () => void;
-}) {
-  const abgeschlossen = data.sdaAbgeschlossenAm !== "";
-
-  return (
-    <div className="flex flex-col" style={{ gap: "var(--space-5)" }}>
-      <SectionHeader icon={FileText} label="Individuelle Präzisierungen" />
-      <TextareaInput
-        label="Individuelle Präzisierungen Stammdaten"
-        value={data.stammdatenPraezisierungen}
-        onChange={v => onUpdate("stammdatenPraezisierungen", v)}
-        hint="Zusätzliche Informationen zum Bereich Stammdaten, die für Abklärung, Betreuung oder Pflege wesentlich sind."
-        rows={4}
-      />
-      {/* Anzeige, keine zweite Eingabe — das Feld des Bereichs AA bleibt im
-          Reiter Anmeldung. */}
-      <div>
-        <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Individuelle Präzisierungen Anmeldung</div>
-        <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>
-          {data.anmeldungPraezisierungen || "—"}
-        </div>
-      </div>
-
-      <SectionHeader icon={User} label="Verantwortliche Personen" />
-      <div>
-        <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Bearbeitende Personen</div>
-        {data.sdaBearbeitende.length === 0 ? (
-          <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Noch niemand hat am SDA gearbeitet.</div>
-        ) : (
-          <div className="flex flex-col" style={{ gap: 2 }}>
-            {data.sdaBearbeitende.map((e, i) => (
-              <div key={i} style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
-                {e.benutzer} · {e.zeitpunkt}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      <div>
-        <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Abschliessende Person</div>
-        <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
-          {abgeschlossen ? `${data.sdaAbgeschlossenVon} · ${data.sdaAbgeschlossenAm}` : "—"}
-        </div>
-      </div>
-
-      <SectionHeader icon={CheckCircle2} label="Abschluss" />
-      {abgeschlossen ? (
-        <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-          Das SDA ist abgeschlossen. Die Angaben beschreiben den Zeitpunkt des Eintritts und sind nicht mehr änderbar; spätere Änderungen gehören in die Pflegedokumentation.
-        </div>
-      ) : (
-        <div className="flex flex-col" style={{ gap: "var(--space-3)", alignItems: "flex-start" }}>
-          <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-            {abschliessbar
-              ? "Mit dem Abschluss sind die Angaben der Reiter Anmeldung, Personalien, Soziales, Wohnen und Anamnese nicht mehr änderbar. Der Abschluss lässt sich nicht zurücknehmen."
-              : "Der Abschluss ist möglich, sobald alle Pflichtfelder der SDA-Reiter gesetzt sind."}
-          </div>
-          <AppButton variant="primaer" icon={CheckCircle2} onClick={onAbschliessen} disabled={!abschliessbar}>
-            SDA abschliessen
-          </AppButton>
-        </div>
-      )}
-    </div>
-  );
-}
+// TabAbschlussV2 entfernt (§6): der Abschluss-Reiter ist ein Statusblock; der
+// SDA-Abschluss geschieht durch Sperren des Registrierungsformulars (gesperrtVon
+// / gesperrtAm ersetzen das frühere Protokoll).

@@ -62,7 +62,7 @@ import { toast } from "sonner";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { useRecording } from "../recording/RecordingContext";
 import { Mic } from "lucide-react";
-import { getPersonByOnboardingId, offenenFallSicherstellen, formulareFuerFall, erstelleNaechstesFormular } from "../../lib/interrai/store";
+import { getPersonByOnboardingId, offenenFallSicherstellen, formulareFuerFall, erstelleNaechstesFormular, registrierungFuerOnboarding } from "../../lib/interrai/store";
 import { useCurrentUser } from "../auth";
 import { ONBOARDING_STATUS_CFG, ONBOARDING_STATUS_WERTE, type OnboardingStatus } from "../../lib/onboarding/status";
 import { getStatus, setzeStatus, getGrund } from "../../lib/onboarding/status-store";
@@ -1134,9 +1134,11 @@ export function OnboardingPage() {
             {(() => {
               const ba = MOCK_ASSESSMENTS.find(a => a.onboardingId === wirksameFallKennung);
               const hints: string[] = [];
-              // Triage nach BB16: verlangt der Wert keine Abklärung, wird ihr
-              // Fehlen nicht als Lücke gemeldet.
-              if (sdaVerlangtInterrai(patientData.einschaetzungSituation) && (!ba || ba.status !== "abgeschlossen")) hints.push("Das InterRAI ist noch nicht abgeschlossen. Es wird mitkonvertiert und kann später vervollständigt werden.");
+              // Triage nach BB16 (CHBB16 aus der Registrierung): ohne Antwort kein
+              // Hinweis (kein Standardwert, §D); verlangt der Wert keine Abklärung,
+              // wird ihr Fehlen nicht als Lücke gemeldet.
+              const chbb16Hint = registrierungFuerOnboarding(wirksameFallKennung)?.answers["CHBB16"] ?? "";
+              if (chbb16Hint !== "" && sdaVerlangtInterrai(chbb16Hint) && (!ba || ba.status !== "abgeschlossen")) hints.push("Das InterRAI ist noch nicht abgeschlossen. Es wird mitkonvertiert und kann später vervollständigt werden.");
               if (!MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === wirksameFallKennung)) hints.push("Es wurde noch keine Pflegeplanung erstellt.");
               const klv = getKlvFuerOnboarding(wirksameFallKennung);
               // Hinweistext, keine Bedingung: der Abschluss hängt nicht am KLV-Zustand.

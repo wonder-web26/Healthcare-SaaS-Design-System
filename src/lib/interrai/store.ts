@@ -317,7 +317,10 @@ function initDemo() {
   // Fall A — Standardweg (Huber): Registrierung gesperrt (BB16=1 → somatic),
   //  Status open, interRAI HC laufnummer 1 (reason first) in Bearbeitung.
   const fallA = eroeffneFall("PERS-001", "2026-02-28");
-  registrieren(fallA, "1", "2026-02-28T11:00:00");        // SKA-2026-0001, route somatic
+  const regA = registrieren(fallA, "1", "2026-02-28T11:00:00"); // SKA-2026-0001, route somatic
+  // §9 Bereichs-Präzisierung: die anmeldende Person steht in der AA-Präzisierung.
+  const aaBereich = SDA_KATALOG.find((i) => i.nummer === "AA1")?.bereich ?? "";
+  regA.answers[`PRAEZ::${aaBereich}`] = "Angemeldet durch Dr. med. R. Lüthi (Hausarzt), Tel. +41 52 213 44 55";
   const hcA = createFormular(fallA.id, "interrai_hc");    // laufnummer 1, reason first
   hcA.gespraechId = "GES-HUBER-001";
   hcA.vorschlaege = vorschlaegeMap;
@@ -653,6 +656,19 @@ export function createFormular(fallId: string, typ: FormularTyp): Formular {
  * triage permits it. Delegates the eligibility check and the reason to
  * createFormular — callers surface the thrown reason to the user.
  */
+/**
+ * Das Registrierungsformular des offenen Falls eines Onboardings, sofern es
+ * existiert. Damit leiten Onboarding-Ansichten Reitersperre, Anmeldung-
+ * Validität und Triage aus dem Formular ab, statt sie zu speichern.
+ */
+export function registrierungFuerOnboarding(onboardingId: string): Formular | undefined {
+  const person = getPersonByOnboardingId(onboardingId);
+  if (!person) return undefined;
+  const fall = offenerFallFuerKlient(person.id);
+  if (!fall) return undefined;
+  return formulareFuerFall(fall.id).find((f) => f.typ === "registration");
+}
+
 export function erstelleNaechstesFormular(fallId: string): Formular {
   const hatRegistrierung = formulareFuerFall(fallId).some((f) => f.typ === "registration");
   return createFormular(fallId, hatRegistrierung ? "interrai_hc" : "registration");
