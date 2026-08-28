@@ -258,8 +258,8 @@ for (const [code, route] of ROUTEN) {
   }
   const zaehle = (h: string) => SDA_KATALOG.filter((i) => herk[i.iCode] === h).length;
   assert.equal(zaehle("fall"), 1);      // iA5d
-  assert.equal(zaehle("klient"), 13);
-  assert.equal(zaehle("formular"), 17);
+  assert.equal(zaehle("klient"), 17);   // +iA11b/iA12a/iA12b/iB2 (Patientenfelder)
+  assert.equal(zaehle("formular"), 13);
 }
 
 console.log("store.test.ts: alle Zusicherungen erfüllt");
