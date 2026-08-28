@@ -458,10 +458,7 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
   }
 }
 
-function isTabComplete(tabKey: string, data: PatientFormData, anmeldungVollstaendig: boolean): boolean {
-  // Anmeldung ist jetzt ein Statusblock: Vollständigkeit wird aus dem
-  // Registrierungsformular abgeleitet, nicht aus Feldern dieses Reiters.
-  if (tabKey === "anmeldung") return anmeldungVollstaendig;
+function isTabComplete(tabKey: string, data: PatientFormData): boolean {
   const { done, total } = getTabCompletion(tabKey, data);
   if (total === 0) return false;
   return done === total;
@@ -474,7 +471,6 @@ function isTabComplete(tabKey: string, data: PatientFormData, anmeldungVollstaen
  * Position: ein eingeschobener Reiter verschöbe sonst stumm jede Nummer.
  */
 const tabDefs = [
-  { key: "anmeldung", label: "Anmeldung", icon: Inbox },
   { key: "personalien", label: "Personalien", icon: User },
   { key: "steuer", label: "Soziales", icon: ShieldCheck },
   { key: "wohnen", label: "Wohnen", icon: Home },
@@ -497,7 +493,7 @@ export const TAB_KEYS: readonly PatientReiter[] = tabDefs.map(t => t.key);
 
 /** Reiter, die reine Formulare sind — ihr Inhalt wird auf FORMULAR_MAX begrenzt. */
 const FORMULARREITER: ReadonlySet<PatientReiter> = new Set<PatientReiter>([
-  "anmeldung", "personalien", "steuer", "wohnen", "anamnese", "aktivitaeten", "dokumente", "abschluss",
+  "personalien", "steuer", "wohnen", "anamnese", "aktivitaeten", "dokumente", "abschluss",
 ]);
 
 /**
@@ -507,7 +503,7 @@ const FORMULARREITER: ReadonlySet<PatientReiter> = new Set<PatientReiter>([
  * SDA-Felder und führen eigene Lebenszyklen.
  */
 export const SDA_REITER: readonly PatientReiter[] = [
-  "anmeldung", "personalien", "steuer", "wohnen", "anamnese",
+  "personalien", "steuer", "wohnen", "anamnese",
 ];
 
 /* ══════════════════════════════════════════
@@ -529,7 +525,7 @@ interface StepPatientProps {
    MAIN COMPONENT
    ══════════════════════════════════════════ */
 export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion }: StepPatientProps) {
-  const [activeTab, setActiveTab] = useState<PatientReiter>("anmeldung");
+  const [activeTab, setActiveTab] = useState<PatientReiter>("personalien");
   const benutzer = useCurrentUser();
 
   // External tab-switch request
@@ -554,12 +550,14 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
   // Lebenszyklus). Fehlt eine Antwort, wird nichts angenommen (§D).
   const registrierung = onboardingId ? registrierungFuerOnboarding(onboardingId) : undefined;
   const registrierungGesperrt = registrierung?.status === "gesperrt";
-  const anmeldungVollstaendig = registrierungGesperrt || (registrierung ? getOpenFieldCount(registrierung) === 0 : false);
+  const registrierungVollstaendig = registrierungGesperrt || (registrierung ? getOpenFieldCount(registrierung) === 0 : false);
   const istEinsatzabbruch = registrierung?.answers["CHAA1"] === EROEFFNUNGSGRUND_EINSATZABBRUCH;
+  // Anmeldung ist kein Reiter mehr (Zugang über Bedarfsabklärung). Die
+  // Registrierung (SDA) muss dennoch vollständig sein; beim Einsatzabbruch genügt sie.
   const requiredTabs = istEinsatzabbruch
-    ? ["anmeldung"]
-    : ["anmeldung", "personalien", "steuer", "wohnen", "anamnese", "dokumente"];
-  const allRequiredComplete = requiredTabs.every((k) => isTabComplete(k, data, anmeldungVollstaendig));
+    ? []
+    : ["personalien", "steuer", "wohnen", "anamnese", "dokumente"];
+  const allRequiredComplete = registrierungVollstaendig && requiredTabs.every((k) => isTabComplete(k, data));
 
   useEffect(() => {
     onValidityChange?.(allRequiredComplete);
@@ -642,7 +640,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
         >
           {tabDefs.map((tab) => {
             const isActive = activeTab === tab.key;
-            const complete = isTabComplete(tab.key, data, anmeldungVollstaendig);
+            const complete = isTabComplete(tab.key, data);
 
             return (
               <button
@@ -689,9 +687,6 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {/* Gesperrte Reiter bleiben vollständig lesbar — nur die Bedienung ist
               stillgelegt. Keine Ausgrauung, kein Ausblenden. */}
           <div style={aktiverReiterGesperrt ? { pointerEvents: "none" } : undefined}>
-          {activeTab === "anmeldung" && (onboardingId
-            ? <RegistrierungStatusBlock onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />
-            : <OhneFallkennung />)}
           {activeTab === "personalien" && (
             <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onUpdateMehrere={updateFields} onBlur={markTouched} />
           )}
@@ -734,9 +729,11 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
               })()
             : <OhneFallkennung />)}
           {activeTab === "dokumente" && <TabDokumente data={data} onChange={onChange} />}
-          {activeTab === "abschluss" && (onboardingId
-            ? <RegistrierungStatusBlock onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />
-            : <OhneFallkennung />)}
+          {activeTab === "abschluss" && (
+            <div style={{ padding: 32, textAlign: "center", color: "var(--text-secondary)", fontSize: "var(--text-small)" }}>
+              Der Onboarding-Abschluss ist noch nicht umgesetzt.
+            </div>
+          )}
           </div>
         </div>
       </div>
@@ -1377,57 +1374,6 @@ function OnboardingTabBA({ onboardingId, patientVorname, patientNachname }: { on
     );
   }
   return <AssessmentStatusView person={person} returnTo={returnTo} />;
-}
-
-/**
- * §C — Anmeldung und Abschluss sind keine Eingabereiter mehr, sondern ein
- * Statusblock: Stand des Registrierungsformulars (SDA), Zahl offener Felder,
- * Verweis. Erfassen und Abschliessen geschehen im Formular selbst.
- */
-function RegistrierungStatusBlock({ onboardingId, patientVorname, patientNachname }: { onboardingId: string; patientVorname: string; patientNachname: string }) {
-  const navigate = useNavigate();
-  const returnTo = `/onboarding/${onboardingId}?step=patient&tab=anmeldung`;
-  const reg = registrierungFuerOnboarding(onboardingId);
-
-  const erfassen = () => {
-    const p = getOrCreatePersonForOnboarding(onboardingId, patientVorname || "Patient", patientNachname || "");
-    const fall = offenenFallSicherstellen(p.id);
-    try {
-      const a = erstelleNaechstesFormular(fall.id);
-      navigate(`/interrai-neu/${a.id}?returnTo=${encodeURIComponent(returnTo)}`);
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Registrierung kann nicht erstellt werden");
-    }
-  };
-
-  if (!reg) {
-    return (
-      <LeerZustand
-        icon={Inbox}
-        titel="Noch keine Registrierung"
-        untertitel="Die Anmeldedaten (SDA) werden im Registrierungsformular erfasst und dort abgeschlossen."
-        aktion={{ label: "Registrierung erfassen", onClick: erfassen, icon: Plus }}
-      />
-    );
-  }
-
-  const gesperrt = reg.status === "gesperrt";
-  const offen = getOpenFieldCount(reg);
-  return (
-    <div style={{ maxWidth: 560, margin: "8px 0", padding: "16px 20px", background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 12 }}>
-      <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)", marginBottom: 8 }}>Registrierung (SDA)</div>
-      <div className="inline-flex items-center" style={{ gap: 6, marginBottom: 6 }}>
-        <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500, background: gesperrt ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: gesperrt ? "var(--status-success-text)" : "var(--status-warning-text)" }}>
-          {gesperrt ? "Gesperrt" : "In Bearbeitung"}
-        </span>
-        {!gesperrt && <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{offen} Felder offen</span>}
-      </div>
-      <button type="button" onClick={() => navigate(`/interrai-neu/${reg.id}?returnTo=${encodeURIComponent(returnTo)}`)}
-        className="ui-fokusring inline-flex items-center cursor-pointer" style={{ marginTop: 8, gap: 6, padding: "8px 16px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 13, fontWeight: 500, border: "none", fontFamily: "inherit" }}>
-        <ClipboardList style={{ width: 14, height: 14 }} /> Registrierung öffnen
-      </button>
-    </div>
-  );
 }
 
 function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {

@@ -19,6 +19,7 @@ import {
   getActiveFieldCount,
   getAnlassLabel,
   getStatusLabel,
+  getTypLabel,
   formatDateTime,
   erstelleNaechstesFormular,
   klassifiziereVorschlaege,
@@ -102,7 +103,7 @@ export function AssessmentStatusView({ person, returnTo }: AssessmentStatusViewP
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>
-                    {getAnlassLabel(a.anlass)}
+                    {getTypLabel(a.typ)}{a.typ === "interrai_hc" ? ` · ${getAnlassLabel(a.anlass)}` : ""}
                     <span style={{ fontWeight: 400, color: "var(--text-tertiary)", marginLeft: 8, fontSize: 12 }}>
                       {getStatusLabel(a.status)}
                     </span>
