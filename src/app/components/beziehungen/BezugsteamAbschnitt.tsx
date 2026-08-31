@@ -26,9 +26,7 @@ import { Plus, Check, AlertTriangle, MoreVertical, ArrowRight, Stethoscope, User
 import { InlineSelect } from "../ui/InlineSelect";
 import { KontaktWahl } from "../ui/KontaktWahl";
 import { AppButton } from "../ui/AppButton";
-import { GEGENWART } from "../../../lib/gegenwart";
-import { formatAnzeige } from "../../../lib/datum";
-import { useBeziehungen, beziehungSichern, beziehungBeenden } from "../../../lib/beziehungen/store";
+import { useBeziehungen, beziehungSichern, beziehungEntfernen } from "../../../lib/beziehungen/store";
 import { useAngehoerige } from "../../../lib/angehoerige/store";
 import { useKontakte, kontaktSichern } from "../../../lib/kontakte/store";
 import { kontaktName } from "../../../lib/kontakte/kontakte";
@@ -69,33 +67,23 @@ export function BezugsteamAbschnitt({ patientId, angehoerigenReiterPfad }: {
   };
 
   const eigene = alle.filter(b => b.patientId === patientId);
+  // Die Kategorie „Benutzer" (Spitex-Mitarbeitende) erscheint hier nicht mehr —
+  // die Zuweisung läuft über ein eigenes Feld.
+  const sichtbare = eigene.filter(b => kategorieFuerRolle(b.rolle) !== "benutzer");
 
   // Gruppierung über die Kategorie (kategorieFuerRolle), nicht über rolleSeite.
-  const gruppen = KATEGORIEN.map(({ code, label }) => {
-    const inGruppe = eigene.filter(b => kategorieFuerRolle(b.rolle) === code);
+  const gruppen = KATEGORIEN.filter(k => k.code !== "benutzer").map(({ code, label }) => {
+    const inGruppe = sichtbare.filter(b => kategorieFuerRolle(b.rolle) === code);
     const aktive = inGruppe.filter(beziehungAktiv).sort((a, b) =>
       (Number(b.notfallkontakt) - Number(a.notfallkontakt)) || (ROLLE_RANG[a.rolle] - ROLLE_RANG[b.rolle]));
     const beendete = inGruppe.filter(b => !beziehungAktiv(b));
     return { code, label, zeilen: [...aktive, ...beendete] };
   }).filter(g => g.zeilen.length > 0);
 
-  // §8 Hinweise (Lücken) + §9 fehlende GLN bei Fachpersonal
-  const aktiveEigene = eigene.filter(beziehungAktiv);
-  const hinweise: { text: string; aktionLabel: string; zielId?: string }[] = [];
-  if (!aktiveEigene.some(b => b.rolle === "hausarzt")) hinweise.push({ text: `Kein ${rolleLabel("hausarzt")} erfasst. Für ärztliche Anfragen und Verordnungen wird er benötigt.`, aktionLabel: `${rolleLabel("hausarzt")} hinzufügen` });
-  if (!aktiveEigene.some(b => b.notfallkontakt)) hinweise.push({ text: "Kein Notfallkontakt gesetzt.", aktionLabel: "Person hinzufügen" });
-  if (!aktiveEigene.some(b => b.rolle === "sozialdienst")) hinweise.push({ text: `Kein ${rolleLabel("sozialdienst")} erfasst. Falls einer involviert ist, gehört er hier hinein.`, aktionLabel: `${rolleLabel("sozialdienst")} hinzufügen` });
-  // §9 nur bei Kategorie Fachpersonal, deren Kontakt keine GLN trägt.
-  for (const b of aktiveEigene) {
-    if (kategorieFuerRolle(b.rolle) !== "fachpersonal" || b.person.art !== "kontakt") continue;
-    const k = kontakte.find(x => x.id === (b.person as { kennung: string }).kennung);
-    if (k && !(k.gln ?? "").trim()) hinweise.push({ text: `Für ${kontaktName(k)} fehlt die GLN. Für strukturierte ärztliche Anfragen wird sie benötigt.`, aktionLabel: "GLN ergänzen", zielId: b.id });
-  }
-
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{eigene.length} {eigene.length === 1 ? "Person" : "Personen"}</span>
+        <span style={{ fontSize: 12, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{sichtbare.length} {sichtbare.length === 1 ? "Person" : "Personen"}</span>
         <button type="button" onClick={() => setDialog({ id: "" })} className="ui-fokusring inline-flex items-center" style={{ ...linkStyle, marginLeft: "auto", gap: 4 }}>
           <Plus style={{ width: 14, height: 14 }} /> Person hinzufügen
         </button>
@@ -114,23 +102,11 @@ export function BezugsteamAbschnitt({ patientId, angehoerigenReiterPfad }: {
                 menuOffen={menuId === b.id} onMenu={() => setMenuId(menuId === b.id ? null : b.id)}
                 angehoerigenReiterPfad={angehoerigenReiterPfad}
                 onBearbeiten={() => { setMenuId(null); setDialog({ id: b.id }); }}
-                onBeenden={() => { beziehungBeenden(b.id, formatAnzeige(GEGENWART)); setMenuId(null); }} />
+                onEntfernen={() => { beziehungEntfernen(b.id); setMenuId(null); }} />
             ))}
           </div>
         </div>
       ))}
-
-      {hinweise.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
-          {hinweise.map((h, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", borderRadius: 12, background: "var(--status-warning-bg)", border: "0.5px solid var(--border-default)" }}>
-              <AlertTriangle style={{ width: 15, height: 15, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
-              <span style={{ flex: 1, fontSize: 13, color: "var(--text-secondary)" }}>{h.text}</span>
-              <button type="button" onClick={() => setDialog({ id: h.zielId ?? "" })} className="ui-fokusring" style={{ ...linkStyle, flexShrink: 0, color: "var(--status-warning-text)" }}>{h.aktionLabel}</button>
-            </div>
-          ))}
-        </div>
-      )}
 
       {dialog && (
         <PersonDialog patientId={patientId} eintragId={dialog.id}
@@ -141,9 +117,9 @@ export function BezugsteamAbschnitt({ patientId, angehoerigenReiterPfad }: {
   );
 }
 
-function Zeile({ b, name, zugehoerigkeit, menuOffen, onMenu, onBearbeiten, onBeenden, angehoerigenReiterPfad }: {
+function Zeile({ b, name, zugehoerigkeit, menuOffen, onMenu, onBearbeiten, onEntfernen, angehoerigenReiterPfad }: {
   b: Beziehung; name: string; zugehoerigkeit: string; menuOffen: boolean;
-  onMenu: () => void; onBearbeiten: () => void; onBeenden: () => void; angehoerigenReiterPfad?: string;
+  onMenu: () => void; onBearbeiten: () => void; onEntfernen: () => void; angehoerigenReiterPfad?: string;
 }) {
   const aktiv = beziehungAktiv(b);
   const gepflegt = b.rolle === "pflegende_angehoerige"; // aus dem Angehörigen-Reiter
@@ -171,8 +147,9 @@ function Zeile({ b, name, zugehoerigkeit, menuOffen, onMenu, onBearbeiten, onBee
           {menuOffen && (
             <div role="menu" style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 30, minWidth: 150, padding: 4, background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 12, boxShadow: "var(--shadow-overlay)" }}>
               <button type="button" role="menuitem" onClick={onBearbeiten} className="ui-fokusring" style={menuItemStyle}>Bearbeiten</button>
-              {/* Beenden nur bei bestehenden, nicht-gepflegten, aktiven Beziehungen. */}
-              {aktiv && !gepflegt && <button type="button" role="menuitem" onClick={onBeenden} className="ui-fokusring" style={menuItemStyle}>Beenden</button>}
+              {/* Entfernen (löschen) nur bei nicht-gepflegten Beziehungen — die
+                  pflegende Angehörige wird im Angehörigen-Reiter geführt. */}
+              {!gepflegt && <button type="button" role="menuitem" onClick={onEntfernen} className="ui-fokusring" style={{ ...menuItemStyle, color: "var(--status-danger)" }}>Entfernen</button>}
             </div>
           )}
         </div>
@@ -341,10 +318,6 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
                     </button>
                   );
                 })}
-              </div>
-              <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>
-                Spitex-Mitarbeitende (Bezugsperson, Stellvertretung) werden zugewiesen, sobald der Personalbestand vorliegt.
-                Die pflegende Angehörige entsteht aus dem Angehörigen-Reiter.
               </div>
             </Feld>
           )}

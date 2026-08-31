@@ -113,6 +113,11 @@ export function beziehungBeenden(id: string, datum: string): void {
   setzeBestand(bestand.map(x => (x.id === id ? { ...x, ende: datum } : x)));
 }
 
+/** Beziehung vollständig entfernen (nicht beenden — der Eintrag verschwindet). */
+export function beziehungEntfernen(id: string): void {
+  setzeBestand(bestand.filter(x => x.id !== id));
+}
+
 /**
  * Stellt die Beziehung `pflegende_angehoerige` zwischen Patient und angehöriger
  * Person sicher — entsteht aus dem Angehörigen-Reiter, nicht aus dem Dialog.

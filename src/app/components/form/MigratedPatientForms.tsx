@@ -3,7 +3,7 @@
  * Uses new form components from components/form/.
  */
 import { useState } from "react";
-import { User, Users, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, Languages, ChevronDown, ChevronUp, CheckCircle2, FileText } from "lucide-react";
+import { User, Users, MapPin, Shield, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, Languages, ChevronDown, ChevronUp, CheckCircle2, FileText } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { FELD_MAX, katalogFeldBreite } from "./feldbreiten";
 import { TextInput } from "./TextInput";
@@ -124,12 +124,6 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
         {patientId
           ? <BezugsteamAbschnitt patientId={patientId} />
           : <div style={{ fontSize: 13, color: "var(--text-tertiary)" }}>Personen lassen sich erfassen, sobald die Personalien angelegt sind.</div>}
-      </div>
-
-      <SectionHeader icon={Mail} label="Kontaktdaten" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" value={data.email} onChange={v => onUpdate("email", v)} placeholder="Optional" /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="Optional" /></div>
       </div>
 
       <SectionHeader icon={Languages} label="Sprache und Verständigung" />
