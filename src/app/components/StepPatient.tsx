@@ -1317,7 +1317,7 @@ function OnboardingTabBA({ onboardingId, patientVorname, patientNachname }: { on
       />
     );
   }
-  return <AssessmentStatusView person={person} returnTo={returnTo} />;
+  return <AssessmentStatusView person={person} returnTo={returnTo} kontext="onboarding" />;
 }
 
 function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {

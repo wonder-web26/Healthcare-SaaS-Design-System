@@ -6167,6 +6167,7 @@ function TabInterRAI({ patientId }: { patientId: string; patientName: string; na
     <AssessmentStatusView
       person={person}
       returnTo={ansichtPfad(patientId!, "interrai-hc")}
+      kontext="patient"
     />
   );
 }

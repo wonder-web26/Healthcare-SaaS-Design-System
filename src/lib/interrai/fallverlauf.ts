@@ -39,16 +39,24 @@ export const ROUTE_LABEL: Record<Exclude<FallRoute, null>, string> = {
   declined: "Abklärung abgelehnt",
 };
 
-/** Voraussichtliches Instrument, solange die interRAI SDA noch nicht gesperrt ist
- *  (das endgültige Instrument ergibt sich erst dann aus BB16). Standardfall HC —
- *  bei anderer BB16-Route korrigiert sich die Zeile nach dem Sperren. Titel aus
- *  der Einzelquelle getTypLabel. */
-export const ABKLAERUNG_NEUTRAL_TITEL = getTypLabel("interrai_hc");
+/** Neutraler Titel der Abklärungszeile, solange die Route offen ist (`route === null`,
+ *  die interRAI SDA noch nicht gesperrt). Bewusst KEIN konkretes Instrument und
+ *  NICHT aus getTypLabel abgeleitet — das Instrument ergibt sich erst nach dem
+ *  Sperren aus BB16. */
+export const ABKLAERUNG_NEUTRAL_TITEL = "Bedarfsabklärung";
+/** Bedingung der neutralen Abklärungszeile — das Instrument steht erst nach BB16 fest. */
+export const BEDINGUNG_INSTRUMENT_OFFEN = "Welches Instrument folgt, ergibt sich aus BB16 in der Registrierung.";
 export const HINWEIS_TITEL = "Keine Bedarfsabklärung verfügbar";
-export const BEDINGUNG_BB16 = `Erst möglich, wenn die ${getTypLabel("registration")} gesperrt ist`;
+/** „Erst nach Sperrung der Registrierung möglich" — nach dem Inhalt benannt (früher
+ *  irreführend BEDINGUNG_BB16, obwohl der Text die Sperrung meint, nicht BB16).
+ *  Aktuell ohne Verwender. */
+export const BEDINGUNG_REGISTRIERUNG_GESPERRT = `Erst möglich, wenn die ${getTypLabel("registration")} gesperrt ist`;
 export const BEDINGUNG_ENTLASSUNG = "Erst möglich, sobald jedes Formular gesperrt ist";
 export const ZUSATZ_REGISTRIERUNG = "Erste Erfassung des Falls";
 export const ZUSATZ_ENTLASSUNG = "Alle Formulare des Falls sind gesperrt";
+
+/** Verwendungszusammenhang der Fallverlauf-Anzeige. */
+export type FallverlaufKontext = "onboarding" | "patient";
 
 /** Die drei Abklärungsinstrumente (ohne Registrierung/Entlassung). */
 const ABKLAERUNG_TYPEN: FormularTyp[] = ["interrai_hc", "interrai_cmh", "housekeeping"];
@@ -114,8 +122,16 @@ function bestehendeZeile(f: Formular): FormularZeile {
   return { art: "formular", typ: f.typ, titel: abklaerungTitel(f), zustand: "in_bearbeitung", formularId: f.id, erfasst: gesamt - offen, gesamt, zuletzt: f.zuletztBearbeitetAm };
 }
 
-/** Fallverlauf-Modell eines Falls — die Kette Registrierung → Abklärung → Entlassung. */
-export function fallverlaufFuerFall(fall: Fall): FallverlaufModell {
+/**
+ * Fallverlauf-Modell eines Falls — die Kette Registrierung → Abklärung → Entlassung.
+ *
+ * `kontext` steuert nur die Entlassungszeile: im Onboarding gibt es keine
+ * Entlassung (der Fall endet mit der Vertragsunterzeichnung), darum erscheint die
+ * discharge-Zeile dort NICHT — es sei denn, ein Entlassungsformular liegt bereits
+ * vor (geschlossener Fall soll nicht unvollständig wirken). Der übrige Verlauf ist
+ * in beiden Kontexten identisch.
+ */
+export function fallverlaufFuerFall(fall: Fall, kontext: FallverlaufKontext): FallverlaufModell {
   const status = fallStatus(fall.id);
   const forms = formulareFuerFall(fall.id);
   const kopf: FallKopf = {
@@ -148,7 +164,7 @@ export function fallverlaufFuerFall(fall: Fall): FallverlaufModell {
     for (const f of abkl) zeilen.push(bestehendeZeile(f));
     abklaerungOffen = abkl.some((f) => f.status !== "gesperrt");
   } else if (fall.route === null) {
-    zeilen.push({ art: "formular", typ: null, titel: ABKLAERUNG_NEUTRAL_TITEL, zustand: "nicht_moeglich", formularId: null, bedingung: BEDINGUNG_BB16 });
+    zeilen.push({ art: "formular", typ: null, titel: ABKLAERUNG_NEUTRAL_TITEL, zustand: "nicht_moeglich", formularId: null, bedingung: BEDINGUNG_INSTRUMENT_OFFEN });
     abklaerungOffen = true;
   } else {
     const instrument = ABKLAERUNG_TYPEN.find((t) => kannFormularEroeffnen(fall.id, t).zulaessig);
@@ -166,7 +182,8 @@ export function fallverlaufFuerFall(fall: Fall): FallverlaufModell {
   const dis = forms.find((f) => f.typ === "discharge");
   if (dis) {
     zeilen.push(bestehendeZeile(dis));
-  } else {
+  } else if (kontext === "patient") {
+    // Im Onboarding gibt es keine Entlassung — die Platzhalterzeile entfällt.
     const ok = !abklaerungOffen && kannFormularEroeffnen(fall.id, "discharge").zulaessig;
     zeilen.push({
       art: "formular", typ: "discharge", titel: getTypLabel("discharge"),
@@ -189,12 +206,12 @@ export function fallverlaufFuerFall(fall: Fall): FallverlaufModell {
 }
 
 /** Alle Fälle eines Klienten — offener Fall zuerst, geschlossene danach (neueste zuerst). */
-export function fallverlaufFuerKlient(klientId: string): FallverlaufModell[] {
+export function fallverlaufFuerKlient(klientId: string, kontext: FallverlaufKontext): FallverlaufModell[] {
   const rang = (f: Fall) => {
     const s = fallStatus(f.id);
     return s === "registering" || s === "open" ? 0 : 1;
   };
   return [...getFaelleFuerKlient(klientId)]
     .sort((a, b) => rang(a) - rang(b) || b.erstelltAm.localeCompare(a.erstelltAm))
-    .map(fallverlaufFuerFall);
+    .map((f) => fallverlaufFuerFall(f, kontext));
 }

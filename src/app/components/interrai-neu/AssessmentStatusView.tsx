@@ -27,17 +27,20 @@ import {
   type FallverlaufModell,
   type FallverlaufZeile,
   type FormularZeile,
+  type FallverlaufKontext,
 } from "../../../lib/interrai/fallverlauf";
 
 interface AssessmentStatusViewProps {
   person: Person;
   /** Encoded return path for the assessment screen */
   returnTo: string;
+  /** Verwendungszusammenhang — steuert, ob die Entlassungszeile erscheint. */
+  kontext: FallverlaufKontext;
 }
 
 const datum = (iso: string) => formatDateTime(iso).split(" ")[0];
 
-export function AssessmentStatusView({ person, returnTo }: AssessmentStatusViewProps) {
+export function AssessmentStatusView({ person, returnTo, kontext }: AssessmentStatusViewProps) {
   const navigate = useNavigate();
   const [, force] = useState(0);
   const rerender = () => force((n) => n + 1);
@@ -68,7 +71,7 @@ export function AssessmentStatusView({ person, returnTo }: AssessmentStatusViewP
     }
   };
 
-  const modelle = fallverlaufFuerKlient(person.id);
+  const modelle = fallverlaufFuerKlient(person.id, kontext);
 
   if (modelle.length === 0) {
     return (
