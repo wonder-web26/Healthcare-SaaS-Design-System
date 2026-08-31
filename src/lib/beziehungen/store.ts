@@ -111,3 +111,24 @@ export function beziehungBeenden(id: string, datum: string): void {
   if (!b || b.ende.trim() !== "") return;
   setzeBestand(bestand.map(x => (x.id === id ? { ...x, ende: datum } : x)));
 }
+
+/**
+ * Stellt die Beziehung `pflegende_angehoerige` zwischen Patient und angehöriger
+ * Person sicher — entsteht aus dem Angehörigen-Reiter, nicht aus dem Dialog.
+ * Existiert eine aktive, folgt sie der Person; sonst wird sie angelegt. Verwandt-
+ * schaft und Merkmale bleiben unangetastet (in der Liste editierbar).
+ */
+export function sichereGepflegteAngehoerige(patientId: string, angehoerigerId: string, beginn: string): void {
+  if (!patientId || !angehoerigerId) return;
+  const vorhanden = bestand.find(b => b.patientId === patientId && b.rolle === "pflegende_angehoerige" && b.ende.trim() === "");
+  if (vorhanden) {
+    if (vorhanden.person.art === "angehoeriger" && vorhanden.person.kennung === angehoerigerId) return;
+    setzeBestand(bestand.map(b => (b.id === vorhanden.id ? { ...b, person: { art: "angehoeriger", kennung: angehoerigerId } } : b)));
+    return;
+  }
+  beziehungSichern({
+    id: "", patientId, person: { art: "angehoeriger", kennung: angehoerigerId },
+    rolle: "pflegende_angehoerige", art: "", vertretungsart: "", beginn, ende: "",
+    notfallkontakt: false, auskunftsberechtigt: false, telefon: "", bemerkung: "",
+  });
+}

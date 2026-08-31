@@ -84,10 +84,10 @@ import { useEinwilligung } from "./EinwilligungContext";
 import { useArztAnfrage, ArztAnfrageFlowInline } from "./ArztAnfrageContext";
 import { SectionAction } from "./ui/SectionAction";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
-import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/krankenkassen";
 import { Combobox } from "./form/Combobox";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
-import { getPatient } from "../../lib/patienten/store";
+import { getPatient, patientFuerOnboarding } from "../../lib/patienten/store";
+import { aktiverVersichererName, aktiveVersicherung } from "../../lib/versicherung/store";
 import { EROEFFNUNGSGRUND_STANDARD, EROEFFNUNGSGRUND_EINSATZABBRUCH } from "../../lib/stammdaten/sda-eroeffnungsgrund";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext, type DokumentTypDefinition } from "../../lib/stammdaten/dokumenttypen";
 import { DokumentScanUpload, type ScanFile } from "./form/DokumentScanUpload";
@@ -108,13 +108,6 @@ export type PatientScanFile = ScanFile;
 export interface SdaProtokollEintrag {
   benutzer: string;
   zeitpunkt: string;
-}
-
-/** Trägt der gewählte Kontakt eine Nummer? Ersetzt die frühere Formatprüfung
-    auf dem Freitextfeld — die Nummer steht jetzt am Kontakt. */
-function istKontaktMitTelefon(kennung: string): boolean {
-  if (!kennung) return false;
-  return (getKontakt(kennung)?.telefon ?? "").trim() !== "";
 }
 
 export interface PatientFormData {
@@ -139,12 +132,7 @@ export interface PatientFormData {
   /** BB4 — Schlüssel aus lib/stammdaten/zivilstand. */
   zivilstand: string;
   aufenthaltsstatus: string;
-  /** SP-02: Krankenkasse als Code (Picklist-Wert) */
-  krankenkasse: string;
   ahvNummer: string;
-  hausarztName: string;
-  hausarztTelefon: string;
-  hausarztEmail: string;
   email: string;
   telefon: string;
   adresseStrasse: string;
@@ -154,17 +142,8 @@ export interface PatientFormData {
      Erfasst wird die Kennung, nie der Name — ändert sich der Name am
      Kontakt, ändert er sich überall mit. Die Verwandtschaft bleibt hier:
      sie beschreibt das Verhältnis zu diesem Patienten, nicht die Person. */
-  notfallkontaktId: string;
-  notfallkontaktVerwandtschaft: string;
-  spezialAerzte: string;
-  /** SP-03: umbenannt von "versicherungsNr" zu "kartennummer" */
-  kartennummer: string;
-  /** SP-03: BAG-Nr. der Kasse (vorbefuellt aus Krankenkasse-Picklist) */
-  bagNr: string;
-  /** BB7b — Kassen-Code der Zusatzversicherung. NICHT aus BB7a abgeleitet. */
-  zusatzversicherungKasse: string;
-  /** BB7c — Invaliden-, Unfall- oder Militärversicherung, Freitext. */
-  weitereVersicherung: string;
+  /* Versicherungen liegen als eigene Versicherungsverhältnisse vor
+     (lib/versicherung/store.ts), nicht mehr als Formularfelder. */
   /** BB13 — Code aus lib/stammdaten/sda-sprache. */
   spracheCode: string;
   /** BB13 Code 21 — Sprache als Freitext. */
@@ -173,17 +152,12 @@ export interface PatientFormData {
   uebersetzerNotwendig: string;
 
   /* Tab 2 – Steuer & Sozialversicherungen */
-  sozialamtKontakt: string;
   /** Kennung des Kontakts beim Sozialdienst; ersetzt den früheren Freitext. */
-  sozialamtKontaktId: string;
   /* Gesetzliche Vertretung — im SDA-Standard V1.3 nicht vorgesehen, aber
      fachlich die schwerste der offenen Fragen: wer einwilligt, wenn die
      Person es nicht mehr kann. Bei Demenz und Hochaltrigkeit keine
      Nebenfrage. */
-  gesetzlicheVertretung: string;
-  vertretungKontaktId: string;
   /** Code aus VERTRETUNGSART; die Liste besteht seit dem Beziehungslauf. */
-  vertretungsart: string;
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
@@ -270,32 +244,16 @@ export const emptyPatientForm: PatientFormData = {
   heimatort: "",
   zivilstand: "",
   aufenthaltsstatus: "",
-  krankenkasse: "",
   ahvNummer: "",
-  hausarztName: "",
-  hausarztTelefon: "",
-  hausarztEmail: "",
   email: "",
   telefon: "",
   adresseStrasse: "",
   adressePlz: "",
   adresseOrt: "",
-  notfallkontaktId: "",
-  notfallkontaktVerwandtschaft: "",
-  spezialAerzte: "",
-  kartennummer: "",
-  bagNr: "",
-  zusatzversicherungKasse: "",
-  weitereVersicherung: "",
   spracheCode: "",
   spracheAndere: "",
   uebersetzerNotwendig: "",
 
-  sozialamtKontakt: "nein",
-  sozialamtKontaktId: "",
-  gesetzlicheVertretung: "",
-  vertretungKontaktId: "",
-  vertretungsart: "",
   ivBezug: "nein",
   ivBezugProzent: "",
   hilflosenentschaedigung: "nein",
@@ -374,7 +332,7 @@ function formatAHV(v: string): string {
 }
 
 /* ── Tab completion logic ──────────────── */
-function getTabCompletion(tabKey: string, data: PatientFormData): { done: number; total: number } {
+function getTabCompletion(tabKey: string, data: PatientFormData, patientId?: string): { done: number; total: number } {
   switch (tabKey) {
     // Der Reiter Abschluss trägt kein Pflichtfeld: die Präzisierungen sind
     // optional, das Protokoll wird nicht erfasst. Er zählt deshalb nicht mit.
@@ -391,34 +349,25 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
         isValidDate(data.geburtsdatum),
         filled(data.geschlecht),
         isValidAHV(data.ahvNummer),
-        filled(data.krankenkasse),
-        filled(data.hausarztName),
+        // Pflicht wie zuvor, an der neuen Speicherform: eine aktive KVG-Grundversicherung.
+        !!(patientId && aktiveVersicherung(patientId, "kvg")),
         filled(data.adresseStrasse),
         filled(data.adressePlz),
         filled(data.adresseOrt),
-        /* Derselbe Pflichtstatus wie zuvor, nur an der neuen Speicherform:
-           ein gewählter Kontakt und eine Nummer daran. */
-        filled(data.notfallkontaktId),
-        istKontaktMitTelefon(data.notfallkontaktId),
+        // Hausarzt und Notfallkontakt sind jetzt Beziehungen (Bezugs- und
+        // Pflegeteam); sie werden über Hinweise geführt, nicht als Pflichtfeld.
       ];
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
     case "steuer": {
+      // Sozialdienst und gesetzliche Vertretung sind Personen (Bezugs- und
+      // Pflegeteam), kein Pflichtstatus dieses Reiters mehr.
       const checks = [
-        filled(data.sozialamtKontakt),
         filled(data.ivBezug),
-        filled(data.gesetzlicheVertretung),
         filled(data.hilflosenentschaedigung),
         filled(data.konfession),
       ];
-      if (data.sozialamtKontakt === "ja") checks.push(filled(data.sozialamtKontaktId));
       if (data.ivBezug === "ja") checks.push(filled(data.ivBezugProzent));
-      /* Bei „ja" beides: eine Vertretung ohne Person und ohne Art wäre eine
-         Behauptung ohne Inhalt. */
-      if (data.gesetzlicheVertretung === "ja") {
-        checks.push(filled(data.vertretungKontaktId));
-        checks.push(filled(data.vertretungsart));
-      }
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
     case "wohnen": {
@@ -458,8 +407,8 @@ function getTabCompletion(tabKey: string, data: PatientFormData): { done: number
   }
 }
 
-function isTabComplete(tabKey: string, data: PatientFormData): boolean {
-  const { done, total } = getTabCompletion(tabKey, data);
+function isTabComplete(tabKey: string, data: PatientFormData, patientId?: string): boolean {
+  const { done, total } = getTabCompletion(tabKey, data, patientId);
   if (total === 0) return false;
   return done === total;
 }
@@ -548,6 +497,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
   // Registrierung (SDA) des Onboardings — Reitersperre, Anmeldung-Validität und
   // Einsatzabbruch werden daraus ABGELEITET, nicht gespeichert (kein zweiter
   // Lebenszyklus). Fehlt eine Antwort, wird nichts angenommen (§D).
+  const patientOnbId = onboardingId ? patientFuerOnboarding(onboardingId)?.id : undefined;
   const registrierung = onboardingId ? registrierungFuerOnboarding(onboardingId) : undefined;
   const registrierungGesperrt = registrierung?.status === "gesperrt";
   const registrierungVollstaendig = registrierungGesperrt || (registrierung ? getOpenFieldCount(registrierung) === 0 : false);
@@ -557,7 +507,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
   const requiredTabs = istEinsatzabbruch
     ? []
     : ["personalien", "steuer", "wohnen", "anamnese", "dokumente"];
-  const allRequiredComplete = registrierungVollstaendig && requiredTabs.every((k) => isTabComplete(k, data));
+  const allRequiredComplete = registrierungVollstaendig && requiredTabs.every((k) => isTabComplete(k, data, patientOnbId));
 
   useEffect(() => {
     onValidityChange?.(allRequiredComplete);
@@ -640,7 +590,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
         >
           {tabDefs.map((tab) => {
             const isActive = activeTab === tab.key;
-            const complete = isTabComplete(tab.key, data);
+            const complete = isTabComplete(tab.key, data, patientOnbId);
 
             return (
               <button
@@ -688,7 +638,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
               stillgelegt. Keine Ausgrauung, kein Ausblenden. */}
           <div style={aktiverReiterGesperrt ? { pointerEvents: "none" } : undefined}>
           {activeTab === "personalien" && (
-            <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onUpdateMehrere={updateFields} onBlur={markTouched} />
+            <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onUpdateMehrere={updateFields} onBlur={markTouched} onboardingId={onboardingId} />
           )}
           {activeTab === "steuer" && (
             <TabSteuerV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
@@ -1753,9 +1703,9 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   const klv = useKlvVerordnungen().find(k => k.onboardingId === onboardingId);
   const pp = MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === onboardingId);
   const verfuegbareDiagnosen = pp?.pflegediagnosen || [];
-  // Krankenkasse: from patient (if konvertiert) or mock default
+  // Krankenkasse: Name des aktiven KVG-Versicherers (Zahlerseite), sonst Demo-Default.
   const patient = klv?.patientId ? getPatient(klv.patientId) : null;
-  const krankenkasse = patient?.krankenkasse || "Groupe Mutuel"; // Demo-Default für Onboarding
+  const krankenkasse = (patient ? aktiverVersichererName(patient.id, "kvg") : "") || "Groupe Mutuel";
 
   // Pflegeplanung data for WZW
   const ppDiagnosen = pp?.pflegediagnosen || [];

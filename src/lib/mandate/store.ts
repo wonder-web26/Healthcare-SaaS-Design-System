@@ -11,10 +11,10 @@
  */
 import { useSyncExternalStore } from "react";
 import { patientenSeed } from "../../app/components/patientData";
-import { KRANKENKASSEN } from "../stammdaten/krankenkassen";
 import { angehoerigeSeed } from "../../app/components/angehoerigeData";
 import type { Mandat } from "./mandate";
 import { gegenwart } from "../gegenwart";
+import { aktiveVersicherung } from "../versicherung/store";
 
 /**
  * Stichtag der Mandate, Verordnungen, Gutsprachen und Dokumente.
@@ -25,36 +25,26 @@ import { gegenwart } from "../gegenwart";
  */
 export const MANDAT_STICHTAG = gegenwart();
 
-/**
- * Anzeigename der Kasse am Patienten → Schlüssel der Werteliste. Gespeichert
- * wird der Schlüssel; findet sich keiner, bleibt das Feld leer statt geraten.
- */
-function versichererSchluessel(anzeigename: string): string {
-  const n = anzeigename.trim().toLowerCase();
-  return KRANKENKASSEN.find(k => k.label.toLowerCase() === n)?.value
-    ?? KRANKENKASSEN.find(k => k.label.toLowerCase().startsWith(n))?.value
-    ?? "";
-}
-
-/** Policennummer aus der bereits erfassten Kartennummer — kein neuer Wert. */
-function ausKartennummer(kartennummer: string): string {
-  return kartennummer.trim();
-}
-
-const abgeleiteteMandate: Mandat[] = patientenSeed.map((p, i) => ({
-  id: `MAN-2026-${String(1001 + i)}`,
-  patientId: p.id,
-  mandatsart: "versichert",
-  gesetzesgrundlage: "kvg_pflege",
-  grund: "krankheit",
-  versicherer: versichererSchluessel(p.krankenkasse),
-  policennummer: ausKartennummer(p.kartennummer),
-  fallnummerKasse: "",
-  beginn: p.aufnahmeDatum,
-  ende: "",
-  zustaendigePerson: p.pflegefachkraft,
-  abgerechneteAngehoerige: abgerechneteAngehoerigeZu(p.id, p.angehoeriger),
-}));
+// Versichererbezug jetzt aus der aktiven KVG des Patienten (Zahlerseite), nicht
+// mehr aus einem am Patienten gehaltenen Kassennamen. Findet sich keine aktive
+// KVG, bleibt das Feld leer statt geraten.
+const abgeleiteteMandate: Mandat[] = patientenSeed.map((p, i) => {
+  const kvg = aktiveVersicherung(p.id, "kvg");
+  return {
+    id: `MAN-2026-${String(1001 + i)}`,
+    patientId: p.id,
+    mandatsart: "versichert",
+    gesetzesgrundlage: "kvg_pflege",
+    grund: "krankheit",
+    versichererId: kvg?.versichererId ?? "",
+    policennummer: kvg?.kartennummer ?? "",
+    fallnummerKasse: "",
+    beginn: p.aufnahmeDatum,
+    ende: "",
+    zustaendigePerson: p.pflegefachkraft,
+    abgerechneteAngehoerige: abgerechneteAngehoerigeZu(p.id, p.angehoeriger),
+  };
+});
 
 /**
  * Abgerechnete angehörige Person aus den bestehenden Angaben.
@@ -83,7 +73,7 @@ const beendetesPrivatmandat: Mandat = {
   mandatsart: "privat",
   gesetzesgrundlage: "privat",
   grund: "krankheit",
-  versicherer: "",
+  versichererId: "",
   policennummer: "",
   fallnummerKasse: "",
   beginn: "01.09.2025",

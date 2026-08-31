@@ -22,8 +22,8 @@ export interface Mandat {
   mandatsart: MandatsartCode;
   gesetzesgrundlage: GesetzesgrundlageCode;
   grund: MandatsgrundCode;
-  /** Schlüssel aus der Krankenkassenliste; leer ausserhalb der Versichertenleistung. */
-  versicherer: string;
+  /** Kennung des Versicherers aus der Versichererliste (aktive KVG); leer ausserhalb der Versichertenleistung. */
+  versichererId: string;
   policennummer: string;
   /** Fallnummer der Kasse — freiwillig. */
   fallnummerKasse: string;
@@ -69,7 +69,7 @@ export function istAktiv(m: Mandat, stichtag: Date): boolean {
 export function m1FehlendeVersicherung(m: Mandat): ("versicherer" | "policennummer")[] {
   if (m.mandatsart !== "versichert") return [];
   const fehlt: ("versicherer" | "policennummer")[] = [];
-  if (!m.versicherer.trim()) fehlt.push("versicherer");
+  if (!m.versichererId.trim()) fehlt.push("versicherer");
   if (!m.policennummer.trim()) fehlt.push("policennummer");
   return fehlt;
 }

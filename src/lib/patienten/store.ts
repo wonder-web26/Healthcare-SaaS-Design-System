@@ -16,7 +16,6 @@
  */
 import { useSyncExternalStore } from "react";
 import { type Patient, type PatientStatus, type AbrechnungsStatus, patientenSeed } from "../../app/components/patientData";
-import { getKrankenkasseLabel } from "../stammdaten/krankenkassen";
 import { isoZuDate, anzeigeZuIso, jetztAnzeige } from "../datum";
 import { GEGENWART_ISO } from "../gegenwart";
 import { ENTLASSUNG_SONSTIGES } from "../stammdaten/entlassung";
@@ -126,9 +125,6 @@ export interface PatientStammdatenEingabe {
   adresseStrasse: string;
   adressePlz: string;
   adresseOrt: string;
-  /** Code aus der Kassen-Picklist; der Bestand hält den Klartextnamen. */
-  krankenkasse: string;
-  kartennummer: string;
   /* ── Bisher nicht übergeben ──────────────────────────────────────────────
      28 Angaben, die das Abklärungsgespräch erhebt und die nie beim Patienten
      ankamen. Sie standen im Formular und blieben dort. */
@@ -142,10 +138,6 @@ export interface PatientStammdatenEingabe {
   email: string;
   spracheAndere: string;
   uebersetzerNotwendig: string;
-  zusatzversicherungKasse: string;
-  weitereVersicherung: string;
-  hausarztEmail: string;
-  spezialAerzte: string;
   wohnsituation: string;
   formZusammenleben: string;
   neuZusammenlebend: string;
@@ -153,14 +145,11 @@ export interface PatientStammdatenEingabe {
   liftVorhanden: string;
   treppen: string;
   personenImHaushalt: string;
-  sozialamtKontakt: string;
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
   assistenzbeitrag: string;
   quellensteuerHinweise: string;
-  /** SP-03 — BAG-Nr. der Kasse. Das Feld bestand am Patienten und blieb leer. */
-  bagNr: string;
 }
 
 /** Der Angehörige kommt aus der Verknüpfung, nicht aus dem Notfallkontakt. */
@@ -203,10 +192,10 @@ function stammdatenAbbilden(
   eingabe: PatientStammdatenEingabe,
   angehoeriger: AngehoerigerVerknuepfung | null,
 ): Pick<Patient,
-  "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "adresse" | "krankenkasse" | "aufnahmeDatum" |
-  "kartennummer" | "sprache" |
-  "angehoeriger" | "angehoerigerTelefon" | "bagNr" |
-  "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "zusatzversicherungKasse" | "weitereVersicherung" | "hausarztEmail" | "spezialAerzte" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "sozialamtKontakt" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
+  "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "adresse" | "aufnahmeDatum" |
+  "sprache" |
+  "angehoeriger" | "angehoerigerTelefon" |
+  "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
   return {
     vorname: eingabe.vorname,
     nachname: eingabe.name,
@@ -218,8 +207,6 @@ function stammdatenAbbilden(
     // Zuweisungs-Übereinstimmung, Sprachfilter und Suche gegen Klartext prüfen.
     sprache: eingabe.spracheCode ? sdaSpracheLabel(eingabe.spracheCode) : "",
     adresse: adresseZusammensetzen(eingabe.adresseStrasse, eingabe.adressePlz, eingabe.adresseOrt),
-    krankenkasse: eingabe.krankenkasse ? getKrankenkasseLabel(eingabe.krankenkasse) : "",
-    kartennummer: eingabe.kartennummer,
     geschlecht: eingabe.geschlecht,
     staatsangehoerigkeit: eingabe.staatsangehoerigkeit,
     heimatort: eingabe.heimatort,
@@ -230,10 +217,6 @@ function stammdatenAbbilden(
     email: eingabe.email,
     spracheAndere: eingabe.spracheAndere,
     uebersetzerNotwendig: eingabe.uebersetzerNotwendig,
-    zusatzversicherungKasse: eingabe.zusatzversicherungKasse,
-    weitereVersicherung: eingabe.weitereVersicherung,
-    hausarztEmail: eingabe.hausarztEmail,
-    spezialAerzte: eingabe.spezialAerzte,
     wohnsituation: eingabe.wohnsituation,
     formZusammenleben: eingabe.formZusammenleben,
     neuZusammenlebend: eingabe.neuZusammenlebend,
@@ -241,13 +224,11 @@ function stammdatenAbbilden(
     liftVorhanden: eingabe.liftVorhanden,
     treppen: eingabe.treppen,
     personenImHaushalt: eingabe.personenImHaushalt,
-    sozialamtKontakt: eingabe.sozialamtKontakt,
     ivBezug: eingabe.ivBezug,
     ivBezugProzent: eingabe.ivBezugProzent,
     hilflosenentschaedigung: eingabe.hilflosenentschaedigung,
     assistenzbeitrag: eingabe.assistenzbeitrag,
     quellensteuerHinweise: eingabe.quellensteuerHinweise,
-    bagNr: eingabe.bagNr,
     angehoeriger: angehoerigerAnzeige(angehoeriger),
     angehoerigerTelefon: angehoeriger?.telefon ?? "",
   };
@@ -301,10 +282,6 @@ export function erfassePatientImOnboarding(
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
-    zusatzversicherungKasse: "",
-    weitereVersicherung: "",
-    hausarztEmail: "",
-    spezialAerzte: "",
     wohnsituation: "",
     formZusammenleben: "",
     neuZusammenlebend: "",
@@ -312,19 +289,19 @@ export function erfassePatientImOnboarding(
     liftVorhanden: "",
     treppen: "",
     personenImHaushalt: "",
-    sozialamtKontakt: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
     assistenzbeitrag: "",
     quellensteuerHinweise: "",
+    // krankenkasse/kartennummer/bagNr/zusatz/weitere entfallen — Versicherungen
+    // liegen als eigene Versicherungsverhältnisse vor (lib/versicherung/store.ts).
     austrittDatum: "",
     austrittNach: "",
     austrittNachAndere: "",
     austrittPraezisierungen: "",
     austrittErfasstVon: "",
     austrittErfasstAm: "",
-    bagNr: "",
     abrechnungsStatus: abrechnungsStatusZu("im_onboarding"),
     reAssessmentFrist: null,
     offeneActionTasks: null,

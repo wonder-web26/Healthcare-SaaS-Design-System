@@ -20,7 +20,9 @@ import type { PatientFormData } from "../StepPatient";
 import { toast } from "sonner";
 import { leseVorgemapptesFeld, schreibeVorgemapptesFeld } from "../../../lib/interrai/vormapping";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
-import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
+import { VersicherungenAbschnitt } from "../versicherung/VersicherungenAbschnitt";
+import { BezugsteamAbschnitt } from "../beziehungen/BezugsteamAbschnitt";
+import { patientFuerOnboarding } from "../../../lib/patienten/store";
 import { SDA_WOHNSITUATION_OPTIONS } from "../../../lib/stammdaten/sda-wohnsituation";
 import { SDA_SPITALAUFENTHALT_OPTIONS } from "../../../lib/stammdaten/sda-spitalaufenthalt";
 import { GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/geschlecht";
@@ -70,9 +72,12 @@ interface TabProps {
 /* ══════════════════════════════════════════
    TAB 1: PERSONALIEN (migrated)
    ══════════════════════════════════════════ */
-export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onBlur }: TabProps) {
+export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onBlur, onboardingId }: TabProps & { onboardingId?: string }) {
   const t = (f: string) => touched.has(f);
   const istSchweizerin = istSchweiz(data.staatsangehoerigkeit);
+  // Versicherungen hängen am Patienten, nicht am Formular — Patient über das
+  // Onboarding auflösen (wird von OnboardingPage fortlaufend angelegt).
+  const patientId = onboardingId ? patientFuerOnboarding(onboardingId)?.id : undefined;
   const istAusland = filled(data.staatsangehoerigkeit) && !istSchweizerin;
   const istAndereSprache = data.spracheCode === SPRACHE_ANDERE;
   const bSprache = katalogFeldBreite(SDA_SPRACHE_OPTIONS);
@@ -109,27 +114,18 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Ort" required value={data.adresseOrt} onChange={v => onUpdate("adresseOrt", v)} onBlur={() => onBlur("adresseOrt")} placeholder="Zürich" error={t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined} /></div>
       </div>
 
-      <SectionHeader icon={Shield} label="Krankenkasse & Aerzte" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
-        {/* SP-02: Picklist statt Freitext */}
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Krankenkasse" required value={data.krankenkasse || null} onChange={v => { const kasse = v || ""; const bag = getBagNummer(kasse); if (onUpdateMehrere) onUpdateMehrere({ krankenkasse: kasse, bagNr: bag || data.bagNr }); else onUpdate("krankenkasse", kasse); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={t("krankenkasse") && !filled(data.krankenkasse) ? "Pflichtfeld" : undefined} /></div>
-        {/* SP-03: Kartennummer (umbenannt) */}
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Kartennummer" required value={data.kartennummer} onChange={v => onUpdate("kartennummer", v)} onBlur={() => onBlur("kartennummer")} placeholder="Nummer auf der Versichertenkarte" error={t("kartennummer") && !filled(data.kartennummer) ? "Pflichtfeld" : undefined} /></div>
-        {/* SP-03: BAG-Nr. */}
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="BAG-Nr. der Kasse" value={data.bagNr} onChange={v => onUpdate("bagNr", v)} placeholder="z.B. 0271" /></div>
-        {/* BB7b — bewusst ohne Vorbelegung aus BB7a: Grund- und Zusatzversicherung
-            derselben Person können bei verschiedenen Kassen bestehen. */}
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zusatzversicherung" value={data.zusatzversicherungKasse || null} onChange={v => onUpdate("zusatzversicherungKasse", v || "")} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" hint="Kann eine andere Krankenkasse sein als die Grundversicherung." /></div>
-        {/* BB7c */}
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Invaliden-, Unfall-, Militärversicherung" steuerelementMaxBreite={FELD_MAX.mittel} value={data.weitereVersicherung} onChange={v => onUpdate("weitereVersicherung", v)} placeholder="Optional — Name der Versicherung" /></div>
+      <SectionHeader icon={Shield} label="Versicherungen" />
+      <div style={{ marginBottom: "var(--space-5)" }}>
+        {patientId
+          ? <VersicherungenAbschnitt patientId={patientId} />
+          : <div style={{ fontSize: 13, color: "var(--text-tertiary)" }}>Versicherungen lassen sich erfassen, sobald die Personalien angelegt sind.</div>}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Hausarzt Name" required value={data.hausarztName} onChange={v => onUpdate("hausarztName", v)} onBlur={() => onBlur("hausarztName")} placeholder="Dr. Müller" error={t("hausarztName") && !filled(data.hausarztName) ? "Pflichtfeld" : undefined} /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Hausarzt Telefon" value={data.hausarztTelefon} onChange={v => onUpdate("hausarztTelefon", v)} placeholder="+41 44 123 45 67" /></div>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Hausarzt E-Mail" value={data.hausarztEmail} onChange={v => onUpdate("hausarztEmail", v)} placeholder="praxis@example.ch" /></div>
-      </div>
-      <div style={{ marginTop: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Spezialarzt" value={data.spezialAerzte} onChange={v => onUpdate("spezialAerzte", v)} placeholder="Optional — z.B. Kardiologe Dr. Weber" /></div>
+
+      <SectionHeader icon={Users} label="Bezugs- und Pflegeteam" />
+      <div style={{ marginBottom: "var(--space-5)" }}>
+        {patientId
+          ? <BezugsteamAbschnitt patientId={patientId} />
+          : <div style={{ fontSize: 13, color: "var(--text-tertiary)" }}>Personen lassen sich erfassen, sobald die Personalien angelegt sind.</div>}
       </div>
 
       <SectionHeader icon={Mail} label="Kontaktdaten" />
@@ -160,22 +156,8 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
         </div>
       </div>
 
-      <SectionHeader icon={Phone} label="Notfallkontakt" />
-      {/* Der Notfallkontakt ist eine dritte Person: gesucht oder angelegt,
-          nicht abgetippt. Telefon und Zugehörigkeit stehen am Kontakt; hier
-          bleibt nur, was das Verhältnis zu diesem Patienten beschreibt. */}
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}>
-          <KontaktWahl label="Kontakt" wert={data.notfallkontaktId}
-            onWahl={v => onUpdate("notfallkontaktId", v)} zugehoerigkeitLabel="Zugehörigkeit" />
-        </div>
-        <div style={{ maxWidth: FELD_MAX.mittel }}>
-          <FormSelect label="Verwandtschaft" value={data.notfallkontaktVerwandtschaft || null}
-            onChange={v => onUpdate("notfallkontaktVerwandtschaft", v || "")}
-            options={BEZIEHUNGSART.map(a => ({ value: a.code, label: a.label }))}
-            placeholder="nicht erfasst" />
-        </div>
-      </div>
+      {/* Notfallkontakt ist ein Merkmal einer Beziehung, kein eigener Block —
+          erfasst im Abschnitt Bezugs- und Pflegeteam oben. */}
     </div>
   );
 }
@@ -186,50 +168,12 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
 export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
-      <SectionHeader icon={IdCard} label="Sozialamt & IV" first />
+      <SectionHeader icon={IdCard} label="IV & Sozialversicherung" first />
+      {/* Sozialdienst und gesetzliche Vertretung sind Personen und stehen im
+          Abschnitt Bezugs- und Pflegeteam (Reiter Personalien), nicht hier. */}
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <SegmentedControl label="Sozialamt involviert?" required value={data.sozialamtKontakt} onChange={v => onUpdate("sozialamtKontakt", v)} options={JA_NEIN} />
         <SegmentedControl label="IV-Bezug?" required value={data.ivBezug} onChange={v => onUpdate("ivBezug", v)} options={JA_NEIN} />
       </div>
-      {data.sozialamtKontakt === "ja" && (
-        <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
-          {/* Ersetzt den früheren Freitext „Name und Kontaktangaben": beim
-              Onboarding ist der Sozialdienst oft schon bekannt — er hat
-              angemeldet. Wer ihn findet, tippt die Nummer nicht ab. */}
-          <div style={{ maxWidth: FELD_MAX.mittel }}>
-            <KontaktWahl label="Kontaktperson Sozialdienst" wert={data.sozialamtKontaktId}
-              onWahl={v => onUpdate("sozialamtKontaktId", v)} zugehoerigkeitLabel="Stelle" />
-          </div>
-        </div>
-      )}
-      {/* Gesetzliche Vertretung — auf demselben Reiter wie der Sozialdienst:
-          beides sind formale Zuständigkeiten Dritter, nicht persönliches
-          Umfeld. Derselbe Aufbau: Schalter, dann Kontaktwahl. */}
-      <div style={{ marginTop: "var(--space-4)" }} className="grid grid-cols-1 md:grid-cols-2">
-        <SegmentedControl label="Gesetzliche Vertretung besteht?" required
-          value={data.gesetzlicheVertretung} onChange={v => onUpdate("gesetzlicheVertretung", v)} options={JA_NEIN} />
-      </div>
-      {data.gesetzlicheVertretung === "ja" && (
-        <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
-          <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-            <div style={{ maxWidth: FELD_MAX.mittel }}>
-              <KontaktWahl label="Vertretende Person" wert={data.vertretungKontaktId}
-                onWahl={v => onUpdate("vertretungKontaktId", v)} zugehoerigkeitLabel="Behörde" />
-            </div>
-            <div style={{ maxWidth: FELD_MAX.mittel }}>
-              <FormSelect label="Art der Vertretung" required value={data.vertretungsart || null}
-                onChange={v => onUpdate("vertretungsart", v || "")}
-                options={VERTRETUNGSART.map(v => ({ value: v.code, label: v.label }))}
-                placeholder="Bitte wählen"
-                /* Dieser Reiter führt keinen Berührt-Zustand; der Fehler
-                   erscheint, sobald der Schalter auf Ja steht und die Art
-                   fehlt — wie bei den übrigen Feldern dieses Reiters. */
-                error={!filled(data.vertretungsart) ? "Pflichtfeld" : undefined} />
-            </div>
-          </div>
-        </div>
-      )}
-
       {data.ivBezug === "ja" && (
         <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
           <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="IV-Bezug" required value={data.ivBezugProzent} onChange={v => onUpdate("ivBezugProzent", v)} suffix="%" placeholder="z.B. 100" /></div>

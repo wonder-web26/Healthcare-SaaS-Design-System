@@ -56,16 +56,26 @@ export const SDA_PATIENT_FELD: Readonly<Record<string, string | null>> = {
   iA5a: "ahvNummer",
   CHB3: "staatsangehoerigkeit",
   iB11: "uebersetzerNotwendig",
-  CHA7b: "zusatzversicherungKasse",
-  CHA7c: "weitereVersicherung",
   // Wohn-/Anmeldefelder, die am Patienten leben (Pipeline + Patient360):
   iA11b: "wohnsituation",
   iA12a: "formZusammenleben",
   iA12b: "neuZusammenlebend",
   // Abweichung — formularseitig, nicht durchgelesen:
   iA10: null, // Wohnort PLZ/Ort ≠ adresse (String inkl. Strasse)
-  CHA7a: null, // Grundversicherung (Freitext) ≠ krankenkasse (Label)
   iB4: null, // Sprache (Auswahl-Code) ≠ sprache (Label)
+  // CHA7a/b/c werden aus den Versicherungsverhältnissen gelesen (siehe unten),
+  // nicht aus einem Patientenfeld.
+};
+
+/**
+ * CHA7a/b/c lesen den Namen des aktiven Versicherers des jeweiligen Typs aus den
+ * Versicherungsverhältnissen (Zahlerseite), nicht aus einem Patientenfeld. Damit
+ * löst sich die Doppelerfassung der Grundversicherung auf.
+ */
+export const SDA_VERSICHERUNG_TYP: Readonly<Record<string, "kvg" | "vvg" | "uvg">> = {
+  CHA7a: "kvg",
+  CHA7b: "vvg",
+  CHA7c: "uvg",
 };
 
 export function sdaHerkunft(iCode: string): ItemHerkunft {
@@ -75,6 +85,11 @@ export function sdaHerkunft(iCode: string): ItemHerkunft {
 /** Trägt dieses Item seinen Wert aus dem Patienten (durchgelesen, rückschreibbar)? */
 export function istPatientDurchgelesen(iCode: string): boolean {
   return SDA_HERKUNFT[iCode] === "klient" && SDA_PATIENT_FELD[iCode] != null;
+}
+
+/** Liest dieses Item den Namen des aktiven Versicherers (CHA7a/b/c)? */
+export function istVersicherungDurchgelesen(iCode: string): boolean {
+  return iCode in SDA_VERSICHERUNG_TYP;
 }
 
 // ── Vollständigkeit beim Start erzwingen ─────────────────────────────────────

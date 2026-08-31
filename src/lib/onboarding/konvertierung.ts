@@ -19,41 +19,8 @@ import { getPersonByOnboardingId, setPatientId } from "../interrai/store";
 import { schliessePatientOnboardingAb } from "../patienten/store";
 import { schliesseAngehoerigenOnboardingAb } from "../angehoerige/store";
 import { GEGENWART, GEGENWART_ISO } from "../gegenwart";
-import { getBeziehungen, beziehungSichern } from "../beziehungen/store";
-import type { Beziehung } from "../beziehungen/beziehungen";
-import { formatAnzeige } from "../datum";
-
-/**
- * Eine im Gespräch gewählte Person wird zur Beziehung.
- *
- * Ist dieselbe Person bereits über eine andere Beziehung erfasst — etwa als
- * pflegende Angehörige —, erhält diese das Merkmal, statt dass eine zweite
- * Zeile entsteht. Zwei Zeilen zu derselben Person sagten nicht mehr, sondern
- * weniger: welche gilt?
- */
-function beziehungAusOnboarding(
-  patientId: string,
-  kontaktId: string,
-  rolle: Beziehung["rolle"],
-  beginn: string,
-  zusatz: { art?: string; notfallkontakt?: boolean; vertretungsart?: string; zusammenfuehren?: boolean },
-): void {
-  if (zusatz.zusammenfuehren !== false) {
-    const bestehend = getBeziehungen(patientId).find(
-      b => b.person.art === "kontakt" && b.person.kennung === kontaktId && !b.ende.trim());
-    if (bestehend) {
-      if (zusatz.notfallkontakt) beziehungSichern({ ...bestehend, notfallkontakt: true });
-      return;
-    }
-  }
-  beziehungSichern({
-    id: "", patientId, person: { art: "kontakt", kennung: kontaktId },
-    rolle, art: (zusatz.art ?? "") as Beziehung["art"],
-    vertretungsart: (zusatz.vertretungsart ?? "") as Beziehung["vertretungsart"],
-    beginn, ende: "", notfallkontakt: zusatz.notfallkontakt ?? false,
-    auskunftsberechtigt: false, telefon: "", bemerkung: "",
-  });
-}
+// Beziehungen entstehen jetzt direkt in der Bezugsteam-Liste, nicht mehr bei der
+// Konvertierung aus Onboarding-Feldern.
 
 export interface KonvertierungsErgebnis {
   patientId: string;
@@ -91,11 +58,6 @@ export function konvertiereOnboarding(
   angehoerigenDaten?: { name: string; quellensteuerpflichtig: boolean; aufenthaltsstatus: string; bvgAnbindungGewuenscht: boolean; qualifikation?: string; eintrittsdatum?: string; pflegefachkraft?: string },
   /** Auslösende Person für das Aufteilungs-Ereignisprotokoll (sofern bekannt). */
   ausloeser?: { id: string; name: string },
-  /** Im Abklärungsgespräch gewählte dritte Personen. */
-  kontakte?: {
-    notfallkontaktId: string; notfallkontaktVerwandtschaft: string; sozialdienstId: string;
-    vertretungKontaktId: string; vertretungsart: string;
-  },
 ): KonvertierungsErgebnis {
   // 1. Der Patient existiert bereits (er entsteht mit dem Schritt "Patient").
   //    Der Abschluss kopiert nichts und erzeugt nichts — er wechselt nur den
@@ -174,29 +136,8 @@ export function konvertiereOnboarding(
     anzahlNeuAngehoeriger = getTicketsFuerSubjekt("angehoeriger", angehoerigerId).length;
   }
 
-  /* Die im Gespräch gewählten Kontakte werden zu Beziehungen am Patienten.
-     Vorher standen sie als Freitext im Formular und landeten nirgends. */
-  if (patientId && kontakte) {
-    const heute = formatAnzeige(GEGENWART);
-    if (kontakte.notfallkontaktId) {
-      beziehungAusOnboarding(patientId, kontakte.notfallkontaktId, "weitere", heute, {
-        art: kontakte.notfallkontaktVerwandtschaft, notfallkontakt: true,
-      });
-    }
-    if (kontakte.sozialdienstId) {
-      beziehungAusOnboarding(patientId, kontakte.sozialdienstId, "sozialdienst", heute, {});
-    }
-    /* Die Vertretung wird NICHT mit einer bestehenden Beziehung derselben
-       Person zusammengeführt: eine Beiständin ist etwas anderes als eine
-       Tochter, und beide Rollen können nebeneinander bestehen. Bei
-       Notfallkontakt und Sozialdienst wird zusammengeführt, weil dort ein
-       Merkmal beziehungsweise dieselbe Rolle hinzukommt. */
-    if (kontakte.vertretungKontaktId) {
-      beziehungAusOnboarding(patientId, kontakte.vertretungKontaktId, "beistand", heute, {
-        vertretungsart: kontakte.vertretungsart, zusammenfuehren: false,
-      });
-    }
-  }
+  // Bezugspersonen (Hausarzt, Notfallkontakt, Sozialdienst, Vertretung) werden
+  // direkt in der Bezugsteam-Liste als Beziehungen erfasst — nicht mehr hier.
 
   // Aufteilung als Ereignis festhalten (GeKoZH Nr. 8 — nachweisrelevant).
   protokolliereAufteilung({

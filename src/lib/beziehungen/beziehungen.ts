@@ -172,6 +172,4 @@ export function personName(
  */
 export const DIAGRAMM_MAX = 8;
 
-export const SPEZIALAERZTE_LUECKE =
-  "Spezialärzte stehen als Freitext am Patienten und erscheinen nicht im Netz.";
 

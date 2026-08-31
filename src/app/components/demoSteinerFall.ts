@@ -76,28 +76,18 @@ export const demoSteinerPatient: PatientFormData = {
   // Aufenthaltsstatus bleibt leer: er erscheint nur bei ausländischer Staatsangehörigkeit.
   name: "Steiner", vorname: "Hans-Rudolf", geburtsdatum: "14.06.1956", geschlecht: "maennlich",
   staatsangehoerigkeit: "schweiz", heimatort: "Winterthur ZH", zivilstand: "verheiratet", aufenthaltsstatus: "",
-  krankenkasse: "helsana", ahvNummer: "756.9876.5432.10",
-  hausarztName: "Dr. med. R. Lüthi", hausarztTelefon: "+41 52 213 44 55", hausarztEmail: "praxis.luethi@example.ch",
+  ahvNummer: "756.9876.5432.10",
   email: "hr.steiner@example.ch", telefon: "+41 79 330 22 11",
   adresseStrasse: "Rosenweg 14", adressePlz: "8400", adresseOrt: "Winterthur",
-  /* Der Notfallkontakt ist seit dem Kontaktlauf eine Kennung, kein Name.
-     Vera Steiner hat einen eigenen Datensatz als angehörige Person und ist
-     kein Kontakt — im Demo-Fall bleibt das Feld darum leer, statt einen
-     Kontakt zu erfinden, den es nicht geben soll. */
-  notfallkontaktId: "", notfallkontaktVerwandtschaft: "ehepartner",
-  spezialAerzte: "Dr. med. A. Frei (Kardiologie), Kantonsspital Winterthur",
-  kartennummer: "80756000987654321", bagNr: "0580",
-  // BB7b: Zusatzversicherung bei derselben Kasse wie die Grundversicherung —
-  // im Fall dokumentiert, aber bewusst eigenständig gewählt, nicht abgeleitet.
-  zusatzversicherungKasse: "helsana",
-  // BB7c: keine Invaliden-, Unfall- oder Militärversicherung im Spiel.
-  weitereVersicherung: "",
+  // Hausarzt, Spezialärzte, Notfallkontakt, Sozialdienst und Vertretung sind jetzt
+  // Beziehungen (Bezugs- und Pflegeteam), keine Formularfelder mehr.
+  // Versicherungen ebenso über die Versicherungsliste.
   // BB13 = 1: Winterthurer Ehepaar, Umgangssprache Schweizerdeutsch.
   // BB14 = 0: kein Übersetzungsbedarf, die Verständigung läuft auf Deutsch.
   spracheCode: "1",
   spracheAndere: "",
   uebersetzerNotwendig: "0",
-  sozialamtKontakt: "nein", sozialamtKontaktId: "", gesetzlicheVertretung: "", vertretungKontaktId: "", vertretungsart: "", ivBezug: "nein", hilflosenentschaedigung: "ja", assistenzbeitrag: "nein",
+  ivBezug: "nein", hilflosenentschaedigung: "ja", assistenzbeitrag: "nein",
   konfession: "evangelisch_reformiert",
   groesse: "174", gewicht: "78", gewichtsverlust: "nein", brille: "ja", hoergeraet: "ja",
   chronischeErkrankungen: "Arterielle Hypertonie, Diabetes mellitus Typ 2, beginnende Herzinsuffizienz (NYHA II)",

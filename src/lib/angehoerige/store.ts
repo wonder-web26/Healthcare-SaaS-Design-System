@@ -58,7 +58,7 @@ export function getAngehoerigen(id: string): Angehoeriger | undefined {
   return bestand.find(a => a.id === id);
 }
 
-function angehoerigerFuerOnboarding(onboardingId: string): Angehoeriger | undefined {
+export function angehoerigerFuerOnboarding(onboardingId: string): Angehoeriger | undefined {
   return bestand.find(a => a.onboardingId === onboardingId);
 }
 

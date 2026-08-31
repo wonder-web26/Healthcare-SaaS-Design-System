@@ -15,6 +15,10 @@ import type { ArztAnfrage, ArztAnfrageStatus } from "../../types/klinische-artef
 import { useEinwilligung } from "./EinwilligungContext";
 import { EinwilligungModal } from "./einwilligung/EinwilligungModal";
 import { toast } from "sonner";
+import { useBeziehungen } from "../../lib/beziehungen/store";
+import { useKontakte } from "../../lib/kontakte/store";
+import { kontaktName } from "../../lib/kontakte/kontakte";
+import { patientFuerOnboarding } from "../../lib/patienten/store";
 
 /* ── Context ──────────────────────────── */
 
@@ -49,19 +53,25 @@ export function useArztAnfrage(): ArztAnfrageContextValue | null {
 export function ArztAnfrageProvider({
   onboardingId,
   patientId,
-  hausarztName,
-  hausarztEmail,
   children,
 }: {
   onboardingId: string | null;
   patientId: string | null;
-  /** Dynamisch aus Patientendaten — kein hartkodierter Empfänger */
-  hausarztName?: string;
-  hausarztEmail?: string;
   children: ReactNode;
 }) {
   let einwilligung: ReturnType<typeof useEinwilligung> | null = null;
   try { einwilligung = useEinwilligung(); } catch { /* outside Onboarding */ }
+
+  // Empfänger = aktiver Hausarzt aus dem Bezugsteam (Beziehung rolle "hausarzt"
+  // → Kontakt), nicht mehr aus einem Freitextfeld am Patienten.
+  const beziehungen = useBeziehungen();
+  const kontakte = useKontakte();
+  const patId = patientId ?? (onboardingId ? patientFuerOnboarding(onboardingId)?.id ?? null : null);
+  const hausarztBez = patId ? beziehungen.find(b => b.patientId === patId && b.rolle === "hausarzt" && b.ende.trim() === "") : undefined;
+  const hausarztPerson = hausarztBez?.person;
+  const hausarztKontakt = hausarztPerson?.art === "kontakt" ? kontakte.find(k => k.id === hausarztPerson.kennung) : undefined;
+  const hausarztName = hausarztKontakt ? kontaktName(hausarztKontakt) : "";
+  const hausarztEmail = hausarztKontakt?.email ?? "";
 
   const einwilligungSigniert = einwilligung?.status.signiert ?? false;
 

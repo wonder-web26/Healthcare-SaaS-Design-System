@@ -52,12 +52,14 @@ import { sdaVerlangtInterrai } from "../../lib/stammdaten/sda-einschaetzung-situ
 import { naechsteFallKennung } from "../../lib/onboarding/faelle";
 import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
 import { erfassePatientImOnboarding, patientFuerOnboarding } from "../../lib/patienten/store";
-import { erfasseAngehoerigenImOnboarding, type AngehoerigenEingabe } from "../../lib/angehoerige/store";
+import { erfasseAngehoerigenImOnboarding, angehoerigerFuerOnboarding, type AngehoerigenEingabe } from "../../lib/angehoerige/store";
+import { sichereGepflegteAngehoerige } from "../../lib/beziehungen/store";
+import { GEGENWART } from "../../lib/gegenwart";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
 import { getKlvVerordnungen, getKlvFuerOnboarding } from "../../lib/klv/store";
 import { lpbStatusLabel } from "../../lib/stammdaten/lpb-status";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
-import { formatFaelligkeit, isoZuDate } from "../../lib/datum";
+import { formatFaelligkeit, isoZuDate, formatAnzeige } from "../../lib/datum";
 import { toast } from "sonner";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { useRecording } from "../recording/RecordingContext";
@@ -451,6 +453,15 @@ export function OnboardingPage() {
     });
   }, [neueFallKennung, patientData, angehoerigerData.vorname, angehoerigerData.name, angehoerigerData.telefon]);
 
+  // §5: Die Beziehung `pflegende_angehoerige` entsteht aus dem Angehörigen-Reiter,
+  // sobald Patient und angehörige Person existieren; ändert sich die Person, folgt sie.
+  useEffect(() => {
+    if (!neueFallKennung) return;
+    const pat = patientFuerOnboarding(neueFallKennung);
+    const ang = angehoerigerFuerOnboarding(neueFallKennung);
+    if (pat && ang) sichereGepflegteAngehoerige(pat.id, ang.id, formatAnzeige(GEGENWART));
+  }, [neueFallKennung, patientData, angehoerigerData.vorname, angehoerigerData.name]);
+
   /* ── Notizspur: Person des aktiven Schritts.
      Eine Notiz hängt an einer PERSON, nicht am Fall — sie braucht deshalb eine
      Personen-Kennung, keine Fallkennung.
@@ -658,7 +669,7 @@ export function OnboardingPage() {
 
   return (
     <EinwilligungProvider onboardingId={wirksameFallKennung} patientId={null}>
-    <ArztAnfrageProvider onboardingId={wirksameFallKennung} patientId={null} hausarztName={patientData.hausarztName} hausarztEmail={patientData.hausarztEmail}>
+    <ArztAnfrageProvider onboardingId={wirksameFallKennung} patientId={null}>
     <div className="flex flex-col h-full min-h-0">
       {/* ── Kopfleiste (§B): keine Karte, kein Avatar. Der Patient ist Subjekt des Falls
              (Titel); die Angehörige ist Kontext. Zeile 1 Rückweg, Zeile 2 Titel + Marken. ── */}
@@ -1177,13 +1188,7 @@ export function OnboardingPage() {
                       bvgAnbindungGewuenscht: angehoerigerData.bvgAnbindungGewuenscht === "ja",
                       qualifikation: qualifikationAusFunktion(angehoerigerData.funktion),
                       eintrittsdatum: angehoerigerData.eintrittsdatum,
-                    }, ausloeser, {
-                      notfallkontaktId: patientData.notfallkontaktId,
-                      notfallkontaktVerwandtschaft: patientData.notfallkontaktVerwandtschaft,
-                      sozialdienstId: patientData.sozialamtKontakt === "ja" ? patientData.sozialamtKontaktId : "",
-                      vertretungKontaktId: patientData.gesetzlicheVertretung === "ja" ? patientData.vertretungKontaktId : "",
-                      vertretungsart: patientData.vertretungsart,
-                    });
+                    }, ausloeser);
 
                     // Qualifizierte Erfolgsmeldung
                     const a = ergebnis.konvertierteArtefakte;

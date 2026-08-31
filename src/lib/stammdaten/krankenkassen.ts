@@ -1,67 +1,111 @@
 /**
- * Schweizer Krankenversicherer — SP-02 / SP-03
+ * Kostenträger (Versicherer) — SP-02 / SP-03, erweitert um GLN und Trägerart.
  *
- * Jeder Eintrag traegt die BAG-Nummer (Identifikationsnummer des
- * Versicherers beim Bundesamt fuer Gesundheit).
+ * Krankenversicherer tragen ihre BAG-Nummer (Identifikationsnummer beim Bundesamt
+ * für Gesundheit). Die GLN (13-stellig, für die Rechnungsstellung über MediData)
+ * ist vorerst überall `null` — es liegt kein belegter Wert vor; eine erfundene GLN
+ * führt zu einer abgewiesenen Rechnung.
  *
- * Quelle: BAG-Register der zugelassenen Krankenversicherer
- * Stand: 2025
+ * Neben den Krankenversicherern führen wir die Kostenträger für UVG (Unfall),
+ * IVG (Invalidenversicherung) und MVG (Militärversicherung). Sie tragen KEINE
+ * BAG-Nummer (die gibt es nur für Krankenversicherer) und werden über `art`
+ * unterschieden.
+ *
+ * Quelle Krankenversicherer: BAG-Register der zugelassenen Krankenversicherer, Stand 2025.
+ * Diese Liste ist die EINZIGE Versichererliste im Projekt.
  */
+
+export type KostentraegerArt = "krankenversicherer" | "unfallversicherer" | "iv_stelle" | "militaerversicherung";
 
 export interface KrankenkasseDefinition {
   value: string;
   label: string;
-  /** BAG-Nummer des Versicherers */
+  /** BAG-Nummer des Versicherers — nur bei Krankenversicherern, sonst "". */
   bagNr: string;
+  /** 13-stellige GLN des Versicherers (generalInvoice); vorerst überall null. */
+  glnVersicherung: string | null;
+  /** 13-stellige GLN des Rechnungsempfängers (kann vom Versicherer abweichen,
+   *  z. B. Verarbeitungszentrum); vorerst überall null. */
+  glnEmpfaenger: string | null;
+  art: KostentraegerArt;
 }
+
+const kv = (value: string, label: string, bagNr: string): KrankenkasseDefinition =>
+  ({ value, label, bagNr, glnVersicherung: null, glnEmpfaenger: null, art: "krankenversicherer" });
 
 export const KRANKENKASSEN: KrankenkasseDefinition[] = [
-  { value: "css", label: "CSS Versicherung", bagNr: "0271" },
-  { value: "helsana", label: "Helsana", bagNr: "0580" },
-  { value: "swica", label: "SWICA", bagNr: "0700" },
-  { value: "concordia", label: "Concordia", bagNr: "0240" },
-  { value: "groupe_mutuel", label: "Groupe Mutuel", bagNr: "0350" },
-  { value: "sanitas", label: "Sanitas", bagNr: "0610" },
-  { value: "visana", label: "Visana", bagNr: "0780" },
-  { value: "assura", label: "Assura", bagNr: "0140" },
-  { value: "atupri", label: "Atupri", bagNr: "0160" },
-  { value: "kpt", label: "KPT", bagNr: "0440" },
-  { value: "sympany", label: "Sympany", bagNr: "0310" },
-  { value: "oekk", label: "OEKK", bagNr: "0520" },
-  { value: "egs", label: "EGK", bagNr: "0290" },
-  { value: "agrisano", label: "Agrisano", bagNr: "0100" },
-  { value: "aquilana", label: "Aquilana", bagNr: "0130" },
-  { value: "compact", label: "Compact Grundversicherungen", bagNr: "1191" },
-  { value: "easy_sana", label: "Easy Sana", bagNr: "1197" },
-  { value: "galenos", label: "Galenos", bagNr: "0340" },
-  { value: "glarner", label: "Glarner Krankenversicherung", bagNr: "0360" },
-  { value: "ics", label: "ICS Intras", bagNr: "0420" },
-  { value: "kolping", label: "Kolping", bagNr: "0430" },
-  { value: "luzerner_hinterland", label: "Luzerner Hinterland", bagNr: "0470" },
-  { value: "metallbau", label: "Metallbau", bagNr: "0480" },
-  { value: "ob", label: "OB Nidwalden/Obwalden", bagNr: "0510" },
-  { value: "progrès", label: "Progrès", bagNr: "0568" },
-  { value: "rhenusana", label: "Rhenusana", bagNr: "0600" },
-  { value: "sana24", label: "Sana24", bagNr: "1195" },
-  { value: "sanagate", label: "Sanagate", bagNr: "1196" },
-  { value: "slkk", label: "SLKK", bagNr: "0660" },
-  { value: "sodalis", label: "Sodalis", bagNr: "0670" },
-  { value: "steffisburg", label: "Steffisburg", bagNr: "0680" },
-  { value: "sumiswalder", label: "Sumiswalder", bagNr: "0690" },
-  { value: "vita_surselva", label: "Vita Surselva", bagNr: "0800" },
-  { value: "vivacare", label: "Vivacare", bagNr: "1192" },
-  { value: "waedenswil", label: "Wädenswil", bagNr: "0810" },
+  kv("css", "CSS Versicherung", "0271"),
+  kv("helsana", "Helsana", "0580"),
+  kv("swica", "SWICA", "0700"),
+  kv("concordia", "Concordia", "0240"),
+  kv("groupe_mutuel", "Groupe Mutuel", "0350"),
+  kv("sanitas", "Sanitas", "0610"),
+  kv("visana", "Visana", "0780"),
+  kv("assura", "Assura", "0140"),
+  kv("atupri", "Atupri", "0160"),
+  kv("kpt", "KPT", "0440"),
+  kv("sympany", "Sympany", "0310"),
+  kv("oekk", "OEKK", "0520"),
+  kv("egs", "EGK", "0290"),
+  kv("agrisano", "Agrisano", "0100"),
+  kv("aquilana", "Aquilana", "0130"),
+  kv("compact", "Compact Grundversicherungen", "1191"),
+  kv("easy_sana", "Easy Sana", "1197"),
+  kv("galenos", "Galenos", "0340"),
+  kv("glarner", "Glarner Krankenversicherung", "0360"),
+  kv("ics", "ICS Intras", "0420"),
+  kv("kolping", "Kolping", "0430"),
+  kv("luzerner_hinterland", "Luzerner Hinterland", "0470"),
+  kv("metallbau", "Metallbau", "0480"),
+  kv("ob", "OB Nidwalden/Obwalden", "0510"),
+  kv("progrès", "Progrès", "0568"),
+  kv("rhenusana", "Rhenusana", "0600"),
+  kv("sana24", "Sana24", "1195"),
+  kv("sanagate", "Sanagate", "1196"),
+  kv("slkk", "SLKK", "0660"),
+  kv("sodalis", "Sodalis", "0670"),
+  kv("steffisburg", "Steffisburg", "0680"),
+  kv("sumiswalder", "Sumiswalder", "0690"),
+  kv("vita_surselva", "Vita Surselva", "0800"),
+  kv("vivacare", "Vivacare", "1192"),
+  kv("waedenswil", "Wädenswil", "0810"),
+  // ── Kostenträger UVG / IVG / MVG (keine BAG-Nummer, GLN unbelegt) ──────────
+  { value: "suva", label: "SUVA", bagNr: "", glnVersicherung: null, glnEmpfaenger: null, art: "unfallversicherer" },
+  { value: "axa", label: "AXA", bagNr: "", glnVersicherung: null, glnEmpfaenger: null, art: "unfallversicherer" },
+  { value: "zurich", label: "Zurich", bagNr: "", glnVersicherung: null, glnEmpfaenger: null, art: "unfallversicherer" },
+  { value: "helvetia", label: "Helvetia", bagNr: "", glnVersicherung: null, glnEmpfaenger: null, art: "unfallversicherer" },
+  { value: "iv_stelle", label: "IV-Stelle (kantonal)", bagNr: "", glnVersicherung: null, glnEmpfaenger: null, art: "iv_stelle" },
+  { value: "militaerversicherung", label: "Militärversicherung (SUVA)", bagNr: "", glnVersicherung: null, glnEmpfaenger: null, art: "militaerversicherung" },
 ];
 
-/** Dropdown-Optionen fuer Select-Komponenten (value + label) */
+/** Dropdown-Optionen für Select-Komponenten (value + label) — alle Träger. */
 export const KRANKENKASSEN_OPTIONS = KRANKENKASSEN.map(k => ({ value: k.value, label: k.label }));
 
-/** BAG-Nummer zu einem Krankenkassen-Code nachschlagen */
-export function getBagNummer(kassenCode: string): string {
-  return KRANKENKASSEN.find(k => k.value === kassenCode)?.bagNr ?? "";
+/** Versicherer nach Kennung. */
+export function getVersicherer(id: string): KrankenkasseDefinition | undefined {
+  return KRANKENKASSEN.find(k => k.value === id);
 }
 
-/** Label zu einem Krankenkassen-Code nachschlagen */
+/** BAG-Nummer zu einem Kostenträger-Code nachschlagen. */
+export function getBagNummer(kassenCode: string): string {
+  return getVersicherer(kassenCode)?.bagNr ?? "";
+}
+
+/** Label zu einem Kostenträger-Code nachschlagen. */
 export function getKrankenkasseLabel(kassenCode: string): string {
-  return KRANKENKASSEN.find(k => k.value === kassenCode)?.label ?? kassenCode;
+  return getVersicherer(kassenCode)?.label ?? kassenCode;
+}
+
+/**
+ * Kostenträger-Kennung aus einem Namen (Code oder Label, tolerant). Für die
+ * Überführung bestehender Klartext-Kassennamen (Fixtures, Mandat) in eine
+ * Versicherer-Referenz. Gibt null zurück, wenn kein Träger passt.
+ */
+export function versichererIdFuerName(name: string): string | null {
+  const n = name.trim().toLowerCase();
+  if (!n) return null;
+  return KRANKENKASSEN.find(k => k.value === n)?.value
+    ?? KRANKENKASSEN.find(k => k.label.toLowerCase() === n)?.value
+    ?? KRANKENKASSEN.find(k => k.label.toLowerCase().startsWith(n))?.value
+    ?? null;
 }

@@ -79,7 +79,8 @@ import {
   type Bestaetigung,
 } from "../../../lib/interrai/store";
 import { SDA_KATALOG, SDA_BEREICHE, SDA_GRUPPEN, sdaGruppe, sdaItem, type SdaItem } from "../../../lib/interrai/katalog/sda-katalog";
-import { sdaHerkunft, istPatientDurchgelesen, SDA_PATIENT_FELD } from "../../../lib/interrai/katalog/sda-herkunft";
+import { sdaHerkunft, istPatientDurchgelesen, istVersicherungDurchgelesen, SDA_PATIENT_FELD, SDA_VERSICHERUNG_TYP } from "../../../lib/interrai/katalog/sda-herkunft";
+import { aktiverVersichererName } from "../../../lib/versicherung/store";
 import { getPatient, patientFuerOnboarding, aktualisierePatient } from "../../../lib/patienten/store";
 import { ansichtPfad } from "../Patient360Page";
 import { useRecording } from "../../recording/RecordingContext";
@@ -952,6 +953,8 @@ function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
     if (readOnly) return String(answers[item.iCode] ?? "");
     const h = sdaHerkunft(item.iCode);
     if (h === "fall") return fall?.fallnummer ?? "";
+    const vTyp = SDA_VERSICHERUNG_TYP[item.iCode];
+    if (vTyp) return patient ? aktiverVersichererName(patient.id, vTyp) : "";
     if (istPatientDurchgelesen(item.iCode)) return patFeld(item.iCode);
     return String(answers[item.iCode] ?? "");
   };
@@ -986,8 +989,12 @@ function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
 
   // Aus den Stammdaten übernommene (durchgelesene) Angaben werden hier nur
   // angezeigt, nicht bearbeitet — geändert wird an der Quelle (Patientendaten).
-  const feldReadOnly = (it: SdaItem) => readOnly || istPatientDurchgelesen(it.iCode);
-  const feldNote = (it: SdaItem) => (!readOnly && istPatientDurchgelesen(it.iCode)) ? "aus Stammdaten" : undefined;
+  const feldReadOnly = (it: SdaItem) => readOnly || istPatientDurchgelesen(it.iCode) || istVersicherungDurchgelesen(it.iCode);
+  const feldNote = (it: SdaItem) =>
+    readOnly ? undefined
+    : istVersicherungDurchgelesen(it.iCode) ? "aus Versicherungen"
+    : istPatientDurchgelesen(it.iCode) ? "aus Stammdaten"
+    : undefined;
   // Freitext zu einer „Andere"-Option (z. B. AA3, Sprache) — eigener Antwort-
   // schlüssel, zählt nicht in die Katalog-Vollständigkeit.
   const andereWert = (it: SdaItem) => String(answers[`${it.iCode}::andere`] ?? "");
@@ -1024,7 +1031,9 @@ function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
     const mat: Record<string, string | null> = { ...answers };
     for (const item of SDA_KATALOG) {
       const h = sdaHerkunft(item.iCode);
+      const vTyp = SDA_VERSICHERUNG_TYP[item.iCode];
       if (h === "fall") mat[item.iCode] = fall?.fallnummer ?? "";
+      else if (vTyp) mat[item.iCode] = patient ? aktiverVersichererName(patient.id, vTyp) : "";
       else if (istPatientDurchgelesen(item.iCode)) mat[item.iCode] = patFeld(item.iCode);
     }
     updateAssessmentAnswers(assessmentId, mat);

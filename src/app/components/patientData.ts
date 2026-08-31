@@ -57,11 +57,8 @@ export interface Patient {
   aufnahmeDatum: string;
   letzterBesuch: string;
   sprache: string;
-  /* ── Krankenkasse und Ärzte (Quelle: Onboarding-Reiter Personalien) ── */
-  /** SP-03: Nummer auf der Versichertenkarte */
-  kartennummer: string;
-  /** SP-03: BAG-Nr. der Kasse */
-  bagNr: string;
+  /* Versicherungen liegen als eigene Versicherungsverhältnisse vor
+     (lib/versicherung/store.ts), nicht mehr als Felder am Patienten. */
   /* ── Aus dem Abklärungsgespräch, bisher nicht übergeben ──────────────────
      28 Angaben wurden im Gespräch erhoben und kamen nie beim Patienten an.
      Sie stehen jetzt hier; gefüllt werden sie beim Abschluss eines
@@ -84,12 +81,6 @@ export interface Patient {
   spracheAndere: string;
   /** BB14 — Code aus lib/stammdaten/sda-ja-nein. */
   uebersetzerNotwendig: string;
-  /** BB7b — Kassen-Code der Zusatzversicherung. Nicht aus der Grundversicherung abgeleitet. */
-  zusatzversicherungKasse: string;
-  /** BB7c — Invaliden-, Unfall- oder Militärversicherung als Freitext. */
-  weitereVersicherung: string;
-  hausarztEmail: string;
-  spezialAerzte: string;
   /** BB9 — Code aus lib/stammdaten/sda-wohnsituation. */
   wohnsituation: string;
   /** BB10a — Code aus lib/stammdaten/sda-zusammenleben. */
@@ -100,7 +91,6 @@ export interface Patient {
   liftVorhanden: string;
   treppen: string;
   personenImHaushalt: string;
-  sozialamtKontakt: string;
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
@@ -139,7 +129,6 @@ export interface Patient {
   /** "" = kein Wert; im Onboarding wird nichts dazu erhoben. */
   medlinkSync: "synced" | "pending" | "error" | "";
   /** Krankenkasse des Patienten (für kassenspezifische Abrechnungsregeln) */
-  krankenkasse: string;
   /* ── Prozessstatus / Workflow ──────────── */
   prozessStatus: {
     naechsteAufgabe: string;
@@ -309,8 +298,6 @@ export const patientenSeed: Patient[] = [
     nachname: "Steiner",
     angehoeriger: "Vera Steiner (Ehefrau)",
     angehoerigerTelefon: "+41 44 312 55 01",
-    kartennummer: "8075600000000041",
-    bagNr: "0350",
     status: "aktiv",
     kanton: "ZH",
     schweregrad: "mittel",
@@ -330,7 +317,6 @@ export const patientenSeed: Patient[] = [
     letzteAktivitaet: "28.07.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
-    krankenkasse: "Groupe Mutuel",
     /* ── Prozessstatus / Workflow ──────────── */
     geschlecht: "",
     staatsangehoerigkeit: "",
@@ -342,10 +328,6 @@ export const patientenSeed: Patient[] = [
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
-    zusatzversicherungKasse: "",
-    weitereVersicherung: "",
-    hausarztEmail: "",
-    spezialAerzte: "",
     wohnsituation: "",
     formZusammenleben: "",
     neuZusammenlebend: "",
@@ -353,7 +335,6 @@ export const patientenSeed: Patient[] = [
     liftVorhanden: "",
     treppen: "",
     personenImHaushalt: "",
-    sozialamtKontakt: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -378,8 +359,6 @@ export const patientenSeed: Patient[] = [
     nachname: "Hübscher-Wiederkehr",
     angehoeriger: "Beatrice Hübscher-Wiederkehr (Tochter)",
     angehoerigerTelefon: "+41 44 320 18 44",
-    kartennummer: "8075600000000042",
-    bagNr: "0271",
     status: "aktiv",
     kanton: "ZH",
     schweregrad: "leicht",
@@ -399,7 +378,6 @@ export const patientenSeed: Patient[] = [
     letzteAktivitaet: "24.07.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "pending",
-    krankenkasse: "CSS",
     /* ── Prozessstatus / Workflow ──────────── */
     geschlecht: "",
     staatsangehoerigkeit: "",
@@ -411,10 +389,6 @@ export const patientenSeed: Patient[] = [
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
-    zusatzversicherungKasse: "",
-    weitereVersicherung: "",
-    hausarztEmail: "",
-    spezialAerzte: "",
     wohnsituation: "",
     formZusammenleben: "",
     neuZusammenlebend: "",
@@ -422,7 +396,6 @@ export const patientenSeed: Patient[] = [
     liftVorhanden: "",
     treppen: "",
     personenImHaushalt: "",
-    sozialamtKontakt: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -447,8 +420,6 @@ export const patientenSeed: Patient[] = [
     nachname: "Rexhepi",
     angehoeriger: "Arben Rexhepi (Sohn)",
     angehoerigerTelefon: "+41 44 555 22 10",
-    kartennummer: "8075600000000043",
-    bagNr: "0580",
     status: "aktiv",
     kanton: "ZH",
     schweregrad: "schwer",
@@ -468,7 +439,6 @@ export const patientenSeed: Patient[] = [
     letzteAktivitaet: "28.07.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
-    krankenkasse: "Helsana",
     /* ── Prozessstatus / Workflow ──────────── */
     geschlecht: "",
     staatsangehoerigkeit: "",
@@ -480,10 +450,6 @@ export const patientenSeed: Patient[] = [
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
-    zusatzversicherungKasse: "",
-    weitereVersicherung: "",
-    hausarztEmail: "",
-    spezialAerzte: "",
     wohnsituation: "",
     formZusammenleben: "",
     neuZusammenlebend: "",
@@ -491,7 +457,6 @@ export const patientenSeed: Patient[] = [
     liftVorhanden: "",
     treppen: "",
     personenImHaushalt: "",
-    sozialamtKontakt: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -516,8 +481,6 @@ export const patientenSeed: Patient[] = [
     nachname: "Kaya",
     angehoeriger: "Yusuf Kaya (Ehemann)",
     angehoerigerTelefon: "+41 44 310 77 33",
-    kartennummer: "8075600000000044",
-    bagNr: "0350",
     status: "gekuendigt",
     kanton: "AG",
     schweregrad: "mittel",
@@ -537,7 +500,6 @@ export const patientenSeed: Patient[] = [
     letzteAktivitaet: "14.07.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
-    krankenkasse: "Groupe Mutuel",
     /* ── Prozessstatus / Workflow ──────────── */
     geschlecht: "",
     staatsangehoerigkeit: "",
@@ -549,10 +511,6 @@ export const patientenSeed: Patient[] = [
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
-    zusatzversicherungKasse: "",
-    weitereVersicherung: "",
-    hausarztEmail: "",
-    spezialAerzte: "",
     wohnsituation: "",
     formZusammenleben: "",
     neuZusammenlebend: "",
@@ -560,7 +518,6 @@ export const patientenSeed: Patient[] = [
     liftVorhanden: "",
     treppen: "",
     personenImHaushalt: "",
-    sozialamtKontakt: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -581,8 +538,6 @@ export const patientenSeed: Patient[] = [
     nachname: "Huber",
     angehoeriger: "Erika Huber (Schwester)",
     angehoerigerTelefon: "+41 44 299 33 15",
-    kartennummer: "8075600000000045",
-    bagNr: "0700",
     status: "nicht_abrechenbar",
     kanton: "ZH",
     schweregrad: "schwer",
@@ -602,7 +557,6 @@ export const patientenSeed: Patient[] = [
     letzteAktivitaet: "27.07.2026",
     abrechnungsstoppGrund: "Fehlende Kostengutsprache",
     medlinkSync: "error",
-    krankenkasse: "Swica",
     /* ── Prozessstatus / Workflow ──────────── */
     geschlecht: "",
     staatsangehoerigkeit: "",
@@ -614,10 +568,6 @@ export const patientenSeed: Patient[] = [
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
-    zusatzversicherungKasse: "",
-    weitereVersicherung: "",
-    hausarztEmail: "",
-    spezialAerzte: "",
     wohnsituation: "",
     formZusammenleben: "",
     neuZusammenlebend: "",
@@ -625,7 +575,6 @@ export const patientenSeed: Patient[] = [
     liftVorhanden: "",
     treppen: "",
     personenImHaushalt: "",
-    sozialamtKontakt: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -650,8 +599,6 @@ export const patientenSeed: Patient[] = [
     nachname: "Da Silva",
     angehoeriger: "Marta Da Silva (Tochter)",
     angehoerigerTelefon: "+41 44 401 12 88",
-    kartennummer: "8075600000000046",
-    bagNr: "0610",
     status: "aktiv",
     kanton: "SG",
     schweregrad: "leicht",
@@ -671,7 +618,6 @@ export const patientenSeed: Patient[] = [
     letzteAktivitaet: "26.07.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "pending",
-    krankenkasse: "Sanitas",
     /* ── Prozessstatus / Workflow ──────────── */
     geschlecht: "",
     staatsangehoerigkeit: "",
@@ -683,10 +629,6 @@ export const patientenSeed: Patient[] = [
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
-    zusatzversicherungKasse: "",
-    weitereVersicherung: "",
-    hausarztEmail: "",
-    spezialAerzte: "",
     wohnsituation: "",
     formZusammenleben: "",
     neuZusammenlebend: "",
@@ -694,7 +636,6 @@ export const patientenSeed: Patient[] = [
     liftVorhanden: "",
     treppen: "",
     personenImHaushalt: "",
-    sozialamtKontakt: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -719,8 +660,6 @@ export const patientenSeed: Patient[] = [
     nachname: "Bösiger",
     angehoeriger: "Heidi Bösiger (Tochter)",
     angehoerigerTelefon: "+41 44 488 91 02",
-    kartennummer: "8075600000000047",
-    bagNr: "0780",
     status: "aktiv",
     kanton: "ZH",
     schweregrad: "mittel",
@@ -740,7 +679,6 @@ export const patientenSeed: Patient[] = [
     letzteAktivitaet: "30.07.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
-    krankenkasse: "Visana",
     /* ── Prozessstatus / Workflow ──────────── */
     geschlecht: "",
     staatsangehoerigkeit: "",
@@ -752,10 +690,6 @@ export const patientenSeed: Patient[] = [
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
-    zusatzversicherungKasse: "",
-    weitereVersicherung: "",
-    hausarztEmail: "",
-    spezialAerzte: "",
     wohnsituation: "",
     formZusammenleben: "",
     neuZusammenlebend: "",
@@ -763,7 +697,6 @@ export const patientenSeed: Patient[] = [
     liftVorhanden: "",
     treppen: "",
     personenImHaushalt: "",
-    sozialamtKontakt: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -788,8 +721,6 @@ export const patientenSeed: Patient[] = [
     nachname: "Ferrari",
     angehoeriger: "Lucia Ferrari (Ehefrau)",
     angehoerigerTelefon: "+41 44 677 45 20",
-    kartennummer: "8075600000000048",
-    bagNr: "0376",
     status: "nicht_abrechenbar",
     kanton: "BE",
     schweregrad: "kritisch",
@@ -809,7 +740,6 @@ export const patientenSeed: Patient[] = [
     letzteAktivitaet: "25.07.2026",
     abrechnungsstoppGrund: "Kritische Gesundheitslage",
     medlinkSync: "error",
-    krankenkasse: "KPT",
     /* ── Prozessstatus / Workflow ──────────── */
     geschlecht: "",
     staatsangehoerigkeit: "",
@@ -821,10 +751,6 @@ export const patientenSeed: Patient[] = [
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
-    zusatzversicherungKasse: "",
-    weitereVersicherung: "",
-    hausarztEmail: "",
-    spezialAerzte: "",
     wohnsituation: "",
     formZusammenleben: "",
     neuZusammenlebend: "",
@@ -832,7 +758,6 @@ export const patientenSeed: Patient[] = [
     liftVorhanden: "",
     treppen: "",
     personenImHaushalt: "",
-    sozialamtKontakt: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -857,8 +782,6 @@ export const patientenSeed: Patient[] = [
     nachname: "Zimmermann",
     angehoeriger: "Karl Zimmermann (Ehemann)",
     angehoerigerTelefon: "+41 44 555 88 43",
-    kartennummer: "8075600000000049",
-    bagNr: "0271",
     status: "aktiv",
     kanton: "ZH",
     schweregrad: "leicht",
@@ -878,7 +801,6 @@ export const patientenSeed: Patient[] = [
     letzteAktivitaet: "29.07.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
-    krankenkasse: "CSS",
     /* ── Prozessstatus / Workflow ──────────── */
     geschlecht: "",
     staatsangehoerigkeit: "",
@@ -890,10 +812,6 @@ export const patientenSeed: Patient[] = [
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
-    zusatzversicherungKasse: "",
-    weitereVersicherung: "",
-    hausarztEmail: "",
-    spezialAerzte: "",
     wohnsituation: "",
     formZusammenleben: "",
     neuZusammenlebend: "",
@@ -901,7 +819,6 @@ export const patientenSeed: Patient[] = [
     liftVorhanden: "",
     treppen: "",
     personenImHaushalt: "",
-    sozialamtKontakt: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",
@@ -922,8 +839,6 @@ export const patientenSeed: Patient[] = [
     nachname: "Keller",
     angehoeriger: "Margrit Keller (Ehefrau)",
     angehoerigerTelefon: "+41 44 210 63 77",
-    kartennummer: "8075600000000050",
-    bagNr: "0240",
     status: "aktiv",
     kanton: "LU",
     schweregrad: "mittel",
@@ -943,7 +858,6 @@ export const patientenSeed: Patient[] = [
     letzteAktivitaet: "28.07.2026",
     abrechnungsstoppGrund: "",
     medlinkSync: "synced",
-    krankenkasse: "Concordia",
     /* ── Prozessstatus / Workflow ──────────── */
     geschlecht: "",
     staatsangehoerigkeit: "",
@@ -955,10 +869,6 @@ export const patientenSeed: Patient[] = [
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
-    zusatzversicherungKasse: "",
-    weitereVersicherung: "",
-    hausarztEmail: "",
-    spezialAerzte: "",
     wohnsituation: "",
     formZusammenleben: "",
     neuZusammenlebend: "",
@@ -966,7 +876,6 @@ export const patientenSeed: Patient[] = [
     liftVorhanden: "",
     treppen: "",
     personenImHaushalt: "",
-    sozialamtKontakt: "",
     ivBezug: "",
     ivBezugProzent: "",
     hilflosenentschaedigung: "",

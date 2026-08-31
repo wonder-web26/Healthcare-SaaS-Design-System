@@ -144,7 +144,7 @@ import { kontaktName, type Kontakt } from "../../lib/kontakte/kontakte";
 import { KONTAKTTYP_OPTIONS, kontakttypLabel } from "../../lib/stammdaten/kontakttypen";
 import {
   istAktiv as beziehungAktiv, personName, rolleLabel, rolleSeite, artLabel,
-  DIAGRAMM_MAX, SPEZIALAERZTE_LUECKE,
+  DIAGRAMM_MAX,
   BEZIEHUNGSROLLE, BEZIEHUNGSART, VERTRETUNGSART, vertretungsartLabel,
   zugehoerigkeitLabel, type Beziehung, type PersonBezug,
 } from "../../lib/beziehungen/beziehungen";
@@ -174,6 +174,8 @@ import { toast } from "sonner";
 import { useRecording } from "../recording/RecordingContext";
 import { getPersonByPatientId } from "../../lib/interrai/store";
 import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
+import { VersicherungenAbschnitt } from "./versicherung/VersicherungenAbschnitt";
+import { BezugsteamAbschnitt } from "./beziehungen/BezugsteamAbschnitt";
 import { DateField } from "./form/DateField";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { ItemRow } from "./ui/ItemRow";
@@ -943,10 +945,10 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const [kanton, setKanton] = useState(patient.kanton);
   const [leistungsart, setLeistungsart] = useState(patient.leistungsart);
 
-  /* ── Editable fields: Versicherung & Arzt — Werte kommen aus dem Patienten ── */
-  const [kkName, setKkName] = useState(patient.krankenkasse);
-  const [kkNummer, setKkNummer] = useState(patient.kartennummer);
-  /* Der Hausarzt steht nicht mehr am Patienten, sondern als Beziehung mit
+  /* Versicherungen liegen als eigene Versicherungsverhältnisse vor und werden
+     über die geteilte Versicherungsliste erfasst (VersicherungenAbschnitt),
+     nicht mehr als Patientenfelder hier.
+     Der Hausarzt steht nicht mehr am Patienten, sondern als Beziehung mit
      Rolle „hausarzt" auf einen Kontakt. Hier wird er nur gelesen; erfasst
      und geändert wird er unter Beziehungen. */
   const alleBeziehungen = useBeziehungen();
@@ -965,8 +967,6 @@ function TabUeberblick({ patient }: { patient: Patient }) {
     // Snapshot current values for the section
     if (section === "adresse") {
       setSnapshot({ adresse, kanton, leistungsart });
-    } else if (section === "versicherung") {
-      setSnapshot({ kkName, kkNummer });
     }
     setEditingSection(section);
   };
@@ -977,9 +977,6 @@ function TabUeberblick({ patient }: { patient: Patient }) {
       setAdresse(snapshot.adresse ?? adresse);
       setKanton(snapshot.kanton ?? kanton);
       setLeistungsart(snapshot.leistungsart ?? leistungsart);
-    } else if (section === "versicherung") {
-      setKkName(snapshot.kkName ?? kkName);
-      setKkNummer(snapshot.kkNummer ?? kkNummer);
     }
     setEditingSection(null);
   };
@@ -994,11 +991,6 @@ function TabUeberblick({ patient }: { patient: Patient }) {
     if (editingSection === "adresse") {
       aktualisierePatient(patient.id, {
         adresse, kanton, leistungsart,
-      });
-    } else if (editingSection === "versicherung") {
-      aktualisierePatient(patient.id, {
-        krankenkasse: kkName,
-        kartennummer: kkNummer,
       });
     }
     setEditingSection(null);
@@ -1036,49 +1028,12 @@ function TabUeberblick({ patient }: { patient: Patient }) {
           </div>
         </PSectionCard>
 
-        {/* Versicherung & Arzt */}
-        <PSectionCard
-          title="Versicherung & Arzt"
-          icon={Shield}
-          editable
-          editing={editingSection === "versicherung"}
-          onEdit={() => startEdit("versicherung")}
-          onCancel={() => cancelEdit("versicherung")}
-          onSave={saveEdit}
-        >
-          {editingSection === "versicherung" ? (
-            <div className="space-y-4">
-              <div>
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2" style={{ fontWeight: 600 }}>Krankenkasse</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <PEditableField label="Name" value={kkName} editing onChange={setKkName} />
-                  <PEditableField label="Versicherungsnr." value={kkNummer} editing onChange={setKkNummer} mono />
-                </div>
-              </div>
-              <div className="border-t border-border-light pt-4">
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2" style={{ fontWeight: 600 }}>Hausarzt</div>
-                <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", maxWidth: "62ch", lineHeight: 1.5 }}>
-                  Der Hausarzt wird unter Beziehungen erfasst — er ist ein Kontakt und kann
-                  mehrere Patienten betreuen.
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 min-h-[32px]">
-                <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                  <Shield className="w-4 h-4 text-muted-foreground" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>Krankenkasse</div>
-                  <div className="text-[13px] text-foreground" style={{ fontWeight: 400 }}>
-                    {kkName}
-                    <span className="text-muted-foreground ml-2 font-mono text-[11px]">{kkNummer}</span>
-                  </div>
-                </div>
-              </div>
+        {/* Versicherungen & Arzt — dieselbe Versicherungsliste wie im Reiter Personalien */}
+        <PSectionCard title="Versicherungen & Arzt" icon={Shield}>
+          <div className="space-y-3">
+            <VersicherungenAbschnitt patientId={patient.id} />
 
-              <div className="border-t border-border-light" />
+            <div className="border-t border-border-light pt-3" />
 
               <div className="flex items-center gap-3 min-h-[32px]">
                 <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
@@ -1110,7 +1065,6 @@ function TabUeberblick({ patient }: { patient: Patient }) {
                 )}
               </div>
             </div>
-          )}
         </PSectionCard>
       </div>
 
@@ -2175,10 +2129,10 @@ function MandatAktiv({ mandat, patient, ueberschneidet, navigate }: {
 
         {istVersichert && (
           <>
-            <MandatAuswahl label="Versicherer *" wert={entwurf.versicherer} optionen={KRANKENKASSEN_OPTIONS}
-              anzeige={getKrankenkasseLabel(entwurf.versicherer)} bearbeitet={bearbeitet}
+            <MandatAuswahl label="Versicherer *" wert={entwurf.versichererId} optionen={KRANKENKASSEN_OPTIONS}
+              anzeige={getKrankenkasseLabel(entwurf.versichererId)} bearbeitet={bearbeitet}
               fehler={fehlend.includes("versicherer") ? "Bei einer Versichertenleistung erforderlich." : undefined}
-              onChange={v => setzeFeld("versicherer", v)} />
+              onChange={v => setzeFeld("versichererId", v)} />
             <MandatText label="Policennummer *" wert={entwurf.policennummer} bearbeitet={bearbeitet}
               fehler={fehlend.includes("policennummer") ? "Bei einer Versichertenleistung erforderlich." : undefined}
               onChange={v => setzeFeld("policennummer", v)} />
@@ -2558,7 +2512,7 @@ function KgsZeile({ k, version, mandat }: { k: Kostengutsprache; version: number
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" style={{ gap: 12 }}>
-        <MandatFeld label="Versicherer" wert={getKrankenkasseLabel(mandat.versicherer)} />
+        <MandatFeld label="Versicherer" wert={getKrankenkasseLabel(mandat.versichererId)} />
         <VoFeld label="Eingereicht am" wert={entwurf.eingereichtAm} bearbeitet={bearbeitet} onChange={v => setzeFeld("eingereichtAm", v)} />
         <VoFeld label="Entscheid am" wert={entwurf.entscheidAm} bearbeitet={bearbeitet} onChange={v => setzeFeld("entscheidAm", v)} />
         <VoFeld label="Gültig ab" wert={entwurf.gueltigAb} bearbeitet={bearbeitet} onChange={v => setzeFeld("gueltigAb", v)} />
@@ -3066,19 +3020,13 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
       { k: "treppen", label: "Treppen" },
       { k: "personenImHaushalt", label: "Personen im Haushalt" },
     ],
-    versicherung: [
-      { k: "krankenkasse", label: "Krankenkasse" },
-      { k: "kartennummer", label: "Kartennummer" },
-      { k: "bagNr", label: "BAG-Nummer" },
-      { k: "zusatzversicherungKasse", label: "Zusatzversicherung" },
-      { k: "weitereVersicherung", label: "Weitere Versicherung" },
-    ],
-    arzt: [
-      { k: "hausarztEmail", label: "E-Mail" },
-      { k: "spezialAerzte", label: "Spezialärzte" },
-    ],
+    // Versicherungen kommen aus der geteilten Versicherungsliste, nicht aus
+    // Patientenfeldern — die Karte rendert VersicherungenAbschnitt (siehe karte()).
+    versicherung: [],
+    // Hausarzt und Spezialärzte sind Beziehungen (Bezugs- und Pflegeteam),
+    // keine Patientenfelder mehr — die Arztkarte trägt nur noch den Verweis.
+    arzt: [],
     sozial: [
-      { k: "sozialamtKontakt", label: "Kontakt zum Sozialamt" },
       { k: "ivBezug", label: "IV-Bezug" },
       { k: "ivBezugProzent", label: "IV-Grad" },
       { k: "hilflosenentschaedigung", label: "Hilflosenentschädigung" },
@@ -3149,7 +3097,17 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
   }, [bearbeiten, geaendert]);
 
   /* Die Karte trägt keinen Knopf mehr — der Modus gehört der Ansicht. */
-  const karte = (id: string, titel: string, icon: React.ElementType) => (
+  const karte = (id: string, titel: string, icon: React.ElementType) => {
+    // Versicherungen: geteilte Liste statt Patientenfelder — dieselbe Komponente
+    // wie im Reiter Personalien, mit eigenem Hinzufügen/Bearbeiten.
+    if (id === "versicherung") {
+      return (
+        <PSectionCard title={titel} icon={icon}>
+          <VersicherungenAbschnitt patientId={patient.id} />
+        </PSectionCard>
+      );
+    }
+    return (
     <PSectionCard title={titel} icon={icon} editing={bearbeiten}>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "var(--space-4)" }}>
         {KARTEN[id].map(f => (
@@ -3164,7 +3122,8 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
         </div>
       )}
     </PSectionCard>
-  );
+    );
+  };
 
   return (
     <div className="space-y-4" data-stammkarte>
@@ -3388,52 +3347,13 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
 
   return (
     <div className="space-y-4">
-      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "10px 18px" }}>
-        <div className="flex items-center flex-wrap" style={{ gap: 12 }}>
-          <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Beziehungen</h3>
-          {formular === null && (
-            <button type="button" onClick={() => setFormular("")} className="ui-fokusring cursor-pointer inline-flex items-center"
-              style={{ gap: 5, marginLeft: "auto", background: "none", border: "none", padding: "4px 8px", fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--brand-primary)" }}>
-              <Plus style={{ width: 13, height: 13 }} /> Beziehung erfassen
-            </button>
-          )}
-        </div>
-      </div>
-
-      {meldung && (
-        <div style={{ padding: "10px 12px", borderRadius: 10, background: "var(--status-info-bg)", fontSize: "var(--text-meta)", color: "var(--status-info)" }}>{meldung}</div>
-      )}
-
-      {aktive.length === 0 ? (
-        <PSectionCard title="Betreuungsnetz" icon={Users}>
-          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
-            Für diesen Patienten ist keine Beziehung erfasst. Das Betreuungsnetz hält fest, wer
-            pflegt, wer Bezugsperson ist und wer im Notfall erreichbar sein muss.
-          </p>
-          {formular === null && (
-            <div style={{ marginTop: 12 }}>
-              <AppButton variant="sekundaer" icon={Plus} onClick={() => setFormular("")}>Beziehung erfassen</AppButton>
-            </div>
-          )}
-        </PSectionCard>
-      ) : (
+      {aktive.length > 0 && (
         <PSectionCard title="Betreuungsnetz" icon={Users}>
           <Netzdiagramm patient={patient} privat={privat} rechts={rechts}
             nameVon={nameVon} kontaktVon={kontaktVon}
             zugehoerigkeitVon={b => kontaktZu(b)?.zugehoerigkeit ?? ""}
             abgerechnet={abgerechnet} stundenJeWoche={stundenJeWoche} />
         </PSectionCard>
-      )}
-
-      {patient.spezialAerzte.trim() !== "" && (
-        <div className="flex items-start" style={{ gap: 8, padding: "10px 12px", borderRadius: 10, background: "var(--bg-secondary)" }}>
-          <Info style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 2 }} />
-          <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", maxWidth: "74ch", lineHeight: 1.55 }}>
-            {SPEZIALAERZTE_LUECKE} Erfasst ist: „{patient.spezialAerzte.trim()}". Ein Freitext mit
-            mehreren Namen lässt sich nicht verlässlich zerlegen; je Person erfasst, folgte die
-            Beziehung daraus wie beim Hausarzt.
-          </span>
-        </div>
       )}
 
       {ohneBeziehung.length > 0 && (
@@ -3446,51 +3366,11 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
         </div>
       )}
 
-      <PSectionCard title={`Aktive Beziehungen (${aktive.length})`} icon={Users}>
-        {formular !== null && (
-          <BeziehungFormular
-            key={formular || "neu"}
-            patientId={patient.id}
-            eintrag={formular ? eigene.find(b => b.id === formular) ?? null : null}
-            personen={personen}
-            kontakte={kontakte}
-            onFertig={() => setFormular(null)}
-          />
-        )}
-        {aktive.length === 0 ? (
-          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0 }}>Keine aktive Beziehung.</p>
-        ) : (
-          <div className="flex flex-col" style={{ gap: 2 }}>
-            {aktive.map(b => (
-              <BeziehungsZeile key={b.id} b={b} nameVon={nameVon} kontaktVon={kontaktVon}
-                zugehoerigkeit={kontaktZu(b)?.zugehoerigkeit ?? ""}
-                abgerechnet={b.person.art === "angehoeriger" && abgerechnet.has(b.person.kennung)}
-                onBearbeiten={() => setFormular(b.id)}
-                onBeenden={() => {
-                  beziehungBeenden(b.id, alsAnzeigedatum(MANDAT_STICHTAG));
-                  setMeldung(`Beziehung beendet zum ${alsAnzeigedatum(MANDAT_STICHTAG)}. Sie bleibt unter „Beendet" sichtbar.`);
-                }} />
-            ))}
-          </div>
-        )}
+      {/* Die Liste, der Dialog und die Lücken-Hinweise stammen aus der geteilten
+          Komponente — dieselbe wie im Onboarding-Reiter Personalien. */}
+      <PSectionCard title="Bezugs- und Pflegeteam" icon={Users}>
+        <BezugsteamAbschnitt patientId={patient.id} />
       </PSectionCard>
-
-      {beendete.length > 0 && (
-        <PSectionCard title={`Beendet (${beendete.length})`} icon={Clock}>
-          <button type="button" onClick={() => setBeendetOffen(o => !o)} className="ui-fokusring cursor-pointer"
-            style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
-            {beendetOffen ? "Einklappen" : `${beendete.length} beendete ${beendete.length === 1 ? "Beziehung" : "Beziehungen"} anzeigen`}
-          </button>
-          {beendetOffen && (
-            <div className="flex flex-col" style={{ gap: 2, marginTop: 8 }}>
-              {beendete.map(b => (
-                <BeziehungsZeile key={b.id} b={b} nameVon={nameVon} kontaktVon={kontaktVon}
-                  zugehoerigkeit={kontaktZu(b)?.zugehoerigkeit ?? ""} abgerechnet={false} />
-              ))}
-            </div>
-          )}
-        </PSectionCard>
-      )}
     </div>
   );
 }
