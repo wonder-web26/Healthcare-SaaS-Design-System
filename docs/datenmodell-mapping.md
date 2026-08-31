@@ -147,3 +147,34 @@ Die Kontaktfelder im Onboarding sind durch die vorhandene Struktur `Beziehung`
 - **Notfallkontakt** und **Auskunftsberechtigung** sind Merkmale der Beziehung,
   keine Rollen. **`SPEZIALAERZTE_LUECKE`** entfällt.
 - **GLN/Praxisadresse bei Ärzten:** weiterhin bewusst nicht geführt (`kontakte.ts`).
+
+### Kategorien (Gruppierung + Dialog)
+
+Gruppierung und Dialog laufen über die **Kategorie** einer Rolle, abgeleitet an
+**einer** Stelle: `kategorieFuerRolle(rolle)` in `beziehungen.ts`. `rolleSeite`
+bleibt als Feld erhalten (Detailanzeige: Verwandtschaft vs. Zugehörigkeit), wird
+aber **nicht mehr zur Gruppierung** verwendet — auch nicht im Betreuungsnetz von
+Patient360 (links `bezugsperson`, rechts der Rest).
+
+| Kategorie | Rollen | Im Dialog anlegbar |
+|---|---|---|
+| Benutzer | `bezugsperson`, `stellvertretung` | **nein** (kein Personalbestand) |
+| Medizinisches Fachpersonal | `hausarzt`, `spezialarzt`, `therapie`, `apotheke` | ja (Funktion zuerst) |
+| Bezugsperson | `angehoerige`, `beistand`, `sozialdienst`, `weitere` | ja (Rolle zuerst) |
+
+- **Neue Rollen** `therapie` und `apotheke` (Kategorie Fachpersonal).
+- **Kategorie Benutzer im Dialog ausgeblendet:** Spitex-Mitarbeitende lassen sich
+  erst zuweisen, wenn ein Personalbestand existiert. Bestehende Benutzer-Beziehungen
+  aus dem Seed werden weiterhin **angezeigt** und lassen sich bearbeiten, nur nicht
+  neu anlegen. Schritt 1 des Dialogs sagt das ausdrücklich.
+- **Rolle wird gefragt, nicht abgeleitet.** In der Kategorie Bezugsperson erscheint
+  die Rolle als sichtbare Auswahl (vier Werte). Der Personentyp-Umschalter
+  (Privatperson/Organisation) erscheint nur beim **Beistand** — der einzigen Rolle,
+  die beides sein kann; bei den drei anderen steht der Personentyp fest
+  (Angehörige/weitere = privat, Sozialdienst = Organisation).
+- **`pflegende_angehoerige`** gruppiert unter Bezugsperson, ist im Dialog aber nicht
+  wählbar (entsteht aus dem Angehörigen-Reiter).
+- **Offen für Lauf B:** die sechs neuen Kontaktfelder (Titel/Fachgebiet/GLN/
+  Organisation/Mobil/Adresse) samt GLN-Prüfung und die Beistandschaft als drei
+  Merkmale (administrativ/gesundheit/vorsorgeauftrag). Bis dahin nutzt der Dialog die
+  bestehenden Kontaktfelder und `VERTRETUNGSART` unverändert.

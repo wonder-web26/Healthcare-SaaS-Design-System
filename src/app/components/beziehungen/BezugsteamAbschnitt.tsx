@@ -5,16 +5,24 @@
  *
  * Stützt sich vollständig auf die vorhandene Struktur `Beziehung` (Rolle,
  * Verwandtschaftsart, Zeitraum, Vertretungsart, Merkmale) und `Kontakt` (die
- * dritte Person). Die Person wird EINMAL geführt: die Auswahl bietet alle drei
- * Bestände (Angehörige, Mitarbeitende, Kontakte). Notfallkontakt und
+ * dritte Person). Die Person wird EINMAL geführt: die Auswahl bietet die zur
+ * Kategorie passenden Bestände (Angehörige, Kontakte). Notfallkontakt und
  * Auskunftsberechtigung sind Merkmale, keine Rollen.
+ *
+ * Gruppierung und Dialog laufen über die KATEGORIE (kategorieFuerRolle), nicht
+ * über `rolleSeite`. Der Dialog fragt zuerst die Kategorie, dann die Rolle —
+ * die Rolle wird nie aus einem indirekten Signal abgeleitet.
+ *
+ * Die Kategorie „Benutzer" (Spitex-Mitarbeitende) ist im Dialog NICHT anlegbar,
+ * solange kein Personalbestand vorliegt. Bestehende Benutzer-Beziehungen aus dem
+ * Seed werden weiterhin angezeigt und lassen sich bearbeiten.
  *
  * Die Rolle `pflegende_angehoerige` wird hier NICHT angeboten — sie entsteht aus
  * dem Angehörigen-Reiter und ist in der Liste nur einsehbar (Verwandtschaft und
  * Merkmale bleiben editierbar).
  */
 import { useState } from "react";
-import { Plus, Check, AlertTriangle, MoreVertical, ArrowRight } from "lucide-react";
+import { Plus, Check, AlertTriangle, MoreVertical, ArrowRight, Stethoscope, Users } from "lucide-react";
 import { InlineSelect } from "../ui/InlineSelect";
 import { KontaktWahl } from "../ui/KontaktWahl";
 import { DateField } from "../form/DateField";
@@ -26,17 +34,12 @@ import { useAngehoerige } from "../../../lib/angehoerige/store";
 import { useKontakte } from "../../../lib/kontakte/store";
 import { kontaktName } from "../../../lib/kontakte/kontakte";
 import {
-  BEZIEHUNGSROLLE, BEZIEHUNGSART, VERTRETUNGSART,
+  BEZIEHUNGSROLLE, BEZIEHUNGSART, VERTRETUNGSART, KATEGORIEN, ROLLEN_JE_KATEGORIE,
   rolleSeite, rolleLabel, artLabel, vertretungsartLabel, zugehoerigkeitLabel, personName,
+  kategorieFuerRolle, kategorieLabel,
   istAktiv as beziehungAktiv,
-  type Beziehung, type PersonBezug, type BeziehungsSeite,
+  type Beziehung, type PersonBezug, type PersonKategorie, type BeziehungsrolleCode,
 } from "../../../lib/beziehungen/beziehungen";
-
-const SEITEN: { seite: BeziehungsSeite; label: string }[] = [
-  { seite: "privat", label: "Privat" },
-  { seite: "intern", label: "Intern" },
-  { seite: "extern", label: "Extern" },
-];
 
 /** Reihenfolge der Rollen für die Sortierung innerhalb einer Gruppe. */
 const ROLLE_RANG: Record<string, number> = Object.fromEntries(BEZIEHUNGSROLLE.map((r, i) => [r.code, i]));
@@ -60,20 +63,21 @@ export function BezugsteamAbschnitt({ patientId, angehoerigenReiterPfad }: {
 
   const eigene = alle.filter(b => b.patientId === patientId);
 
-  const gruppen = SEITEN.map(({ seite, label }) => {
-    const inGruppe = eigene.filter(b => rolleSeite(b.rolle) === seite);
+  // Gruppierung über die Kategorie (kategorieFuerRolle), nicht über rolleSeite.
+  const gruppen = KATEGORIEN.map(({ code, label }) => {
+    const inGruppe = eigene.filter(b => kategorieFuerRolle(b.rolle) === code);
     const aktive = inGruppe.filter(beziehungAktiv).sort((a, b) =>
       (Number(b.notfallkontakt) - Number(a.notfallkontakt)) || (ROLLE_RANG[a.rolle] - ROLLE_RANG[b.rolle]));
     const beendete = inGruppe.filter(b => !beziehungAktiv(b));
-    return { seite, label, zeilen: [...aktive, ...beendete] };
+    return { code, label, zeilen: [...aktive, ...beendete] };
   }).filter(g => g.zeilen.length > 0);
 
   // §8 Hinweise
   const aktiveEigene = eigene.filter(beziehungAktiv);
-  const hinweise: { text: string; aktionLabel: string; rolle: string }[] = [];
-  if (!aktiveEigene.some(b => b.rolle === "hausarzt")) hinweise.push({ text: `Kein ${rolleLabel("hausarzt")} erfasst. Für ärztliche Anfragen und Verordnungen wird er benötigt.`, aktionLabel: `${rolleLabel("hausarzt")} hinzufügen`, rolle: "hausarzt" });
-  if (!aktiveEigene.some(b => b.notfallkontakt)) hinweise.push({ text: "Kein Notfallkontakt gesetzt.", aktionLabel: "Person hinzufügen", rolle: "" });
-  if (!aktiveEigene.some(b => b.rolle === "sozialdienst")) hinweise.push({ text: `Kein ${rolleLabel("sozialdienst")} erfasst. Falls einer involviert ist, gehört er hier hinein.`, aktionLabel: `${rolleLabel("sozialdienst")} hinzufügen`, rolle: "sozialdienst" });
+  const hinweise: { text: string; aktionLabel: string }[] = [];
+  if (!aktiveEigene.some(b => b.rolle === "hausarzt")) hinweise.push({ text: `Kein ${rolleLabel("hausarzt")} erfasst. Für ärztliche Anfragen und Verordnungen wird er benötigt.`, aktionLabel: `${rolleLabel("hausarzt")} hinzufügen` });
+  if (!aktiveEigene.some(b => b.notfallkontakt)) hinweise.push({ text: "Kein Notfallkontakt gesetzt.", aktionLabel: "Person hinzufügen" });
+  if (!aktiveEigene.some(b => b.rolle === "sozialdienst")) hinweise.push({ text: `Kein ${rolleLabel("sozialdienst")} erfasst. Falls einer involviert ist, gehört er hier hinein.`, aktionLabel: `${rolleLabel("sozialdienst")} hinzufügen` });
 
   return (
     <div>
@@ -88,8 +92,8 @@ export function BezugsteamAbschnitt({ patientId, angehoerigenReiterPfad }: {
         <div style={{ fontSize: 13, color: "var(--text-tertiary)", padding: "8px 0 12px" }}>Noch keine Person erfasst.</div>
       )}
 
-      {gruppen.map(({ seite, label, zeilen }) => (
-        <div key={seite} style={{ marginBottom: 16 }}>
+      {gruppen.map(({ code, label, zeilen }) => (
+        <div key={code} style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 8 }}>{label}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {zeilen.map(b => (
@@ -182,11 +186,29 @@ function Chip({ children, ton }: { children: React.ReactNode; ton?: "warnung" | 
   return <span style={{ padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500, whiteSpace: "nowrap", ...stil }}>{children}</span>;
 }
 
-// ── Dialog: Person, Rolle, dann rollenabhängige Angaben ──────────────────────
+// ── Dialog: erst Kategorie, dann Rolle, dann rollenabhängige Angaben ──────────
 
 const KONTAKT_WAHL = "__kontakt__";
-// pflegende_angehoerige wird nicht angeboten (§5).
-const ROLLEN_WAEHLBAR = BEZIEHUNGSROLLE.filter(r => r.code !== "pflegende_angehoerige");
+type PersonModus = "privat" | "kontakt" | "mitarbeitende" | "";
+
+/** Person-Beschaffung je Kategorie/Rolle. Nie aus einem indirekten Signal. */
+function personModusVon(kategorie: PersonKategorie | "", rolle: string, beistandTyp: "privat" | "organisation", gepflegt: boolean): PersonModus {
+  if (gepflegt) return "privat";
+  if (kategorie === "benutzer") return "mitarbeitende"; // nur im Bearbeiten-Fall (Seed)
+  if (kategorie === "fachpersonal") return "kontakt";
+  if (kategorie === "bezugsperson") {
+    if (!rolle) return "";
+    if (rolle === "sozialdienst") return "kontakt";
+    if (rolle === "beistand") return beistandTyp === "organisation" ? "kontakt" : "privat";
+    return "privat"; // angehoerige, weitere
+  }
+  return "";
+}
+
+const KATEGORIE_KARTEN: { code: PersonKategorie; titel: string; text: string; icon: typeof Stethoscope }[] = [
+  { code: "fachpersonal", titel: "Medizinisches Fachpersonal", text: "Hausarzt, Spezialarzt, Therapie, Apotheke.", icon: Stethoscope },
+  { code: "bezugsperson", titel: "Bezugsperson", text: "Angehörige, Beistand, Sozialdienst, weitere.", icon: Users },
+];
 
 function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onClose }: {
   patientId: string; eintragId: string;
@@ -197,13 +219,16 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
 }) {
   const eintrag = eintragId ? eigene.find(b => b.id === eintragId) ?? null : null;
   const gepflegt = eintrag?.rolle === "pflegende_angehoerige";
+  const editKategorie = eintrag ? kategorieFuerRolle(eintrag.rolle) : "";
 
-  const [wahl, setWahl] = useState(
-    eintrag ? (eintrag.person.art === "angehoeriger" ? `a:${eintrag.person.kennung}`
-      : eintrag.person.art === "mitarbeitende" ? `m:${eintrag.person.name}` : KONTAKT_WAHL) : "");
-  const [kontaktWahl, setKontaktWahl] = useState(eintrag?.person.art === "kontakt" ? eintrag.person.kennung : "");
+  const [kategorie, setKategorie] = useState<PersonKategorie | "">(editKategorie);
   const [rolle, setRolle] = useState<string>(eintrag?.rolle ?? "");
-  const [rollenOffen, setRollenOffen] = useState(false);
+  const [beistandTyp, setBeistandTyp] = useState<"privat" | "organisation">(
+    eintrag?.rolle === "beistand" && eintrag.person.art === "kontakt" ? "organisation" : "privat");
+  const [wahl, setWahl] = useState(
+    eintrag?.person.art === "angehoeriger" ? `a:${eintrag.person.kennung}`
+      : eintrag?.person.art === "kontakt" ? KONTAKT_WAHL : "");
+  const [kontaktWahl, setKontaktWahl] = useState(eintrag?.person.art === "kontakt" ? eintrag.person.kennung : "");
   const [art, setArt] = useState<string>(eintrag?.art ?? "");
   const [vertretungsart, setVertretungsart] = useState<string>(eintrag?.vertretungsart ?? "");
   const [beginn, setBeginn] = useState(eintrag?.beginn ?? "");
@@ -212,16 +237,17 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
   const [auskunft, setAuskunft] = useState(eintrag?.auskunftsberechtigt ?? false);
   const [fehler, setFehler] = useState("");
 
-  const seite = rolle ? rolleSeite(rolle) : null;
-  // Personenauswahl über die drei Bestände (§6). Herkunft + Kennung sichtbar.
-  const personen = angehoerige.map(a => ({ value: `a:${a.id}`, label: `${a.vorname} ${a.nachname} — Angehörige ${a.id}` }));
-  const mitarbeitende = [...new Set(eigene.filter(b => b.person.art === "mitarbeitende").map(b => (b.person as { name: string }).name))]
-    .sort().map(n => ({ value: `m:${n}`, label: `${n} — Mitarbeitende` }));
+  const modus = personModusVon(kategorie, rolle, beistandTyp, !!gepflegt);
+  const rollenWaehlbar: BeziehungsrolleCode[] = kategorie ? ROLLEN_JE_KATEGORIE[kategorie] : [];
 
-  // Ausgewählte Person hat schon ein Telefon? Dann kein Telefonfeld (§7).
-  const gewaehltePerson: PersonBezug | null = wahl === KONTAKT_WAHL ? (kontaktWahl ? { art: "kontakt", kennung: kontaktWahl } : null)
-    : wahl.startsWith("a:") ? { art: "angehoeriger", kennung: wahl.slice(2) }
-    : wahl.startsWith("m:") ? { art: "mitarbeitende", name: wahl.slice(2) } : null;
+  // Ausgewählte Person aus dem passenden Modus.
+  const gewaehltePerson: PersonBezug | null = gepflegt ? eintrag!.person
+    : modus === "mitarbeitende" ? (eintrag?.person ?? null)
+    : modus === "kontakt" ? (kontaktWahl ? { art: "kontakt", kennung: kontaktWahl } : null)
+    : modus === "privat" ? (wahl.startsWith("a:") ? { art: "angehoeriger", kennung: wahl.slice(2) }
+      : wahl === KONTAKT_WAHL && kontaktWahl ? { art: "kontakt", kennung: kontaktWahl } : null)
+    : null;
+
   const personTelefon = gewaehltePerson?.art === "angehoeriger" ? (angehoerige.find(a => a.id === gewaehltePerson.kennung)?.telefon ?? "")
     : gewaehltePerson?.art === "kontakt" ? (kontakte.find(k => k.id === gewaehltePerson.kennung)?.telefon ?? "") : "";
 
@@ -229,13 +255,23 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
   const kontaktName_ = gewaehltePerson?.art === "kontakt" ? (kontakte.find(k => k.id === gewaehltePerson.kennung)?.name ?? "") : "";
   const gleichnamigerAngehoeriger = kontaktName_ ? angehoerige.find(a => a.nachname.toLowerCase() === kontaktName_.trim().toLowerCase()) : undefined;
 
-  const rollenSichtbar = rollenOffen ? ROLLEN_WAEHLBAR : ROLLEN_WAEHLBAR.slice(0, 5);
+  // Personenliste für den privaten Modus: Angehörige + „Kontakt anlegen".
+  const personen = angehoerige.map(a => ({ value: `a:${a.id}`, label: `${a.vorname} ${a.nachname} — Angehörige ${a.id}` }));
+
+  const kategorieWaehlen = (c: PersonKategorie) => {
+    setKategorie(c); setRolle(""); setWahl(""); setKontaktWahl(""); setArt(""); setVertretungsart(""); setFehler("");
+  };
+  const rolleWaehlen = (r: string) => {
+    setRolle(r);
+    // Personenbezug bei Kategoriewechsel-innerhalb zurücksetzen, wenn der Modus wechselt.
+    setFehler("");
+  };
 
   const sichern = () => {
     if (!gepflegt) {
-      if (!wahl) { setFehler("Bitte eine Person wählen."); return; }
-      if (wahl === KONTAKT_WAHL && !kontaktWahl) { setFehler("Bitte einen Kontakt wählen oder anlegen."); return; }
-      if (!rolle) { setFehler("Bitte eine Rolle wählen."); return; }
+      if (!kategorie) { setFehler("Bitte eine Kategorie wählen."); return; }
+      if (!rolle) { setFehler(kategorie === "fachpersonal" ? "Bitte eine Funktion wählen." : "Bitte eine Rolle wählen."); return; }
+      if (!gewaehltePerson) { setFehler(modus === "kontakt" ? "Bitte einen Kontakt wählen oder anlegen." : "Bitte eine Person wählen."); return; }
     }
     const person: PersonBezug = gepflegt ? eintrag!.person : gewaehltePerson!;
     const zielRolle = gepflegt ? eintrag!.rolle : (rolle as Beziehung["rolle"]);
@@ -246,7 +282,8 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
 
     beziehungSichern({
       id: eintragId, patientId, person, rolle: zielRolle,
-      art: rolleSeite(zielRolle) === "privat" ? (art as Beziehung["art"]) : "",
+      // Verwandtschaft nur im privaten Modus (Angehörige/private Bezugsperson).
+      art: modus === "privat" ? (art as Beziehung["art"]) : "",
       vertretungsart: zielRolle === "beistand" ? (vertretungsart as Beziehung["vertretungsart"]) : "",
       beginn: beginn.trim(), ende: eintrag?.ende ?? "",
       telefon: personTelefon ? (eintrag?.telefon ?? "") : telefon.trim(),
@@ -256,6 +293,8 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
     onClose();
   };
 
+  const funktionLabel = kategorie === "fachpersonal" ? "Funktion" : "Rolle";
+
   return (
     <div role="dialog" aria-modal="true" aria-label={eintrag ? "Beziehung bearbeiten" : "Person hinzufügen"} onClick={onClose}
       style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(19,19,20,0.28)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -263,87 +302,160 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
         <div style={{ padding: "16px 20px 8px", fontSize: 16, fontWeight: 500, color: "var(--text-primary)" }}>{eintrag ? "Beziehung bearbeiten" : "Person hinzufügen"}</div>
         <div style={{ padding: "8px 20px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-          {/* 1. Person */}
-          <Feld label="Person">
-            {gepflegt ? (
-              <div style={{ fontSize: 14, color: "var(--text-primary)" }}>{personName(eintrag!, k => { const a = angehoerige.find(x => x.id === k); return a ? `${a.vorname} ${a.nachname}` : k; })} <span style={{ fontSize: 12, color: "var(--status-info)", marginLeft: 8 }}>im Angehörigen-Reiter gepflegt</span></div>
-            ) : (
-              <>
-                <InlineSelect value={wahl} onChange={setWahl} platzhalter="Person suchen …"
-                  options={[...personen, ...mitarbeitende, { value: KONTAKT_WAHL, label: "Kontakt (dritte Person) — suchen oder anlegen" }]} />
-                {wahl === KONTAKT_WAHL && (
-                  <div style={{ marginTop: 8 }}>
-                    <KontaktWahl wert={kontaktWahl} onWahl={setKontaktWahl} label="Kontakt" zugehoerigkeitLabel={rolle ? zugehoerigkeitLabel(rolle) : "Zugehörigkeit"} />
-                    {gleichnamigerAngehoeriger && (
-                      <div style={{ marginTop: 6, fontSize: 12, color: "var(--status-warning-text)" }}>
-                        „{gleichnamigerAngehoeriger.vorname} {gleichnamigerAngehoeriger.nachname}" ist bereits als Angehörige erfasst ({gleichnamigerAngehoeriger.id}). Für sie sollte kein Kontakt angelegt werden.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </Feld>
-
-          {/* 2. Rolle — sichtbare Auswahl, ohne pflegende_angehoerige */}
-          {!gepflegt && (
-            <Feld label="Rolle">
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {rollenSichtbar.map(r => {
-                  const sel = rolle === r.code;
+          {/* Schritt 1: Kategorie — nur beim Neuanlegen. */}
+          {!eintrag && !kategorie && (
+            <Feld label="Kategorie">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {KATEGORIE_KARTEN.map(k => {
+                  const Icon = k.icon;
                   return (
-                    <button key={r.code} type="button" onClick={() => setRolle(r.code)} aria-pressed={sel} className="ui-fokusring"
-                      style={{ padding: "6px 12px", borderRadius: 12, fontFamily: "inherit", fontSize: 13, cursor: "pointer",
-                        background: sel ? "var(--brand-primary-light)" : "var(--bg-elevated)", color: sel ? "var(--brand-primary)" : "var(--text-primary)",
-                        border: "0.5px solid " + (sel ? "var(--brand-primary)" : "var(--border-default)"), boxShadow: sel ? "inset 0 0 0 1px var(--brand-primary)" : "none" }}>
-                      {r.label}
+                    <button key={k.code} type="button" onClick={() => kategorieWaehlen(k.code)} className="ui-fokusring"
+                      style={{ display: "flex", alignItems: "flex-start", gap: 12, textAlign: "left", padding: "12px 14px", borderRadius: 12, cursor: "pointer",
+                        background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", fontFamily: "inherit" }}>
+                      <Icon style={{ width: 18, height: 18, color: "var(--brand-primary)", flexShrink: 0, marginTop: 1 }} />
+                      <span>
+                        <span style={{ display: "block", fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>{k.titel}</span>
+                        <span style={{ display: "block", fontSize: 12, color: "var(--text-tertiary)", marginTop: 2 }}>{k.text}</span>
+                      </span>
                     </button>
                   );
                 })}
-                {!rollenOffen && ROLLEN_WAEHLBAR.length > 5 && (
-                  <button type="button" onClick={() => setRollenOffen(true)} className="ui-fokusring" style={linkStyle}>weitere Rollen …</button>
-                )}
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>
+                Spitex-Mitarbeitende (Bezugsperson, Stellvertretung) werden zugewiesen, sobald der Personalbestand vorliegt.
+                Die pflegende Angehörige entsteht aus dem Angehörigen-Reiter.
               </div>
             </Feld>
           )}
 
-          {/* 3. rollenabhängig */}
-          {seite === "privat" && (
-            <Feld label="Verwandtschaft">
-              <InlineSelect value={art} onChange={setArt} platzhalter="nicht erfasst" options={BEZIEHUNGSART.map(a => ({ value: a.code, label: a.label }))} />
-            </Feld>
-          )}
-          {rolle === "beistand" && (
-            <Feld label="Art der Vertretung">
-              <InlineSelect value={vertretungsart} onChange={setVertretungsart} platzhalter="Art nicht bekannt" options={VERTRETUNGSART.map(v => ({ value: v.code, label: v.label }))} />
-            </Feld>
-          )}
-          {!gepflegt && (
-            <Feld label="Beginn (optional)">
-              <div style={{ maxWidth: 200 }}><DateField label="" value={beginn} wertFormat="display" bereich="past" onChange={v => setBeginn(typeof v === "string" ? v : "")} /></div>
-            </Feld>
-          )}
+          {/* Ab hier: Kategorie steht fest (gewählt oder aus dem Eintrag). */}
+          {(kategorie || eintrag) && (
+            <>
+              {/* Kategorie-Kontext + ändern (nur beim Neuanlegen wechselbar) */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Kategorie:</span>
+                <Chip>{kategorieLabel((kategorie || editKategorie) as PersonKategorie)}</Chip>
+                {!eintrag && (
+                  <button type="button" onClick={() => { setKategorie(""); setRolle(""); }} className="ui-fokusring" style={linkStyle}>ändern</button>
+                )}
+              </div>
 
-          {/* Merkmale */}
-          <Feld label="Merkmale">
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <Umschalter an={notfall} onToggle={() => setNotfall(!notfall)} text="Notfallkontakt" />
-              <Umschalter an={auskunft} onToggle={() => setAuskunft(!auskunft)} text="Auskunftsberechtigt" />
-            </div>
-          </Feld>
+              {/* Person (gepflegte/Benutzer-Beziehung: gesperrt) */}
+              {(gepflegt || modus === "mitarbeitende") ? (
+                <Feld label="Person">
+                  <div style={{ fontSize: 14, color: "var(--text-primary)" }}>
+                    {personName(eintrag!, k => { const a = angehoerige.find(x => x.id === k); return a ? `${a.vorname} ${a.nachname}` : k; }, k => { const t = kontakte.find(x => x.id === k); return t ? kontaktName(t) : k; })}
+                    {gepflegt && <span style={{ fontSize: 12, color: "var(--status-info)", marginLeft: 8 }}>im Angehörigen-Reiter gepflegt</span>}
+                    {modus === "mitarbeitende" && <span style={{ fontSize: 12, color: "var(--text-tertiary)", marginLeft: 8 }}>Spitex-Mitarbeitende</span>}
+                  </div>
+                </Feld>
+              ) : null}
 
-          {/* Telefon nur, wenn die Person keines trägt */}
-          {!gepflegt && !personTelefon && (
-            <Feld label="Telefon (optional)">
-              <input type="text" value={telefon} onChange={e => setTelefon(e.target.value)} className="ui-fokusring" style={inputStil} placeholder="+41 44 000 00 00" />
-            </Feld>
+              {/* Rolle / Funktion — sichtbare Auswahl */}
+              {!gepflegt && (
+                <Feld label={funktionLabel}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {rollenWaehlbar.map(code => {
+                      const sel = rolle === code;
+                      return (
+                        <button key={code} type="button" onClick={() => rolleWaehlen(code)} aria-pressed={sel} className="ui-fokusring"
+                          style={{ padding: "6px 12px", borderRadius: 12, fontFamily: "inherit", fontSize: 13, cursor: "pointer",
+                            background: sel ? "var(--brand-primary-light)" : "var(--bg-elevated)", color: sel ? "var(--brand-primary)" : "var(--text-primary)",
+                            border: "0.5px solid " + (sel ? "var(--brand-primary)" : "var(--border-default)"), boxShadow: sel ? "inset 0 0 0 1px var(--brand-primary)" : "none" }}>
+                          {rolleLabel(code)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Feld>
+              )}
+
+              {/* Beistand: Personentyp — die einzige Rolle, die beides sein kann. */}
+              {!gepflegt && rolle === "beistand" && (
+                <Feld label="Personentyp">
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {(["privat", "organisation"] as const).map(t => {
+                      const sel = beistandTyp === t;
+                      return (
+                        <button key={t} type="button" onClick={() => { setBeistandTyp(t); setWahl(""); setKontaktWahl(""); }} aria-pressed={sel} className="ui-fokusring"
+                          style={{ padding: "6px 12px", borderRadius: 12, fontFamily: "inherit", fontSize: 13, cursor: "pointer",
+                            background: sel ? "var(--brand-primary-light)" : "var(--bg-elevated)", color: sel ? "var(--brand-primary)" : "var(--text-primary)",
+                            border: "0.5px solid " + (sel ? "var(--brand-primary)" : "var(--border-default)") }}>
+                          {t === "privat" ? "Privatperson" : "Organisation"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Feld>
+              )}
+
+              {/* Personenauswahl je Modus (nicht bei gepflegt/Benutzer) */}
+              {!gepflegt && modus === "privat" && rolle && (
+                <Feld label="Person">
+                  <InlineSelect value={wahl} onChange={setWahl} platzhalter="Angehörige suchen …"
+                    options={[...personen, { value: KONTAKT_WAHL, label: "Kontakt (dritte Person) — suchen oder anlegen" }]} />
+                  {wahl === KONTAKT_WAHL && (
+                    <div style={{ marginTop: 8 }}>
+                      <KontaktWahl wert={kontaktWahl} onWahl={setKontaktWahl} label="Kontakt" zugehoerigkeitLabel={rolle ? zugehoerigkeitLabel(rolle) : "Zugehörigkeit"} />
+                      {gleichnamigerAngehoeriger && (
+                        <div style={{ marginTop: 6, fontSize: 12, color: "var(--status-warning-text)" }}>
+                          „{gleichnamigerAngehoeriger.vorname} {gleichnamigerAngehoeriger.nachname}" ist bereits als Angehörige erfasst ({gleichnamigerAngehoeriger.id}). Für sie sollte kein Kontakt angelegt werden.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Feld>
+              )}
+              {!gepflegt && modus === "kontakt" && rolle && (
+                <Feld label={kategorie === "fachpersonal" ? "Fachperson" : "Organisation"}>
+                  <KontaktWahl wert={kontaktWahl} onWahl={setKontaktWahl} label="Kontakt" zugehoerigkeitLabel={zugehoerigkeitLabel(rolle)} />
+                  {gleichnamigerAngehoeriger && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: "var(--status-warning-text)" }}>
+                      „{gleichnamigerAngehoeriger.vorname} {gleichnamigerAngehoeriger.nachname}" ist bereits als Angehörige erfasst ({gleichnamigerAngehoeriger.id}).
+                    </div>
+                  )}
+                </Feld>
+              )}
+
+              {/* Verwandtschaft nur im privaten Modus */}
+              {modus === "privat" && (
+                <Feld label="Verwandtschaft">
+                  <InlineSelect value={art} onChange={setArt} platzhalter="nicht erfasst" options={BEZIEHUNGSART.map(a => ({ value: a.code, label: a.label }))} />
+                </Feld>
+              )}
+              {/* Art der Vertretung nur beim Beistand */}
+              {rolle === "beistand" && (
+                <Feld label="Art der Vertretung">
+                  <InlineSelect value={vertretungsart} onChange={setVertretungsart} platzhalter="Art nicht bekannt" options={VERTRETUNGSART.map(v => ({ value: v.code, label: v.label }))} />
+                </Feld>
+              )}
+
+              <Feld label="Beginn (optional)">
+                <div style={{ maxWidth: 200 }}><DateField label="" value={beginn} wertFormat="display" bereich="past" onChange={v => setBeginn(typeof v === "string" ? v : "")} /></div>
+              </Feld>
+
+              {/* Merkmale */}
+              <Feld label="Merkmale">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <Umschalter an={notfall} onToggle={() => setNotfall(!notfall)} text="Notfallkontakt" />
+                  <Umschalter an={auskunft} onToggle={() => setAuskunft(!auskunft)} text="Auskunftsberechtigt" />
+                </div>
+              </Feld>
+
+              {/* Telefon nur, wenn die Person keines trägt */}
+              {!personTelefon && (
+                <Feld label="Telefon (optional)">
+                  <input type="text" value={telefon} onChange={e => setTelefon(e.target.value)} className="ui-fokusring" style={inputStil} placeholder="+41 44 000 00 00" />
+                </Feld>
+              )}
+            </>
           )}
 
           {fehler && <div role="alert" style={{ fontSize: 12, color: "var(--status-warning-text)" }}>{fehler}</div>}
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, padding: "12px 20px", borderTop: "0.5px solid var(--border-default)" }}>
           <button type="button" onClick={onClose} className="ui-fokusring" style={{ ...linkStyle, color: "var(--text-secondary)" }}>Abbrechen</button>
-          <AppButton variant="primaer" onClick={sichern}>Sichern</AppButton>
+          {(kategorie || eintrag) && <AppButton variant="primaer" onClick={sichern}>Sichern</AppButton>}
         </div>
       </div>
     </div>

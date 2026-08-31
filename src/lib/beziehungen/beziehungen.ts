@@ -29,6 +29,8 @@ export const BEZIEHUNGSROLLE = [
   { code: "stellvertretung", label: "Stellvertretung", seite: "intern" },
   { code: "hausarzt", label: "Hausarzt", seite: "extern" },
   { code: "spezialarzt", label: "Spezialarzt", seite: "extern" },
+  { code: "therapie", label: "Therapie", seite: "extern" },
+  { code: "apotheke", label: "Apotheke", seite: "extern" },
   { code: "beistand", label: "Beistand", seite: "extern" },
   { code: "sozialdienst", label: "Sozialdienst", seite: "extern" },
   { code: "weitere", label: "Weitere", seite: "privat" },
@@ -44,6 +46,51 @@ export function rolleLabel(code: string): string {
 export function rolleSeite(code: string): BeziehungsSeite {
   return (BEZIEHUNGSROLLE.find(r => r.code === code)?.seite ?? "privat") as BeziehungsSeite;
 }
+
+/**
+ * Kategorie einer Rolle — die Gruppierung im Bezugsteam läuft über diese
+ * Ableitung, NICHT über `rolleSeite`. Einzige Stelle der Zuordnung.
+ *
+ * `pflegende_angehoerige` erscheint in der Liste unter `bezugsperson`, ist aber
+ * im Dialog nicht wählbar (sie entsteht aus dem Angehörigen-Reiter).
+ */
+export type PersonKategorie = "benutzer" | "fachpersonal" | "bezugsperson";
+
+const KATEGORIE_JE_ROLLE: Record<BeziehungsrolleCode, PersonKategorie> = {
+  bezugsperson: "benutzer",
+  stellvertretung: "benutzer",
+  hausarzt: "fachpersonal",
+  spezialarzt: "fachpersonal",
+  therapie: "fachpersonal",
+  apotheke: "fachpersonal",
+  angehoerige: "bezugsperson",
+  beistand: "bezugsperson",
+  sozialdienst: "bezugsperson",
+  weitere: "bezugsperson",
+  pflegende_angehoerige: "bezugsperson",
+};
+
+export function kategorieFuerRolle(rolle: BeziehungsrolleCode): PersonKategorie {
+  return KATEGORIE_JE_ROLLE[rolle] ?? "bezugsperson";
+}
+
+/** Anzeige und Reihenfolge der Kategorien. */
+export const KATEGORIEN: { code: PersonKategorie; label: string }[] = [
+  { code: "benutzer", label: "Benutzer" },
+  { code: "fachpersonal", label: "Medizinisches Fachpersonal" },
+  { code: "bezugsperson", label: "Bezugsperson" },
+];
+
+export function kategorieLabel(code: PersonKategorie): string {
+  return KATEGORIEN.find(k => k.code === code)?.label ?? code;
+}
+
+/** Wählbare Rollen je Kategorie im Dialog (ohne pflegende_angehoerige). */
+export const ROLLEN_JE_KATEGORIE: Record<PersonKategorie, BeziehungsrolleCode[]> = {
+  benutzer: ["bezugsperson", "stellvertretung"],
+  fachpersonal: ["hausarzt", "spezialarzt", "therapie", "apotheke"],
+  bezugsperson: ["angehoerige", "beistand", "sozialdienst", "weitere"],
+};
 
 /** Verwandtschaft — nur bei privaten Rollen. */
 export const BEZIEHUNGSART = [

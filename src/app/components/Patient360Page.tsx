@@ -143,7 +143,7 @@ import { useKontakte } from "../../lib/kontakte/store";
 import { kontaktName, type Kontakt } from "../../lib/kontakte/kontakte";
 import { KONTAKTTYP_OPTIONS, kontakttypLabel } from "../../lib/stammdaten/kontakttypen";
 import {
-  istAktiv as beziehungAktiv, personName, rolleLabel, rolleSeite, artLabel,
+  istAktiv as beziehungAktiv, personName, rolleLabel, rolleSeite, kategorieFuerRolle, artLabel,
   DIAGRAMM_MAX,
   BEZIEHUNGSROLLE, BEZIEHUNGSART, VERTRETUNGSART, vertretungsartLabel,
   zugehoerigkeitLabel, type Beziehung, type PersonBezug,
@@ -3342,8 +3342,11 @@ function AnsichtBeziehungenNeu({ patient }: { patient: Patient }) {
   const ohneBeziehung = [...abgerechnet].filter(k =>
     !aktive.some(b => b.person.art === "angehoeriger" && b.person.kennung === k));
 
-  const privat = aktive.filter(b => rolleSeite(b.rolle) === "privat");
-  const rechts = aktive.filter(b => rolleSeite(b.rolle) !== "privat");
+  /* Zwei Seiten des Netzes über die Kategorie (nicht rolleSeite): links der
+     persönliche Kreis (Bezugsperson — Angehörige, Beistand, Sozialdienst,
+     weitere), rechts das medizinische Fachpersonal und die Spitex-Rollen. */
+  const privat = aktive.filter(b => kategorieFuerRolle(b.rolle) === "bezugsperson");
+  const rechts = aktive.filter(b => kategorieFuerRolle(b.rolle) !== "bezugsperson");
 
   return (
     <div className="space-y-4">
@@ -3628,7 +3631,7 @@ function Netzdiagramm({ patient, privat, rechts, nameVon, kontaktVon, zugehoerig
     return { gezeigt: fest, rest: liste.length - fest.length };
   };
   const l = kuerzen(privat, b => b.rolle === "pflegende_angehoerige");
-  const r = kuerzen(rechts, b => rolleSeite(b.rolle) === "intern");
+  const r = kuerzen(rechts, b => kategorieFuerRolle(b.rolle) === "benutzer");
 
   const zeilen = Math.max(l.gezeigt.length + (l.rest > 0 ? 1 : 0), r.gezeigt.length + (r.rest > 0 ? 1 : 0), 1);
   /* Die Höhe folgt der Knotenzahl. Der Rand oben und unten trägt die
