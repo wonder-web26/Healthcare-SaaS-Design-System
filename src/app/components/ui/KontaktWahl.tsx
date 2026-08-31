@@ -195,7 +195,9 @@ export function KontaktWahl({
           <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12 }}>
             {(feldsatz === "fachpersonal" || feldsatz === "privat") && (
               <>
-                <div className="grid grid-cols-2" style={{ gap: 12 }}>
+                {/* Anrede/Titel als eigene, volle Zeile — damit Vorname und
+                    Nachname darunter eine gemeinsame Zeile bilden. */}
+                <div className="grid grid-cols-2" style={{ gap: 12, gridColumn: "1 / -1" }}>
                   <div>
                     <FeldLabel>Anrede</FeldLabel>
                     <InlineSelect value={anrede} onChange={setAnrede} platzhalter="—" options={KONTAKT_ANREDE.map(a => ({ value: a.code, label: a.label }))} />
