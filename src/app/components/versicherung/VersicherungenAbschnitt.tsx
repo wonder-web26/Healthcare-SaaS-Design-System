@@ -61,36 +61,6 @@ export function VersicherungenAbschnitt({ patientId }: { patientId: string }) {
   const mandatFuer = (v: Versicherungsverhaeltnis) =>
     v.typ === "kvg" ? mandate.find(m => m.versichererId === v.versichererId) : undefined;
 
-  // §6 Hinweise
-  const hinweise: { text: string; aktionLabel: string; aktion: () => void }[] = [];
-  if (!aktiveVersicherung(patientId, "kvg")) {
-    hinweise.push({
-      text: "Keine aktive Grundversicherung erfasst. Ohne sie kann nicht über die OKP abgerechnet werden.",
-      aktionLabel: "Grundversicherung hinzufügen", aktion: () => setDialog(leererEntwurf("kvg")),
-    });
-  }
-  for (const v of aktive) {
-    const versicherer = getVersicherer(v.versichererId);
-    if (!versicherer) continue;
-    const fehlend: string[] = [];
-    if (versicherer.glnVersicherung === null) fehlend.push("GLN Versicherung");
-    if (versicherer.glnEmpfaenger === null) fehlend.push("GLN Empfänger");
-    if (fehlend.length > 0) {
-      hinweise.push({
-        text: `Für ${versicherer.label} fehlt ${fehlend.join(" und ")}. Für die Rechnungsstellung über MediData wird sie benötigt.`,
-        aktionLabel: "Versicherung bearbeiten", aktion: () => oeffneBearbeiten(v),
-      });
-    }
-  }
-  for (const m of mandate) {
-    if (m.versichererId && !aktive.some(v => v.typ === "kvg" && v.versichererId === m.versichererId)) {
-      hinweise.push({
-        text: `Das Mandat ${m.id} verweist auf eine Versicherung, die hier nicht erfasst ist.`,
-        aktionLabel: "Grundversicherung hinzufügen", aktion: () => setDialog(leererEntwurf("kvg")),
-      });
-    }
-  }
-
   function oeffneBearbeiten(v: Versicherungsverhaeltnis) {
     setMenuId(null);
     setDialog({
@@ -192,19 +162,6 @@ export function VersicherungenAbschnitt({ patientId }: { patientId: string }) {
           );
         })}
       </div>
-
-      {/* §6 Hinweisstreifen */}
-      {hinweise.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-          {hinweise.map((h, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", borderRadius: 12, background: "var(--status-warning-bg)", border: "0.5px solid var(--border-default)" }}>
-              <AlertTriangle style={{ width: 15, height: 15, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
-              <span style={{ flex: 1, fontSize: 13, color: "var(--text-secondary)" }}>{h.text}</span>
-              <button type="button" onClick={h.aktion} className="ui-fokusring" style={{ ...linkStyle, flexShrink: 0, color: "var(--status-warning-text)" }}>{h.aktionLabel}</button>
-            </div>
-          ))}
-        </div>
-      )}
 
       {dialog && (
         <VersicherungDialog
