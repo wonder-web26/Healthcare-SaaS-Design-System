@@ -7,7 +7,7 @@
  * fünf Abschnitte.
  */
 import { useState } from "react";
-import { Plus, MoreVertical, Lock, Check, AlertTriangle, X, Search, Pencil, Ban, Trash2 } from "lucide-react";
+import { Plus, MoreVertical, Lock, Check, AlertTriangle, X, Search, Pencil, Ban, Trash2, StickyNote } from "lucide-react";
 import { GEGENWART_ISO } from "../../../lib/gegenwart";
 import { isoZuAnzeige } from "../../../lib/datum";
 import { KRANKENKASSEN, getVersicherer } from "../../../lib/stammdaten/krankenkassen";
@@ -17,7 +17,8 @@ import {
   addVersicherung, updateVersicherung, beendeVersicherung, loescheVersicherung,
   TYP_LABEL, TYP_CHIP, TYP_NUMMER_LABEL, TYP_PFLICHTFELD, TYP_TRAEGERART, VERSICHERUNGS_TYPEN,
   UNFALLDECKUNG_LABEL, UNFALLDECKUNG_WERTE,
-  type VersicherungsTyp, type Versicherungsverhaeltnis, type Unfalldeckung,
+  ABRECHNUNGSART_LABEL, ABRECHNUNGSART_ZUSATZ, ABRECHNUNGSART_WERTE,
+  type VersicherungsTyp, type Versicherungsverhaeltnis, type Unfalldeckung, type Abrechnungsart,
 } from "../../../lib/versicherung/store";
 
 /** Hinweissatz unter der Typ-Auswahl (gedämpft). */
@@ -38,10 +39,11 @@ type Entwurf = {
   unfalldeckung: Unfalldeckung;
   datum: string;            // Unfalldatum (uvg) bzw. Verfügungsdatum (ivg)
   bemerkung: string;
+  abrechnungsart: Abrechnungsart | null;
 };
 
 function leererEntwurf(typ: VersicherungsTyp = "kvg"): Entwurf {
-  return { typ, versichererId: "", gueltigAb: GEGENWART_ISO, gueltigBis: "", nummer: "", unfalldeckung: "unbekannt", datum: "", bemerkung: "" };
+  return { typ, versichererId: "", gueltigAb: GEGENWART_ISO, gueltigBis: "", nummer: "", unfalldeckung: "unbekannt", datum: "", bemerkung: "", abrechnungsart: null };
 }
 
 function nummerAus(v: Versicherungsverhaeltnis): string {
@@ -97,6 +99,7 @@ export function VersicherungenAbschnitt({ patientId }: { patientId: string }) {
       nummer: nummerAus(v), unfalldeckung: v.unfalldeckung,
       datum: (v.typ === "uvg" ? v.unfalldatum : v.typ === "ivg" ? v.verfuegungsdatum : "") ?? "",
       bemerkung: v.bemerkung ?? "",
+      abrechnungsart: v.abrechnungsart,
     });
   }
 
@@ -137,6 +140,9 @@ export function VersicherungenAbschnitt({ patientId }: { patientId: string }) {
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ flexShrink: 0, width: 44, textAlign: "center", padding: "3px 0", borderRadius: 999, fontSize: 12, fontWeight: 500, background: "var(--bg-secondary)", color: "var(--text-primary)" }}>{TYP_CHIP[v.typ]}</span>
                 <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>{versicherer?.label ?? v.versichererId}</span>
+                {v.abrechnungsart && (
+                  <span style={{ flexShrink: 0, padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 500, background: "var(--bg-secondary)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{ABRECHNUNGSART_LABEL[v.abrechnungsart]}</span>
+                )}
                 {!aktiv && (
                   <span className="inline-flex items-center" style={{ gap: 4, padding: "2px 10px", borderRadius: 999, fontSize: 12, color: "var(--text-secondary)", background: "var(--bg-secondary)" }}>
                     <Lock style={{ width: 11, height: 11 }} /> abgelaufen
@@ -169,6 +175,13 @@ export function VersicherungenAbschnitt({ patientId }: { patientId: string }) {
                   </span>
                 ))}
               </div>
+              {/* Bemerkung — eigene, eingerückte Zeile mit Notizsymbol, nur wenn gesetzt, einzeilig gekürzt. */}
+              {v.bemerkung && (
+                <div style={{ marginLeft: 54, marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-secondary)", minWidth: 0 }}>
+                  <StickyNote style={{ width: 12, height: 12, color: "var(--text-tertiary)", flexShrink: 0 }} />
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.bemerkung}</span>
+                </div>
+              )}
               {/* §5 Mandatsbezug */}
               {mandat && (
                 <div style={{ marginLeft: 54, marginTop: 6, fontSize: 12, color: "var(--status-info)" }}>
@@ -248,7 +261,8 @@ function VersicherungDialog({ patientId, entwurf, onClose }: { patientId: string
       unfalldeckung: istKvg ? e.unfalldeckung : "unbekannt" as const,
       unfalldatum: e.typ === "uvg" ? (e.datum || null) : null,
       verfuegungsdatum: e.typ === "ivg" ? (e.datum || null) : null,
-      bemerkung: e.bemerkung || null,
+      bemerkung: e.bemerkung.trim() || null,
+      abrechnungsart: e.abrechnungsart,
     };
     (basis as Record<string, unknown>)[feld] = e.nummer.trim();
     if (bearbeiten && entwurf.id) {
@@ -343,7 +357,7 @@ function VersicherungDialog({ patientId, entwurf, onClose }: { patientId: string
           </Feld>
 
           {/* UVG: Unfalldatum · IVG: Verfügungsdatum (Pflicht) */}
-          {(e.typ === "uvg" || e.typ === "ivg") && (
+          {datumPflicht && (
             <Feld label={`${e.typ === "uvg" ? "Unfalldatum" : "Verfügungsdatum"} *`}>
               <input type="date" value={e.datum} onChange={(ev) => set({ datum: ev.target.value })} className="ui-fokusring" style={{ ...inputStil, maxWidth: 180 }} />
             </Feld>
@@ -367,6 +381,32 @@ function VersicherungDialog({ patientId, entwurf, onClose }: { patientId: string
               </div>
             </Feld>
           )}
+
+          {/* Abrechnungsart — Vorgabe für neue Mandate, kein Standardwert. Alle Typen. */}
+          <Feld label="Abrechnungsart">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {ABRECHNUNGSART_WERTE.map((w) => {
+                const sel = e.abrechnungsart === w;
+                return (
+                  <button key={w} type="button" onClick={() => set({ abrechnungsart: sel ? null : w })} aria-pressed={sel} className="ui-fokusring"
+                    style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, padding: "8px 14px", borderRadius: 12, fontFamily: "inherit", cursor: "pointer",
+                      background: sel ? "var(--brand-primary-light)" : "var(--bg-elevated)", color: sel ? "var(--brand-primary)" : "var(--text-primary)",
+                      border: "0.5px solid " + (sel ? "var(--brand-primary)" : "var(--border-default)"), boxShadow: sel ? "inset 0 0 0 1px var(--brand-primary)" : "none" }}>
+                    <span style={{ fontSize: 13, fontWeight: 500 }}>{ABRECHNUNGSART_LABEL[w]}</span>
+                    <span style={{ fontSize: 12, color: sel ? "var(--brand-primary)" : "var(--text-tertiary)" }}>{ABRECHNUNGSART_ZUSATZ[w]}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 6 }}>Vorgabe für neue Mandate. Ein einzelnes Mandat kann davon abweichen.</div>
+          </Feld>
+
+          {/* Bemerkung — letztes Feld, alle Typen, optional. */}
+          <Feld label="Bemerkung">
+            <textarea value={e.bemerkung} onChange={(ev) => set({ bemerkung: ev.target.value })} rows={2}
+              placeholder="Kostengutsprache, Ansprechperson, Besonderheiten"
+              className="ui-fokusring" style={{ ...inputStil, resize: "vertical", minHeight: 60 }} />
+          </Feld>
 
           {bisherAktiv && (
             <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", borderRadius: 12, background: "var(--status-warning-bg)" }}>

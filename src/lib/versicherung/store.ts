@@ -22,6 +22,10 @@ export type VersicherungsTyp = "kvg" | "vvg" | "uvg" | "ivg" | "mvg";
  *  („unbekannt" statt geratenem Ja/Nein). Nur bei KVG relevant. */
 export type Unfalldeckung = "eingeschlossen" | "ausgeschlossen" | "unbekannt";
 
+/** Abrechnungsart — wohin die Rechnung geht. Kein Standardwert: eine Vereinbarung,
+ *  keine Annahme (auch wenn Tiers payant in der Praxis überwiegt). */
+export type Abrechnungsart = "tiers_payant" | "tiers_garant";
+
 export type Versicherungsverhaeltnis = {
   id: string;
   patientId: string;
@@ -37,6 +41,8 @@ export type Versicherungsverhaeltnis = {
   unfalldatum: string | null;        // nur uvg (Pflicht dort), ISO
   verfuegungsdatum: string | null;   // nur ivg (Pflicht dort), ISO
   bemerkung: string | null;
+  /** Vorgabe für neue Mandate; die verbindliche Entscheidung liegt beim Mandat. */
+  abrechnungsart: Abrechnungsart | null;
 };
 
 /** Typabhängige Pflicht-Nummer je Typ (das Nummernfeld) — Einzelquelle. */
@@ -65,6 +71,17 @@ export const UNFALLDECKUNG_LABEL: Record<Unfalldeckung, string> = {
 };
 
 export const UNFALLDECKUNG_WERTE: Unfalldeckung[] = ["eingeschlossen", "ausgeschlossen", "unbekannt"];
+
+/** Anzeige der Abrechnungsart (Einzelquelle) — Fachbegriff plus erklärender Zusatz. */
+export const ABRECHNUNGSART_LABEL: Record<Abrechnungsart, string> = {
+  tiers_payant: "Tiers payant",
+  tiers_garant: "Tiers garant",
+};
+export const ABRECHNUNGSART_ZUSATZ: Record<Abrechnungsart, string> = {
+  tiers_payant: "Rechnung an die Kasse",
+  tiers_garant: "Rechnung an die Klientin",
+};
+export const ABRECHNUNGSART_WERTE: Abrechnungsart[] = ["tiers_payant", "tiers_garant"];
 
 /** Bezeichnung des Typs in der Oberfläche. */
 export const TYP_LABEL: Record<VersicherungsTyp, string> = {
@@ -230,5 +247,6 @@ function seed(): Versicherungsverhaeltnis[] {
     unfalldatum: null,
     verfuegungsdatum: null,
     bemerkung: null,
+    abrechnungsart: null,
   }));
 }

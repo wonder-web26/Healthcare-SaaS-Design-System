@@ -116,9 +116,35 @@ Pflichtfelder je Typ (`TYP_PFLICHTFELDER`): kvg = Kartennummer + Unfalldeckung;
 vvg = Policennummer; uvg = Schadennummer + Unfalldatum; ivg = Verfügungsnummer +
 Verfügungsdatum; mvg = Verfügungsnummer.
 
-**Bewusst nicht Teil dieses Laufs:** Abrechnungsart (Tiers payant/garant → Mandat),
-abweichende Rechnungsadresse, Ergänzungsleistungen/Hilflosenentschädigung,
-internationale Versicherung als sechster Typ.
+**Bewusst nicht Teil jenes Laufs:** abweichende Rechnungsadresse,
+Ergänzungsleistungen/Hilflosenentschädigung, internationale Versicherung als
+sechster Typ.
+
+## Abrechnungsart und Bemerkung (Versicherung)
+
+Abgleich mit dem kantonalen Rechnungsformular V5.1 (Basel-Landschaft) und der
+Solothurner Restkostenübersicht 2026:
+
+1. **`abrechnungsart`** (`tiers_payant` | `tiers_garant` | `null`) am
+   `Versicherungsverhaeltnis`. Sie entscheidet den Rechnungsweg: Tiers payant →
+   direkt an die Kasse, Tiers garant → an die Klientin, die selbst einreicht.
+   **Kein Standardwert** (Vorgabe `null`) — eine Vereinbarung, keine Annahme, auch
+   wenn Tiers payant überwiegt. Im Dialog eine sichtbare Auswahl mit erklärendem
+   Zusatz, in der Liste ein Chip neben dem Versicherer, nur wenn gesetzt.
+   **Vorgabe-Charakter:** Die Angabe an der Versicherung ist die Vorgabe für neue
+   Mandate; die verbindliche Entscheidung liegt beim Mandat, und **bei Abweichung
+   gilt das Mandat**. Die Abrechnungsart am Mandat ist hier nicht gebaut (eigener
+   Lauf, berührt das Mandatsmodell).
+2. **`bemerkung`** (bestand schon im Modell) jetzt auch im Dialog (letztes Feld,
+   alle Typen) und in der Liste (eingerückte Zeile mit Notizsymbol, gekürzt).
+   Ort für befristete Kostengutsprache, Ansprechperson bei der Kasse u. Ä.
+
+**MVG-Verfügungsdatum — offen, nicht entschieden.** Der Auftrag war, bei fehlender
+Begründung `mvg` analog zu `ivg` um ein Pflicht-Verfügungsdatum zu ergänzen. Eine
+Begründung besteht jedoch (oben, Nachbesserung Punkt 4): „MVG trägt kein Datum —
+nur die Verfügungsnummer wird für die Abrechnung gebraucht." Da ein Grund
+dokumentiert ist, wurde `mvg` **nicht** geändert; die Entscheidung liegt bei der
+Fachseite (Person B).
 
 ## Bezugs- und Pflegeteam (elf Onboarding-Felder → Beziehungen)
 

@@ -21,7 +21,7 @@ const mk = (over: Partial<Versicherungsverhaeltnis>): Versicherungsverhaeltnis =
   gueltigAb: "2025-01-01", gueltigBis: null,
   kartennummer: "1", policennummer: null, schadennummer: null,
   verfuegungsnummer: null, unfalldeckung: "unbekannt", unfalldatum: null,
-  verfuegungsdatum: null, bemerkung: null,
+  verfuegungsdatum: null, bemerkung: null, abrechnungsart: null,
   ...over,
 });
 
@@ -30,7 +30,17 @@ assert.deepEqual(TYP_PFLICHTFELDER.kvg, ["kartennummer", "unfalldeckung"]);
 assert.deepEqual(TYP_PFLICHTFELDER.vvg, ["policennummer"]);
 assert.deepEqual(TYP_PFLICHTFELDER.uvg, ["schadennummer", "unfalldatum"]);
 assert.deepEqual(TYP_PFLICHTFELDER.ivg, ["verfuegungsnummer", "verfuegungsdatum"]);
+// MVG bleibt bei nur der Verfügungsnummer (dokumentierter Grund im Mappingdoc,
+// offen zur Entscheidung — siehe Bericht).
 assert.deepEqual(TYP_PFLICHTFELDER.mvg, ["verfuegungsnummer"]);
+
+// Abrechnungsart ist optional (kein Pflichtfeld) und in keinem Typ vorgeschrieben.
+for (const felder of Object.values(TYP_PFLICHTFELDER)) {
+  assert.ok(!felder.includes("abrechnungsart"), "abrechnungsart ist nie Pflichtfeld");
+}
+// Vorgabewert null, frei setzbar.
+assert.equal(mk({}).abrechnungsart, null, "Standardwert null");
+assert.equal(mk({ abrechnungsart: "tiers_payant" }).abrechnungsart, "tiers_payant");
 
 // ── V8: istAktiv über den Zeitraum ───────────────────────────────────────────
 const befristet = mk({ gueltigAb: "2025-06-01", gueltigBis: "2025-12-31" });
