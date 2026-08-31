@@ -410,15 +410,15 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
                 </Feld>
               )}
 
-              {/* Ein Suchfeld über Kontakte (und im privaten Modus Angehörige) */}
+              {/* Ein Suchfeld über Kontakte (und im privaten Modus Angehörige).
+                  Das Feldlabel trägt die KontaktWahl selbst — keine zweite
+                  Abschnittsüberschrift darüber. */}
               {!gepflegt && modus !== "mitarbeitende" && rolle && (
-                <Feld label={kategorie === "fachpersonal" ? "Fachperson" : "Person"}>
-                  <KontaktWahl person={person} onChange={setPerson}
-                    feldsatz={feldsatz} kontaktTyp={kontaktTyp}
-                    angehoerige={angehoerige.map(a => ({ id: a.id, vorname: a.vorname, nachname: a.nachname }))}
-                    zeigtAngehoerige={modus === "privat"}
-                    abteilungLabel={zugehoerigkeitLabel(rolle)} />
-                </Feld>
+                <KontaktWahl person={person} onChange={setPerson}
+                  feldsatz={feldsatz} kontaktTyp={kontaktTyp}
+                  angehoerige={angehoerige.map(a => ({ id: a.id, vorname: a.vorname, nachname: a.nachname }))}
+                  zeigtAngehoerige={modus === "privat"}
+                  abteilungLabel={zugehoerigkeitLabel(rolle)} />
               )}
 
               {/* Verwandtschaft nur im privaten Modus */}

@@ -26,6 +26,14 @@ import { formatTelefon, pruefeTelefon } from "../../../lib/telefon";
  */
 export type KontaktFeldsatz = "fachpersonal" | "privat" | "organisation";
 
+/** Beschriftung des Suchfelds und des Anlegeblocks — an EINER Stelle je Kontext.
+    Keine Datenmodell-Bezeichner (z. B. „Zugehörigkeit") in der Oberfläche. */
+const BESCHRIFTUNG: Record<KontaktFeldsatz, { label: string; platzhalter: string; neuTitel: string }> = {
+  fachpersonal: { label: "Fachperson", platzhalter: "Name oder GLN suchen", neuTitel: "Neuen Kontakt erfassen" },
+  privat: { label: "Person", platzhalter: "Name suchen", neuTitel: "Neuen Kontakt erfassen" },
+  organisation: { label: "Organisation", platzhalter: "Name der Organisation suchen", neuTitel: "Neue Organisation erfassen" },
+};
+
 interface AdressTreffer { strasse: string; plz: string; ort: string; land: string; label: string }
 
 /* Adressdienst — hier wird später ein Dienst (mit Schlüssel, also Backend)
@@ -170,11 +178,11 @@ export function KontaktWahl({
   return (
     <div>
       <Combobox
-        label="Person"
+        label={BESCHRIFTUNG[feldsatz].label}
         value={modus || null}
         onChange={v => waehlen(v ?? "")}
-        placeholder="Name oder Zugehörigkeit suchen …"
-        searchPlaceholder="Name, Kennung oder Zugehörigkeit suchen…"
+        placeholder={BESCHRIFTUNG[feldsatz].platzhalter}
+        searchPlaceholder={BESCHRIFTUNG[feldsatz].platzhalter}
         keineTrefferText="Nichts gefunden — über Neu erfassen anlegen."
         onSuchtext={t => { suchtext.current = t; }}
         options={optionen} />
@@ -182,7 +190,7 @@ export function KontaktWahl({
       {modus === NEU && (
         <div ref={bereich} tabIndex={-1}
           style={{ marginTop: 10, padding: "12px 14px", borderRadius: 10, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
-          <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", marginBottom: 10 }}>Neu erfassen</div>
+          <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", marginBottom: 10 }}>{BESCHRIFTUNG[feldsatz].neuTitel}</div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12 }}>
             {(feldsatz === "fachpersonal" || feldsatz === "privat") && (
