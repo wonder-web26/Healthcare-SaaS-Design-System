@@ -5,8 +5,6 @@
 import { useState } from "react";
 import { User, Users, MapPin, Shield, Mail, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, Languages, ChevronDown, ChevronUp, CheckCircle2, FileText } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
-import { KontaktWahl } from "../ui/KontaktWahl";
-import { BEZIEHUNGSART, VERTRETUNGSART } from "../../../lib/beziehungen/beziehungen";
 import { FELD_MAX, katalogFeldBreite } from "./feldbreiten";
 import { TextInput } from "./TextInput";
 import { TextareaInput } from "./TextareaInput";

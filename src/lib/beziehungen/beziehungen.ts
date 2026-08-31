@@ -113,29 +113,58 @@ export function artLabel(code: string): string {
 }
 
 /**
- * Art der Vertretung — nur bei der Rolle `beistand`.
+ * Beistandschaft — Umfang der Vertretung, nur bei der Rolle `beistand`.
  *
- * ACHTUNG, UNGEPRÜFTE SETZUNG. Ob diese vier Werte das schweizerische
- * Erwachsenenschutzrecht (ZGB Art. 360 ff.) richtig abbilden, ist nicht
- * belegt. Vorsorgeauftrag, Beistandschaft und Vertretung bei medizinischen
- * Massnahmen sind dort verschiedene Rechtsinstitute mit verschiedenen
- * Voraussetzungen, und die Beistandschaft zerfällt ihrerseits in mehrere
- * Formen. Eine fachliche Prüfung steht aus; bis dahin ist die Liste eine
- * Arbeitsannahme und keine Rechtsgrundlage.
+ * Mehrwertig: eine Person kann administrative UND gesundheitliche Vertretung
+ * zugleich tragen, oder einen Vorsorgeauftrag. Das frühere einwertige Feld
+ * `vertretungsart` konnte das nicht.
+ *
+ * ACHTUNG, VORLÄUFIGE SETZUNG. Ob diese drei Merkmale das schweizerische
+ * Erwachsenenschutzrecht (ZGB Art. 360 ff.) richtig schneiden, ist nicht
+ * belegt; die Abbildung der alten Werte (siehe beistandschaftAusVertretungsart)
+ * bestätigt Person B. Bis dahin Arbeitsannahme, keine Rechtsgrundlage.
+ *
+ * `gesundheit` ist das gefährliche Merkmal: daraus folgt, wer einer Behandlung
+ * zustimmen darf. Es wird nie aus etwas anderem angenommen, sondern nur, wenn
+ * es ausdrücklich gesetzt ist.
  */
-export const VERTRETUNGSART = [
+export interface Beistandschaft {
+  administrativ: boolean;
+  gesundheit: boolean;
+  vorsorgeauftrag: boolean;
+}
+
+export function leereBeistandschaft(): Beistandschaft {
+  return { administrativ: false, gesundheit: false, vorsorgeauftrag: false };
+}
+
+export const BEISTANDSCHAFT_ARTEN: { code: keyof Beistandschaft; label: string; hinweis?: string }[] = [
+  { code: "administrativ", label: "Administrativ" },
+  { code: "gesundheit", label: "Gesundheit", hinweis: "Gesundheit entscheidet, wer einer Behandlung zustimmen darf." },
   { code: "vorsorgeauftrag", label: "Vorsorgeauftrag" },
-  { code: "beistandschaft", label: "Beistandschaft" },
-  { code: "medizinische_massnahmen", label: "Vertretung bei medizinischen Massnahmen" },
-  { code: "unbekannt", label: "Art nicht bekannt" },
-] as const;
+];
 
-export type VertretungsartCode = typeof VERTRETUNGSART[number]["code"];
+/** Beschriftungen der gesetzten Merkmale, in fester Reihenfolge. */
+export function beistandschaftLabels(b: Beistandschaft | undefined): string[] {
+  if (!b) return [];
+  return BEISTANDSCHAFT_ARTEN.filter(a => b[a.code]).map(a => a.label);
+}
 
-export function vertretungsartLabel(code: string): string {
-  /* Ohne Angabe steht „Art nicht bekannt" — eine leere Stelle liesse offen,
-     ob niemand es weiss oder niemand gefragt hat. */
-  return VERTRETUNGSART.find(v => v.code === code)?.label ?? "Art nicht bekannt";
+export function istBeistandschaftErfasst(b: Beistandschaft | undefined): boolean {
+  return !!b && (b.administrativ || b.gesundheit || b.vorsorgeauftrag);
+}
+
+/**
+ * Abbildung der vier alten `vertretungsart`-Werte auf die Merkmale.
+ * Vorläufig bis zur Bestätigung durch Person B.
+ */
+export function beistandschaftAusVertretungsart(code: string): Beistandschaft {
+  switch (code) {
+    case "vorsorgeauftrag": return { administrativ: false, gesundheit: false, vorsorgeauftrag: true };
+    case "medizinische_massnahmen": return { administrativ: false, gesundheit: true, vorsorgeauftrag: false };
+    case "beistandschaft": return { administrativ: true, gesundheit: false, vorsorgeauftrag: false };
+    default: return leereBeistandschaft(); // "unbekannt" und Leerwert: Umfang nicht erfasst
+  }
 }
 
 /**
@@ -183,8 +212,8 @@ export interface Beziehung {
   /* Die Zugehörigkeit — Fachgebiet, Stelle, Behörde — steht seit der
      Einführung des Kontaktobjekts am Kontakt. Sie beschreibt die Person,
      nicht ihr Verhältnis zu diesem Patienten. */
-  /** Nur bei der Rolle `beistand`; leer = nicht bekannt. */
-  vertretungsart: VertretungsartCode | "";
+  /** Nur bei der Rolle `beistand`; alle false = Umfang nicht erfasst. */
+  beistandschaft: Beistandschaft;
   bemerkung: string;
 }
 

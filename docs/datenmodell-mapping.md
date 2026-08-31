@@ -174,7 +174,84 @@ Patient360 (links `bezugsperson`, rechts der Rest).
   (Angehörige/weitere = privat, Sozialdienst = Organisation).
 - **`pflegende_angehoerige`** gruppiert unter Bezugsperson, ist im Dialog aber nicht
   wählbar (entsteht aus dem Angehörigen-Reiter).
-- **Offen für Lauf B:** die sechs neuen Kontaktfelder (Titel/Fachgebiet/GLN/
-  Organisation/Mobil/Adresse) samt GLN-Prüfung und die Beistandschaft als drei
-  Merkmale (administrativ/gesundheit/vorsorgeauftrag). Bis dahin nutzt der Dialog die
-  bestehenden Kontaktfelder und `VERTRETUNGSART` unverändert.
+### Kontaktfelder, GLN, Beistandschaft (Lauf B)
+
+**Neue `Kontakt`-Felder** aus dem Abgleich mit einem etablierten Spitex-System,
+optional-nullbar (nur befüllt, wo ein Verwender sie erfasst):
+
+| Feld | Typ | Erfasst im Feldsatz |
+|---|---|---|
+| `anrede` | `'herr' \| 'frau'` | Fachpersonal, Privatperson |
+| `titel` | `'dr' \| 'prof' \| 'prof_dr'` | Fachpersonal |
+| `fachgebiet` | Freitext (Vorschläge) | Fachpersonal |
+| `gln` | 13-stellig | Fachpersonal |
+| `organisation` (Praxis/Institution) | Freitext | Fachpersonal |
+| `mobil` | formatiert | Fachpersonal, Privatperson |
+| `strasse` / `plz` / `ort` / `land` | vier Felder, `land` Vorgabe `CH` | alle drei |
+
+**Anrede und akademischer Titel sind zwei Felder** — eine Ärztin trägt Frau UND
+Dr.; ein gemeinsames Auswahlfeld erlaubte nur eines. **Die Adresse sind vier
+Felder**, keine Zeichenkette: ein zusammengesetzter String liesse sich für
+Postversand und Rechnungsempfänger nicht verwenden. Der Ausschluss-Kommentar in
+`kontakte.ts` wurde **fortgeschrieben**, nicht gelöscht.
+
+- **Erfassungsblock** im Bezugsteam-Dialog (`KontaktWahl`, `feldsatz`): aufklappbar
+  über „Neu erfassen" — bestand-zuerst, damit keine Dubletten entstehen. Feldsätze:
+  Fachpersonal (Anrede/Titel/Fachgebiet/GLN/Praxis/Adresse), Privatperson
+  (Anrede/Adresse, keine GLN), Organisation (Abteilung→`zugehoerigkeit`,
+  Ansprechperson→`vorname`, Organisationsname→`name`, Adresse). **Pflicht ist nur der
+  Nachname** bzw. der Organisationsname.
+- **Telefon/Mobil** sind formatierte Felder (`lib/telefon.ts`, Unit-Test): Formatierung
+  beim Verlassen des Felds ins Schweizer Format `+41 44 000 00 00`; ausländische Nummern
+  (andere Vorwahl) bleiben unverändert; ungültige erzeugen einen Hinweis, **kein Block**.
+- **Adressdienst ausstehend:** über den vier Adressfeldern steht ein Suchfeld
+  „Adresse suchen", gekapselt in `adresseSuchen` (einzige Anbindungsstelle). Die
+  Anbindung braucht einen Schlüssel und damit Backend — im Design-Repo ohne Treffer;
+  die vier Felder sind direkt bearbeitbar.
+- **Ein Suchfeld** je Kategorie: die Personenauswahl durchsucht Kontakte und (bei
+  Bezugsperson) Angehörige zugleich; die Trefferzeile nennt Herkunft und Kennung
+  (`Kontakt K-…` / `Angehörige A-…`). Kein vorgeschaltetes Auswahlfeld mehr.
+- **Beginn** und das **Telefonfeld auf Beziehungsebene** entfallen aus dem Dialog.
+  `beginn` bleibt im Modell (Seed-Anzeige); die Telefonnummer lebt an der Person —
+  trägt eine gewählte Person keine, zeigt der Dialog nur einen Hinweis mit Verweis,
+  kein zweites Eingabefeld.
+- **Fachgebiet** ist Freitext mit Vorschlägen aus bereits erfassten Fachgebieten
+  (`<datalist>`), **keine feste Werteliste**: die käme aus dem GLN-Register
+  (zu jeder Gesundheitsfachperson eine Berufs-/Fachangabe), das nicht vorliegt.
+  Sobald es angebunden ist, wird das Fachgebiet von dort übernommen.
+- **GLN**: reine Formatprüfung auf 13 Stellen, Bestätigung bzw. Hinweis, **kein
+  Blockieren**, keine Prüfung gegen ein Verzeichnis (es gibt keines).
+- **`BEZIEHUNGSROLLE` bleibt bei vier Fachpersonal-Rollen** (Hausarzt, Spezialarzt,
+  Therapie, Apotheke). Ein Vergleichssystem führt hier rund 34 Werte, die drei Dinge
+  vermischen — pflegerische Funktionen, ärztliche Fachgebiete als Personenbezeichnung
+  (`Kardiologe` neben Fachgebiet `Kardiologie`) und weitere Berufe. Bei uns trägt die
+  Rolle Verhalten (der Hausarzt ist Empfänger der ärztlichen Anordnung); die fachliche
+  Ausdifferenzierung leistet das Fachgebiet. Eine Rolle, die nichts steuert, gehört
+  nicht in die Rollenliste.
+
+**Beistandschaft** — das einwertige `vertretungsart` (Rolle `beistand`) ist ersetzt
+durch drei gleichzeitig setzbare Merkmale `beistandschaft {administrativ, gesundheit,
+vorsorgeauftrag}`. Abbildung der vier alten Werte (`beistandschaftAusVertretungsart`):
+
+| Alt (`vertretungsart`) | Neu (`beistandschaft`) |
+|---|---|
+| `vorsorgeauftrag` | `vorsorgeauftrag: true` |
+| `medizinische_massnahmen` | `gesundheit: true` |
+| `beistandschaft` | `administrativ: true` |
+| `unbekannt` / leer | alle drei `false` → „Umfang nicht erfasst" |
+
+**Begründung (VORLÄUFIG bis zur Bestätigung durch Person B):** Der Regelfall einer
+Vertretungsbeistandschaft nach ZGB betrifft administrative Belange. Eine Befugnis in
+Gesundheitsfragen muss ausdrücklich angeordnet sein; sie unbesehen anzunehmen wäre die
+gefährlichere Richtung, weil daraus folgt, wer einer Behandlung zustimmen darf. Darum
+bringt `administrativ` nie `gesundheit` mit. Im Dialog stehen die drei als Umschalter
+unter „Beistandschaft, falls vorhanden" mit dem Satz „Gesundheit entscheidet, wer einer
+Behandlung zustimmen darf."
+
+- **„Umfang nicht erfasst"** erscheint nur bei einem `beistand` ohne gesetzte Art —
+  bei allen anderen Rollen ist „keine Beistandschaft" der Normalfall.
+- **GLN-Hinweis** unter der Liste nur bei Fachpersonal-Beziehungen ohne GLN, mit Aktion
+  „GLN ergänzen" (öffnet die Beziehung; im Bearbeiten-Dialog trägt ein GLN-Feld die GLN
+  am bestehenden Kontakt nach). Blockiert nichts.
+- **Toter Code** `BeziehungFormular`/`BeziehungsZeile` in `Patient360Page.tsx` (~200
+  Zeilen, unreferenziert) entfernt.

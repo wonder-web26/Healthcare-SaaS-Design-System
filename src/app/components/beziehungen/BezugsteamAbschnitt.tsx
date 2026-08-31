@@ -25,20 +25,21 @@ import { useState } from "react";
 import { Plus, Check, AlertTriangle, MoreVertical, ArrowRight, Stethoscope, Users } from "lucide-react";
 import { InlineSelect } from "../ui/InlineSelect";
 import { KontaktWahl } from "../ui/KontaktWahl";
-import { DateField } from "../form/DateField";
 import { AppButton } from "../ui/AppButton";
 import { GEGENWART } from "../../../lib/gegenwart";
 import { formatAnzeige } from "../../../lib/datum";
 import { useBeziehungen, beziehungSichern, beziehungBeenden } from "../../../lib/beziehungen/store";
 import { useAngehoerige } from "../../../lib/angehoerige/store";
-import { useKontakte } from "../../../lib/kontakte/store";
+import { useKontakte, kontaktSichern } from "../../../lib/kontakte/store";
 import { kontaktName } from "../../../lib/kontakte/kontakte";
+import type { KontaktFeldsatz } from "../ui/KontaktWahl";
+import type { KontakttypCode } from "../../../lib/stammdaten/kontakttypen";
 import {
-  BEZIEHUNGSROLLE, BEZIEHUNGSART, VERTRETUNGSART, KATEGORIEN, ROLLEN_JE_KATEGORIE,
-  rolleSeite, rolleLabel, artLabel, vertretungsartLabel, zugehoerigkeitLabel, personName,
-  kategorieFuerRolle, kategorieLabel,
+  BEZIEHUNGSROLLE, BEZIEHUNGSART, BEISTANDSCHAFT_ARTEN, KATEGORIEN, ROLLEN_JE_KATEGORIE,
+  rolleSeite, rolleLabel, artLabel, zugehoerigkeitLabel, personName,
+  kategorieFuerRolle, kategorieLabel, leereBeistandschaft, beistandschaftLabels, istBeistandschaftErfasst,
   istAktiv as beziehungAktiv,
-  type Beziehung, type PersonBezug, type PersonKategorie, type BeziehungsrolleCode,
+  type Beziehung, type PersonBezug, type PersonKategorie, type BeziehungsrolleCode, type Beistandschaft,
 } from "../../../lib/beziehungen/beziehungen";
 
 /** Reihenfolge der Rollen für die Sortierung innerhalb einer Gruppe. */
@@ -59,7 +60,13 @@ export function BezugsteamAbschnitt({ patientId, angehoerigenReiterPfad }: {
 
   const nameVon = (k: string) => { const a = angehoerige.find(x => x.id === k); return a ? `${a.vorname} ${a.nachname}` : k; };
   const kontaktVon = (k: string) => { const t = kontakte.find(x => x.id === k); return t ? kontaktName(t) : k; };
-  const zugVon = (b: Beziehung) => { const p = b.person; return p.art === "kontakt" ? kontakte.find(x => x.id === p.kennung)?.zugehoerigkeit ?? "" : ""; };
+  const zugVon = (b: Beziehung) => {
+    const p = b.person;
+    if (p.art !== "kontakt") return "";
+    const k = kontakte.find(x => x.id === p.kennung);
+    // Fachgebiet zuerst (Fachpersonal), sonst Stelle/Behörde, sonst Organisation.
+    return (k?.fachgebiet || k?.zugehoerigkeit || k?.organisation || "").trim();
+  };
 
   const eigene = alle.filter(b => b.patientId === patientId);
 
@@ -72,12 +79,18 @@ export function BezugsteamAbschnitt({ patientId, angehoerigenReiterPfad }: {
     return { code, label, zeilen: [...aktive, ...beendete] };
   }).filter(g => g.zeilen.length > 0);
 
-  // §8 Hinweise
+  // §8 Hinweise (Lücken) + §9 fehlende GLN bei Fachpersonal
   const aktiveEigene = eigene.filter(beziehungAktiv);
-  const hinweise: { text: string; aktionLabel: string }[] = [];
+  const hinweise: { text: string; aktionLabel: string; zielId?: string }[] = [];
   if (!aktiveEigene.some(b => b.rolle === "hausarzt")) hinweise.push({ text: `Kein ${rolleLabel("hausarzt")} erfasst. Für ärztliche Anfragen und Verordnungen wird er benötigt.`, aktionLabel: `${rolleLabel("hausarzt")} hinzufügen` });
   if (!aktiveEigene.some(b => b.notfallkontakt)) hinweise.push({ text: "Kein Notfallkontakt gesetzt.", aktionLabel: "Person hinzufügen" });
   if (!aktiveEigene.some(b => b.rolle === "sozialdienst")) hinweise.push({ text: `Kein ${rolleLabel("sozialdienst")} erfasst. Falls einer involviert ist, gehört er hier hinein.`, aktionLabel: `${rolleLabel("sozialdienst")} hinzufügen` });
+  // §9 nur bei Kategorie Fachpersonal, deren Kontakt keine GLN trägt.
+  for (const b of aktiveEigene) {
+    if (kategorieFuerRolle(b.rolle) !== "fachpersonal" || b.person.art !== "kontakt") continue;
+    const k = kontakte.find(x => x.id === (b.person as { kennung: string }).kennung);
+    if (k && !(k.gln ?? "").trim()) hinweise.push({ text: `Für ${kontaktName(k)} fehlt die GLN. Für strukturierte ärztliche Anfragen wird sie benötigt.`, aktionLabel: "GLN ergänzen", zielId: b.id });
+  }
 
   return (
     <div>
@@ -113,7 +126,7 @@ export function BezugsteamAbschnitt({ patientId, angehoerigenReiterPfad }: {
             <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", borderRadius: 12, background: "var(--status-warning-bg)", border: "0.5px solid var(--border-default)" }}>
               <AlertTriangle style={{ width: 15, height: 15, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
               <span style={{ flex: 1, fontSize: 13, color: "var(--text-secondary)" }}>{h.text}</span>
-              <button type="button" onClick={() => setDialog({ id: "" })} className="ui-fokusring" style={{ ...linkStyle, flexShrink: 0, color: "var(--status-warning-text)" }}>{h.aktionLabel}</button>
+              <button type="button" onClick={() => setDialog({ id: h.zielId ?? "" })} className="ui-fokusring" style={{ ...linkStyle, flexShrink: 0, color: "var(--status-warning-text)" }}>{h.aktionLabel}</button>
             </div>
           ))}
         </div>
@@ -135,7 +148,9 @@ function Zeile({ b, name, zugehoerigkeit, menuOffen, onMenu, onBearbeiten, onBee
   const aktiv = beziehungAktiv(b);
   const gepflegt = b.rolle === "pflegende_angehoerige"; // aus dem Angehörigen-Reiter
   const detail = [
-    b.rolle === "beistand" ? vertretungsartLabel(b.vertretungsart) : rolleSeite(b.rolle) === "extern" ? zugehoerigkeit : (b.art ? artLabel(b.art) : ""),
+    b.rolle === "beistand"
+      ? (istBeistandschaftErfasst(b.beistandschaft) ? beistandschaftLabels(b.beistandschaft).join(", ") : "Umfang nicht erfasst")
+      : rolleSeite(b.rolle) === "extern" ? zugehoerigkeit : (b.art ? artLabel(b.art) : ""),
     b.telefon,
     b.beginn ? `seit ${b.beginn}${b.ende ? ` bis ${b.ende}` : ""}` : b.ende ? `bis ${b.ende}` : "",
   ].filter(Boolean);
@@ -188,7 +203,6 @@ function Chip({ children, ton }: { children: React.ReactNode; ton?: "warnung" | 
 
 // ── Dialog: erst Kategorie, dann Rolle, dann rollenabhängige Angaben ──────────
 
-const KONTAKT_WAHL = "__kontakt__";
 type PersonModus = "privat" | "kontakt" | "mitarbeitende" | "";
 
 /** Person-Beschaffung je Kategorie/Rolle. Nie aus einem indirekten Signal. */
@@ -225,68 +239,75 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
   const [rolle, setRolle] = useState<string>(eintrag?.rolle ?? "");
   const [beistandTyp, setBeistandTyp] = useState<"privat" | "organisation">(
     eintrag?.rolle === "beistand" && eintrag.person.art === "kontakt" ? "organisation" : "privat");
-  const [wahl, setWahl] = useState(
-    eintrag?.person.art === "angehoeriger" ? `a:${eintrag.person.kennung}`
-      : eintrag?.person.art === "kontakt" ? KONTAKT_WAHL : "");
-  const [kontaktWahl, setKontaktWahl] = useState(eintrag?.person.art === "kontakt" ? eintrag.person.kennung : "");
+  // Eine Personenauswahl (Kontakt ODER Angehörige) statt zweier Auswahlfelder.
+  const [person, setPerson] = useState<PersonBezug | null>(eintrag ? eintrag.person : null);
   const [art, setArt] = useState<string>(eintrag?.art ?? "");
-  const [vertretungsart, setVertretungsart] = useState<string>(eintrag?.vertretungsart ?? "");
-  const [beginn, setBeginn] = useState(eintrag?.beginn ?? "");
-  const [telefon, setTelefon] = useState(eintrag?.telefon ?? "");
+  const [beistandschaft, setBeistandschaft] = useState<Beistandschaft>(eintrag?.beistandschaft ?? leereBeistandschaft());
   const [notfall, setNotfall] = useState(eintrag?.notfallkontakt ?? false);
   const [auskunft, setAuskunft] = useState(eintrag?.auskunftsberechtigt ?? false);
   const [fehler, setFehler] = useState("");
 
+  /* §9 Behebung: beim Bearbeiten einer Fachperson die GLN des bestehenden
+     Kontakts ergänzen — der einzige Ort, an dem eine schon erfasste Fachperson
+     ihre GLN nachträglich bekommt. */
+  const eintragKontaktId = eintrag && eintrag.person.art === "kontakt" ? eintrag.person.kennung : "";
+  const bearbeiteterKontakt = eintragKontaktId ? kontakte.find(k => k.id === eintragKontaktId) : undefined;
+  const [glnEdit, setGlnEdit] = useState(bearbeiteterKontakt?.gln ?? "");
+  const glnEditOk = /^\d{13}$/.test(glnEdit.trim());
+
   const modus = personModusVon(kategorie, rolle, beistandTyp, !!gepflegt);
   const rollenWaehlbar: BeziehungsrolleCode[] = kategorie ? ROLLEN_JE_KATEGORIE[kategorie] : [];
 
-  // Ausgewählte Person aus dem passenden Modus.
-  const gewaehltePerson: PersonBezug | null = gepflegt ? eintrag!.person
-    : modus === "mitarbeitende" ? (eintrag?.person ?? null)
-    : modus === "kontakt" ? (kontaktWahl ? { art: "kontakt", kennung: kontaktWahl } : null)
-    : modus === "privat" ? (wahl.startsWith("a:") ? { art: "angehoeriger", kennung: wahl.slice(2) }
-      : wahl === KONTAKT_WAHL && kontaktWahl ? { art: "kontakt", kennung: kontaktWahl } : null)
-    : null;
+  // Feldsatz und Kontakttyp für den Anlege-Block, aus Kategorie/Modus/Rolle.
+  const feldsatz: KontaktFeldsatz = kategorie === "fachpersonal" ? "fachpersonal" : modus === "privat" ? "privat" : "organisation";
+  const kontaktTyp: KontakttypCode = kategorie === "fachpersonal" ? "arztpraxis"
+    : modus === "privat" ? "privatperson"
+    : rolle === "beistand" ? "behoerde" : "sozialdienst";
 
+  // Ausgewählte Person: gesperrte Fälle aus dem Eintrag, sonst aus der Auswahl.
+  const gewaehltePerson: PersonBezug | null = (gepflegt || modus === "mitarbeitende") ? (eintrag?.person ?? null) : person;
+
+  // Telefon der gewählten Person (jetzt an der Person, nicht an der Beziehung).
   const personTelefon = gewaehltePerson?.art === "angehoeriger" ? (angehoerige.find(a => a.id === gewaehltePerson.kennung)?.telefon ?? "")
     : gewaehltePerson?.art === "kontakt" ? (kontakte.find(k => k.id === gewaehltePerson.kennung)?.telefon ?? "") : "";
-
-  // §6 Warnung: gleichnamiger Angehöriger, wenn ein Kontakt gewählt/angelegt wird.
-  const kontaktName_ = gewaehltePerson?.art === "kontakt" ? (kontakte.find(k => k.id === gewaehltePerson.kennung)?.name ?? "") : "";
-  const gleichnamigerAngehoeriger = kontaktName_ ? angehoerige.find(a => a.nachname.toLowerCase() === kontaktName_.trim().toLowerCase()) : undefined;
-
-  // Personenliste für den privaten Modus: Angehörige + „Kontakt anlegen".
-  const personen = angehoerige.map(a => ({ value: `a:${a.id}`, label: `${a.vorname} ${a.nachname} — Angehörige ${a.id}` }));
+  const personName_ = !gewaehltePerson ? "" : gewaehltePerson.art === "angehoeriger"
+    ? (() => { const a = angehoerige.find(x => x.id === gewaehltePerson.kennung); return a ? `${a.vorname} ${a.nachname}` : ""; })()
+    : gewaehltePerson.art === "kontakt"
+      ? (() => { const k = kontakte.find(x => x.id === gewaehltePerson.kennung); return k ? kontaktName(k) : ""; })()
+      : "";
 
   const kategorieWaehlen = (c: PersonKategorie) => {
-    setKategorie(c); setRolle(""); setWahl(""); setKontaktWahl(""); setArt(""); setVertretungsart(""); setFehler("");
+    setKategorie(c); setRolle(""); setPerson(null); setArt(""); setBeistandschaft(leereBeistandschaft()); setFehler("");
   };
-  const rolleWaehlen = (r: string) => {
-    setRolle(r);
-    // Personenbezug bei Kategoriewechsel-innerhalb zurücksetzen, wenn der Modus wechselt.
-    setFehler("");
-  };
+  const rolleWaehlen = (r: string) => { setRolle(r); setFehler(""); };
 
   const sichern = () => {
     if (!gepflegt) {
       if (!kategorie) { setFehler("Bitte eine Kategorie wählen."); return; }
       if (!rolle) { setFehler(kategorie === "fachpersonal" ? "Bitte eine Funktion wählen." : "Bitte eine Rolle wählen."); return; }
-      if (!gewaehltePerson) { setFehler(modus === "kontakt" ? "Bitte einen Kontakt wählen oder anlegen." : "Bitte eine Person wählen."); return; }
+      if (!gewaehltePerson) { setFehler("Bitte eine Person suchen oder erfassen."); return; }
     }
-    const person: PersonBezug = gepflegt ? eintrag!.person : gewaehltePerson!;
+    const zielPerson: PersonBezug = gepflegt ? eintrag!.person : gewaehltePerson!;
     const zielRolle = gepflegt ? eintrag!.rolle : (rolle as Beziehung["rolle"]);
     // Keine zweite offene Beziehung derselben Rolle für dieselbe Person.
     const doppelt = eigene.some(b => b.id !== eintragId && beziehungAktiv(b) && b.rolle === zielRolle
-      && personSchluessel(b.person) === personSchluessel(person));
+      && personSchluessel(b.person) === personSchluessel(zielPerson));
     if (doppelt) { setFehler("Diese Person hat diese Rolle bereits."); return; }
 
+    // §9: GLN am bestehenden Kontakt nachtragen, wenn im Bearbeiten geändert.
+    if (bearbeiteterKontakt && glnEdit.trim() !== (bearbeiteterKontakt.gln ?? "")) {
+      kontaktSichern({ ...bearbeiteterKontakt, gln: glnEdit.trim() ? glnEdit.trim() : null });
+    }
+
     beziehungSichern({
-      id: eintragId, patientId, person, rolle: zielRolle,
+      id: eintragId, patientId, person: zielPerson, rolle: zielRolle,
       // Verwandtschaft nur im privaten Modus (Angehörige/private Bezugsperson).
       art: modus === "privat" ? (art as Beziehung["art"]) : "",
-      vertretungsart: zielRolle === "beistand" ? (vertretungsart as Beziehung["vertretungsart"]) : "",
-      beginn: beginn.trim(), ende: eintrag?.ende ?? "",
-      telefon: personTelefon ? (eintrag?.telefon ?? "") : telefon.trim(),
+      // Beistandschaft nur bei der Rolle beistand; sonst leer.
+      beistandschaft: zielRolle === "beistand" ? beistandschaft : leereBeistandschaft(),
+      // Beginn und Telefon werden im Dialog nicht mehr erfasst; Seed-Werte bleiben.
+      beginn: eintrag?.beginn ?? "", ende: eintrag?.ende ?? "",
+      telefon: eintrag?.telefon ?? "",
       notfallkontakt: notfall, auskunftsberechtigt: auskunft,
       bemerkung: eintrag?.bemerkung ?? "",
     });
@@ -377,7 +398,7 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
                     {(["privat", "organisation"] as const).map(t => {
                       const sel = beistandTyp === t;
                       return (
-                        <button key={t} type="button" onClick={() => { setBeistandTyp(t); setWahl(""); setKontaktWahl(""); }} aria-pressed={sel} className="ui-fokusring"
+                        <button key={t} type="button" onClick={() => { setBeistandTyp(t); setPerson(null); }} aria-pressed={sel} className="ui-fokusring"
                           style={{ padding: "6px 12px", borderRadius: 12, fontFamily: "inherit", fontSize: 13, cursor: "pointer",
                             background: sel ? "var(--brand-primary-light)" : "var(--bg-elevated)", color: sel ? "var(--brand-primary)" : "var(--text-primary)",
                             border: "0.5px solid " + (sel ? "var(--brand-primary)" : "var(--border-default)") }}>
@@ -389,31 +410,14 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
                 </Feld>
               )}
 
-              {/* Personenauswahl je Modus (nicht bei gepflegt/Benutzer) */}
-              {!gepflegt && modus === "privat" && rolle && (
-                <Feld label="Person">
-                  <InlineSelect value={wahl} onChange={setWahl} platzhalter="Angehörige suchen …"
-                    options={[...personen, { value: KONTAKT_WAHL, label: "Kontakt (dritte Person) — suchen oder anlegen" }]} />
-                  {wahl === KONTAKT_WAHL && (
-                    <div style={{ marginTop: 8 }}>
-                      <KontaktWahl wert={kontaktWahl} onWahl={setKontaktWahl} label="Kontakt" zugehoerigkeitLabel={rolle ? zugehoerigkeitLabel(rolle) : "Zugehörigkeit"} />
-                      {gleichnamigerAngehoeriger && (
-                        <div style={{ marginTop: 6, fontSize: 12, color: "var(--status-warning-text)" }}>
-                          „{gleichnamigerAngehoeriger.vorname} {gleichnamigerAngehoeriger.nachname}" ist bereits als Angehörige erfasst ({gleichnamigerAngehoeriger.id}). Für sie sollte kein Kontakt angelegt werden.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </Feld>
-              )}
-              {!gepflegt && modus === "kontakt" && rolle && (
-                <Feld label={kategorie === "fachpersonal" ? "Fachperson" : "Organisation"}>
-                  <KontaktWahl wert={kontaktWahl} onWahl={setKontaktWahl} label="Kontakt" zugehoerigkeitLabel={zugehoerigkeitLabel(rolle)} />
-                  {gleichnamigerAngehoeriger && (
-                    <div style={{ marginTop: 6, fontSize: 12, color: "var(--status-warning-text)" }}>
-                      „{gleichnamigerAngehoeriger.vorname} {gleichnamigerAngehoeriger.nachname}" ist bereits als Angehörige erfasst ({gleichnamigerAngehoeriger.id}).
-                    </div>
-                  )}
+              {/* Ein Suchfeld über Kontakte (und im privaten Modus Angehörige) */}
+              {!gepflegt && modus !== "mitarbeitende" && rolle && (
+                <Feld label={kategorie === "fachpersonal" ? "Fachperson" : "Person"}>
+                  <KontaktWahl person={person} onChange={setPerson}
+                    feldsatz={feldsatz} kontaktTyp={kontaktTyp}
+                    angehoerige={angehoerige.map(a => ({ id: a.id, vorname: a.vorname, nachname: a.nachname }))}
+                    zeigtAngehoerige={modus === "privat"}
+                    abteilungLabel={zugehoerigkeitLabel(rolle)} />
                 </Feld>
               )}
 
@@ -423,16 +427,30 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
                   <InlineSelect value={art} onChange={setArt} platzhalter="nicht erfasst" options={BEZIEHUNGSART.map(a => ({ value: a.code, label: a.label }))} />
                 </Feld>
               )}
-              {/* Art der Vertretung nur beim Beistand */}
+              {/* Beistandschaft — drei gleichzeitig setzbare Arten, nur beim Beistand */}
               {rolle === "beistand" && (
-                <Feld label="Art der Vertretung">
-                  <InlineSelect value={vertretungsart} onChange={setVertretungsart} platzhalter="Art nicht bekannt" options={VERTRETUNGSART.map(v => ({ value: v.code, label: v.label }))} />
+                <Feld label="Beistandschaft, falls vorhanden">
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {BEISTANDSCHAFT_ARTEN.map(a => (
+                      <Umschalter key={a.code} an={beistandschaft[a.code]} text={a.label}
+                        onToggle={() => setBeistandschaft({ ...beistandschaft, [a.code]: !beistandschaft[a.code] })} />
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-tertiary)" }}>Gesundheit entscheidet, wer einer Behandlung zustimmen darf.</div>
                 </Feld>
               )}
 
-              <Feld label="Beginn (optional)">
-                <div style={{ maxWidth: 200 }}><DateField label="" value={beginn} wertFormat="display" bereich="past" onChange={v => setBeginn(typeof v === "string" ? v : "")} /></div>
-              </Feld>
+              {/* §9 Behebung: GLN einer schon erfassten Fachperson nachtragen */}
+              {eintrag && editKategorie === "fachpersonal" && bearbeiteterKontakt && (
+                <Feld label="GLN">
+                  <input type="text" value={glnEdit} onChange={e => setGlnEdit(e.target.value)} inputMode="numeric" className="ui-fokusring" style={inputStil} placeholder="13-stellig" />
+                  {glnEdit.trim() && (
+                    <div style={{ marginTop: 4, fontSize: 12, color: glnEditOk ? "var(--status-success-text)" : "var(--status-warning-text)" }}>
+                      {glnEditOk ? "Format gültig (13 Stellen)." : `Noch keine 13 Stellen (${glnEdit.trim().replace(/\D/g, "").length}).`}
+                    </div>
+                  )}
+                </Feld>
+              )}
 
               {/* Merkmale */}
               <Feld label="Merkmale">
@@ -442,11 +460,16 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
                 </div>
               </Feld>
 
-              {/* Telefon nur, wenn die Person keines trägt */}
-              {!personTelefon && (
-                <Feld label="Telefon (optional)">
-                  <input type="text" value={telefon} onChange={e => setTelefon(e.target.value)} className="ui-fokusring" style={inputStil} placeholder="+41 44 000 00 00" />
-                </Feld>
+              {/* Kein zweites Telefonfeld: die Nummer lebt an der Person. Fehlt sie,
+                  nur ein Hinweis mit Verweis auf die Person. */}
+              {gewaehltePerson && !personTelefon && (
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", borderRadius: 12, background: "var(--status-warning-bg)", border: "0.5px solid var(--border-default)" }}>
+                  <AlertTriangle style={{ width: 15, height: 15, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
+                  <span style={{ flex: 1, fontSize: 13, color: "var(--text-secondary)" }}>
+                    {personName_ || "Diese Person"} trägt keine Telefonnummer. Sie wird bei der Person erfasst
+                    {gewaehltePerson.art === "angehoeriger" ? " (Angehörigen-Reiter)." : gewaehltePerson.art === "kontakt" ? " (Kontakt bearbeiten)." : "."}
+                  </span>
+                </div>
               )}
             </>
           )}

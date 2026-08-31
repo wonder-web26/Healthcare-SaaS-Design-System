@@ -152,12 +152,6 @@ export interface PatientFormData {
   uebersetzerNotwendig: string;
 
   /* Tab 2 – Steuer & Sozialversicherungen */
-  /** Kennung des Kontakts beim Sozialdienst; ersetzt den früheren Freitext. */
-  /* Gesetzliche Vertretung — im SDA-Standard V1.3 nicht vorgesehen, aber
-     fachlich die schwerste der offenen Fragen: wer einwilligt, wenn die
-     Person es nicht mehr kann. Bei Demenz und Hochaltrigkeit keine
-     Nebenfrage. */
-  /** Code aus VERTRETUNGSART; die Liste besteht seit dem Beziehungslauf. */
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
