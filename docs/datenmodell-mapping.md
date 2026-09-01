@@ -185,10 +185,30 @@ Patient360 (links `bezugsperson`, rechts der Rest).
 | Kategorie | Rollen | Im Dialog anlegbar |
 |---|---|---|
 | Benutzer | `bezugsperson`, `stellvertretung` | **nein** (kein Personalbestand) |
-| Medizinisches Fachpersonal | `hausarzt`, `spezialarzt`, `therapie`, `apotheke` | ja (Funktion zuerst) |
+| Medizinisches Fachpersonal | `hausarzt`, `spezialarzt`, `therapie`, `apotheke`, `spital` | ja (Funktion zuerst) |
 | Bezugsperson | `angehoerige`, `beistand`, `sozialdienst`, `weitere` | ja (Rolle zuerst) |
 
 - **Neue Rollen** `therapie` und `apotheke` (Kategorie Fachpersonal).
+- **Rolle `spital`** (Beschriftung „Spital oder Klinik", Kategorie Fachpersonal). Die
+  Rollenliste wächst hier bewusst, nachdem sie zuvor gegen eine Erweiterung um
+  Fachgebietsbezeichnungen verteidigt wurde: Fachgebiete duplizieren das Feld
+  `fachgebiet` — ein Spital dagegen ist ein eigener Akteur mit eigenem
+  Austauschverhalten (Austrittsbericht, Medikationsliste, Rückfragen, Wiedereintritt),
+  den keine bestehende Rolle abdeckt. Der Workflow-Eintrag „Diagnose & Mediliste
+  erhalten" bezieht sich in der Regel darauf.
+- **Personentyp je Rolle** — `personentypFuerRolle` (Einzelquelle neben
+  `kategorieFuerRolle`): Person bei `hausarzt`/`spezialarzt`/`therapie`/`angehoerige`/
+  `weitere`, Organisation bei `apotheke`/`spital`/`sozialdienst`, Umschalter nur beim
+  `beistand`. Bei Organisation greift der Organisations-Feldsatz (ohne Anrede/Vorname),
+  **erweitert um die GLN** — auch Apotheken und Spitäler tragen eine (Format 13-stellig,
+  nicht blockierend). Kein Umschalter Person/Organisation bei den acht eindeutigen Rollen.
+- **Hausarzt eindeutig** — `sichereEindeutigenHausarzt`: höchstens ein offener Hausarzt
+  je Patient. Beim Speichern eines Hausarzts wird ein bestehender offener auf den Vortag
+  beendet (wie der Kassenwechsel in der Versicherung); der Dialog weist vorher darauf hin.
+  Grund: `ArztAnfrageContext` liest den Hausarzt im Singular — zwei offene machten den
+  Empfänger der Verordnung unbestimmt. Gilt **nur** für `hausarzt`; mehrere Spezialärzte,
+  Therapien, Apotheken und Spitäler sind zulässig. Die bestehende Doppel-Sperre im Dialog
+  prüft nur dieselbe Person in derselben Rolle und bleibt unverändert.
 - **Kategorie Benutzer im Dialog ausgeblendet:** Spitex-Mitarbeitende lassen sich
   erst zuweisen, wenn ein Personalbestand existiert. Bestehende Benutzer-Beziehungen
   aus dem Seed werden weiterhin **angezeigt** und lassen sich bearbeiten, nur nicht

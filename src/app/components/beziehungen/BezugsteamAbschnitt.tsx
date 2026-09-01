@@ -26,7 +26,9 @@ import { Plus, Check, AlertTriangle, MoreVertical, ArrowRight, Stethoscope, User
 import { InlineSelect } from "../ui/InlineSelect";
 import { KontaktWahl } from "../ui/KontaktWahl";
 import { AppButton } from "../ui/AppButton";
-import { useBeziehungen, beziehungSichern, beziehungEntfernen } from "../../../lib/beziehungen/store";
+import { GEGENWART } from "../../../lib/gegenwart";
+import { formatAnzeige } from "../../../lib/datum";
+import { useBeziehungen, beziehungSichern, beziehungEntfernen, sichereEindeutigenHausarzt } from "../../../lib/beziehungen/store";
 import { useAngehoerige } from "../../../lib/angehoerige/store";
 import { useKontakte, kontaktSichern } from "../../../lib/kontakte/store";
 import { kontaktName } from "../../../lib/kontakte/kontakte";
@@ -35,10 +37,17 @@ import type { KontakttypCode } from "../../../lib/stammdaten/kontakttypen";
 import {
   BEZIEHUNGSROLLE, BEZIEHUNGSART, BEISTANDSCHAFT_ARTEN, KATEGORIEN, ROLLEN_JE_KATEGORIE,
   rolleSeite, rolleLabel, artLabel, zugehoerigkeitLabel, personName,
-  kategorieFuerRolle, kategorieLabel, leereBeistandschaft, beistandschaftLabels, istBeistandschaftErfasst,
+  kategorieFuerRolle, kategorieLabel, personentypFuerRolle, leereBeistandschaft, beistandschaftLabels, istBeistandschaftErfasst,
   istAktiv as beziehungAktiv,
   type Beziehung, type PersonBezug, type PersonKategorie, type BeziehungsrolleCode, type Beistandschaft,
 } from "../../../lib/beziehungen/beziehungen";
+
+/** Vortag der Gegenwart im Anzeigeformat — für das Beenden beim Hausarzt-Wechsel. */
+function vortagGegenwart(): string {
+  const d = new Date(GEGENWART);
+  d.setDate(d.getDate() - 1);
+  return formatAnzeige(d);
+}
 
 /** Reihenfolge der Rollen für die Sortierung innerhalb einer Gruppe. */
 const ROLLE_RANG: Record<string, number> = Object.fromEntries(BEZIEHUNGSROLLE.map((r, i) => [r.code, i]));
@@ -72,12 +81,13 @@ export function BezugsteamAbschnitt({ patientId, angehoerigenReiterPfad }: {
   const sichtbare = eigene.filter(b => kategorieFuerRolle(b.rolle) !== "benutzer");
 
   // Gruppierung über die Kategorie (kategorieFuerRolle), nicht über rolleSeite.
-  const gruppen = KATEGORIEN.filter(k => k.code !== "benutzer").map(({ code, label }) => {
+  const gruppen = KATEGORIEN.filter(k => k.code !== "benutzer").map(({ code, labelPlural }) => {
     const inGruppe = sichtbare.filter(b => kategorieFuerRolle(b.rolle) === code);
     const aktive = inGruppe.filter(beziehungAktiv).sort((a, b) =>
       (Number(b.notfallkontakt) - Number(a.notfallkontakt)) || (ROLLE_RANG[a.rolle] - ROLLE_RANG[b.rolle]));
     const beendete = inGruppe.filter(b => !beziehungAktiv(b));
-    return { code, label, zeilen: [...aktive, ...beendete] };
+    // Gruppenüberschrift im Plural.
+    return { code, label: labelPlural, zeilen: [...aktive, ...beendete] };
   }).filter(g => g.zeilen.length > 0);
 
   return (
@@ -85,7 +95,7 @@ export function BezugsteamAbschnitt({ patientId, angehoerigenReiterPfad }: {
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{sichtbare.length} {sichtbare.length === 1 ? "Person" : "Personen"}</span>
         <button type="button" onClick={() => setDialog({ id: "" })} className="ui-fokusring inline-flex items-center" style={{ ...linkStyle, marginLeft: "auto", gap: 4 }}>
-          <Plus style={{ width: 14, height: 14 }} /> Person hinzufügen
+          <Plus style={{ width: 14, height: 14 }} /> Hinzufügen
         </button>
       </div>
 
@@ -180,24 +190,8 @@ function Chip({ children, ton }: { children: React.ReactNode; ton?: "warnung" | 
 
 // ── Dialog: erst Kategorie, dann Rolle, dann rollenabhängige Angaben ──────────
 
-type PersonModus = "privat" | "kontakt" | "mitarbeitende" | "";
-
-/** Person-Beschaffung je Kategorie/Rolle. Nie aus einem indirekten Signal. */
-function personModusVon(kategorie: PersonKategorie | "", rolle: string, beistandTyp: "privat" | "organisation", gepflegt: boolean): PersonModus {
-  if (gepflegt) return "privat";
-  if (kategorie === "benutzer") return "mitarbeitende"; // nur im Bearbeiten-Fall (Seed)
-  if (kategorie === "fachpersonal") return "kontakt";
-  if (kategorie === "bezugsperson") {
-    if (!rolle) return "";
-    if (rolle === "sozialdienst") return "kontakt";
-    if (rolle === "beistand") return beistandTyp === "organisation" ? "kontakt" : "privat";
-    return "privat"; // angehoerige, weitere
-  }
-  return "";
-}
-
 const KATEGORIE_KARTEN: { code: PersonKategorie; titel: string; text: string; icon: typeof Stethoscope }[] = [
-  { code: "fachpersonal", titel: "Medizinisches Fachpersonal", text: "Hausarzt, Spezialarzt, Therapie, Apotheke.", icon: Stethoscope },
+  { code: "fachpersonal", titel: "Medizinisches Fachpersonal", text: "Hausarzt, Spezialarzt, Therapie, Apotheke, Spital oder Klinik.", icon: Stethoscope },
   { code: "bezugsperson", titel: "Bezugsperson", text: "Angehörige, Beistand, Sozialdienst, weitere.", icon: Users },
 ];
 
@@ -232,17 +226,28 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
   const [glnEdit, setGlnEdit] = useState(bearbeiteterKontakt?.gln ?? "");
   const glnEditOk = /^\d{13}$/.test(glnEdit.trim());
 
-  const modus = personModusVon(kategorie, rolle, beistandTyp, !!gepflegt);
   const rollenWaehlbar: BeziehungsrolleCode[] = kategorie ? ROLLEN_JE_KATEGORIE[kategorie] : [];
 
-  // Feldsatz und Kontakttyp für den Anlege-Block, aus Kategorie/Modus/Rolle.
-  const feldsatz: KontaktFeldsatz = kategorie === "fachpersonal" ? "fachpersonal" : modus === "privat" ? "privat" : "organisation";
+  // Personentyp je Rolle (Einzelquelle); nur beim Beistand entscheidet der Umschalter.
+  const istBenutzerEintrag = !!eintrag && kategorieFuerRolle(eintrag.rolle) === "benutzer";
+  const gesperrt = gepflegt || istBenutzerEintrag; // Person nicht wählbar (Seed/Mitarbeitende)
+  const typ = rolle ? personentypFuerRolle(rolle as BeziehungsrolleCode) : "";
+  const orgTyp = typ === "organisation" || (typ === "umschalter" && beistandTyp === "organisation");
+  const zeigtAngehoerige = kategorie === "bezugsperson" && !orgTyp;
+
+  // Feldsatz und Kontakttyp für den Anlege-Block.
+  const feldsatz: KontaktFeldsatz = orgTyp ? "organisation" : kategorie === "fachpersonal" ? "fachpersonal" : "privat";
   const kontaktTyp: KontakttypCode = kategorie === "fachpersonal" ? "arztpraxis"
-    : modus === "privat" ? "privatperson"
+    : !orgTyp ? "privatperson"
     : rolle === "beistand" ? "behoerde" : "sozialdienst";
 
   // Ausgewählte Person: gesperrte Fälle aus dem Eintrag, sonst aus der Auswahl.
-  const gewaehltePerson: PersonBezug | null = (gepflegt || modus === "mitarbeitende") ? (eintrag?.person ?? null) : person;
+  const gewaehltePerson: PersonBezug | null = gesperrt ? (eintrag?.person ?? null) : person;
+
+  // §3: besteht bereits ein offener Hausarzt? Der bisherige wird beim Speichern beendet.
+  const bestehenderHausarzt = rolle === "hausarzt"
+    ? eigene.find(b => b.id !== eintragId && beziehungAktiv(b) && b.rolle === "hausarzt")
+    : undefined;
 
   // Telefon der gewählten Person (jetzt an der Person, nicht an der Beziehung).
   const personTelefon = gewaehltePerson?.art === "angehoeriger" ? (angehoerige.find(a => a.id === gewaehltePerson.kennung)?.telefon ?? "")
@@ -276,10 +281,10 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
       kontaktSichern({ ...bearbeiteterKontakt, gln: glnEdit.trim() ? glnEdit.trim() : null });
     }
 
-    beziehungSichern({
+    const gespeichert = beziehungSichern({
       id: eintragId, patientId, person: zielPerson, rolle: zielRolle,
-      // Verwandtschaft nur im privaten Modus (Angehörige/private Bezugsperson).
-      art: modus === "privat" ? (art as Beziehung["art"]) : "",
+      // Verwandtschaft nur bei privaten Bezugspersonen (Angehörige/weitere/Beistand privat).
+      art: zeigtAngehoerige ? (art as Beziehung["art"]) : "",
       // Beistandschaft nur bei der Rolle beistand; sonst leer.
       beistandschaft: zielRolle === "beistand" ? beistandschaft : leereBeistandschaft(),
       // Beginn und Telefon werden im Dialog nicht mehr erfasst; Seed-Werte bleiben.
@@ -288,16 +293,18 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
       notfallkontakt: notfall, auskunftsberechtigt: auskunft,
       bemerkung: eintrag?.bemerkung ?? "",
     });
+    // §3: höchstens ein offener Hausarzt — der bisherige wird auf den Vortag beendet.
+    if (zielRolle === "hausarzt") sichereEindeutigenHausarzt(patientId, gespeichert.id, vortagGegenwart());
     onClose();
   };
 
   const funktionLabel = kategorie === "fachpersonal" ? "Funktion" : "Rolle";
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={eintrag ? "Beziehung bearbeiten" : "Person hinzufügen"} onClick={onClose}
+    <div role="dialog" aria-modal="true" aria-label={eintrag ? "Beziehung bearbeiten" : "Eintrag hinzufügen"} onClick={onClose}
       style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(19,19,20,0.28)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div onClick={e => e.stopPropagation()} style={{ width: 540, maxWidth: "100%", maxHeight: "88vh", overflowY: "auto", background: "var(--bg-elevated)", borderRadius: 12, border: "0.5px solid var(--border-default)", boxShadow: "var(--shadow-overlay)" }}>
-        <div style={{ padding: "16px 20px 8px", fontSize: 16, fontWeight: 500, color: "var(--text-primary)" }}>{eintrag ? "Beziehung bearbeiten" : "Person hinzufügen"}</div>
+        <div style={{ padding: "16px 20px 8px", fontSize: 16, fontWeight: 500, color: "var(--text-primary)" }}>{eintrag ? "Beziehung bearbeiten" : "Eintrag hinzufügen"}</div>
         <div style={{ padding: "8px 20px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
 
           {/* Schritt 1: Kategorie — nur beim Neuanlegen. */}
@@ -335,12 +342,12 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
               </div>
 
               {/* Person (gepflegte/Benutzer-Beziehung: gesperrt) */}
-              {(gepflegt || modus === "mitarbeitende") ? (
+              {gesperrt ? (
                 <Feld label="Person">
                   <div style={{ fontSize: 14, color: "var(--text-primary)" }}>
                     {personName(eintrag!, k => { const a = angehoerige.find(x => x.id === k); return a ? `${a.vorname} ${a.nachname}` : k; }, k => { const t = kontakte.find(x => x.id === k); return t ? kontaktName(t) : k; })}
                     {gepflegt && <span style={{ fontSize: 12, color: "var(--status-info)", marginLeft: 8 }}>im Angehörigen-Reiter gepflegt</span>}
-                    {modus === "mitarbeitende" && <span style={{ fontSize: 12, color: "var(--text-tertiary)", marginLeft: 8 }}>Spitex-Mitarbeitende</span>}
+                    {istBenutzerEintrag && <span style={{ fontSize: 12, color: "var(--text-tertiary)", marginLeft: 8 }}>Spitex-Mitarbeitende</span>}
                   </div>
                 </Feld>
               ) : null}
@@ -386,16 +393,26 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
               {/* Ein Suchfeld über Kontakte (und im privaten Modus Angehörige).
                   Das Feldlabel trägt die KontaktWahl selbst — keine zweite
                   Abschnittsüberschrift darüber. */}
-              {!gepflegt && modus !== "mitarbeitende" && rolle && (
+              {!gesperrt && rolle && (
                 <KontaktWahl person={person} onChange={setPerson}
                   feldsatz={feldsatz} kontaktTyp={kontaktTyp}
                   angehoerige={angehoerige.map(a => ({ id: a.id, vorname: a.vorname, nachname: a.nachname }))}
-                  zeigtAngehoerige={modus === "privat"}
+                  zeigtAngehoerige={zeigtAngehoerige}
                   abteilungLabel={zugehoerigkeitLabel(rolle)} />
               )}
 
-              {/* Verwandtschaft nur im privaten Modus */}
-              {modus === "privat" && (
+              {/* §3 Hausarzt eindeutig: Hinweis, dass der bisherige beendet wird. */}
+              {!gesperrt && bestehenderHausarzt && (
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", borderRadius: 12, background: "var(--status-warning-bg)", border: "0.5px solid var(--border-default)" }}>
+                  <AlertTriangle style={{ width: 15, height: 15, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
+                  <span style={{ flex: 1, fontSize: 13, color: "var(--text-secondary)" }}>
+                    Es besteht bereits ein Hausarzt ({personName(bestehenderHausarzt, k => { const a = angehoerige.find(x => x.id === k); return a ? `${a.vorname} ${a.nachname}` : k; }, k => { const t = kontakte.find(x => x.id === k); return t ? kontaktName(t) : k; })}). Er wird beim Speichern beendet — es ist höchstens ein Hausarzt zugleich zulässig.
+                  </span>
+                </div>
+              )}
+
+              {/* Verwandtschaft nur bei privaten Bezugspersonen */}
+              {zeigtAngehoerige && (
                 <Feld label="Verwandtschaft">
                   <InlineSelect value={art} onChange={setArt} platzhalter="nicht erfasst" options={BEZIEHUNGSART.map(a => ({ value: a.code, label: a.label }))} />
                 </Feld>

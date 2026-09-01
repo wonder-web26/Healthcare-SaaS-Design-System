@@ -119,6 +119,19 @@ export function beziehungEntfernen(id: string): void {
 }
 
 /**
+ * Höchstens ein offener Hausarzt je Patient. Beendet alle anderen offenen
+ * Hausarzt-Beziehungen auf `ende` (Anzeigeformat) — wie der Kassenwechsel in der
+ * Versicherung. Gilt nur für die Rolle `hausarzt`; andere Rollen sind mehrfach
+ * zulässig und werden nie berührt.
+ */
+export function sichereEindeutigenHausarzt(patientId: string, behaltenId: string, ende: string): void {
+  setzeBestand(bestand.map(b =>
+    (b.patientId === patientId && b.rolle === "hausarzt" && b.id !== behaltenId && b.ende.trim() === "")
+      ? { ...b, ende }
+      : b));
+}
+
+/**
  * Stellt die Beziehung `pflegende_angehoerige` zwischen Patient und angehöriger
  * Person sicher — entsteht aus dem Angehörigen-Reiter, nicht aus dem Dialog.
  * Existiert eine aktive, folgt sie der Person; sonst wird sie angelegt. Verwandt-

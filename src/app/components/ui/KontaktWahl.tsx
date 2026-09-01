@@ -146,7 +146,8 @@ export function KontaktWahl({
       anrede: !istOrg && anrede ? (anrede as KontaktAnrede) : null,
       titel: istFach && titel ? (titel as KontaktTitel) : null,
       fachgebiet: istFach && fachgebiet.trim() ? fachgebiet.trim() : null,
-      gln: istFach && gln.trim() ? gln.trim() : null,
+      // GLN bei Fachpersonal UND Organisationen (auch Apotheken/Spitäler tragen eine).
+      gln: (istFach || istOrg) && gln.trim() ? gln.trim() : null,
       organisation: istFach && organisation.trim() ? organisation.trim() : null,
       mobil: !istOrg && mobil.trim() ? mobil.trim() : null,
       strasse: strasse.trim() ? strasse.trim() : null,
@@ -239,6 +240,15 @@ export function KontaktWahl({
                 <FormFeld label="Organisation" wert={name} platzhalter="Pflicht" onAendern={setName} />
                 <FormFeld label={abteilungLabel} wert={zugehoerigkeit} onAendern={setZugehoerigkeit} />
                 <FormFeld label="Ansprechperson" wert={vorname} onAendern={setVorname} />
+                <div>
+                  <FeldLabel>GLN</FeldLabel>
+                  <input value={gln} onChange={e => setGln(e.target.value)} placeholder="13-stellig" inputMode="numeric" aria-label="GLN" className="ui-fokusring" style={feldInput} />
+                  {glnGetippt && (
+                    <div style={{ fontSize: "var(--text-meta)", marginTop: 4, color: glnOk ? "var(--status-success-text)" : "var(--status-warning-text)" }}>
+                      {glnOk ? "Format gültig (13 Stellen)." : `Noch keine 13 Stellen (${glnGetippt.replace(/\D/g, "").length}).`}
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>

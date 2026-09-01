@@ -31,6 +31,7 @@ export const BEZIEHUNGSROLLE = [
   { code: "spezialarzt", label: "Spezialarzt", seite: "extern" },
   { code: "therapie", label: "Therapie", seite: "extern" },
   { code: "apotheke", label: "Apotheke", seite: "extern" },
+  { code: "spital", label: "Spital oder Klinik", seite: "extern" },
   { code: "beistand", label: "Beistand", seite: "extern" },
   { code: "sozialdienst", label: "Sozialdienst", seite: "extern" },
   { code: "weitere", label: "Weitere", seite: "privat" },
@@ -63,6 +64,7 @@ const KATEGORIE_JE_ROLLE: Record<BeziehungsrolleCode, PersonKategorie> = {
   spezialarzt: "fachpersonal",
   therapie: "fachpersonal",
   apotheke: "fachpersonal",
+  spital: "fachpersonal",
   angehoerige: "bezugsperson",
   beistand: "bezugsperson",
   sozialdienst: "bezugsperson",
@@ -74,11 +76,11 @@ export function kategorieFuerRolle(rolle: BeziehungsrolleCode): PersonKategorie 
   return KATEGORIE_JE_ROLLE[rolle] ?? "bezugsperson";
 }
 
-/** Anzeige und Reihenfolge der Kategorien. */
-export const KATEGORIEN: { code: PersonKategorie; label: string }[] = [
-  { code: "benutzer", label: "Benutzer" },
-  { code: "fachpersonal", label: "Medizinisches Fachpersonal" },
-  { code: "bezugsperson", label: "Bezugsperson" },
+/** Anzeige und Reihenfolge der Kategorien. `labelPlural` für Gruppenüberschriften. */
+export const KATEGORIEN: { code: PersonKategorie; label: string; labelPlural: string }[] = [
+  { code: "benutzer", label: "Benutzer", labelPlural: "Benutzer" },
+  { code: "fachpersonal", label: "Medizinisches Fachpersonal", labelPlural: "Medizinisches Fachpersonal" },
+  { code: "bezugsperson", label: "Bezugsperson", labelPlural: "Bezugspersonen" },
 ];
 
 export function kategorieLabel(code: PersonKategorie): string {
@@ -88,9 +90,35 @@ export function kategorieLabel(code: PersonKategorie): string {
 /** Wählbare Rollen je Kategorie im Dialog (ohne pflegende_angehoerige). */
 export const ROLLEN_JE_KATEGORIE: Record<PersonKategorie, BeziehungsrolleCode[]> = {
   benutzer: ["bezugsperson", "stellvertretung"],
-  fachpersonal: ["hausarzt", "spezialarzt", "therapie", "apotheke"],
+  fachpersonal: ["hausarzt", "spezialarzt", "therapie", "apotheke", "spital"],
   bezugsperson: ["angehoerige", "beistand", "sozialdienst", "weitere"],
 };
+
+/**
+ * Personentyp je Rolle — Person oder Organisation, an EINER Stelle festgelegt
+ * (neben `kategorieFuerRolle`). `umschalter` nur beim Beistand, der beides sein
+ * kann; bei allen anderen steht der Typ fest und wird nicht gefragt.
+ */
+export type Personentyp = "person" | "organisation" | "umschalter";
+
+const PERSONENTYP_JE_ROLLE: Record<BeziehungsrolleCode, Personentyp> = {
+  hausarzt: "person",
+  spezialarzt: "person",
+  therapie: "person",
+  apotheke: "organisation",
+  spital: "organisation",
+  sozialdienst: "organisation",
+  beistand: "umschalter",
+  angehoerige: "person",
+  weitere: "person",
+  bezugsperson: "person",       // Benutzer — im Dialog nicht anlegbar
+  stellvertretung: "person",
+  pflegende_angehoerige: "person",
+};
+
+export function personentypFuerRolle(rolle: BeziehungsrolleCode): Personentyp {
+  return PERSONENTYP_JE_ROLLE[rolle] ?? "person";
+}
 
 /** Verwandtschaft — nur bei privaten Rollen. */
 export const BEZIEHUNGSART = [
@@ -181,6 +209,8 @@ export function zugehoerigkeitLabel(rolle: string): string {
     case "spezialarzt": return "Fachgebiet";
     case "sozialdienst": return "Stelle";
     case "beistand": return "Behörde";
+    case "spital": return "Abteilung";
+    case "apotheke": return "Filiale";
     default: return "Zugehörigkeit";
   }
 }
