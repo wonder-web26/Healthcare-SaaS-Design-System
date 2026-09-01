@@ -84,6 +84,21 @@ export function getPatient(id: string): Patient | undefined {
 }
 
 /**
+ * Der Ort, an dem die Pflege stattfindet: der abweichende Pflegeort, wenn gesetzt,
+ * sonst die Wohnsitzadresse. KEIN Aufrufer entscheidet das selbst — die
+ * Restkostenpflicht knüpft an den Wohnsitz, die Einsatzplanung an den Pflegeort.
+ * Gemeinde/Kanton bleiben am Wohnsitz und werden hier nicht mitgeführt.
+ */
+export interface PflegeAdresse { strasse: string; plz: string; ort: string; abweichend: boolean }
+export function pflegeAdresse(patientId: string): PflegeAdresse | null {
+  const p = getPatient(patientId);
+  if (!p) return null;
+  return p.pflegeortAbweichend
+    ? { strasse: p.pflegeortStrasse, plz: p.pflegeortPlz, ort: p.pflegeortOrt, abweichend: true }
+    : { strasse: p.strasse, plz: p.plz, ort: p.ort, abweichend: false };
+}
+
+/**
  * Der Patient eines Onboardings, sofern dieses bereits einen erzeugt hat.
  *
  * Exportiert, weil die Notizspur eines neu begonnenen Onboardings eine
@@ -125,6 +140,14 @@ export interface PatientStammdatenEingabe {
   adresseStrasse: string;
   adressePlz: string;
   adresseOrt: string;
+  gemeinde: string;
+  bfsNummer: string;
+  kanton: string;
+  land: string;
+  pflegeortAbweichend: boolean;
+  pflegeortStrasse: string;
+  pflegeortPlz: string;
+  pflegeortOrt: string;
   /* ── Bisher nicht übergeben ──────────────────────────────────────────────
      28 Angaben, die das Abklärungsgespräch erhebt und die nie beim Patienten
      ankamen. Sie standen im Formular und blieben dort. */
@@ -159,12 +182,6 @@ export interface AngehoerigerVerknuepfung {
   telefon: string;
 }
 
-/** "Musterstrasse 12, 8000 Zürich" — leere Bestandteile fallen weg. */
-function adresseZusammensetzen(strasse: string, plz: string, ort: string): string {
-  const ortsteil = [plz.trim(), ort.trim()].filter(Boolean).join(" ");
-  return [strasse.trim(), ortsteil].filter(Boolean).join(", ");
-}
-
 function angehoerigerAnzeige(a: AngehoerigerVerknuepfung | null): string {
   if (!a) return "";
   return `${a.vorname} ${a.name}`.trim();
@@ -192,7 +209,9 @@ function stammdatenAbbilden(
   eingabe: PatientStammdatenEingabe,
   angehoeriger: AngehoerigerVerknuepfung | null,
 ): Pick<Patient,
-  "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "adresse" | "aufnahmeDatum" |
+  "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "aufnahmeDatum" |
+  "strasse" | "plz" | "ort" | "gemeinde" | "bfsNummer" | "kanton" | "land" |
+  "pflegeortAbweichend" | "pflegeortStrasse" | "pflegeortPlz" | "pflegeortOrt" |
   "sprache" |
   "angehoeriger" | "angehoerigerTelefon" |
   "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
@@ -206,7 +225,17 @@ function stammdatenAbbilden(
     // BB13 ist die einzige Quelle. Der Bestand hält die BESCHRIFTUNG, weil
     // Zuweisungs-Übereinstimmung, Sprachfilter und Suche gegen Klartext prüfen.
     sprache: eingabe.spracheCode ? sdaSpracheLabel(eingabe.spracheCode) : "",
-    adresse: adresseZusammensetzen(eingabe.adresseStrasse, eingabe.adressePlz, eingabe.adresseOrt),
+    strasse: eingabe.adresseStrasse,
+    plz: eingabe.adressePlz,
+    ort: eingabe.adresseOrt,
+    gemeinde: eingabe.gemeinde,
+    bfsNummer: eingabe.bfsNummer,
+    kanton: eingabe.kanton,
+    land: eingabe.land || "CH",
+    pflegeortAbweichend: eingabe.pflegeortAbweichend,
+    pflegeortStrasse: eingabe.pflegeortAbweichend ? eingabe.pflegeortStrasse : "",
+    pflegeortPlz: eingabe.pflegeortAbweichend ? eingabe.pflegeortPlz : "",
+    pflegeortOrt: eingabe.pflegeortAbweichend ? eingabe.pflegeortOrt : "",
     geschlecht: eingabe.geschlecht,
     staatsangehoerigkeit: eingabe.staatsangehoerigkeit,
     heimatort: eingabe.heimatort,
@@ -266,7 +295,6 @@ export function erfassePatientImOnboarding(
     onboardingId,
     ...felder,
     status: "im_onboarding",
-    kanton: "",
     schweregrad: "",
     pflegefachkraft: NICHT_ZUGEWIESEN,
     pflegefachkraftInitialen: NICHT_ZUGEWIESEN,

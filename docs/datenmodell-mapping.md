@@ -78,17 +78,50 @@ bewusst, statt Strings zu zerlegen oder Labels rückwärts auf Codes zu mappen.
 
 | Item | Patientenfeld heute | Warum untauglich | Auflösungsweg |
 |---|---|---|---|
-| `iA10` Wohnort PLZ/Ort | `adresse` (ein String inkl. Strasse) | BB6 will nur PLZ+Ort | **`adresse` in `plz` und `ort` trennen** (eigene Felder am Patienten) |
+| `iA10` Wohnort PLZ/Ort | ~~`adresse` (ein String)~~ | — | **AUFGELÖST:** die Adresse ist strukturiert (`plz`/`ort`), `iA10` trägt Herkunft `klient` und liest berechnet „PLZ, Ort" durch (`klientWert`); beim Sperren als eine Antwort materialisiert. Eine der beiden Doppelerfassungen ist damit weg. |
 | `CHA7a` Grundversicherung | ~~`krankenkasse` (Label)~~ | — | **AUFGELÖST:** `CHA7a`/`CHA7b`/`CHA7c` lesen jetzt den Namen des aktiven KVG-/VVG-/UVG-Versicherers aus den Versicherungsverhältnissen (`aktiverVersichererName`). Das Patientenfeld `krankenkasse` entfällt; die Doppelerfassung der Grundversicherung ist damit weg. |
 | `iB4` Sprache | `sprache` (Label) | Auswahl-Code ≠ Label | **Sprache als Code führen** (Label nur zur Anzeige ableiten) |
 
-**Folge — sichtbar dokumentiert, nicht stillschweigend:** Damit sind **Wohnort,
-Krankenkasse und Sprache doppelt erfasst** — im Onboarding (Patient) **und** im
-Registrierungsformular, nebeneinander, und sie **können auseinanderlaufen**. Das
-ist der Preis für den kleinen Umbau (kein Zerlegen/Rückmappen). Er ist
-vertretbar, entfällt aber erst, wenn die drei Felder oben nach dem Auflösungsweg
-umgestellt sind — dann werden auch diese drei Items durchgelesen statt doppelt
-geführt.
+**Folge — sichtbar dokumentiert:** Wohnort (`iA10`) und Krankenkasse (`CHA7a/b/c`)
+sind **aufgelöst** und werden durchgelesen. Es bleibt **eine** Doppelerfassung:
+die **Sprache** (`iB4`) — sie ist im Onboarding (Patient) und im
+Registrierungsformular nebeneinander erfasst und kann auseinanderlaufen, bis
+`sprache` als Code geführt wird.
+
+## Adresse strukturiert, politische Gemeinde, abweichender Pflegeort
+
+Abgleich mit dem kantonalen Rechnungsformular V5.1 (Basel-Landschaft) und der
+Solothurner Restkostenübersicht 2026:
+
+- **Strukturierte Wohnsitzadresse** am `Patient`: `strasse`, `plz`, `ort`,
+  `gemeinde`, `bfsNummer`, `kanton` (wiederverwendet), `land` (Vorgabe `CH`). Das
+  frühere zusammengesetzte Feld `adresse` **entfällt** — der Anzeigestring wird
+  bei Bedarf gebildet (`patientAdresse`/`adresseAnzeige`), **nicht gespeichert**.
+  Kein Parsen des Alt-Strings: die Seed-Einzelfelder sind direkt gesetzt.
+- **Politische Gemeinde + BFS-Nummer** (≠ Ort): Empfänger und Satz der
+  Restkostenrechnung hängen an der BFS-Nummer der politischen Gemeinde. **Freitext**,
+  keine Auswahlliste — ein Verzeichnis der ~2100 Gemeinden mit BFS-Nummern liegt
+  nicht vor. **Gemeinde und Kanton werden nicht aus der PLZ abgeleitet** (nicht
+  eindeutig). Künftig kommen Gemeinde und BFS-Nummer aus einem Gemeindeverzeichnis;
+  bis dahin Freitext.
+- **Kanton als Auswahl** über die 26 Kantone (`lib/stammdaten/kantone.ts`, Kürzel):
+  `pflegetarife.ts` vergleicht über die Zeichenkette, eine abweichende Schreibweise
+  bräche die Tarifzuordnung still. Fixtures und `pflegetarife.ts` nutzen dieselbe
+  Schreibweise (Kürzel) — deshalb Auswahl statt Textfeld.
+- **Abweichender Pflegeort** (`pflegeortAbweichend` + `pflegeortStrasse/Plz/Ort`):
+  eine Klientin ist am Wohnsitz gemeldet, wird aber z. B. bei der Tochter betreut.
+  `pflegeAdresse(patientId)` liefert den Pflegeort, wenn abweichend, sonst den
+  Wohnsitz — **kein Aufrufer entscheidet das selbst**. Restkostenpflicht knüpft an
+  den Wohnsitz (Art. 25a KVG), darum **keine Gemeinde/Kanton am Pflegeort**. Der
+  Hinweis erscheint überall, wo die Adresse steht (Patient360-Kopf + Adresskarte).
+- **`iA10`** (Registrierung) liest jetzt `plz`/`ort` der **Wohnsitzadresse** durch.
+  **Offene Frage an Spitex Schweiz:** ob `iA10` den Wohnsitz oder den Pflegeort
+  meint, ist ungeklärt (BB9-Hilfetext nennt den Ort des Leistungsbezugs). Vorerst
+  Wohnsitz.
+- **Adresskomponente:** neue eigenständige `components/ui/AdressFelder.tsx` (Strasse,
+  PLZ, Ort + vorbereitetes Suchfeld, `adresseSuchen`-Stub, nicht angebunden). Der
+  Patient nutzt sie. **Offen (eigener kleiner Lauf):** `KontaktWahl` trägt die
+  Adresse noch inline und ist auf diese Komponente umzustellen.
 
 ## Nachbesserung Versicherungsfelder (vier Feldänderungen)
 

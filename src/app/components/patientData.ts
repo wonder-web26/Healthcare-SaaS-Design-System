@@ -52,7 +52,22 @@ export interface Patient {
   pflegefachkraftInitialen: string;
   ahvNummer: string;
   geburtsdatum: string;
-  adresse: string;
+  /* Wohnsitzadresse strukturiert (kein zusammengesetzter String mehr). `kanton`
+     steht oben und wird von Tarifen/Zuteilung gelesen. Der Anzeigestring wird
+     bei Bedarf aus diesen Feldern gebildet (patientAdresse), nicht gespeichert. */
+  strasse: string;
+  plz: string;
+  ort: string;
+  /** Politische Gemeinde — Empfänger/Satz der Restkostenrechnung (≠ Ort). */
+  gemeinde: string;
+  /** BFS-Nummer der politischen Gemeinde; leer, solange kein Verzeichnis vorliegt. */
+  bfsNummer: string;
+  land: string;
+  /** Pflegeort weicht vom Wohnsitz ab (Betreuung z. B. bei der Tochter). */
+  pflegeortAbweichend: boolean;
+  pflegeortStrasse: string;
+  pflegeortPlz: string;
+  pflegeortOrt: string;
   leistungsart: string;
   aufnahmeDatum: string;
   letzterBesuch: string;
@@ -135,6 +150,20 @@ export interface Patient {
     faelligDatum: string; // dd.mm.yyyy
     ueberfaellig: boolean;
   } | null; // null = keine offene Aufgabe
+}
+
+/**
+ * Anzeigestring einer strukturierten Adresse — „Strasse, PLZ Ort". Ersetzt das
+ * frühere gespeicherte Feld `adresse`: der String wird gebildet, nicht gehalten.
+ */
+export function adresseAnzeige(strasse: string, plz: string, ort: string): string {
+  const zeile2 = [plz, ort].filter(s => s.trim()).join(" ");
+  return [strasse.trim(), zeile2].filter(Boolean).join(", ");
+}
+
+/** Anzeigestring der Wohnsitzadresse eines Patienten. */
+export function patientAdresse(p: Pick<Patient, "strasse" | "plz" | "ort">): string {
+  return adresseAnzeige(p.strasse, p.plz, p.ort);
 }
 
 /* ── Status config ─────────────────────── */
@@ -305,7 +334,16 @@ export const patientenSeed: Patient[] = [
     pflegefachkraftInitialen: "SW",
     ahvNummer: "756.1234.5678.90",
     geburtsdatum: "15.03.1948",
-    adresse: "Bahnhofstrasse 42, 8001 Zürich",
+    strasse: "Bahnhofstrasse 42",
+    plz: "8001",
+    ort: "Zürich",
+    gemeinde: "Zürich",
+    bfsNummer: "",
+    land: "CH",
+    pflegeortAbweichend: false,
+    pflegeortStrasse: "",
+    pflegeortPlz: "",
+    pflegeortOrt: "",
     leistungsart: "Pflege HKP",
     aufnahmeDatum: "12.01.2026",
     letzterBesuch: "31.07.2026",
@@ -366,7 +404,16 @@ export const patientenSeed: Patient[] = [
     pflegefachkraftInitialen: "KM",
     ahvNummer: "756.9876.5432.10",
     geburtsdatum: "08.11.1955",
-    adresse: "Oerlikonerstrasse 15, 8057 Zürich",
+    strasse: "Oerlikonerstrasse 15",
+    plz: "8057",
+    ort: "Zürich",
+    gemeinde: "Zürich",
+    bfsNummer: "",
+    land: "CH",
+    pflegeortAbweichend: false,
+    pflegeortStrasse: "",
+    pflegeortPlz: "",
+    pflegeortOrt: "",
     leistungsart: "Hauswirtschaft",
     aufnahmeDatum: "20.02.2026",
     letzterBesuch: "—",
@@ -427,7 +474,16 @@ export const patientenSeed: Patient[] = [
     pflegefachkraftInitialen: "LB",
     ahvNummer: "756.1111.2222.33",
     geburtsdatum: "22.06.1940",
-    adresse: "Seestrasse 88, 8002 Zürich",
+    strasse: "Seestrasse 88",
+    plz: "8002",
+    ort: "Zürich",
+    gemeinde: "Zürich",
+    bfsNummer: "",
+    land: "CH",
+    pflegeortAbweichend: false,
+    pflegeortStrasse: "",
+    pflegeortPlz: "",
+    pflegeortOrt: "",
     leistungsart: "Pflege A",
     aufnahmeDatum: "03.09.2025",
     letzterBesuch: "28.07.2026",
@@ -488,7 +544,16 @@ export const patientenSeed: Patient[] = [
     pflegefachkraftInitialen: "MK",
     ahvNummer: "756.4444.5555.66",
     geburtsdatum: "30.01.1952",
-    adresse: "Hauptstrasse 5, 5000 Aarau",
+    strasse: "Hauptstrasse 5",
+    plz: "5000",
+    ort: "Aarau",
+    gemeinde: "Aarau",
+    bfsNummer: "",
+    land: "CH",
+    pflegeortAbweichend: false,
+    pflegeortStrasse: "",
+    pflegeortPlz: "",
+    pflegeortOrt: "",
     leistungsart: "Beratung",
     aufnahmeDatum: "15.06.2025",
     letzterBesuch: "14.07.2026",
@@ -545,7 +610,16 @@ export const patientenSeed: Patient[] = [
     pflegefachkraftInitialen: "SW",
     ahvNummer: "756.7777.8888.99",
     geburtsdatum: "18.09.1945",
-    adresse: "Schwamendingenstrasse 12, 8051 Zürich",
+    strasse: "Schwamendingenstrasse 12",
+    plz: "8051",
+    ort: "Zürich",
+    gemeinde: "Zürich",
+    bfsNummer: "",
+    land: "CH",
+    pflegeortAbweichend: false,
+    pflegeortStrasse: "",
+    pflegeortPlz: "",
+    pflegeortOrt: "",
     leistungsart: "Pflege HKP",
     aufnahmeDatum: "28.07.2025",
     letzterBesuch: "27.07.2026",
@@ -606,7 +680,16 @@ export const patientenSeed: Patient[] = [
     pflegefachkraftInitialen: "—",
     ahvNummer: "756.3333.4444.55",
     geburtsdatum: "04.04.1960",
-    adresse: "Rosenbergstrasse 22, 9000 St. Gallen",
+    strasse: "Rosenbergstrasse 22",
+    plz: "9000",
+    ort: "St. Gallen",
+    gemeinde: "St. Gallen",
+    bfsNummer: "",
+    land: "CH",
+    pflegeortAbweichend: false,
+    pflegeortStrasse: "",
+    pflegeortPlz: "",
+    pflegeortOrt: "",
     leistungsart: "Therapie",
     aufnahmeDatum: "22.02.2026",
     letzterBesuch: "—",
@@ -667,7 +750,16 @@ export const patientenSeed: Patient[] = [
     pflegefachkraftInitialen: "KM",
     ahvNummer: "756.2222.3333.44",
     geburtsdatum: "11.12.1938",
-    adresse: "Limmatquai 74, 8001 Zürich",
+    strasse: "Limmatquai 74",
+    plz: "8001",
+    ort: "Zürich",
+    gemeinde: "Zürich",
+    bfsNummer: "",
+    land: "CH",
+    pflegeortAbweichend: false,
+    pflegeortStrasse: "",
+    pflegeortPlz: "",
+    pflegeortOrt: "",
     leistungsart: "Pflege HKP",
     aufnahmeDatum: "01.11.2025",
     letzterBesuch: "30.07.2026",
@@ -728,7 +820,16 @@ export const patientenSeed: Patient[] = [
     pflegefachkraftInitialen: "LB",
     ahvNummer: "756.5555.6666.77",
     geburtsdatum: "19.07.1935",
-    adresse: "Bundesgasse 10, 3011 Bern",
+    strasse: "Bundesgasse 10",
+    plz: "3011",
+    ort: "Bern",
+    gemeinde: "Bern",
+    bfsNummer: "",
+    land: "CH",
+    pflegeortAbweichend: false,
+    pflegeortStrasse: "",
+    pflegeortPlz: "",
+    pflegeortOrt: "",
     leistungsart: "Pflege A",
     aufnahmeDatum: "05.04.2025",
     letzterBesuch: "25.07.2026",
@@ -789,7 +890,16 @@ export const patientenSeed: Patient[] = [
     pflegefachkraftInitialen: "SW",
     ahvNummer: "756.8888.9999.00",
     geburtsdatum: "25.05.1950",
-    adresse: "Hönggerstrasse 31, 8037 Zürich",
+    strasse: "Hönggerstrasse 31",
+    plz: "8037",
+    ort: "Zürich",
+    gemeinde: "Zürich",
+    bfsNummer: "",
+    land: "CH",
+    pflegeortAbweichend: false,
+    pflegeortStrasse: "",
+    pflegeortPlz: "",
+    pflegeortOrt: "",
     leistungsart: "Hauswirtschaft",
     aufnahmeDatum: "18.12.2025",
     letzterBesuch: "02.08.2026",
@@ -846,7 +956,16 @@ export const patientenSeed: Patient[] = [
     pflegefachkraftInitialen: "MK",
     ahvNummer: "756.6666.7777.88",
     geburtsdatum: "02.08.1942",
-    adresse: "Pilatusstrasse 8, 6003 Luzern",
+    strasse: "Pilatusstrasse 8",
+    plz: "6003",
+    ort: "Luzern",
+    gemeinde: "Luzern",
+    bfsNummer: "",
+    land: "CH",
+    pflegeortAbweichend: false,
+    pflegeortStrasse: "",
+    pflegeortPlz: "",
+    pflegeortOrt: "",
     leistungsart: "Pflege HKP",
     aufnahmeDatum: "10.10.2025",
     letzterBesuch: "28.07.2026",

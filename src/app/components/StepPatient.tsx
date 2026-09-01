@@ -138,6 +138,16 @@ export interface PatientFormData {
   adresseStrasse: string;
   adressePlz: string;
   adresseOrt: string;
+  /** Politische Gemeinde + BFS-Nummer (≠ Ort); Kanton als Auswahl; Land Vorgabe CH. */
+  gemeinde: string;
+  bfsNummer: string;
+  kanton: string;
+  land: string;
+  /** Abweichender Pflegeort (Wohnsitz ≠ Pflegeort). */
+  pflegeortAbweichend: boolean;
+  pflegeortStrasse: string;
+  pflegeortPlz: string;
+  pflegeortOrt: string;
   /* Der Notfallkontakt ist eine dritte Person und steht im Kontaktbestand.
      Erfasst wird die Kennung, nie der Name — ändert sich der Name am
      Kontakt, ändert er sich überall mit. Die Verwandtschaft bleibt hier:
@@ -248,6 +258,14 @@ export const emptyPatientForm: PatientFormData = {
   adresseStrasse: "",
   adressePlz: "",
   adresseOrt: "",
+  gemeinde: "",
+  bfsNummer: "",
+  kanton: "",
+  land: "CH",
+  pflegeortAbweichend: false,
+  pflegeortStrasse: "",
+  pflegeortPlz: "",
+  pflegeortOrt: "",
   spracheCode: "",
   spracheAndere: "",
   uebersetzerNotwendig: "",

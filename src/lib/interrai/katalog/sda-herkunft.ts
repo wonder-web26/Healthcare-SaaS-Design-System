@@ -9,12 +9,14 @@
  *              materialisiert.
  *   formular — nur im Formular erfasst.
  *
- * `SDA_PATIENT_FELD` bildet jedes `klient`-Item auf sein Patientenfeld ab. Drei
- * Items tragen `null`: iA10 (Adresse als zusammengesetzter String), CHA7a
- * (Krankenkasse als Label) und iB4 (Sprache als Label) taugen mit dem heutigen
- * Patientenfeld nicht zum Durchlesen/Rückschreiben. Sie werden formularseitig
- * geführt (im Formular erfasst, beim Sperren materialisiert) und sind als
- * benannte Abweichung dokumentiert (docs/datenmodell-mapping.md).
+ * `SDA_PATIENT_FELD` bildet jedes `klient`-Item auf sein Patientenfeld ab. Zwei
+ * Items tragen `null`: CHA7a (Krankenkasse als Label) und iB4 (Sprache als
+ * Label) taugen mit dem heutigen Patientenfeld nicht zum Durchlesen. Sie werden
+ * formularseitig geführt (benannte Abweichung, docs/datenmodell-mapping.md).
+ *
+ * `iA10` (Wohnort PLZ/Ort) wird durchgelesen, aber aus ZWEI Feldern gebildet
+ * (`plz`, `ort` → „PLZ, Ort") — ein berechneter Klientwert (klientWert), darum
+ * kein einzelnes `SDA_PATIENT_FELD`. Read-only, kein Rückschreiben.
  */
 import { SDA_KATALOG } from "./sda-katalog";
 
@@ -60,9 +62,9 @@ export const SDA_PATIENT_FELD: Readonly<Record<string, string | null>> = {
   iA11b: "wohnsituation",
   iA12a: "formZusammenleben",
   iA12b: "neuZusammenlebend",
-  // Abweichung — formularseitig, nicht durchgelesen:
-  iA10: null, // Wohnort PLZ/Ort ≠ adresse (String inkl. Strasse)
-  iB4: null, // Sprache (Auswahl-Code) ≠ sprache (Label)
+  // iA10 wird berechnet gelesen (plz + ort), nicht über ein einzelnes Feld — siehe klientWert.
+  iA10: null,
+  iB4: null, // Sprache (Auswahl-Code) ≠ sprache (Label), formularseitig
   // CHA7a/b/c werden aus den Versicherungsverhältnissen gelesen (siehe unten),
   // nicht aus einem Patientenfeld.
 };
@@ -82,9 +84,26 @@ export function sdaHerkunft(iCode: string): ItemHerkunft {
   return SDA_HERKUNFT[iCode] ?? "formular";
 }
 
-/** Trägt dieses Item seinen Wert aus dem Patienten (durchgelesen, rückschreibbar)? */
+/** Berechnete Klientwerte — aus mehr als einem Patientenfeld gebildet (iA10). */
+const KLIENT_BERECHNET = new Set<string>(["iA10"]);
+
+/** Trägt dieses Item seinen Wert aus dem Patienten (durchgelesen)? */
 export function istPatientDurchgelesen(iCode: string): boolean {
-  return SDA_HERKUNFT[iCode] === "klient" && SDA_PATIENT_FELD[iCode] != null;
+  return SDA_HERKUNFT[iCode] === "klient" && (SDA_PATIENT_FELD[iCode] != null || KLIENT_BERECHNET.has(iCode));
+}
+
+/**
+ * Durchgelesener Wert eines klient-Items aus dem Patienten. Einzelfelder direkt;
+ * `iA10` berechnet als „PLZ, Ort" der Wohnsitzadresse. Feldnamen als String,
+ * damit der Katalog vom Patientenmodell entkoppelt bleibt.
+ */
+export function klientWert(iCode: string, patient: Record<string, unknown>): string {
+  if (iCode === "iA10") {
+    const teile = [String(patient.plz ?? "").trim(), String(patient.ort ?? "").trim()].filter(Boolean);
+    return teile.join(", ");
+  }
+  const feld = SDA_PATIENT_FELD[iCode];
+  return feld ? String(patient[feld] ?? "") : "";
 }
 
 /** Liest dieses Item den Namen des aktiven Versicherers (CHA7a/b/c)? */

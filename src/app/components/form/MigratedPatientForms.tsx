@@ -12,6 +12,8 @@ import { NumberInput } from "./NumberInput";
 import { AHVNummerInput } from "./AHVNummerInput";
 import { SegmentedControl } from "./SegmentedControl";
 import { Combobox as FormSelect } from "./Combobox";
+import { AdressFelder } from "../ui/AdressFelder";
+import { KANTON_OPTIONS } from "../../../lib/stammdaten/kantone";
 import { FormField } from "./FormField";
 import { DateField } from "./DateField";
 import type { PatientFormData } from "../StepPatient";
@@ -103,14 +105,48 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" /></div>
       </div>
 
-      <SectionHeader icon={MapPin} label="Adresse" />
-      <div style={{ marginBottom: "var(--space-5)" }}>
-        <TextInput label="Strasse" required value={data.adresseStrasse} onChange={v => onUpdate("adresseStrasse", v)} onBlur={() => onBlur("adresseStrasse")} placeholder="Musterstrasse 12" error={t("adresseStrasse") && !filled(data.adresseStrasse) ? "Pflichtfeld" : undefined} />
+      <SectionHeader icon={MapPin} label="Wohnsitzadresse" />
+      <AdressFelder
+        required
+        wert={{ strasse: data.adresseStrasse, plz: data.adressePlz, ort: data.adresseOrt }}
+        onChange={patch => {
+          if (patch.strasse !== undefined) onUpdate("adresseStrasse", patch.strasse);
+          if (patch.plz !== undefined) onUpdate("adressePlz", patch.plz);
+          if (patch.ort !== undefined) onUpdate("adresseOrt", patch.ort);
+        }}
+        fehler={{
+          strasse: t("adresseStrasse") && !filled(data.adresseStrasse) ? "Pflichtfeld" : undefined,
+          ort: t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined,
+        }}
+      />
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-3)" }}>
+        <TextInput label="Politische Gemeinde" value={data.gemeinde} onChange={v => onUpdate("gemeinde", v)} placeholder="z.B. Winterthur"
+          hint="Bestimmt den Restkostensatz und den Empfänger der Restkostenrechnung." />
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="BFS-Nummer" value={data.bfsNummer} onChange={v => onUpdate("bfsNummer", v.replace(/\D/g, ""))} placeholder="optional" /></div>
+        <FormSelect label="Kanton" value={data.kanton || null} onChange={v => onUpdate("kanton", v || "")} options={KANTON_OPTIONS} placeholder="Kanton wählen" />
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Land" value={data.land} onChange={v => onUpdate("land", v)} placeholder="CH" /></div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="PLZ" required value={data.adressePlz} onChange={v => onUpdate("adressePlz", v.replace(/\D/g, "").slice(0, 4))} onBlur={() => onBlur("adressePlz")} placeholder="8000" /></div>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Ort" required value={data.adresseOrt} onChange={v => onUpdate("adresseOrt", v)} onBlur={() => onBlur("adresseOrt")} placeholder="Zürich" error={t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined} /></div>
+
+      <div style={{ marginTop: "var(--space-4)" }}>
+        <SegmentedControl label="Pflegeort" value={data.pflegeortAbweichend ? "abweichend" : "gleich"}
+          onChange={v => onUpdateMehrere?.({ pflegeortAbweichend: v === "abweichend" })}
+          options={[
+            { value: "gleich", label: "Pflege findet an dieser Adresse statt" },
+            { value: "abweichend", label: "Pflege findet an einer anderen Adresse statt" },
+          ]} />
       </div>
+      {data.pflegeortAbweichend && (
+        <div style={{ marginTop: "var(--space-4)" }}>
+          <SectionHeader icon={MapPin} label="Pflegeort" />
+          <AdressFelder idPrefix="pflegeort"
+            wert={{ strasse: data.pflegeortStrasse, plz: data.pflegeortPlz, ort: data.pflegeortOrt }}
+            onChange={patch => {
+              if (patch.strasse !== undefined) onUpdate("pflegeortStrasse", patch.strasse);
+              if (patch.plz !== undefined) onUpdate("pflegeortPlz", patch.plz);
+              if (patch.ort !== undefined) onUpdate("pflegeortOrt", patch.ort);
+            }} />
+        </div>
+      )}
 
       <SectionHeader icon={Shield} label="Versicherungen" />
       <div style={{ marginBottom: "var(--space-5)" }}>

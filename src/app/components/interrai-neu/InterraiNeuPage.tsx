@@ -79,7 +79,7 @@ import {
   type Bestaetigung,
 } from "../../../lib/interrai/store";
 import { SDA_KATALOG, SDA_BEREICHE, SDA_GRUPPEN, sdaGruppe, sdaItem, type SdaItem } from "../../../lib/interrai/katalog/sda-katalog";
-import { sdaHerkunft, istPatientDurchgelesen, istVersicherungDurchgelesen, SDA_PATIENT_FELD, SDA_VERSICHERUNG_TYP } from "../../../lib/interrai/katalog/sda-herkunft";
+import { sdaHerkunft, istPatientDurchgelesen, istVersicherungDurchgelesen, SDA_PATIENT_FELD, SDA_VERSICHERUNG_TYP, klientWert } from "../../../lib/interrai/katalog/sda-herkunft";
 import { aktiverVersichererName } from "../../../lib/versicherung/store";
 import { getPatient, patientFuerOnboarding, aktualisierePatient } from "../../../lib/patienten/store";
 import { ansichtPfad } from "../Patient360Page";
@@ -943,10 +943,8 @@ function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
   const aktiverIndex = SDA_BEREICH_META.findIndex((b) => b.code === aktiverCode);
   const naechsteMeta = SDA_BEREICH_META[aktiverIndex + 1];
 
-  const patFeld = (iCode: string): string => {
-    const feld = SDA_PATIENT_FELD[iCode];
-    return feld && patient ? String((patient as unknown as Record<string, unknown>)[feld] ?? "") : "";
-  };
+  const patFeld = (iCode: string): string =>
+    patient ? klientWert(iCode, patient as unknown as Record<string, unknown>) : "";
   // Effektiver Wert: nach dem Sperren aus den (materialisierten) Antworten;
   // davor je Herkunft aus Fall / Patient durchgelesen, sonst aus dem Formular.
   const wert = (item: SdaItem): string => {
@@ -963,8 +961,9 @@ function RegistrierungView({ assessmentId, returnZiel, returnLabel, person }: {
     const h = sdaHerkunft(item.iCode);
     if (h === "fall") return; // nicht editierbar
     if (istPatientDurchgelesen(item.iCode)) {
-      const feld = SDA_PATIENT_FELD[item.iCode]!;
-      if (patient) { aktualisierePatient(patient.id, { [feld]: v } as unknown as Parameters<typeof aktualisierePatient>[1]); rerender(); }
+      // Berechnete Klient-Items (iA10 = plz+ort) sind read-only, kein Rückschreiben.
+      const feld = SDA_PATIENT_FELD[item.iCode];
+      if (feld && patient) { aktualisierePatient(patient.id, { [feld]: v } as unknown as Parameters<typeof aktualisierePatient>[1]); rerender(); }
       return;
     }
     setAnswers((prev) => ({ ...prev, [item.iCode]: v }));

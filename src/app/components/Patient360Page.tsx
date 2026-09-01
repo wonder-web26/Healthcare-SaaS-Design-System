@@ -98,10 +98,13 @@ import {
   statusConfig,
   schweregradConfig,
   abrechnungsStatusConfig,
+  patientAdresse,
+  adresseAnzeige,
   type Patient,
 } from "./patientData";
-import { usePatienten, getPatient, aktualisierePatient, tageBisReAssessment,
+import { usePatienten, getPatient, aktualisierePatient, pflegeAdresse, tageBisReAssessment,
   austrittErfassen, AUSTRITT_FEHLERTEXT, type AustrittFehler } from "../../lib/patienten/store";
+import { KANTON_OPTIONS } from "../../lib/stammdaten/kantone";
 import { ENTLASSUNG_NACH, ENTLASSUNG_SONSTIGES, entlassungNachLabel } from "../../lib/stammdaten/entlassung";
 import { austrittVon, austrittText, monatNachAustritt, austrittsMonat } from "../../lib/patienten/austritt";
 import { GEGENWART, gegenwart } from "../../lib/gegenwart";
@@ -681,7 +684,12 @@ function Patient360Inhalt() {
               <span className="hidden md:inline">·</span>
               <span>Geb.: {patient.geburtsdatum}</span>
               <span className="hidden md:inline">·</span>
-              <span>{patient.adresse || "—"}</span>
+              <span>{patientAdresse(patient) || "—"}</span>
+              {patient.pflegeortAbweichend && (
+                <span className="inline-flex items-center" style={{ gap: 4, color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
+                  <AlertTriangle style={{ width: 12, height: 12 }} /> Pflege an: {adresseAnzeige(patient.pflegeortStrasse, patient.pflegeortPlz, patient.pflegeortOrt) || "—"}
+                </span>
+              )}
               <span className="hidden md:inline">·</span>
               {patient.pflegefachkraft !== "—" ? (
                 <BezugspersonFeld person={{ initialen: patient.pflegefachkraftInitialen, name: patient.pflegefachkraft }} />
@@ -831,6 +839,24 @@ function PDataField({ label, value, mono }: { label: string; value: string | Rea
   );
 }
 
+/** Kanton als Auswahl über die 26 Kantone (Textfeld bräche die Tarifzuordnung). */
+function KantonFeld({ value, editing, onChange }: { value: string; editing: boolean; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>Kanton</div>
+      {editing ? (
+        <select value={value} onChange={e => onChange(e.target.value)} aria-label="Kanton"
+          className="w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all">
+          <option value="">Bitte wählen</option>
+          {KANTON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      ) : (
+        <div className="text-[13px] text-foreground" style={{ fontWeight: 400 }}>{value || "—"}</div>
+      )}
+    </div>
+  );
+}
+
 /** Editable data field — shows input when editing, plain text otherwise */
 function PEditableField({
   label,
@@ -940,8 +966,11 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   /* ── Track which section is being edited ── */
   const [editingSection, setEditingSection] = useState<string | null>(null);
 
-  /* ── Editable fields: Adresse & Mandat ── */
-  const [adresse, setAdresse] = useState(patient.adresse);
+  /* ── Editable fields: Adresse & Mandat (strukturiert) ── */
+  const [strasse, setStrasse] = useState(patient.strasse);
+  const [plz, setPlz] = useState(patient.plz);
+  const [ort, setOrt] = useState(patient.ort);
+  const [gemeinde, setGemeinde] = useState(patient.gemeinde);
   const [kanton, setKanton] = useState(patient.kanton);
   const [leistungsart, setLeistungsart] = useState(patient.leistungsart);
 
@@ -966,7 +995,7 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const startEdit = (section: string) => {
     // Snapshot current values for the section
     if (section === "adresse") {
-      setSnapshot({ adresse, kanton, leistungsart });
+      setSnapshot({ strasse, plz, ort, gemeinde, kanton, leistungsart });
     }
     setEditingSection(section);
   };
@@ -974,7 +1003,10 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const cancelEdit = (section: string) => {
     // Revert to snapshot
     if (section === "adresse") {
-      setAdresse(snapshot.adresse ?? adresse);
+      setStrasse(snapshot.strasse ?? strasse);
+      setPlz(snapshot.plz ?? plz);
+      setOrt(snapshot.ort ?? ort);
+      setGemeinde(snapshot.gemeinde ?? gemeinde);
       setKanton(snapshot.kanton ?? kanton);
       setLeistungsart(snapshot.leistungsart ?? leistungsart);
     }
@@ -990,7 +1022,7 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const saveEdit = () => {
     if (editingSection === "adresse") {
       aktualisierePatient(patient.id, {
-        adresse, kanton, leistungsart,
+        strasse, plz, ort, gemeinde, kanton, leistungsart,
       });
     }
     setEditingSection(null);
@@ -1017,8 +1049,14 @@ function TabUeberblick({ patient }: { patient: Patient }) {
           onSave={saveEdit}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <PEditableField label="Adresse" value={adresse} editing={editingSection === "adresse"} onChange={setAdresse} />
-            <PEditableField label="Kanton" value={kanton} editing={editingSection === "adresse"} onChange={setKanton} />
+            <PEditableField label="Strasse und Nr." value={strasse} editing={editingSection === "adresse"} onChange={setStrasse} />
+            <PEditableField label="PLZ" value={plz} editing={editingSection === "adresse"} onChange={setPlz} />
+            <PEditableField label="Ort" value={ort} editing={editingSection === "adresse"} onChange={setOrt} />
+            <PEditableField label="Gemeinde" value={gemeinde} editing={editingSection === "adresse"} onChange={setGemeinde} />
+            <KantonFeld value={kanton} editing={editingSection === "adresse"} onChange={setKanton} />
+            {patient.pflegeortAbweichend && (
+              <PEditableField label="Pflegeort" value={adresseAnzeige(patient.pflegeortStrasse, patient.pflegeortPlz, patient.pflegeortOrt)} editing={false} onChange={() => {}} />
+            )}
             {/* Quelle ist BB13 im Reiter Personalien — hier nur Anzeige. */}
             <PEditableField label="Sprache" value={patient.sprache} editing={false} onChange={() => {}} />
             <PEditableField label="Leistungsart" value={leistungsart} editing={editingSection === "adresse"} onChange={setLeistungsart} />
@@ -3001,10 +3039,14 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
      Eine Karte „Vertretung" fehlt, weil Vorsorgeauftrag, Beistandschaft und
      Patientenverfügung im Gespräch nicht erhoben werden — drei leere Felder
      wären eine Behauptung. */
-  const KARTEN: Record<string, { k: keyof Patient; label: string; anzeige?: (v: string) => string }[]> = {
+  const KARTEN: Record<string, { k: keyof Patient; label: string; anzeige?: (v: string) => string; optionen?: { value: string; label: string }[] }[]> = {
     kontakt: [
-      { k: "adresse", label: "Adresse" },
-      { k: "kanton", label: "Kanton" },
+      { k: "strasse", label: "Strasse und Nr." },
+      { k: "plz", label: "PLZ" },
+      { k: "ort", label: "Ort" },
+      { k: "gemeinde", label: "Gemeinde" },
+      { k: "bfsNummer", label: "BFS-Nummer" },
+      { k: "kanton", label: "Kanton", optionen: KANTON_OPTIONS },
       { k: "telefon", label: "Telefon" },
       { k: "email", label: "E-Mail" },
       { k: "sprache", label: "Sprache" },
@@ -3112,7 +3154,7 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "var(--space-4)" }}>
         {KARTEN[id].map(f => (
           <StammFeld key={String(f.k)} label={f.label} wert={feld(f.k)} bearbeiten={bearbeiten}
-            anzeige={f.anzeige} onAendern={v => setEntwurf(e => ({ ...e, [f.k]: v }))} />
+            anzeige={f.anzeige} optionen={f.optionen} onAendern={v => setEntwurf(e => ({ ...e, [f.k]: v }))} />
         ))}
       </div>
       {id === "arzt" && (
@@ -3255,12 +3297,18 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
 }
 
 /** Ein Feld — im Lesezustand Text, im Bearbeitenzustand Eingabe. */
-function StammFeld({ label, wert, bearbeiten, anzeige, onAendern }: {
+function StammFeld({ label, wert, bearbeiten, anzeige, optionen, onAendern }: {
   label: string; wert: string; bearbeiten: boolean;
   /** Löst einen Code in Klartext auf; fehlt sie, steht der Wert selbst da. */
   anzeige?: (v: string) => string;
+  /** Wenn gesetzt: Auswahl statt Textfeld (z. B. Kanton). */
+  optionen?: { value: string; label: string }[];
   onAendern: (v: string) => void;
 }) {
+  const feldStil: React.CSSProperties = {
+    width: "100%", padding: "5px 8px", borderRadius: 8, fontFamily: "inherit", fontSize: "var(--text-small)",
+    color: "var(--text-primary)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
+  };
   if (!bearbeiten) {
     const text = anzeige ? anzeige(wert) : wert;
     return (
@@ -3275,9 +3323,14 @@ function StammFeld({ label, wert, bearbeiten, anzeige, onAendern }: {
   return (
     <div>
       <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>{label}</div>
-      <input value={wert} onChange={e => onAendern(e.target.value)} aria-label={label} className="ui-fokusring"
-        style={{ width: "100%", padding: "5px 8px", borderRadius: 8, fontFamily: "inherit", fontSize: "var(--text-small)",
-          color: "var(--text-primary)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }} />
+      {optionen ? (
+        <select value={wert} onChange={e => onAendern(e.target.value)} aria-label={label} className="ui-fokusring" style={feldStil}>
+          <option value="">Bitte wählen</option>
+          {optionen.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      ) : (
+        <input value={wert} onChange={e => onAendern(e.target.value)} aria-label={label} className="ui-fokusring" style={feldStil} />
+      )}
     </div>
   );
 }
