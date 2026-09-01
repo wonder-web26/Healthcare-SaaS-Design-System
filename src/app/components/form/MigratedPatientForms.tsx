@@ -105,6 +105,15 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" /></div>
       </div>
 
+      {/* Erreichbarkeit steht bewusst ÜBER der Adresse: zwei kurze Felder vor dem
+          grössten, aufklappbaren Abschnitt (Adresse mit Gemeinde- und Pflegeort-
+          Umschaltern). */}
+      <SectionHeader icon={Phone} label="Erreichbarkeit" />
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" value={data.email} onChange={v => onUpdate("email", v)} placeholder="name@example.com" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="+41 44 000 00 00" /></div>
+      </div>
+
       <SectionHeader icon={MapPin} label="Adresse" />
       <AdressBlock
         required
@@ -160,12 +169,6 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
             }} />
         </div>
       )}
-
-      <SectionHeader icon={Phone} label="Erreichbarkeit" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" value={data.email} onChange={v => onUpdate("email", v)} placeholder="name@example.com" /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="+41 44 000 00 00" /></div>
-      </div>
 
       <SectionHeader icon={Shield} label="Versicherungen" />
       <div style={{ marginBottom: "var(--space-5)" }}>

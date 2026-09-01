@@ -141,6 +141,14 @@ export function PersonalienFormV2({
         <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Zivilstand seit" required wertFormat="display" bereich="past" value={data.zivilstandSeit || null} onChange={v => set("zivilstandSeit", (v as string) ?? "")} onBlur={() => touch("zivilstandSeit")} /></div>
       </div>
 
+      {/* Erreichbarkeit steht über der Adresse — gleiche Reihenfolge wie im
+          Patienten-Onboarding. */}
+      <SectionHeader icon={Phone} label="Erreichbarkeit" />
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" required value={data.email} onChange={v => set("email", v)} onBlur={() => touch("email")} placeholder="name@example.com" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" required value={data.telefon} onChange={v => set("telefon", v)} onBlur={() => touch("telefon")} placeholder="+41 79 123 45 67" /></div>
+      </div>
+
       {/* Adresse */}
       <SectionHeader icon={MapPin} label="Adresse" />
       <AdressBlock
@@ -157,13 +165,6 @@ export function PersonalienFormV2({
           ort: touched.ort && !filled(data.ort) ? "Pflichtfeld" : undefined,
         }}
       />
-
-      {/* Erreichbarkeit */}
-      <SectionHeader icon={Phone} label="Erreichbarkeit" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" required value={data.email} onChange={v => set("email", v)} onBlur={() => touch("email")} placeholder="name@example.com" /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" required value={data.telefon} onChange={v => set("telefon", v)} onBlur={() => touch("telefon")} placeholder="+41 79 123 45 67" /></div>
-      </div>
 
       {/* Krankenkasse (SP-02, SP-03) */}
       <SectionHeader icon={Shield} label="Krankenkasse" />
