@@ -291,12 +291,25 @@ Regeln sind Teil des Standards. Sie werden nicht je Kunde abgewandelt.
 
 | Nr. | Auslöser | Wirkung |
 |---|---|---|
-| R16 | AN-B3 = B | Zusätzlicher Schritt „Spezialbewilligung B". Der Vertragsschritt bleibt gesperrt, solange AN-B9 ≠ eingereicht |
-| R17 | AN-B3 ∈ {B, S, F} | SEM-Meldeformular wird erzeugbar. Es liest unter anderem AN-A3 und AN-F13 |
+| R16 | AN-B3 = B | Zusätzlicher Schritt „Spezialbewilligung B", sichtbar und dokumentierbar. **Keine Vertragssperre** (aufgehoben in Korrekturen Lauf 1) |
+| R17 | AN-B3 ∈ {S, F} | SEM-Meldeformular wird erzeugbar. Bei AN-B3 = B erscheint stattdessen nur ein Abklärungs-Hinweis, kein Formular (Korrekturen Lauf 1) |
 | R18 | AN-F10 unter dem gesetzlichen Minimum für das Alter aus AN-A4 | Warnung |
 | R19 | AN-F8 | Ankerdatum der Monatsschritte |
 | R20 | AN-F6 mit vorliegender KLV-Verordnung | Qualifikationsnachweis wird erzeugt |
 | R21 | AN-G3 und AN-F7 | **SRK-Gate.** Gilt nur bei Qualifikationsstufe `srk` und `ohne_srk`; bei `fage_dipl` entfällt es. **Frist = AN-F8 + 12 Monate.** Ampel: Zertifikat vorhanden → erlaubt · fehlt und Frist läuft → Risiko · fehlt und Frist überschritten → pausiert. Ohne AN-F8 keine Ampel — nicht „erlaubt" als Vorgabe |
+
+## Korrekturen Lauf 1 — falsche Aussagen im Ausländerrechtsteil
+
+Vier Anzeigen behaupteten etwas, das nicht zutrifft; sie wurden vor dem Umbau der Regeln (Lauf 3) beseitigt. **Keine neue Regellogik.**
+
+1. **Versprochene Ablauf-Pendenz entfernt.** Der Hinweis unter AN-B7 (Ablaufdatum Bewilligung) versprach eine Erneuerungs-Pendenz 30 Tage vor Ablauf, die kein Code erzeugte. Neuer Hinweis: „Optional. Das Datum steht auf dem Ausweis." **Offen:** Die Fristenüberwachung des Bewilligungsablaufs wird zusammen mit SRK-Kurs und Supervision in einem Fristenmodell gebaut — mit vorgesehenem **Vorlauf von 90 Tagen** (nicht mehr 30).
+2. **Arbeitsort-Kanton nicht mehr festgeschrieben.** Das SEM-Meldeformular schrieb Kanton und Ort auf „Zürich" fest. Beide kommen jetzt aus dem Patientenkontext (`patientData.kanton`, Pflege-/Adressort); fehlt der Kanton, erscheint im Banner eine Kantonsauswahl, und der Download bleibt ohne Wahl inaktiv.
+3. **Feldzählung erreicht null.** `firmaUid`, `beschaeftigungsgrad` und `wochenstunden` sind aus den erfassten Daten nicht befüllbar (Org-Stammdatum bzw. im Onboarding nicht erhoben) und wurden aus der Zählung genommen. Die Zahl der leeren Felder kann jetzt null erreichen.
+4. **Meldepflicht-Hinweis bei Ausweis B entschärft.** Bei AN-B3 = B erscheint statt der behaupteten Meldepflicht ein Abklärungs-Hinweis („Verfahren abklären"), und der SEM-Knopf entfällt. Bei S und F unverändert. **Das Spezialbewilligungs-Gate bleibt sichtbar/dokumentierbar, sperrt aber die Vertragsunterzeichnung nicht mehr.**
+
+**Begründung zur aufgehobenen Sperre:** Eine EU-/EFTA-Angehörige mit Ausweis B darf ohne jedes Verfahren arbeiten. Die bisherige Sperre verhinderte eine zulässige Anstellung und erzeugte eine erfundene Pflicht. Solange die Unterscheidung EU/EFTA ↔ Drittstaat (und der Bewilligungsgrund) nicht erfasst wird, ist ein Hinweis richtiger als eine Sperre. Die Vertragssperre hing allein an AN-B9 (Status Spezialbewilligung); sie ist an zwei Stellen aufgehoben (Wizard-Schritt-Sperre und „Weiter"-Sperre auf dem Spezialbewilligungs-Schritt).
+
+**Bekannter Restposten (nicht Teil dieses Laufs):** `SpezialbewilligungDialog` trägt noch die Formulierungen „Vertragsphase … freigegeben/blockiert". Der Dialog ist im heutigen Onboarding nicht erreichbar (`onOpenSpezialbewilligung` wird nirgends aufgerufen); der Text bleibt als offener Posten für einen späteren Lauf.
 
 **Quelle zu R21:** Administrativvertrag Spitex Schweiz / ASPS mit
 Einkaufsgemeinschaft HSK, gültig ab 1.4.2023, Anhang 6 «Pflegende

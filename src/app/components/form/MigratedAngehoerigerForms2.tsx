@@ -340,10 +340,13 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
  * Sichtbarkeit wird live aus den Formulardaten abgeleitet.
  * Bereits hochgeladene Dateien werden bei Bedingungswegfall NICHT gelöscht.
  */
-export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
+export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung, arbeitsortKanton, arbeitsortOrt }: {
   data: AngehoerigerFormData;
   onChange: (d: AngehoerigerFormData) => void;
   onOpenSpezialbewilligung?: () => void;
+  /** Kanton (Kürzel) und Ort des Arbeitsorts, aus dem Patientenkontext; leer → Auswahl im SEM-Banner. */
+  arbeitsortKanton?: string;
+  arbeitsortOrt?: string;
 }) {
   const [previewOpen, setPreviewOpen] = useState<string | null>(null);
 
@@ -539,7 +542,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
 
         {/* SEM-Meldeformular im Dokumente-Tab (bei B, S, F) */}
         {(data.aufenthaltsstatus === "B" || data.aufenthaltsstatus === "S" || data.aufenthaltsstatus === "F") && (
-          <SEMMeldeBanner data={data} />
+          <SEMMeldeBanner data={data} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />
         )}
 
         {/* Pro-Kind-Dokumente: ein Upload pro Kind, das über Spitex abgerechnet wird */}

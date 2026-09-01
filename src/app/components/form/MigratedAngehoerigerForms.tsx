@@ -29,6 +29,7 @@ import { AUFENTHALTSSTATUS_OPTIONS, STATUS_B } from "../../../lib/stammdaten/auf
 import { FELD_MAX } from "./feldbreiten";
 import { leiteTarifcodeAb } from "../../../lib/stammdaten/quellensteuer-tarif";
 import { formDataToSEM, erstelleSEMFormular, ermittleFehlendeFelderSEM, downloadBlob } from "../../../lib/sem/meldeformular";
+import { KANTON_OPTIONS, kantonName } from "../../../lib/stammdaten/kantone";
 import { FUNKTIONEN_OPTIONS } from "../../../lib/stammdaten/funktionen";
 import { DEUTSCH_NIVEAU_OPTIONS } from "../../../lib/stammdaten/sprachkenntnisse";
 import { FIRMEN_DEFAULT_FERIENWOCHEN, berechneFerienzuschlagProzent, pruefeFerienMinimum } from "../../../lib/stammdaten/ferien";
@@ -65,11 +66,14 @@ const FUNKTIONEN = FUNKTIONEN_OPTIONS;
    ══════════════════════════════════════════ */
 
 export function PersonalienFormV2({
-  data, onChange, onOpenSpezialbewilligung,
+  data, onChange, onOpenSpezialbewilligung, arbeitsortKanton, arbeitsortOrt,
 }: {
   data: AngehoerigerFormData;
   onChange: (d: AngehoerigerFormData) => void;
   onOpenSpezialbewilligung?: () => void;
+  /** Kanton (Kürzel) und Ort des Arbeitsorts, aus dem Patientenkontext; leer → Auswahl im SEM-Banner. */
+  arbeitsortKanton?: string;
+  arbeitsortOrt?: string;
 }) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const touch = (f: string) => setTouched(p => ({ ...p, [f]: true }));
@@ -126,14 +130,14 @@ export function PersonalienFormV2({
             <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Einreisedatum" required wertFormat="display" bereich="past" value={data.einreisedatum || null} onChange={v => set("einreisedatum", (v as string) ?? "")} onBlur={() => touch("einreisedatum")} /></div>
             <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="ZEMIS-Nummer" required value={data.zemisNummer} onChange={v => set("zemisNummer", v)} onBlur={() => touch("zemisNummer")} placeholder="ZEMIS-Nummer" hint="Zentrales Migrationsinformationssystem" error={touched.zemisNummer && !filled(data.zemisNummer) ? "Bitte ausfüllen" : undefined} /></div>
             <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Einreichungsdatum Migrationsamt" required wertFormat="display" bereich="any" value={data.einreichungsdatumMigrationsamt || null} onChange={v => set("einreichungsdatumMigrationsamt", (v as string) ?? "")} onBlur={() => touch("einreichungsdatumMigrationsamt")} /></div>
-            <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Ablaufdatum Bewilligung" wertFormat="display" bereich="any" value={data.bewilligungAblaufdatum || null} onChange={v => set("bewilligungAblaufdatum", (v as string) ?? "")} hint="Optional — bei Eingabe wird 30 Tage vor Ablauf eine Erneuerungs-Pendenz erstellt" /></div>
+            <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Ablaufdatum Bewilligung" wertFormat="display" bereich="any" value={data.bewilligungAblaufdatum || null} onChange={v => set("bewilligungAblaufdatum", (v as string) ?? "")} hint="Optional. Das Datum steht auf dem Ausweis." /></div>
           </div>
         </div>
       )}
 
-      {/* SEM-Meldeformular: bei B, S, F Meldepflicht */}
+      {/* Ausländerrechtlicher Hinweis: bei B Abklärungs-Hinweis, bei S/F Meldepflicht */}
       {(data.aufenthaltsstatus === "B" || data.aufenthaltsstatus === "S" || data.aufenthaltsstatus === "F") && (
-        <SEMMeldeBanner data={data} />
+        <SEMMeldeBanner data={data} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
@@ -412,14 +416,25 @@ export function AnstellungFormV2({
    SEM-MELDEFORMULAR BANNER
    ══════════════════════════════════════════ */
 
-function SEMMeldeBanner({ data }: { data: AngehoerigerFormData }) {
+function SEMMeldeBanner({ data, arbeitsortKanton, arbeitsortOrt }: { data: AngehoerigerFormData; arbeitsortKanton?: string; arbeitsortOrt?: string }) {
   const [loading, setLoading] = useState(false);
   const [showLuecken, setShowLuecken] = useState(false);
 
-  const semDaten = formDataToSEM(data);
+  // Kanton/Ort des Arbeitsorts: aus dem Patientenkontext vorgegeben oder hier gewählt.
+  const kantonVorgegeben = (arbeitsortKanton ?? "").trim();
+  const ortVorgegeben = (arbeitsortOrt ?? "").trim();
+  const [kantonWahl, setKantonWahl] = useState(kantonVorgegeben);
+  const [ortWahl, setOrtWahl] = useState(ortVorgegeben);
+  const kantonBekannt = !!kantonVorgegeben;
+  const effektiverKanton = kantonBekannt ? kantonVorgegeben : kantonWahl;
+  const effektiverOrt = kantonBekannt ? ortVorgegeben : ortWahl;
+  const kantonFehlt = !effektiverKanton;
+
+  const semDaten = formDataToSEM(data, { kanton: effektiverKanton ? kantonName(effektiverKanton) : "", ort: effektiverOrt });
   const fehlend = ermittleFehlendeFelderSEM(semDaten);
 
   const handleDownload = async () => {
+    if (kantonFehlt) return;
     setLoading(true);
     try {
       const blob = await erstelleSEMFormular(semDaten);
@@ -431,6 +446,27 @@ function SEMMeldeBanner({ data }: { data: AngehoerigerFormData }) {
     setLoading(false);
   };
 
+  // ── Ausweis B: keine belegte Meldepflicht, solange EU/EFTA nicht unterscheidbar
+  //    ist. Hinweis zum Abklären statt Meldeformular. ──
+  if (data.aufenthaltsstatus === "B") {
+    return (
+      <div style={{ marginTop: "var(--space-4)", padding: "14px 18px", background: "var(--status-warning-bg)", borderRadius: 10, border: "0.5px solid var(--status-warning)" }}>
+        <div className="flex items-start" style={{ gap: 12 }}>
+          <AlertTriangle style={{ width: 18, height: 18, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--status-warning-text)" }}>
+              Verfahren abklären
+            </div>
+            <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", marginTop: 4 }}>
+              Bei Aufenthaltsstatus B hängt das Verfahren von der Staatsangehörigkeit und vom Grund der Bewilligung ab. Bei Angehörigen aus der EU oder EFTA ist weder eine Bewilligung noch eine Meldung erforderlich. Bei Drittstaatsangehörigen kann eine Bewilligung oder eine Meldung nötig sein. Vor dem Stellenantritt beim zuständigen kantonalen Amt abklären.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Ausweis S / F: belegte Meldepflicht, Formular herunterladbar ──
   return (
     <div style={{ marginTop: "var(--space-4)", padding: "14px 18px", background: "var(--status-warning-bg)", borderRadius: 10, border: "0.5px solid var(--status-warning)" }}>
       <div className="flex items-start" style={{ gap: 12 }}>
@@ -443,6 +479,14 @@ function SEMMeldeBanner({ data }: { data: AngehoerigerFormData }) {
             Aufenthaltsstatus {data.aufenthaltsstatus}: Bei Stellenantritt muss die Erwerbstätigkeit beim zuständigen kantonalen Amt gemeldet werden.
             Das offizielle SEM-Formular kann mit den erfassten Daten vorausgefüllt heruntergeladen werden.
           </div>
+
+          {/* Arbeitsort wählen, wenn kein Kanton aus dem Patientenkontext vorliegt */}
+          {!kantonBekannt && (
+            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-3)", marginTop: "var(--space-3)", maxWidth: 520 }}>
+              <FormSelect label="Kanton des Arbeitsorts" required value={kantonWahl || null} onChange={v => setKantonWahl(v || "")} options={KANTON_OPTIONS} placeholder="Kanton wählen" />
+              <TextInput label="Ort des Arbeitsorts" value={ortWahl} onChange={setOrtWahl} placeholder="z.B. Winterthur" />
+            </div>
+          )}
 
           {/* Fehlende Felder anzeigen */}
           {fehlend.length > 0 && (
@@ -465,13 +509,24 @@ function SEMMeldeBanner({ data }: { data: AngehoerigerFormData }) {
           <div style={{ marginTop: 10 }}>
             <button
               onClick={handleDownload}
-              disabled={loading}
-              className="inline-flex items-center cursor-pointer"
-              style={{ gap: 6, padding: "8px 18px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none", opacity: loading ? 0.6 : 1 }}
+              disabled={loading || kantonFehlt}
+              className={loading || kantonFehlt ? "inline-flex items-center" : "inline-flex items-center cursor-pointer"}
+              style={{
+                gap: 6, padding: "8px 18px", borderRadius: 999, fontSize: "var(--text-small)", fontWeight: 500, border: "none",
+                background: kantonFehlt ? "transparent" : "var(--brand-primary)",
+                color: kantonFehlt ? "var(--text-tertiary)" : "var(--text-on-dark)",
+                cursor: kantonFehlt ? "not-allowed" : "pointer",
+                opacity: loading ? 0.6 : 1,
+              }}
             >
               <Download style={{ width: 14, height: 14 }} />
               {loading ? "Wird erstellt…" : "SEM-Meldeformular herunterladen"}
             </button>
+            {kantonFehlt && (
+              <div style={{ marginTop: 6, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+                Bitte den Kanton des Arbeitsorts wählen.
+              </div>
+            )}
           </div>
         </div>
       </div>

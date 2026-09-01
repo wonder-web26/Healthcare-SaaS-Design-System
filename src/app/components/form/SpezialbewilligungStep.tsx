@@ -83,9 +83,9 @@ export function SpezialbewilligungStep({ data, onChange }: Props) {
       <div className="flex" style={{ gap: "var(--space-3)", padding: "var(--space-5)", background: "var(--brand-primary-light)", borderRadius: "var(--radius-card)", marginBottom: "var(--space-8)" }}>
         <Info style={{ width: 20, height: 20, color: "var(--brand-primary)", flexShrink: 0, marginTop: 1 }} />
         <div>
-          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: "var(--space-1)" }}>Was ist eine Spezialbewilligung?</div>
+          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: "var(--space-1)" }}>Verfahren abklären</div>
           <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-            Für Angehörige mit Aufenthaltsstatus B muss vor Vertragsabschluss eine Spezialbewilligung beim Migrationsamt eingereicht werden. Erfasse hier das Einreichungsdatum und lade die Bestätigung der Einreichung hoch.
+            Ob eine Bewilligung erforderlich ist, hängt von der Staatsangehörigkeit und vom Grund der Bewilligung ab. Diese Angaben werden derzeit nicht erfasst. Kläre das Verfahren vor der Vertragsunterzeichnung ab und dokumentiere es hier.
           </div>
         </div>
       </div>
@@ -114,27 +114,15 @@ export function SpezialbewilligungStep({ data, onChange }: Props) {
         />
       </div>
 
-      {/* Warning banner (when not complete) */}
-      {!isComplete && (
-        <div className="flex items-center" style={{ gap: "var(--space-3)", padding: "var(--space-4) var(--space-5)", background: "var(--status-warning-bg)", borderRadius: "var(--radius-card)", marginTop: "var(--space-8)" }}>
-          <AlertTriangle style={{ width: 18, height: 18, color: "var(--status-warning-text)", flexShrink: 0 }} />
-          <div>
-            <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--status-warning-text)" }}>Vertrag noch blockiert</div>
-            <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", marginTop: 2 }}>
-              Sobald du Datum und Bestätigung erfasst hast, ist der Vertragsschritt freigeschaltet.
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Success banner (when complete) */}
+      {/* Bestätigung (wenn dokumentiert) — keine Freischaltungs-Aussage mehr,
+          weil die Vertragsunterzeichnung nicht mehr blockiert wird. */}
       {isComplete && (
         <div className="flex items-center" style={{ gap: "var(--space-3)", padding: "var(--space-4) var(--space-5)", background: "var(--status-success-bg)", borderRadius: "var(--radius-card)", marginTop: "var(--space-8)" }}>
           <CircleCheck style={{ width: 18, height: 18, color: "var(--status-success)", flexShrink: 0 }} />
           <div>
-            <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--status-success-text)" }}>Eingereicht</div>
+            <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--status-success-text)" }}>Dokumentiert</div>
             <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", marginTop: 2 }}>
-              Die Spezialbewilligung wurde am {formatDateDE(data.spezialbewilligungEinreichungsDatum)} eingereicht. Der Vertragsschritt ist freigeschaltet.
+              Die Einreichung wurde am {formatDateDE(data.spezialbewilligungEinreichungsDatum)} erfasst.
             </div>
           </div>
         </div>

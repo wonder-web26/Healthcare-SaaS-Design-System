@@ -563,6 +563,9 @@ interface StepAngehoerigerProps {
   onOpenSpezialbewilligung?: () => void;
   /** Aktion am rechten Ende der Reiterzeile (z. B. "Gespräch"), bleibt fixiert sichtbar. */
   reiterAktion?: React.ReactNode;
+  /** Kanton (Kürzel) und Ort des Arbeitsorts, aus dem Patientenkontext; für das SEM-Meldeformular. */
+  arbeitsortKanton?: string;
+  arbeitsortOrt?: string;
 }
 
 /* ══════��═══════════════════════════════════
@@ -574,6 +577,8 @@ export function StepAngehoeriger({
   onValidityChange,
   onOpenSpezialbewilligung,
   reiterAktion,
+  arbeitsortKanton,
+  arbeitsortOrt,
 }: StepAngehoerigerProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -706,12 +711,12 @@ export function StepAngehoeriger({
          ═══════════════════════════════════════ */}
       <div style={{ background: "var(--bg-elevated)" }}>
         <div style={{ padding: "20px 32px 24px", maxWidth: FORMULAR_MAX }}>
-          {activeTab === 0 && <PersonalienFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />}
+          {activeTab === 0 && <PersonalienFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />}
           {activeTab === 1 && <SteuerFormV2 data={data} onChange={onChange} />}
           {activeTab === 2 && <PartnerFormV2 data={data} onChange={onChange} />}
           {activeTab === 3 && <KinderFormV2 data={data} onChange={onChange} />}
           {activeTab === 4 && <AnstellungFormV2 data={data} onChange={onChange} />}
-          {activeTab === 5 && <DokumenteFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} />}
+          {activeTab === 5 && <DokumenteFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />}
         </div>
       </div>
       {/* Hinweistext entfernt (§A): erklärte, wie Reiter funktionieren, war auf Reitern

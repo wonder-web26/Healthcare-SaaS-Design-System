@@ -110,15 +110,16 @@ export function ermittleFehlendeFelderSEM(daten: SEMFormDaten): FehlendesFeld[] 
   const check = (wert: string | undefined, feld: string, label: string) => {
     if (!wert || wert.trim().length === 0) fehlend.push({ feld, label });
   };
+  // Nur Felder zählen, die aus den erfassten Daten befüllbar sind — sonst
+  // erreicht die Zahl nie null. firmaUid (statisches, unbekanntes Org-Stammdatum),
+  // beschaeftigungsgrad und wochenstunden (im Onboarding nicht erhoben) sind
+  // strukturell nie befüllbar und bleiben daher aussen vor.
   check(daten.zemisNummer, "zemisNummer", "ZEMIS-Nr.");
-  check(daten.firmaUid ?? FIRMA_DEFAULTS.firmaUid, "firmaUid", "UID (Unternehmens-Identifikationsnummer)");
   check(daten.geburtsdatum, "geburtsdatum", "Geburtsdatum");
   check(daten.strasse, "strasse", "Strasse");
   check(daten.plz, "plz", "PLZ");
   check(daten.ort, "ort", "Ort");
   check(daten.eintrittsdatum, "eintrittsdatum", "Stellenantritt");
-  check(daten.beschaeftigungsgrad, "beschaeftigungsgrad", "Beschäftigungsgrad");
-  check(daten.wochenstunden, "wochenstunden", "Wochenstunden");
   check(daten.bruttolohn, "bruttolohn", "Bruttolohn");
   return fehlend;
 }
@@ -227,7 +228,13 @@ export function downloadBlob(blob: Blob, filename: string): void {
    KONVERTIERUNG: FormData → SEMFormDaten
    ══════════════════════════════════════════ */
 
-/** Wandelt AngehoerigerFormData in SEMFormDaten um */
+/**
+ * Wandelt AngehoerigerFormData in SEMFormDaten um.
+ *
+ * Arbeitsort (Kanton + Ort) wird nicht mehr festgeschrieben, sondern von aussen
+ * übergeben — ermittelt aus dem Kanton/Pflegeort des Patienten oder im Banner
+ * gewählt. Ohne Angabe bleiben beide leer (kein Vorgabewert).
+ */
 export function formDataToSEM(data: {
   name: string;
   vorname: string;
@@ -244,7 +251,7 @@ export function formDataToSEM(data: {
   funktion: string;
   stundenlohn: string;
   lohnart: string;
-}): SEMFormDaten {
+}, arbeitsort?: { kanton?: string; ort?: string }): SEMFormDaten {
   return {
     name: data.name,
     vorname: data.vorname,
@@ -263,7 +270,7 @@ export function formDataToSEM(data: {
     wochenstunden: "",
     bruttolohn: data.stundenlohn,
     lohnart: data.lohnart || "stundenlohn",
-    arbeitsortKanton: "Zürich",
-    arbeitsortOrt: "Zürich",
+    arbeitsortKanton: arbeitsort?.kanton ?? "",
+    arbeitsortOrt: arbeitsort?.ort ?? "",
   };
 }

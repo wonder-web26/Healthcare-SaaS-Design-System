@@ -116,7 +116,10 @@ function buildSteps(requiresB: boolean, bewilligungEingereicht: boolean): Wizard
       danger: !eingereicht,
     },
     { ...baseSteps[1], id: 3 },
-    { ...baseSteps[2], id: 4, blocked: !eingereicht },
+    // Ausweis B blockiert die Vertragsunterzeichnung nicht mehr: ob überhaupt ein
+    // Verfahren nötig ist, hängt an EU/EFTA vs. Drittstaat, was noch nicht erfasst
+    // wird. Der Schritt bleibt sichtbar und dokumentierbar (danger), sperrt aber nicht.
+    { ...baseSteps[2], id: 4 },
   ];
 }
 
@@ -987,6 +990,8 @@ export function OnboardingPage() {
                   onValidityChange={setStep1Valid}
                   onOpenSpezialbewilligung={() => setShowSpezialbewilligung(true)}
                   reiterAktion={gespraechReiter}
+                  arbeitsortKanton={patientData.kanton}
+                  arbeitsortOrt={patientData.pflegeortAbweichend ? patientData.pflegeortOrt : patientData.adresseOrt}
                 />
               )}
               {activeStepData.key === "spezialbewilligung" && (
@@ -1029,18 +1034,11 @@ export function OnboardingPage() {
                   <AppButton variant="sekundaer" icon={isSaving ? Loader2 : Save} iconClassName={isSaving ? "animate-spin" : undefined} onClick={handleSave} disabled={isSaving}>Speichern</AppButton>
 
                   {currentStep < wizardSteps.length ? (
-                    (() => {
-                      const isOnSpezialbewilligung = activeStepData.key === "spezialbewilligung";
-                      const spezialbewilligungIncomplete = isOnSpezialbewilligung && !bewilligungEingereicht;
-                      return (
-                        <AppButton variant="primaer" iconRight={ChevronRight}
-                          onClick={spezialbewilligungIncomplete ? undefined : goNext}
-                          disabled={spezialbewilligungIncomplete}
-                          title={spezialbewilligungIncomplete ? "Erst Spezialbewilligung einreichen" : undefined}>
-                          Weiter
-                        </AppButton>
-                      );
-                    })()
+                    // Ausweis B sperrt den Fortschritt nicht mehr: der Spezialbewilligungs-
+                    // Schritt ist dokumentierbar, aber keine Voraussetzung fürs Weitergehen.
+                    <AppButton variant="primaer" iconRight={ChevronRight} onClick={goNext}>
+                      Weiter
+                    </AppButton>
                   ) : (
                     <div>
                       <AppButton variant="primaer" icon={Check}
