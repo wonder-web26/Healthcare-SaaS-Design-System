@@ -58,7 +58,10 @@ export interface Patient {
   strasse: string;
   plz: string;
   ort: string;
-  /** Politische Gemeinde — Empfänger/Satz der Restkostenrechnung (≠ Ort). */
+  /** Politische Gemeinde weicht vom Ort ab (PLZ mit mehreren Gemeinden, Ortsteil,
+   *  Fusion). Nur dann ist `gemeinde` gesetzt; sonst gilt der Ort. */
+  gemeindeAbweichend: boolean;
+  /** Politische Gemeinde — nur gesetzt, wenn abweichend (politischeGemeinde). */
   gemeinde: string;
   /** BFS-Nummer der politischen Gemeinde; leer, solange kein Verzeichnis vorliegt. */
   bfsNummer: string;
@@ -164,6 +167,14 @@ export function adresseAnzeige(strasse: string, plz: string, ort: string): strin
 /** Anzeigestring der Wohnsitzadresse eines Patienten. */
 export function patientAdresse(p: Pick<Patient, "strasse" | "plz" | "ort">): string {
   return adresseAnzeige(p.strasse, p.plz, p.ort);
+}
+
+/**
+ * Politische Gemeinde: die erfasste Gemeinde, wenn sie vom Ort abweicht, sonst
+ * der Ort. Einzige Entscheidungsstelle — kein Aufrufer bildet das selbst.
+ */
+export function patientGemeinde(p: Pick<Patient, "gemeindeAbweichend" | "gemeinde" | "ort">): string {
+  return p.gemeindeAbweichend ? p.gemeinde : p.ort;
 }
 
 /* ── Status config ─────────────────────── */
@@ -337,7 +348,8 @@ export const patientenSeed: Patient[] = [
     strasse: "Bahnhofstrasse 42",
     plz: "8001",
     ort: "Zürich",
-    gemeinde: "Zürich",
+    gemeindeAbweichend: false,
+    gemeinde: "",
     bfsNummer: "",
     land: "CH",
     pflegeortAbweichend: false,
@@ -407,7 +419,8 @@ export const patientenSeed: Patient[] = [
     strasse: "Oerlikonerstrasse 15",
     plz: "8057",
     ort: "Zürich",
-    gemeinde: "Zürich",
+    gemeindeAbweichend: false,
+    gemeinde: "",
     bfsNummer: "",
     land: "CH",
     pflegeortAbweichend: false,
@@ -477,7 +490,8 @@ export const patientenSeed: Patient[] = [
     strasse: "Seestrasse 88",
     plz: "8002",
     ort: "Zürich",
-    gemeinde: "Zürich",
+    gemeindeAbweichend: false,
+    gemeinde: "",
     bfsNummer: "",
     land: "CH",
     pflegeortAbweichend: false,
@@ -547,7 +561,8 @@ export const patientenSeed: Patient[] = [
     strasse: "Hauptstrasse 5",
     plz: "5000",
     ort: "Aarau",
-    gemeinde: "Aarau",
+    gemeindeAbweichend: false,
+    gemeinde: "",
     bfsNummer: "",
     land: "CH",
     pflegeortAbweichend: false,
@@ -613,7 +628,8 @@ export const patientenSeed: Patient[] = [
     strasse: "Schwamendingenstrasse 12",
     plz: "8051",
     ort: "Zürich",
-    gemeinde: "Zürich",
+    gemeindeAbweichend: false,
+    gemeinde: "",
     bfsNummer: "",
     land: "CH",
     pflegeortAbweichend: false,
@@ -683,7 +699,8 @@ export const patientenSeed: Patient[] = [
     strasse: "Rosenbergstrasse 22",
     plz: "9000",
     ort: "St. Gallen",
-    gemeinde: "St. Gallen",
+    gemeindeAbweichend: false,
+    gemeinde: "",
     bfsNummer: "",
     land: "CH",
     pflegeortAbweichend: false,
@@ -753,7 +770,8 @@ export const patientenSeed: Patient[] = [
     strasse: "Limmatquai 74",
     plz: "8001",
     ort: "Zürich",
-    gemeinde: "Zürich",
+    gemeindeAbweichend: false,
+    gemeinde: "",
     bfsNummer: "",
     land: "CH",
     pflegeortAbweichend: false,
@@ -823,7 +841,8 @@ export const patientenSeed: Patient[] = [
     strasse: "Bundesgasse 10",
     plz: "3011",
     ort: "Bern",
-    gemeinde: "Bern",
+    gemeindeAbweichend: false,
+    gemeinde: "",
     bfsNummer: "",
     land: "CH",
     pflegeortAbweichend: false,
@@ -893,7 +912,8 @@ export const patientenSeed: Patient[] = [
     strasse: "Hönggerstrasse 31",
     plz: "8037",
     ort: "Zürich",
-    gemeinde: "Zürich",
+    gemeindeAbweichend: false,
+    gemeinde: "",
     bfsNummer: "",
     land: "CH",
     pflegeortAbweichend: false,
@@ -959,7 +979,8 @@ export const patientenSeed: Patient[] = [
     strasse: "Pilatusstrasse 8",
     plz: "6003",
     ort: "Luzern",
-    gemeinde: "Luzern",
+    gemeindeAbweichend: false,
+    gemeinde: "",
     bfsNummer: "",
     land: "CH",
     pflegeortAbweichend: false,

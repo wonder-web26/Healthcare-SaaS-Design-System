@@ -6,7 +6,7 @@
  * Wohnsitzadresse — kein Aufrufer entscheidet das selbst.
  */
 import assert from "node:assert/strict";
-import { pflegeAdresse, aktualisierePatient, getPatient } from "./store";
+import { pflegeAdresse, politischeGemeinde, aktualisierePatient, getPatient } from "./store";
 
 const ID = "P-2026-0041"; // Seed-Patient
 const p = getPatient(ID);
@@ -42,5 +42,23 @@ assert.equal(pflegeAdresse(ID)!.ort, p!.ort);
 
 // Unbekannter Patient → null.
 assert.equal(pflegeAdresse("P-GIBTS-NICHT"), null);
+
+// ── politische Gemeinde: entspricht dem Ort, sonst die abweichende Gemeinde ──
+{
+  // Seed: gemeindeAbweichend false → politischeGemeinde liefert den Ort.
+  const ort = getPatient(ID)!.ort;
+  assert.equal(getPatient(ID)!.gemeindeAbweichend, false, "Seed: nicht abweichend");
+  assert.equal(getPatient(ID)!.gemeinde, "", "Seed: gemeinde leer, wenn nicht abweichend");
+  assert.equal(politischeGemeinde(ID), ort, "nicht abweichend → Ort");
+
+  // Abweichend gesetzt → politischeGemeinde liefert die Gemeinde.
+  aktualisierePatient(ID, { gemeindeAbweichend: true, gemeinde: "Illnau-Effretikon" });
+  assert.equal(politischeGemeinde(ID), "Illnau-Effretikon");
+  assert.notEqual(politischeGemeinde(ID), ort);
+
+  // Zurückgesetzt → wieder der Ort.
+  aktualisierePatient(ID, { gemeindeAbweichend: false });
+  assert.equal(politischeGemeinde(ID), ort);
+}
 
 console.log("patienten/store.test.ts: alle Zusicherungen erfüllt");

@@ -119,12 +119,24 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
           ort: t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined,
         }}
       />
+      <div style={{ marginTop: "var(--space-3)" }}>
+        <SegmentedControl label="Politische Gemeinde" value={data.gemeindeAbweichend ? "abweichend" : "gleich"}
+          onChange={v => onUpdateMehrere?.({ gemeindeAbweichend: v === "abweichend" })}
+          options={[
+            { value: "gleich", label: "Politische Gemeinde entspricht dem Ort" },
+            { value: "abweichend", label: "Politische Gemeinde weicht ab" },
+          ]} />
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-3)" }}>
-        <TextInput label="Politische Gemeinde" value={data.gemeinde} onChange={v => onUpdate("gemeinde", v)} placeholder="z.B. Winterthur"
-          hint="Bestimmt den Restkostensatz und den Empfänger der Restkostenrechnung." />
+        {data.gemeindeAbweichend && (
+          <TextInput label="Politische Gemeinde" value={data.gemeinde} onChange={v => onUpdate("gemeinde", v)} placeholder="z.B. Illnau-Effretikon" />
+        )}
         <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="BFS-Nummer" value={data.bfsNummer} onChange={v => onUpdate("bfsNummer", v.replace(/\D/g, ""))} placeholder="optional" /></div>
         <FormSelect label="Kanton" value={data.kanton || null} onChange={v => onUpdate("kanton", v || "")} options={KANTON_OPTIONS} placeholder="Kanton wählen" />
         <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Land" value={data.land} onChange={v => onUpdate("land", v)} placeholder="CH" /></div>
+      </div>
+      <div style={{ marginTop: "var(--space-2)", fontSize: 12, color: "var(--text-tertiary)" }}>
+        Bestimmt den Restkostensatz und den Empfänger der Restkostenrechnung.
       </div>
 
       <div style={{ marginTop: "var(--space-4)" }}>

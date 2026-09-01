@@ -100,6 +100,7 @@ import {
   abrechnungsStatusConfig,
   patientAdresse,
   adresseAnzeige,
+  patientGemeinde,
   type Patient,
 } from "./patientData";
 import { usePatienten, getPatient, aktualisierePatient, pflegeAdresse, tageBisReAssessment,
@@ -970,7 +971,6 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const [strasse, setStrasse] = useState(patient.strasse);
   const [plz, setPlz] = useState(patient.plz);
   const [ort, setOrt] = useState(patient.ort);
-  const [gemeinde, setGemeinde] = useState(patient.gemeinde);
   const [kanton, setKanton] = useState(patient.kanton);
   const [leistungsart, setLeistungsart] = useState(patient.leistungsart);
 
@@ -995,7 +995,7 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const startEdit = (section: string) => {
     // Snapshot current values for the section
     if (section === "adresse") {
-      setSnapshot({ strasse, plz, ort, gemeinde, kanton, leistungsart });
+      setSnapshot({ strasse, plz, ort, kanton, leistungsart });
     }
     setEditingSection(section);
   };
@@ -1006,7 +1006,6 @@ function TabUeberblick({ patient }: { patient: Patient }) {
       setStrasse(snapshot.strasse ?? strasse);
       setPlz(snapshot.plz ?? plz);
       setOrt(snapshot.ort ?? ort);
-      setGemeinde(snapshot.gemeinde ?? gemeinde);
       setKanton(snapshot.kanton ?? kanton);
       setLeistungsart(snapshot.leistungsart ?? leistungsart);
     }
@@ -1022,7 +1021,7 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const saveEdit = () => {
     if (editingSection === "adresse") {
       aktualisierePatient(patient.id, {
-        strasse, plz, ort, gemeinde, kanton, leistungsart,
+        strasse, plz, ort, kanton, leistungsart,
       });
     }
     setEditingSection(null);
@@ -1052,7 +1051,8 @@ function TabUeberblick({ patient }: { patient: Patient }) {
             <PEditableField label="Strasse und Nr." value={strasse} editing={editingSection === "adresse"} onChange={setStrasse} />
             <PEditableField label="PLZ" value={plz} editing={editingSection === "adresse"} onChange={setPlz} />
             <PEditableField label="Ort" value={ort} editing={editingSection === "adresse"} onChange={setOrt} />
-            <PEditableField label="Gemeinde" value={gemeinde} editing={editingSection === "adresse"} onChange={setGemeinde} />
+            {/* Politische Gemeinde: abgeleitet (patientGemeinde), nie direkt gelesen. Erfassung im Onboarding. */}
+            <PEditableField label="Politische Gemeinde" value={patientGemeinde(patient)} editing={false} onChange={() => {}} />
             <KantonFeld value={kanton} editing={editingSection === "adresse"} onChange={setKanton} />
             {patient.pflegeortAbweichend && (
               <PEditableField label="Pflegeort" value={adresseAnzeige(patient.pflegeortStrasse, patient.pflegeortPlz, patient.pflegeortOrt)} editing={false} onChange={() => {}} />
@@ -3044,7 +3044,7 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
       { k: "strasse", label: "Strasse und Nr." },
       { k: "plz", label: "PLZ" },
       { k: "ort", label: "Ort" },
-      { k: "gemeinde", label: "Gemeinde" },
+      // Politische Gemeinde: abgeleitet (patientGemeinde), nicht direkt editierbar — Erfassung im Onboarding.
       { k: "bfsNummer", label: "BFS-Nummer" },
       { k: "kanton", label: "Kanton", optionen: KANTON_OPTIONS },
       { k: "telefon", label: "Telefon" },

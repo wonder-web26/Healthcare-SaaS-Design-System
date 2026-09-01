@@ -98,12 +98,20 @@ Solothurner Restkostenübersicht 2026:
   frühere zusammengesetzte Feld `adresse` **entfällt** — der Anzeigestring wird
   bei Bedarf gebildet (`patientAdresse`/`adresseAnzeige`), **nicht gespeichert**.
   Kein Parsen des Alt-Strings: die Seed-Einzelfelder sind direkt gesetzt.
-- **Politische Gemeinde + BFS-Nummer** (≠ Ort): Empfänger und Satz der
-  Restkostenrechnung hängen an der BFS-Nummer der politischen Gemeinde. **Freitext**,
-  keine Auswahlliste — ein Verzeichnis der ~2100 Gemeinden mit BFS-Nummern liegt
-  nicht vor. **Gemeinde und Kanton werden nicht aus der PLZ abgeleitet** (nicht
-  eindeutig). Künftig kommen Gemeinde und BFS-Nummer aus einem Gemeindeverzeichnis;
-  bis dahin Freitext.
+- **Politische Gemeinde als Umschalter** (`gemeindeAbweichend` + `gemeinde`): Sie
+  entspricht in den allermeisten Fällen dem Ort und weicht nur ab, wenn eine PLZ
+  mehrere Gemeinden umfasst, bei Ortsteilen ohne eigene Gemeinde und nach Fusionen,
+  bei denen die Ortsbezeichnung blieb. Vorgabe „entspricht dem Ort"; nur bei
+  „weicht ab" erscheint das Freitextfeld. `patientGemeinde`/`politischeGemeinde(patientId)`
+  liefern die Gemeinde, wenn abweichend, sonst den Ort — **kein Aufrufer entscheidet
+  das selbst** (Muster wie `pflegeAdresse`). Seed: stimmte `gemeinde` mit `ort`
+  überein → `gemeindeAbweichend: false`, `gemeinde` leer.
+- **BFS-Nummer** (in beiden Fällen erfassbar): Empfänger und Satz der Restkosten
+  hängen an ihr. Die kantonalen Restkostenverzeichnisse sind **über die BFS-Nummer**
+  geschlüsselt — die Solothurner Übersicht 2026 führt sie als erste Spalte, die
+  Gemeindebezeichnung nur als Beschriftung; ein Abgleich über den Namen wäre
+  unzuverlässig (Zusätze wie „Aeschi (SO)"). **Keine Auswahlliste, keine PLZ-Ableitung**
+  von Gemeinde/Kanton (nicht eindeutig); künftig aus einem Gemeindeverzeichnis.
 - **Kanton als Auswahl** über die 26 Kantone (`lib/stammdaten/kantone.ts`, Kürzel):
   `pflegetarife.ts` vergleicht über die Zeichenkette, eine abweichende Schreibweise
   bräche die Tarifzuordnung still. Fixtures und `pflegetarife.ts` nutzen dieselbe
