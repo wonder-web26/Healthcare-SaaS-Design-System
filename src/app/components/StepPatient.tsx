@@ -157,6 +157,10 @@ export interface PatientFormData {
   hilflosenentschaedigung: string;
   /** PA-01: IV-Assistenzbeitrag */
   assistenzbeitrag: string;
+  /** Ja/Nein-Indikator; die Kontaktperson des Sozialdiensts steht im Bezugsteam. */
+  sozialamtInvolviert: string;
+  /** Ja/Nein-Indikator; vertretende Person und Art der Vertretung stehen im Bezugsteam. */
+  gesetzlicheVertretung: string;
   konfession: string;
   quellensteuerHinweise: string;
 
@@ -252,6 +256,8 @@ export const emptyPatientForm: PatientFormData = {
   ivBezugProzent: "",
   hilflosenentschaedigung: "nein",
   assistenzbeitrag: "nein",
+  sozialamtInvolviert: "nein",
+  gesetzlicheVertretung: "nein",
   konfession: "",
   quellensteuerHinweise: "",
 
@@ -354,11 +360,14 @@ function getTabCompletion(tabKey: string, data: PatientFormData, patientId?: str
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
     case "steuer": {
-      // Sozialdienst und gesetzliche Vertretung sind Personen (Bezugs- und
-      // Pflegeteam), kein Pflichtstatus dieses Reiters mehr.
+      // Der Ja/Nein-Indikator für Sozialamt und gesetzliche Vertretung wird hier
+      // beantwortet; die Kontaktperson bzw. vertretende Person steht als Person
+      // im Bezugs- und Pflegeteam (Reiter Personalien).
       const checks = [
         filled(data.ivBezug),
         filled(data.hilflosenentschaedigung),
+        filled(data.sozialamtInvolviert),
+        filled(data.gesetzlicheVertretung),
         filled(data.konfession),
       ];
       if (data.ivBezug === "ja") checks.push(filled(data.ivBezugProzent));

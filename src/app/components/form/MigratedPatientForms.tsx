@@ -161,8 +161,6 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={IdCard} label="IV & Sozialversicherung" first />
-      {/* Sozialdienst und gesetzliche Vertretung sind Personen und stehen im
-          Abschnitt Bezugs- und Pflegeteam (Reiter Personalien), nicht hier. */}
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <SegmentedControl label="IV-Bezug?" required value={data.ivBezug} onChange={v => onUpdate("ivBezug", v)} options={JA_NEIN} />
       </div>
@@ -174,6 +172,15 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <SegmentedControl label="Hilflosenentschädigung?" required value={data.hilflosenentschaedigung} onChange={v => onUpdate("hilflosenentschaedigung", v)} options={JA_NEIN} />
         <SegmentedControl label="Bezieht der Patient einen IV-Assistenzbeitrag?" required value={data.assistenzbeitrag} onChange={v => onUpdate("assistenzbeitrag", v)} options={JA_NEIN} />
+      </div>
+
+      <SectionHeader icon={Users} label="Soziales" />
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+        <SegmentedControl label="Sozialamt involviert?" required value={data.sozialamtInvolviert} onChange={v => onUpdate("sozialamtInvolviert", v)} options={JA_NEIN} />
+        <SegmentedControl label="Gesetzliche Vertretung besteht?" required value={data.gesetzlicheVertretung} onChange={v => onUpdate("gesetzlicheVertretung", v)} options={JA_NEIN} />
+      </div>
+      <div style={{ marginTop: "var(--space-2)", fontSize: 12, color: "var(--text-tertiary)" }}>
+        Die Kontaktperson des Sozialdiensts bzw. die vertretende Person (Beistand) werden im Abschnitt Bezugs- und Pflegeteam (Reiter Personalien) erfasst.
       </div>
 
       <SectionHeader icon={Receipt} label="Konfession & Steuer" />
