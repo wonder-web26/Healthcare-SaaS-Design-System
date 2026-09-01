@@ -3,15 +3,18 @@ import { Search } from "lucide-react";
 import { TextInput } from "../form/TextInput";
 
 /**
- * Adressfelder — Strasse, PLZ, Ort, mit vorbereitetem Suchfeld.
+ * AdressBlock — Suchfeld, Strasse und Nr., dann PLZ und Ort nebeneinander.
  *
- * Eigenständige Komponente, damit Patient und (später) Kontakt dieselbe Adresse
- * bedienen. `KontaktWahl` trägt die Adresse heute noch inline; die Umstellung
- * darauf ist ein eigener, kleiner Lauf (siehe docs/datenmodell-mapping.md).
+ * Die EINE Adresserfassung des Produkts: Patient, Angehörige und `KontaktWahl`
+ * binden dieselbe Komponente ein. Nur die Adresse (kein Kontaktdatum) — E-Mail,
+ * Telefon und Mobil bleiben beim jeweiligen Formular (Abschnitt „Erreichbarkeit"),
+ * weil sie je Entität unterschiedlich sind. Ebenso Gemeinde/BFS/Kanton/Land, die
+ * nur zum Patienten gehören.
  *
- * Das Suchfeld ist für einen Adressdienst vorbereitet und an EINER Stelle
- * gekapselt (`adresseSuchen`). Ohne Schlüssel (Backend) gibt es keine Treffer;
- * die drei Felder sind direkt bearbeitbar. Keine Anbindung in diesem Lauf.
+ * Das Suchfeld ist an EINER Stelle für einen Adressdienst vorbereitet
+ * (`adresseSuchen`). Ohne Schlüssel (Backend) gibt es keine Treffer — mit der
+ * Anbindung funktionieren dann alle drei Formulare gleichzeitig; die drei Felder
+ * sind bis dahin direkt bearbeitbar.
  */
 export interface AdressWert {
   strasse: string;
@@ -28,9 +31,11 @@ async function adresseSuchen(_query: string): Promise<AdressTreffer[]> {
   return [];
 }
 
-export function AdressFelder({ wert, onChange, required, fehler, idPrefix = "adr" }: {
+export function AdressBlock({ wert, onChange, onBlur, required, fehler, idPrefix = "adr" }: {
   wert: AdressWert;
   onChange: (patch: Partial<AdressWert>) => void;
+  /** Optional: meldet das Verlassen eines Felds (für die Pflichtfeld-/Touch-Logik). */
+  onBlur?: (feld: keyof AdressWert) => void;
   required?: boolean;
   fehler?: { strasse?: string; plz?: string; ort?: string };
   /** Für die datalist-Id, falls mehrere Blöcke auf einer Seite stehen. */
@@ -71,12 +76,12 @@ export function AdressFelder({ wert, onChange, required, fehler, idPrefix = "adr
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div className="md:col-span-2">
           <TextInput label="Strasse und Nr." required={required} value={wert.strasse} onChange={v => onChange({ strasse: v })}
-            placeholder="Musterstrasse 12" error={fehler?.strasse} />
+            onBlur={() => onBlur?.("strasse")} placeholder="Musterstrasse 12" error={fehler?.strasse} />
         </div>
         <TextInput label="PLZ" required={required} value={wert.plz} onChange={v => onChange({ plz: v.replace(/\D/g, "").slice(0, 4) })}
-          placeholder="8000" error={fehler?.plz} />
+          onBlur={() => onBlur?.("plz")} placeholder="8000" error={fehler?.plz} />
         <TextInput label="Ort" required={required} value={wert.ort} onChange={v => onChange({ ort: v })}
-          placeholder="Zürich" error={fehler?.ort} />
+          onBlur={() => onBlur?.("ort")} placeholder="Zürich" error={fehler?.ort} />
       </div>
     </div>
   );

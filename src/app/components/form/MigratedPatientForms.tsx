@@ -12,7 +12,7 @@ import { NumberInput } from "./NumberInput";
 import { AHVNummerInput } from "./AHVNummerInput";
 import { SegmentedControl } from "./SegmentedControl";
 import { Combobox as FormSelect } from "./Combobox";
-import { AdressFelder } from "../ui/AdressFelder";
+import { AdressBlock } from "../ui/AdressBlock";
 import { KANTON_OPTIONS } from "../../../lib/stammdaten/kantone";
 import { FormField } from "./FormField";
 import { DateField } from "./DateField";
@@ -105,8 +105,8 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" value={data.zivilstand || null} onChange={v => onUpdate("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" /></div>
       </div>
 
-      <SectionHeader icon={MapPin} label="Wohnsitzadresse" />
-      <AdressFelder
+      <SectionHeader icon={MapPin} label="Adresse" />
+      <AdressBlock
         required
         wert={{ strasse: data.adresseStrasse, plz: data.adressePlz, ort: data.adresseOrt }}
         onChange={patch => {
@@ -114,6 +114,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
           if (patch.plz !== undefined) onUpdate("adressePlz", patch.plz);
           if (patch.ort !== undefined) onUpdate("adresseOrt", patch.ort);
         }}
+        onBlur={feld => onBlur(feld === "strasse" ? "adresseStrasse" : feld === "plz" ? "adressePlz" : "adresseOrt")}
         fehler={{
           strasse: t("adresseStrasse") && !filled(data.adresseStrasse) ? "Pflichtfeld" : undefined,
           ort: t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined,
@@ -150,7 +151,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
       {data.pflegeortAbweichend && (
         <div style={{ marginTop: "var(--space-4)" }}>
           <SectionHeader icon={MapPin} label="Pflegeort" />
-          <AdressFelder idPrefix="pflegeort"
+          <AdressBlock idPrefix="pflegeort"
             wert={{ strasse: data.pflegeortStrasse, plz: data.pflegeortPlz, ort: data.pflegeortOrt }}
             onChange={patch => {
               if (patch.strasse !== undefined) onUpdate("pflegeortStrasse", patch.strasse);
@@ -159,6 +160,12 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
             }} />
         </div>
       )}
+
+      <SectionHeader icon={Phone} label="Erreichbarkeit" />
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" value={data.email} onChange={v => onUpdate("email", v)} placeholder="name@example.com" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="+41 44 000 00 00" /></div>
+      </div>
 
       <SectionHeader icon={Shield} label="Versicherungen" />
       <div style={{ marginBottom: "var(--space-5)" }}>

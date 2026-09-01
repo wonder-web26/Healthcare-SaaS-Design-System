@@ -126,10 +126,32 @@ Solothurner Restkostenübersicht 2026:
   **Offene Frage an Spitex Schweiz:** ob `iA10` den Wohnsitz oder den Pflegeort
   meint, ist ungeklärt (BB9-Hilfetext nennt den Ort des Leistungsbezugs). Vorerst
   Wohnsitz.
-- **Adresskomponente:** neue eigenständige `components/ui/AdressFelder.tsx` (Strasse,
-  PLZ, Ort + vorbereitetes Suchfeld, `adresseSuchen`-Stub, nicht angebunden). Der
-  Patient nutzt sie. **Offen (eigener kleiner Lauf):** `KontaktWahl` trägt die
-  Adresse noch inline und ist auf diese Komponente umzustellen.
+- **Adresskomponente `components/ui/AdressBlock`** (Strasse, PLZ, Ort +
+  vorbereitetes Suchfeld, `adresseSuchen`-Stub, nicht angebunden; früher
+  `AdressFelder`) ist jetzt die **einzige** Adresserfassung des Produkts.
+
+### Adressfelder überall einheitlich
+
+`AdressBlock` wird an allen echten Erfassungen verwendet — je Formular getrennt
+in zwei Abschnitte **„Adresse"** (AdressBlock) und **„Erreichbarkeit"** (E-Mail/
+Telefon/Mobil, je nach Entität), in dieser Reihenfolge:
+
+| Stelle | vorher | jetzt |
+|---|---|---|
+| Patient-Onboarding (`MigratedPatientForms`) | „Wohnsitzadresse" + eigene Felder | „Adresse" (AdressBlock) + „Erreichbarkeit" (E-Mail/Telefon **wieder aufgenommen**) |
+| Angehörige-Onboarding (`MigratedAngehoerigerForms`) | „Kontaktdaten" (Adresse+E-Mail+Telefon) | „Adresse" + „Erreichbarkeit" |
+| `KontaktWahl` (Dialog) | inline + eigener `adresseSuchen`-Stub | AdressBlock; „Adresse" + „Erreichbarkeit" (Telefon/Mobil/E-Mail) |
+| `Patient360Page` (Übersicht + Stammdaten-Karte) | Strasse/PLZ/Ort als Einzelfelder | AdressBlock im Bearbeiten, zusammengesetzt im Lesemodus |
+| `Angehoerige360Page` | „Kontaktdaten" mit Einzelfeldern | „Adresse" (AdressBlock) + „Erreichbarkeit" |
+
+- **Ein Suchfeld:** in `AdressBlock` gekapselt (`adresseSuchen`), danach an genau
+  EINER Stelle im Code. Mit der Anbindung eines Adressdienstes (Schlüssel/Backend)
+  funktionieren damit **alle** Formulare gleichzeitig. Keine Anbindung in diesem Lauf.
+- **Land/Gemeinde/BFS/Kanton** gehören nicht in `AdressBlock`: Land bleibt beim
+  jeweiligen Formular (Patient, KontaktWahl); Gemeinde/BFS/Kanton nur beim Patienten.
+- **Ausgenommen (dokumentiert):** `FormShowcase` — eine Komponenten-Demo, keine echte
+  Adresserfassung; sie führt weiter eigene `TextInput`-Beispiele (inkl. „Kontaktdaten")
+  vor. Kein Datenmodell an `Angehoeriger`/`Kontakt`/`Patient` geändert.
 
 ## Nachbesserung Versicherungsfelder (vier Feldänderungen)
 

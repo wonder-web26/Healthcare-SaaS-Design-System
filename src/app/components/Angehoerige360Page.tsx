@@ -55,7 +55,8 @@ import {
   type Angehoeriger,
   type AngehoerigerStatus,
 } from "./angehoerigeData";
-import { patientenSeed as patients } from "./patientData";
+import { patientenSeed as patients, adresseAnzeige } from "./patientData";
+import { AdressBlock } from "./ui/AdressBlock";
 import { FORMULAR_MAX } from "./form/feldbreiten";
 import { NotizSpur } from "./notizen/NotizSpur";
 import { type NotizReferenz } from "../../lib/notizen/notizen";
@@ -807,25 +808,32 @@ function TabStammdaten({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
             <EditableField label="Zivilstand seit" value={zivilstandSeit} editing={isEd("personalien")} onChange={setZivilstandSeit} />
           </div>
           <div className="mt-5 pt-4 border-t border-border-light">
-            <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-3" style={{ fontWeight: 600 }}>Kontaktdaten</div>
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-3" style={{ fontWeight: 600 }}>Adresse</div>
+            {isEd("personalien") ? (
+              <AdressBlock
+                wert={{ strasse, plz, ort }}
+                onChange={patch => {
+                  if (patch.strasse !== undefined) setStrasse(patch.strasse);
+                  if (patch.plz !== undefined) setPlz(patch.plz);
+                  if (patch.ort !== undefined) setOrt(patch.ort);
+                }} />
+            ) : (
+              <div className="flex items-center gap-2">
+                <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <div className="text-[13px] text-foreground">{adresseAnzeige(strasse, plz, ort) || "—"}</div>
+              </div>
+            )}
+          </div>
+          <div className="mt-5 pt-4 border-t border-border-light">
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-3" style={{ fontWeight: 600 }}>Erreichbarkeit</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {isEd("personalien") ? (
                 <>
-                  <EditableField label="Strasse" value={strasse} editing onChange={setStrasse} />
-                  <EditableField label="PLZ" value={plz} editing onChange={setPlz} />
-                  <EditableField label="Ort" value={ort} editing onChange={setOrt} />
                   <EditableField label="E-Mail" value={email} editing type="email" onChange={setEmail} />
                   <EditableField label="Telefon" value={telefon} editing type="tel" onChange={setTelefon} />
                 </>
               ) : (
                 <>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <div>
-                      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>Adresse</div>
-                      <div className="text-[13px] text-foreground">{strasse}, {plz} {ort}</div>
-                    </div>
-                  </div>
                   <div className="flex items-center gap-2">
                     <Mail className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                     <div>

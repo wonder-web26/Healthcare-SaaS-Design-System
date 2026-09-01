@@ -4,7 +4,8 @@
  * Form logic (state, validation, conditional fields) unchanged.
  */
 import { useState } from "react";
-import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Info, Download, AlertTriangle, Check } from "lucide-react";
+import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Info, Download, AlertTriangle, Check, MapPin, Phone } from "lucide-react";
+import { AdressBlock } from "../ui/AdressBlock";
 import { SectionHeader } from "./SectionHeader";
 import { GEGENWART_ISO } from "../../../lib/gegenwart";
 import { TextInput } from "./TextInput";
@@ -140,14 +141,26 @@ export function PersonalienFormV2({
         <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Zivilstand seit" required wertFormat="display" bereich="past" value={data.zivilstandSeit || null} onChange={v => set("zivilstandSeit", (v as string) ?? "")} onBlur={() => touch("zivilstandSeit")} /></div>
       </div>
 
-      {/* Kontaktdaten */}
-      <SectionHeader icon={Mail} label="Kontaktdaten" />
-      <div style={{ marginBottom: "var(--space-5)" }}>
-        <TextInput label="Strasse & Nr." required value={data.strasse} onChange={v => set("strasse", v)} onBlur={() => touch("strasse")} placeholder="Musterstrasse 12" error={touched.strasse && !filled(data.strasse) ? "Pflichtfeld" : undefined} />
-      </div>
+      {/* Adresse */}
+      <SectionHeader icon={MapPin} label="Adresse" />
+      <AdressBlock
+        required
+        wert={{ strasse: data.strasse, plz: data.plz, ort: data.ort }}
+        onChange={patch => {
+          if (patch.strasse !== undefined) set("strasse", patch.strasse);
+          if (patch.plz !== undefined) set("plz", patch.plz);
+          if (patch.ort !== undefined) set("ort", patch.ort);
+        }}
+        onBlur={feld => touch(feld)}
+        fehler={{
+          strasse: touched.strasse && !filled(data.strasse) ? "Pflichtfeld" : undefined,
+          ort: touched.ort && !filled(data.ort) ? "Pflichtfeld" : undefined,
+        }}
+      />
+
+      {/* Erreichbarkeit */}
+      <SectionHeader icon={Phone} label="Erreichbarkeit" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="PLZ" required value={data.plz} onChange={v => set("plz", v.replace(/\D/g, "").slice(0, 4))} onBlur={() => touch("plz")} placeholder="8000" /></div>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Ort" required value={data.ort} onChange={v => set("ort", v)} onBlur={() => touch("ort")} placeholder="Zürich" error={touched.ort && !filled(data.ort) ? "Pflichtfeld" : undefined} /></div>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" required value={data.email} onChange={v => set("email", v)} onBlur={() => touch("email")} placeholder="name@example.com" /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" required value={data.telefon} onChange={v => set("telefon", v)} onBlur={() => touch("telefon")} placeholder="+41 79 123 45 67" /></div>
       </div>

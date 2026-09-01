@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { InlineSelect } from "./InlineSelect";
 import { Combobox } from "../form/Combobox";
 import { FormFeld } from "./FormFeld";
+import { AdressBlock } from "./AdressBlock";
 import { useKontakte, kontaktSichern } from "../../../lib/kontakte/store";
 import {
   kontaktName, type Kontakt,
@@ -20,9 +21,9 @@ import { formatTelefon, pruefeTelefon } from "../../../lib/telefon";
  * überall mit. Der Anlegeblock richtet sich nach `feldsatz` (Kategorie +
  * Personentyp). Pflicht ist überall nur der Name.
  *
- * Adresse als vier Felder mit vorbereitetem Suchfeld (Adressdienst folgt,
- * einzige Anbindungsstelle: `adresseSuchen`). Telefon/Mobil werden beim
- * Verlassen des Felds ins Schweizer Format überführt (lib/telefon).
+ * Adresse über die geteilte Komponente `AdressBlock` (Suchfeld dort gekapselt);
+ * das Land bleibt daneben, weil es nicht zum AdressBlock gehört. Telefon/Mobil
+ * werden beim Verlassen des Felds ins Schweizer Format überführt (lib/telefon).
  */
 export type KontaktFeldsatz = "fachpersonal" | "privat" | "organisation";
 
@@ -33,15 +34,6 @@ const BESCHRIFTUNG: Record<KontaktFeldsatz, { label: string; platzhalter: string
   privat: { label: "Person", platzhalter: "Name suchen", neuTitel: "Neuen Kontakt erfassen" },
   organisation: { label: "Organisation", platzhalter: "Name der Organisation suchen", neuTitel: "Neue Organisation erfassen" },
 };
-
-interface AdressTreffer { strasse: string; plz: string; ort: string; land: string; label: string }
-
-/* Adressdienst — hier wird später ein Dienst (mit Schlüssel, also Backend)
-   angebunden. Im Design-Repo ohne Treffer; die vier Felder sind direkt
-   bearbeitbar. Einzige Anbindungsstelle. */
-async function adresseSuchen(_query: string): Promise<AdressTreffer[]> {
-  return [];
-}
 
 export function KontaktWahl({
   person, onChange, feldsatz, kontaktTyp, angehoerige, zeigtAngehoerige, abteilungLabel = "Abteilung",
@@ -80,8 +72,6 @@ export function KontaktWahl({
   const [plz, setPlz] = useState("");
   const [ort, setOrt] = useState("");
   const [land, setLand] = useState("CH");
-  const [adressSuche, setAdressSuche] = useState("");
-  const [adressTreffer, setAdressTreffer] = useState<AdressTreffer[]>([]);
   const [fehler, setFehler] = useState("");
   const [vorher, setVorher] = useState<string>(wertVon(person));
 
@@ -91,7 +81,7 @@ export function KontaktWahl({
   const felderLeeren = () => {
     setAnrede(""); setTitel(""); setName(""); setVorname(""); setZugehoerigkeit("");
     setFachgebiet(""); setGln(""); setOrganisation(""); setTelefon(""); setMobil(""); setEmail("");
-    setStrasse(""); setPlz(""); setOrt(""); setLand("CH"); setAdressSuche(""); setAdressTreffer([]); setFehler("");
+    setStrasse(""); setPlz(""); setOrt(""); setLand("CH"); setFehler("");
   };
 
   const abbrechen = () => {
@@ -253,37 +243,27 @@ export function KontaktWahl({
             )}
           </div>
 
-          {/* Adresse — Suchfeld (Dienst folgt) über vier bearbeitbaren Feldern */}
+          {/* Adresse — geteilte Komponente (Suchfeld gekapselt) + Land daneben. */}
           <div style={{ marginTop: 12 }}>
-            <FeldLabel>Adresse suchen</FeldLabel>
-            <input value={adressSuche} aria-label="Adresse suchen" placeholder="Strasse, Ort — Adressdienst folgt"
-              className="ui-fokusring" style={feldInput}
-              onChange={async e => { setAdressSuche(e.target.value); setAdressTreffer(await adresseSuchen(e.target.value)); }} />
-            {adressTreffer.length > 0 && (
-              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-                {adressTreffer.map((t, i) => (
-                  <button key={i} type="button" className="ui-fokusring cursor-pointer" style={trefferKnopf}
-                    onClick={() => { setStrasse(t.strasse); setPlz(t.plz); setOrt(t.ort); setLand(t.land); setAdressSuche(""); setAdressTreffer([]); }}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12, marginTop: 8 }}>
-              <FormFeld label="Strasse und Nr." wert={strasse} onAendern={setStrasse} />
-              <div className="grid grid-cols-2" style={{ gap: 12 }}>
-                <FormFeld label="PLZ" wert={plz} onAendern={setPlz} />
-                <FormFeld label="Ort" wert={ort} onAendern={setOrt} />
-              </div>
-              <FormFeld label="Land" wert={land} onAendern={setLand} />
-            </div>
+            <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", marginBottom: 8 }}>Adresse</div>
+            <AdressBlock idPrefix="kontakt"
+              wert={{ strasse, plz, ort }}
+              onChange={patch => {
+                if (patch.strasse !== undefined) setStrasse(patch.strasse);
+                if (patch.plz !== undefined) setPlz(patch.plz);
+                if (patch.ort !== undefined) setOrt(patch.ort);
+              }} />
+            <div style={{ maxWidth: 160, marginTop: 12 }}><FormFeld label="Land" wert={land} onAendern={setLand} /></div>
           </div>
 
-          {/* Kontaktkanäle */}
-          <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12, marginTop: 12 }}>
-            <TelFeld label="Telefon" wert={telefon} onAendern={setTelefon} />
-            {feldsatz !== "organisation" && <TelFeld label="Mobil" wert={mobil} onAendern={setMobil} />}
-            <FormFeld label="E-Mail" wert={email} onAendern={setEmail} />
+          {/* Erreichbarkeit */}
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", marginBottom: 8 }}>Erreichbarkeit</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12 }}>
+              <TelFeld label="Telefon" wert={telefon} onAendern={setTelefon} />
+              {feldsatz !== "organisation" && <TelFeld label="Mobil" wert={mobil} onAendern={setMobil} />}
+              <FormFeld label="E-Mail" wert={email} onAendern={setEmail} />
+            </div>
           </div>
 
           {(kontaktTreffer.length > 0 || fremdTreffer.length > 0) && (

@@ -106,6 +106,7 @@ import {
 import { usePatienten, getPatient, aktualisierePatient, pflegeAdresse, tageBisReAssessment,
   austrittErfassen, AUSTRITT_FEHLERTEXT, type AustrittFehler } from "../../lib/patienten/store";
 import { KANTON_OPTIONS } from "../../lib/stammdaten/kantone";
+import { AdressBlock } from "./ui/AdressBlock";
 import { ENTLASSUNG_NACH, ENTLASSUNG_SONSTIGES, entlassungNachLabel } from "../../lib/stammdaten/entlassung";
 import { austrittVon, austrittText, monatNachAustritt, austrittsMonat } from "../../lib/patienten/austritt";
 import { GEGENWART, gegenwart } from "../../lib/gegenwart";
@@ -1047,10 +1048,24 @@ function TabUeberblick({ patient }: { patient: Patient }) {
           onCancel={() => cancelEdit("adresse")}
           onSave={saveEdit}
         >
+          {/* Adresse über die geteilte Komponente: im Bearbeiten AdressBlock,
+              im Lesemodus der zusammengesetzte String. Keine Strasse/PLZ/Ort-
+              Felder ausserhalb von AdressBlock (§3). */}
+          {editingSection === "adresse" && (
+            <div style={{ marginBottom: "var(--space-4)" }}>
+              <AdressBlock
+                wert={{ strasse, plz, ort }}
+                onChange={patch => {
+                  if (patch.strasse !== undefined) setStrasse(patch.strasse);
+                  if (patch.plz !== undefined) setPlz(patch.plz);
+                  if (patch.ort !== undefined) setOrt(patch.ort);
+                }} />
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <PEditableField label="Strasse und Nr." value={strasse} editing={editingSection === "adresse"} onChange={setStrasse} />
-            <PEditableField label="PLZ" value={plz} editing={editingSection === "adresse"} onChange={setPlz} />
-            <PEditableField label="Ort" value={ort} editing={editingSection === "adresse"} onChange={setOrt} />
+            {editingSection !== "adresse" && (
+              <PEditableField label="Adresse" value={patientAdresse(patient)} editing={false} onChange={() => {}} />
+            )}
             {/* Politische Gemeinde: abgeleitet (patientGemeinde), nie direkt gelesen. Erfassung im Onboarding. */}
             <PEditableField label="Politische Gemeinde" value={patientGemeinde(patient)} editing={false} onChange={() => {}} />
             <KantonFeld value={kanton} editing={editingSection === "adresse"} onChange={setKanton} />
@@ -3041,9 +3056,7 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
      wären eine Behauptung. */
   const KARTEN: Record<string, { k: keyof Patient; label: string; anzeige?: (v: string) => string; optionen?: { value: string; label: string }[] }[]> = {
     kontakt: [
-      { k: "strasse", label: "Strasse und Nr." },
-      { k: "plz", label: "PLZ" },
-      { k: "ort", label: "Ort" },
+      // Adresse (Strasse/PLZ/Ort) läuft über AdressBlock in der Kontakt-Karte, nicht als Einzelfelder.
       // Politische Gemeinde: abgeleitet (patientGemeinde), nicht direkt editierbar — Erfassung im Onboarding.
       { k: "bfsNummer", label: "BFS-Nummer" },
       { k: "kanton", label: "Kanton", optionen: KANTON_OPTIONS },
@@ -3151,6 +3164,21 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
     }
     return (
     <PSectionCard title={titel} icon={icon} editing={bearbeiten}>
+      {/* Kontakt-Karte: die Adresse über den geteilten AdressBlock, nicht über
+          einzelne Strasse/PLZ/Ort-Felder (§3). Im Lesemodus zusammengesetzt. */}
+      {id === "kontakt" && (
+        bearbeiten ? (
+          <div style={{ marginBottom: "var(--space-4)" }}>
+            <AdressBlock
+              wert={{ strasse: feld("strasse"), plz: feld("plz"), ort: feld("ort") }}
+              onChange={patch => setEntwurf(e => ({ ...e, ...patch }))} />
+          </div>
+        ) : (
+          <div style={{ marginBottom: "var(--space-4)" }}>
+            <StammFeld label="Adresse" wert={adresseAnzeige(feld("strasse"), feld("plz"), feld("ort"))} bearbeiten={false} onAendern={() => {}} />
+          </div>
+        )
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: "var(--space-4)" }}>
         {KARTEN[id].map(f => (
           <StammFeld key={String(f.k)} label={f.label} wert={feld(f.k)} bearbeiten={bearbeiten}
