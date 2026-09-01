@@ -333,6 +333,7 @@ AN-A4 fehlt. `[Setzung]`
 | `sprachzertifikat_deutsch` | Sprachzertifikat Deutsch | nein | nein | AN-G2 = ja |
 | `spezialbewilligung_b` | Spezialbewilligung B | ja | nein | AN-B3 = B, eigener Schritt |
 | `kind_kk_<id>` | Krankenkassenkarte Kind | ja | nein | AN-E3 = ja, je Kind |
+| `kind_ausbildungsbestaetigung_<id>` | Ausbildungsbestätigung Kind | ja | nein | AN-E14 = ja, je Kind |
 
 ---
 
@@ -377,7 +378,6 @@ Detailseite; heute zeigt sie nur den Nachnamen.
 | Ob `pf_hf` und `pf_fh` bei pflegenden Angehörigen überhaupt vorkommen | Kaufmann |
 | **Altersgrenzen der Zulagenart** (16 / 25 Jahre) sind in `lib/stammdaten/zulagenart.ts` als vorläufige Konstanten hinterlegt und fachlich zu bestätigen | Person B / Lohnstelle |
 | **Sonderfall Erwerbsunfähigkeit** — Kinderzulage läuft bei erwerbsunfähigen Kindern bis zum 20. Altersjahr weiter. Nicht abgebildet, solange das Modell keine Erwerbsunfähigkeit trägt | Person B / Lohnstelle |
-| **Ausbildungsbestätigung je Kind** — bei laufender Ausbildung wird im Kinder-Reiter ein Upload angeboten (`kind_ausbildungsbestaetigung_<id>`), aber die Dokumente-Checkliste zählt ihn noch nicht mit und macht ihn nicht zur Pflicht | intern |
 | **AN-E17/AN-E18 (Override der Zulagenart)** — die Felder `typQuelle`/`overrideBegruendung` sind entfallen; falls ein manueller Override fachlich nötig ist, muss er neu spezifiziert werden | Person B |
 
 ---

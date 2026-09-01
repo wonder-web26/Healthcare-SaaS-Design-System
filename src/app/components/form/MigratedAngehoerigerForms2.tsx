@@ -44,34 +44,6 @@ function ZulageChipForm({ art }: { art: Zulagenart }) {
   );
 }
 
-/**
- * §5-Hinweis: Bei laufender Ausbildung fehlt die Ausbildungsbestätigung.
- * Pro-Kind-Ablage existiert (scans, Schlüssel je Kind), daher mit echter
- * Hochladen-Aktion. Die Dokumente-Checkliste zählt diesen Nachweis noch nicht
- * mit — als Pendenz vermerkt (siehe Feldzuordnung-Doc).
- */
-function AusbildungsbestaetigungHinweis({ kindId, data, onChange }: {
-  kindId: string;
-  data: AngehoerigerFormData;
-  onChange: (d: AngehoerigerFormData) => void;
-}) {
-  const key = `kind_ausbildungsbestaetigung_${kindId}`;
-  const scan = data.scans[key];
-  if (scan) {
-    return (
-      <div className="flex items-center" style={{ marginTop: "var(--space-3)", gap: 8, fontSize: "var(--text-small)", color: "var(--status-success)" }}>
-        <Check style={{ width: 16, height: 16 }} /> Ausbildungsbestätigung hochgeladen ({scan.name})
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-center justify-between" style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, gap: 12 }}>
-      <span style={{ fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>Ausbildungsbestätigung fehlt.</span>
-      <DokumentScanUpload scanKey={key} docLabel="Ausbildungsbestätigung" onFile={(k, file) => onChange({ ...data, scans: { ...data.scans, [k]: file } })} />
-    </div>
-  );
-}
-
 /** Aufenthaltsbewilligung des Partners — vollstaendige Liste wie beim Angehoerigen selbst */
 const AUFENTHALT_PARTNER = [
   { value: "CH", label: "Schweizer Bürger/in" },
@@ -331,9 +303,12 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                       </div>
                     )}
 
-                    {/* §5: Ausbildungsbestätigung fehlt */}
+                    {/* §5: Ausbildungsbestätigung — erfasst wird sie im Tab Dokumente */}
                     {kind.inAusbildung === true && (
-                      <AusbildungsbestaetigungHinweis kindId={kind.id} data={data} onChange={onChange} />
+                      <div className="flex items-center" style={{ marginTop: "var(--space-3)", gap: 8, fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>
+                        <FileText style={{ width: 14, height: 14, flexShrink: 0 }} />
+                        Ausbildungsbestätigung wird im Tab „Dokumente" erfasst.
+                      </div>
                     )}
                   </GroupBox>
                   );
@@ -400,6 +375,10 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
   const kinderMitZulagen = kontext.kinderzulagenUeberSpitex ? data.kinder : [];
   const kinderDocsVollstaendig = kinderMitZulagen.filter(k => !!data.scans[`kind_kk_${k.id}`]).length;
 
+  // Pro-Kind-Ausbildungsbestätigung (nur Kinder in laufender Ausbildung)
+  const kinderInAusbildung = data.kinder.filter(k => k.inAusbildung === true);
+  const ausbildungDocsVollstaendig = kinderInAusbildung.filter(k => !!data.scans[`kind_ausbildungsbestaetigung_${k.id}`]).length;
+
   // Mehrfach-Dokumente: eigener State für dynamisch hinzugefügte Einträge
   const [mehrfachEintraege, setMehrfachEintraege] = useState<Record<string, { id: string; label: string }[]>>({});
   const [mehrfachNeuesLabel, setMehrfachNeuesLabel] = useState<Record<string, string>>({});
@@ -413,10 +392,11 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
     + unterschriftDocs.filter(d => istDokumentVollstaendig(d, data.scans)).length;
   const katalogPflichtOffen = uploadDocs.filter(d => d.pflicht && !istDokumentVollstaendig(d, data.scans)).length
     + unterschriftDocs.filter(d => d.pflicht && !istDokumentVollstaendig(d, data.scans)).length;
-  const kinderPflichtOffen = kinderMitZulagen.length - kinderDocsVollstaendig;
+  const kinderPflichtOffen = (kinderMitZulagen.length - kinderDocsVollstaendig)
+    + (kinderInAusbildung.length - ausbildungDocsVollstaendig);
 
-  const vollstaendig = katalogVollstaendig + kinderDocsVollstaendig;
-  const gesamtAnzahl = uploadDocs.length + unterschriftDocs.length + kinderMitZulagen.length;
+  const vollstaendig = katalogVollstaendig + kinderDocsVollstaendig + ausbildungDocsVollstaendig;
+  const gesamtAnzahl = uploadDocs.length + unterschriftDocs.length + kinderMitZulagen.length + kinderInAusbildung.length;
   const pflichtOffen = katalogPflichtOffen + kinderPflichtOffen;
 
   const addMehrfachEintrag = (docCode: string) => {
@@ -566,6 +546,30 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung }: {
         {kinderMitZulagen.map((kind, idx) => {
           const kindKey = `kind_kk_${kind.id}`;
           const kindLabel = `Krankenkassenkarte — ${kind.vorname || ""} ${kind.nachname || `Kind ${idx + 1}`}`.trim();
+          const kindScan = data.scans[kindKey];
+          return (
+            <div key={kindKey} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: kindScan ? 0 : "var(--space-3)" }}>
+                <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
+                  {kindLabel} <span style={{ color: "var(--status-danger)" }}>*</span>
+                </div>
+                {kindScan && <Check style={{ width: 16, height: 16, color: "var(--status-success)" }} />}
+              </div>
+              {kindScan ? (
+                <ScanDisplay scanKey={kindKey} scan={kindScan} onRemove={removeScan} previewOpen={previewOpen} setPreviewOpen={setPreviewOpen} />
+              ) : (
+                <div className="flex items-center" style={{ gap: 8 }}>
+                  <DokumentScanUpload scanKey={kindKey} docLabel={kindLabel} onFile={handleScanFile} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Pro-Kind-Dokumente: Ausbildungsbestätigung je Kind in laufender Ausbildung */}
+        {kinderInAusbildung.map((kind, idx) => {
+          const kindKey = `kind_ausbildungsbestaetigung_${kind.id}`;
+          const kindLabel = `Ausbildungsbestätigung — ${kind.vorname || ""} ${kind.nachname || `Kind ${idx + 1}`}`.trim();
           const kindScan = data.scans[kindKey];
           return (
             <div key={kindKey} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
