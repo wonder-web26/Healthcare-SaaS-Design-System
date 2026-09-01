@@ -14,7 +14,8 @@ import { Combobox as FormSelect } from "./Combobox";
 import { GroupBox } from "./GroupBox";
 import { DokumentScanUpload, type ScanFile } from "./DokumentScanUpload";
 import type { AngehoerigerFormData } from "../StepAngehoeriger";
-import { createEmptyKind, zulagenartLabel } from "../StepAngehoeriger";
+import { createEmptyKind } from "../StepAngehoeriger";
+import { zulagenart, zulagenartLabel, alterInJahren, alterAnzeige, AUSBILDUNGSFRAGE_AB_ALTER, type Zulagenart } from "../../../lib/stammdaten/zulagenart";
 import { pruefeQuellensteuerAutomatik } from "../../../lib/stammdaten/quellensteuer-automatik";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../../lib/stammdaten/dokumenttypen";
 import { SEMMeldeBanner } from "./MigratedAngehoerigerForms";
@@ -28,18 +29,59 @@ function filled(v: string | undefined | null): boolean {
 }
 
 const JA_NEIN = [{ value: "ja", label: "Ja" }, { value: "nein", label: "Nein" }];
-const ZULAGENART = [{ value: "K", label: "K (Kinderzulage)" }, { value: "W", label: "W (Weiterbildung)" }];
-const AUSBILDUNG = [{ value: "gymnasium", label: "Gymnasium" }, { value: "lehre", label: "Lehre" }, { value: "fachhochschule", label: "Fachhochschule" }, { value: "universitaet", label: "Universität" }, { value: "andere", label: "Andere" }];
+
+/** Abgeleitete Zulagenart als Chip — nie leer; "Keine Zulage" gedämpft. */
+function ZulageChipForm({ art }: { art: Zulagenart }) {
+  const farbe = art === "kinderzulage"
+    ? { bg: "var(--status-info-bg)", fg: "var(--status-info)" }
+    : art === "ausbildungszulage"
+      ? { bg: "var(--status-warning-bg)", fg: "var(--status-warning-text)" }
+      : { bg: "var(--bg-tertiary)", fg: "var(--text-tertiary)" };
+  return (
+    <span style={{ fontSize: "var(--text-meta)", fontWeight: 500, padding: "2px 10px", borderRadius: 999, background: farbe.bg, color: farbe.fg }}>
+      {zulagenartLabel(art)}
+    </span>
+  );
+}
+
+/**
+ * §5-Hinweis: Bei laufender Ausbildung fehlt die Ausbildungsbestätigung.
+ * Pro-Kind-Ablage existiert (scans, Schlüssel je Kind), daher mit echter
+ * Hochladen-Aktion. Die Dokumente-Checkliste zählt diesen Nachweis noch nicht
+ * mit — als Pendenz vermerkt (siehe Feldzuordnung-Doc).
+ */
+function AusbildungsbestaetigungHinweis({ kindId, data, onChange }: {
+  kindId: string;
+  data: AngehoerigerFormData;
+  onChange: (d: AngehoerigerFormData) => void;
+}) {
+  const key = `kind_ausbildungsbestaetigung_${kindId}`;
+  const scan = data.scans[key];
+  if (scan) {
+    return (
+      <div className="flex items-center" style={{ marginTop: "var(--space-3)", gap: 8, fontSize: "var(--text-small)", color: "var(--status-success)" }}>
+        <Check style={{ width: 16, height: 16 }} /> Ausbildungsbestätigung hochgeladen ({scan.name})
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-between" style={{ marginTop: "var(--space-3)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, gap: 12 }}>
+      <span style={{ fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>Ausbildungsbestätigung fehlt.</span>
+      <DokumentScanUpload scanKey={key} docLabel="Ausbildungsbestätigung" onFile={(k, file) => onChange({ ...data, scans: { ...data.scans, [k]: file } })} />
+    </div>
+  );
+}
+
 /** Aufenthaltsbewilligung des Partners — vollstaendige Liste wie beim Angehoerigen selbst */
 const AUFENTHALT_PARTNER = [
-  { value: "CH", label: "Schweizer Buerger/in" },
+  { value: "CH", label: "Schweizer Bürger/in" },
   { value: "B", label: "B – Aufenthaltsbewilligung" },
   { value: "C", label: "C – Niederlassungsbewilligung" },
   { value: "L", label: "L – Kurzaufenthaltsbewilligung" },
-  { value: "G", label: "G – Grenzgaengerbewilligung" },
-  { value: "F", label: "F – Vorlaeufige Aufnahme" },
+  { value: "G", label: "G – Grenzgängerbewilligung" },
+  { value: "F", label: "F – Vorläufige Aufnahme" },
   { value: "N", label: "N – Asylsuchende" },
-  { value: "S", label: "S – Schutzbeduertige" },
+  { value: "S", label: "S – Schutzbedürftige" },
 ];
 
 /* ══════════════════════════════════════════
@@ -90,24 +132,6 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
 
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
-      {/* Zustand-Hinweis */}
-      {!istPflicht && (
-        <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
-          <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)", fontStyle: "italic" }}>
-            {/* revDSG: Partnerdaten = Personendaten Dritter, Erhebung nur mit Zweck */}
-            Nur noetig bei Quellensteuerpflicht. Freiwillige Angabe.
-          </div>
-          {!pflichtBedingung && (
-            <button
-              onClick={() => set("partnerManualToggle", false)}
-              className="cursor-pointer"
-              style={{ background: "none", border: "none", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", padding: "2px 6px" }}
-            >
-              Ausblenden
-            </button>
-          )}
-        </div>
-      )}
       {istPflicht && (
         <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: "var(--space-4)", padding: "8px 12px", background: "var(--status-info-bg)", borderRadius: 8 }}>
           Partnerangaben sind Pflicht (verheiratet / eingetragene Partnerschaft + quellensteuerpflichtig).
@@ -143,9 +167,9 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
             // SP-07 Regel 2 (Pendenz): erfolgt erst bei Onboarding-Konvertierung,
             // nicht waehrend der Erfassung (Mitarbeiter existiert noch nicht).
           }
-        }} options={AUFENTHALT_PARTNER} placeholder="Bewilligung waehlen" error={errIfPflicht("partnerAufenthaltsstatus", data.partnerAufenthaltsstatus)} /></div>
+        }} options={AUFENTHALT_PARTNER} placeholder="Bewilligung wählen" error={errIfPflicht("partnerAufenthaltsstatus", data.partnerAufenthaltsstatus)} /></div>
         {/* SP-06: Erwerbstaetig */}
-        <SegmentedControl label="Erwerbstaetig?" required={istPflicht} value={data.partnerErwerbstaetig} onChange={v => set("partnerErwerbstaetig", v)} options={JA_NEIN} />
+        <SegmentedControl label="Erwerbstätig?" required={istPflicht} value={data.partnerErwerbstaetig} onChange={v => set("partnerErwerbstaetig", v)} options={JA_NEIN} />
       </div>
     </div>
   );
@@ -179,12 +203,19 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
     onChange({ ...data, kinder: data.kinder.filter(k => k.id !== id) });
   };
 
-  const updateKind = (id: string, field: string, value: string) => {
+  const updateKind = (id: string, field: string, value: string | boolean | null) => {
     onChange({ ...data, kinder: data.kinder.map(k => k.id === id ? { ...k, [field]: value } : k) });
   };
 
   // Plausibilitaetswarnung: Anzahl vs. Detail
   const anzahlVsDetail = zulagenUeberSpitex && anzahlNum > 0 && data.kinder.length > 0 && anzahlNum < data.kinder.length;
+
+  // §6: abgeleitete Anspruchsübersicht über alle erfassten Kinder
+  const arten = data.kinder.map(k => zulagenart(k.geburtsdatum, k.inAusbildung));
+  const nKinder = data.kinder.length;
+  const nKinderzulage = arten.filter(a => a === "kinderzulage").length;
+  const nAusbildung = arten.filter(a => a === "ausbildungszulage").length;
+  const nKeine = arten.filter(a => a === "keine").length;
 
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
@@ -200,7 +231,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
 
       {!hasKids && (
         <div style={{ textAlign: "center", padding: "var(--space-4) 0" }}>
-          <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Keine unterhaltspflichtigen Kinder — Abschnitt wird als vollstaendig markiert.</div>
+          <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Keine unterhaltspflichtigen Kinder — Abschnitt wird als vollständig markiert.</div>
         </div>
       )}
 
@@ -214,14 +245,14 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
               value={data.anzahlKinder}
               onChange={v => set("anzahlKinder", v)}
               placeholder="z.B. 2"
-              hint="Relevant fuer Quellensteuer-Tarif"
+              hint="Relevant für Quellensteuer-Tarif"
               error={hasKids && (!data.anzahlKinder || data.anzahlKinder === "0") ? "Pflichtfeld" : undefined}
             /></div>
           </div>
 
           {/* Gating-Frage 2 (nur wenn Frage 1 = Ja) */}
           <div style={{ marginBottom: "var(--space-5)" }}>
-            <SegmentedControl label="Kinderzulagen werden ueber die Spitex abgerechnet?" required value={data.kinderzulagenUeberSpitex} onChange={v => set("kinderzulagenUeberSpitex", v)} options={JA_NEIN} hint="Wenn Nein, nur Anzahl relevant (fuer QST-Tarif). Details nicht noetig." />
+            <SegmentedControl label="Kinderzulagen werden über die Spitex abgerechnet?" required value={data.kinderzulagenUeberSpitex} onChange={v => set("kinderzulagenUeberSpitex", v)} options={JA_NEIN} hint="Wenn Nein, nur Anzahl relevant (für QST-Tarif). Details nicht nötig." />
           </div>
 
           {/* Stufe 2: Kinder-Detailblock (nur wenn Frage 2 = Ja) */}
@@ -234,12 +265,29 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                 </div>
               )}
 
+              {/* §6: abgeleitete Anspruchsübersicht */}
+              {nKinder > 0 && (
+                <div style={{ marginBottom: "var(--space-3)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+                  {nKinder} {nKinder === 1 ? "Kind" : "Kinder"}
+                  {" · "}{nKinderzulage} {nKinderzulage === 1 ? "Kinderzulage" : "Kinderzulagen"}
+                  {" · "}{nAusbildung} {nAusbildung === 1 ? "Ausbildungszulage" : "Ausbildungszulagen"}
+                  {nKeine > 0 && <>{" · "}{nKeine} ohne Anspruch</>}
+                </div>
+              )}
+
               <div className="flex flex-col" style={{ gap: "var(--space-3)" }}>
-                {data.kinder.map((kind, idx) => (
+                {data.kinder.map((kind, idx) => {
+                  const alter = alterInJahren(kind.geburtsdatum);
+                  const abAusbildung = alter !== null && alter >= AUSBILDUNGSFRAGE_AB_ALTER;
+                  const art = zulagenart(kind.geburtsdatum, kind.inAusbildung);
+                  const name = [kind.vorname, kind.nachname].map(s => s.trim()).filter(Boolean).join(" ") || `Kind ${idx + 1}`;
+                  const alterText = alterAnzeige(kind.geburtsdatum);
+                  return (
                   <GroupBox
                     key={kind.id}
-                    title={`Kind ${idx + 1}`}
-                    subtitle={zulagenartLabel(kind.zulagenart)}
+                    title={name}
+                    subtitle={alterText || undefined}
+                    badge={<ZulageChipForm art={art} />}
                     onRemove={() => removeKind(kind.id)}
                     removeDisabled={data.kinder.length <= 1}
                     removeDisabledTooltip="Mindestens ein Kind erforderlich"
@@ -248,12 +296,48 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                       <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required value={kind.vorname} onChange={v => updateKind(kind.id, "vorname", v)} placeholder="Vorname" /></div>
                       <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Nachname" required value={kind.nachname} onChange={v => updateKind(kind.id, "nachname", v)} placeholder="Nachname" /></div>
                       <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={kind.geburtsdatum || null} onChange={v => updateKind(kind.id, "geburtsdatum", (v as string) ?? "")} /></div>
-                      <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" value={kind.geschlecht || null} onChange={v => updateKind(kind.id, "geschlecht", v || "")} options={GESCHLECHT_OPTIONS} placeholder="Waehlen" /></div>
+                      <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Geschlecht" value={kind.geschlecht || null} onChange={v => updateKind(kind.id, "geschlecht", v || "")} options={GESCHLECHT_OPTIONS} placeholder="Wählen" /></div>
                     </div>
-                    {/* SP-09: Ausbildungslogik >16/25 hier nicht ausimplementiert */}
-                    {/* SP-22: Dokumente (Familienbuechlein/IDs) hier nicht enthalten */}
+
+                    {/* §2: ohne Geburtsdatum ist die Zulagenart nicht bestimmbar */}
+                    {!filled(kind.geburtsdatum) && (
+                      <div style={{ marginTop: "var(--space-3)", fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>
+                        Ohne Geburtsdatum lässt sich der Zulagenanspruch nicht bestimmen.
+                      </div>
+                    )}
+
+                    {/* §4: Ausbildungsblock ab 16 Jahren */}
+                    {abAusbildung && (
+                      <div style={{ marginTop: "var(--space-4)", padding: "var(--space-4)", background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)" }}>
+                        <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: "var(--space-3)" }}>
+                          Ab 16 Jahren besteht ein Anspruch nur bei laufender Ausbildung.
+                        </div>
+                        <SegmentedControl
+                          label="In Ausbildung"
+                          value={kind.inAusbildung === null ? "" : kind.inAusbildung ? "ja" : "nein"}
+                          onChange={v => updateKind(kind.id, "inAusbildung", v === "ja")}
+                          options={JA_NEIN}
+                        />
+                        {kind.inAusbildung === true && (
+                          <div style={{ marginTop: "var(--space-3)", maxWidth: FELD_MAX.schmal }}>
+                            <DateField label="Ausbildung voraussichtlich bis" wertFormat="display" bereich="future" value={kind.ausbildungBis || null} onChange={v => updateKind(kind.id, "ausbildungBis", (v as string) ?? "")} />
+                          </div>
+                        )}
+                        {kind.inAusbildung === false && (
+                          <div style={{ marginTop: "var(--space-3)", fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>
+                            Ohne laufende Ausbildung besteht ab 16 Jahren kein Anspruch auf Familienzulagen.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* §5: Ausbildungsbestätigung fehlt */}
+                    {kind.inAusbildung === true && (
+                      <AusbildungsbestaetigungHinweis kindId={kind.id} data={data} onChange={onChange} />
+                    )}
                   </GroupBox>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Kind hinzufuegen */}

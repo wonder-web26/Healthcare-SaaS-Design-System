@@ -153,17 +153,20 @@ berufstätig, AHV. `[Setzung]`
 | AN-E11 | Name | Text | ja | — |
 | AN-E12 | Geburtsdatum | Datum | ja | — |
 | AN-E13 | Geschlecht | Auswahl | ja | `GESCHLECHT` |
-| AN-E14 | In Ausbildung | Ja/Nein | nein | `JA_NEIN` |
-| AN-E15 | Ausbildungsbeginn | Datum | nein | — |
+| AN-E14 | In Ausbildung | Ja/Nein | ab 16 ja | `JA_NEIN` |
+| AN-E15 | Ausbildung voraussichtlich bis | Datum | bei AN-E14 = ja | — |
 | AN-E16 | Zulagenart | abgeleitet | — | `ZULAGENART` |
-| AN-E17 | Herkunft der Zulagenart | abgeleitet | — | `TARIFCODE_QUELLE` |
-| AN-E18 | Begründung der Abweichung | Text | ja | — |
 
-AN-E14 und AN-E15 werden heute im Typ geführt, aber nicht als Eingabe
-angeboten, obwohl AN-E16 aus ihnen abgeleitet wird. Sie werden
-Erhebungsfelder. `[Setzung]`
+**Umgesetzt.** AN-E14 und AN-E15 sind jetzt Erhebungsfelder je Kind
+(`inAusbildung: boolean | null`, `ausbildungBis: string | null`), sichtbar erst
+ab dem 16. Altersjahr. AN-E16 wird an genau einer Stelle abgeleitet
+(`lib/stammdaten/zulagenart.ts`, Funktion `zulagenart(geburtsdatum,
+inAusbildung, stichtag)`) und nirgends gespeichert. Das frühere gespeicherte
+Kürzel (K/W) am Kind ist entfallen.
 
-AN-E18 ist Pflicht, sobald AN-E17 = manuell überschrieben.
+Die frühere manuelle Überschreibung der Zulagenart (Felder `typQuelle`,
+`overrideBegruendung`, im Katalog AN-E17/AN-E18) wurde **nicht gebaut** — die
+Ableitung hat keinen Override-Pfad. Siehe Offene Punkte.
 
 **`familienausgleichskasse` und `kinderzulagenBeantragt` entfallen** — im Typ
 vorhanden, nie erhoben, nie gelesen. `[Setzung]`
@@ -372,6 +375,10 @@ Detailseite; heute zeigt sie nur den Nachnamen.
 | Werteliste `LOHNART` — heute keine vorhanden, vom SEM-Formular gelesen | intern, ggf. Kaufmann |
 | Ob AN-C6 Steuergemeinde erhoben oder aus der Adresse abgeleitet wird | intern |
 | Ob `pf_hf` und `pf_fh` bei pflegenden Angehörigen überhaupt vorkommen | Kaufmann |
+| **Altersgrenzen der Zulagenart** (16 / 25 Jahre) sind in `lib/stammdaten/zulagenart.ts` als vorläufige Konstanten hinterlegt und fachlich zu bestätigen | Person B / Lohnstelle |
+| **Sonderfall Erwerbsunfähigkeit** — Kinderzulage läuft bei erwerbsunfähigen Kindern bis zum 20. Altersjahr weiter. Nicht abgebildet, solange das Modell keine Erwerbsunfähigkeit trägt | Person B / Lohnstelle |
+| **Ausbildungsbestätigung je Kind** — bei laufender Ausbildung wird im Kinder-Reiter ein Upload angeboten (`kind_ausbildungsbestaetigung_<id>`), aber die Dokumente-Checkliste zählt ihn noch nicht mit und macht ihn nicht zur Pflicht | intern |
+| **AN-E17/AN-E18 (Override der Zulagenart)** — die Felder `typQuelle`/`overrideBegruendung` sind entfallen; falls ein manueller Override fachlich nötig ist, muss er neu spezifiziert werden | Person B |
 
 ---
 

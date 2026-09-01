@@ -1,8 +1,9 @@
 /**
  * SP-09: Doppelbezugs-Check für Kinderzulagen.
  *
- * Die Zulagenart (Kinderzulage/Ausbildungszulage) wird am Feld `zulagenart`
- * geführt (Kürzel K/W, siehe StepAngehoeriger — dort auch die Bezeichnungen).
+ * Die Zulagenart (Kinderzulage/Ausbildungszulage/keine) wird nicht erfasst,
+ * sondern aus Alter und Ausbildungsstand abgeleitet — siehe
+ * lib/stammdaten/zulagenart. Hier geht es nur um den Doppelbezug.
  */
 
 /** Optionen für den Doppelbezugs-Check */

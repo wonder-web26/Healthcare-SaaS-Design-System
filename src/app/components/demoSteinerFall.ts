@@ -44,9 +44,8 @@ export const demoSteinerAngehoeriger: AngehoerigerFormData = {
   hatUnterhaltspflichtigeKinder: "ja", anzahlKinder: "1",
   kinder: [{
     id: "K-Steiner-1", vorname: "Lena", nachname: "Steiner", geburtsdatum: "03.03.2005",
-    geschlecht: "weiblich", ahvNummer: "756.2233.4455.66", inAusbildung: "ja",
-    ausbildungsbeginn: "01.09.2023", ausbildungsstatus: "laufend", zulagenart: "W",
-    typQuelle: "abgeleitet", overrideBegruendung: "", doppelbezug: "nein",
+    geschlecht: "weiblich", ahvNummer: "756.2233.4455.66",
+    inAusbildung: true, ausbildungBis: "31.08.2026", doppelbezug: "nein",
   }],
   kinderzulagenUeberSpitex: "ja", kinderzulagenBeantragt: "ja", familienausgleichskasse: "Ausgleichskasse Zürich",
   // Anstellung & Auszahlung

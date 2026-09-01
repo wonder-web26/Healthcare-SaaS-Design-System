@@ -58,6 +58,7 @@ import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/kranke
 import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
 import { Combobox } from "./form/Combobox";
 import { leiteTarifcodeAb } from "../../lib/stammdaten/quellensteuer-tarif";
+import { alterInJahren, AUSBILDUNGSFRAGE_AB_ALTER } from "../../lib/stammdaten/zulagenart";
 
 /* ══════════════════════════════════════════
    TYPES (unchanged export contract)
@@ -166,21 +167,9 @@ export interface AngehoerigerFormData {
 }
 
 /**
- * Zulagenart eines Kindes — Fachkürzel der CH-Familienzulagen:
- * K = Kinderzulage, W = Ausbildungszulage. "" = noch nicht gewählt.
+ * Zulagenart wird abgeleitet, nicht erfasst — Definition, Anzeigebezeichnung und
+ * Ableitung leben in lib/stammdaten/zulagenart und werden dort direkt bezogen.
  */
-export type Zulagenart = "" | "K" | "W";
-
-/** Einzige Quelle der Anzeigebezeichnung für zulagenart (K/W). */
-export const ZULAGENART_LABEL: Record<"K" | "W", string> = {
-  K: "Kinderzulage",
-  W: "Ausbildungszulage",
-};
-
-/** Anzeigebezeichnung für einen zulagenart-Wert; leer, solange nichts gewählt ist. */
-export function zulagenartLabel(v: Zulagenart): string {
-  return v === "" ? "" : ZULAGENART_LABEL[v];
-}
 
 export interface KindEntry {
   id: string;
@@ -189,17 +178,11 @@ export interface KindEntry {
   geburtsdatum: string;
   geschlecht: string;
   ahvNummer: string;
-  /** SP-09: "ja" / "nein" — nachobligatorische Ausbildung */
-  inAusbildung: string;
-  ausbildungsbeginn: string;
-  ausbildungsstatus: string;
-  /** SP-09: Zulagenart — K = Kinderzulage, W = Ausbildungszulage */
-  zulagenart: Zulagenart;
-  /** SP-09: Quelle des Zulagentyps ("abgeleitet" / "manuell_ueberschrieben") */
-  typQuelle: string;
-  /** SP-09: Begründung bei manuellem Override (Pflichtfeld) */
-  overrideBegruendung: string;
-  /** SP-09: Doppelbezugs-Check ("ja" / "nein" / "unbekannt") */
+  /** Ab 16 relevant: in laufender Ausbildung? null = noch nicht beantwortet. */
+  inAusbildung: boolean | null;
+  /** Voraussichtliches Ausbildungsende (TT.MM.JJJJ); null wenn nicht in Ausbildung. */
+  ausbildungBis: string | null;
+  /** Doppelbezugs-Check ("ja" / "nein" / "unbekannt") */
   doppelbezug: string;
 }
 
@@ -211,12 +194,8 @@ export function createEmptyKind(): KindEntry {
     geburtsdatum: "",
     geschlecht: "",
     ahvNummer: "",
-    inAusbildung: "",
-    ausbildungsbeginn: "",
-    ausbildungsstatus: "",
-    zulagenart: "",
-    typQuelle: "abgeleitet",
-    overrideBegruendung: "",
+    inAusbildung: null,
+    ausbildungBis: null,
     doppelbezug: "",
   };
 }
@@ -227,11 +206,12 @@ function isKindComplete(k: KindEntry): boolean {
     filled(k.vorname) &&
     isValidDate(k.geburtsdatum) &&
     isValidAHV(k.ahvNummer) &&
-    filled(k.geschlecht) &&
-    filled(k.zulagenart);
+    filled(k.geschlecht);
   if (!base) return false;
-  if (k.zulagenart === "W") {
-    return filled(k.ausbildungsstatus) && isValidDate(k.ausbildungsbeginn);
+  const alter = alterInJahren(k.geburtsdatum);
+  if (alter !== null && alter >= AUSBILDUNGSFRAGE_AB_ALTER) {
+    if (k.inAusbildung === null) return false;
+    if (k.inAusbildung === true) return isValidDate(k.ausbildungBis ?? "");
   }
   return true;
 }
@@ -243,10 +223,11 @@ function kindProgress(k: KindEntry): { done: number; total: number } {
     isValidDate(k.geburtsdatum),
     isValidAHV(k.ahvNummer),
     filled(k.geschlecht),
-    filled(k.zulagenart),
   ];
-  if (k.zulagenart === "W") {
-    checks.push(filled(k.ausbildungsstatus), isValidDate(k.ausbildungsbeginn));
+  const alter = alterInJahren(k.geburtsdatum);
+  if (alter !== null && alter >= AUSBILDUNGSFRAGE_AB_ALTER) {
+    checks.push(k.inAusbildung !== null);
+    if (k.inAusbildung === true) checks.push(isValidDate(k.ausbildungBis ?? ""));
   }
   return { done: checks.filter(Boolean).length, total: checks.length };
 }

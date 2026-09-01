@@ -75,10 +75,66 @@ import { getNachweiseFuerAngehoeriger } from "../../lib/schulung/nachweis-store"
 import { getKontrollenFuerAngehoeriger, erstelleKontrolle, getNaechsteFaelligkeit, type KontrolleArt } from "../../lib/arbeitskontrolle/store";
 import { exportiereArbeitskontrollePDF } from "../../lib/arbeitskontrolle/pdf-export";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
-import { type KindEntry, createEmptyKind, ZULAGENART_LABEL, zulagenartLabel } from "./StepAngehoeriger";
+import { type KindEntry, createEmptyKind } from "./StepAngehoeriger";
+import { zulagenart, zulagenartLabel, alterInJahren, AUSBILDUNGSFRAGE_AB_ALTER } from "../../lib/stammdaten/zulagenart";
 import { isoZuAnzeige, anzeigeZuIso } from "../../lib/datum";
 import "../../lib/schulung/demo-seed";
 import "../../lib/arbeitskontrolle/demo-seed";
+
+/** Abgeleitete Zulagenart als Chip — nie leer, "Keine Zulage" gedämpft. */
+function ZulageChip({ k }: { k: KindEntry }) {
+  const art = zulagenart(k.geburtsdatum, k.inAusbildung);
+  const cls = art === "kinderzulage" ? "bg-info-light text-info-foreground"
+    : art === "ausbildungszulage" ? "bg-warning-light text-warning-foreground"
+    : "bg-muted text-muted-foreground";
+  return (
+    <span className={`inline-flex items-center px-2 py-[2px] rounded-md text-[11px] ${cls}`} style={{ fontWeight: 500, opacity: art === "keine" ? 0.65 : 1 }}>
+      {zulagenartLabel(art)}
+    </span>
+  );
+}
+
+/**
+ * Ausbildungs-Zelle der Kinder-Tabelle. Die Frage stellt sich erst ab 16;
+ * darunter bleibt sie leer ("—"). Im Bearbeitungsmodus Ja/Nein plus, bei Ja,
+ * das voraussichtliche Ausbildungsende.
+ */
+function KindAusbildungCell({ k, editing, selectClass, updateKind }: {
+  k: KindEntry;
+  editing: boolean;
+  selectClass: string;
+  updateKind: (id: string, field: keyof KindEntry, value: string | boolean | null) => void;
+}) {
+  const alter = alterInJahren(k.geburtsdatum);
+  if (alter === null || alter < AUSBILDUNGSFRAGE_AB_ALTER) {
+    return <span className="text-[13px] text-muted-foreground">—</span>;
+  }
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <select
+          value={k.inAusbildung === null ? "" : k.inAusbildung ? "ja" : "nein"}
+          onChange={e => updateKind(k.id, "inAusbildung", e.target.value === "" ? null : e.target.value === "ja")}
+          className={selectClass + " !py-1.5 !text-[12px]"}
+        >
+          <option value="">Offen</option>
+          <option value="ja">In Ausbildung</option>
+          <option value="nein">Nicht in Ausbildung</option>
+        </select>
+        {k.inAusbildung === true && (
+          <DateField wertFormat="display" bereich="any" value={k.ausbildungBis || null} onChange={v => updateKind(k.id, "ausbildungBis", (v as string) ?? "")} />
+        )}
+      </div>
+    );
+  }
+  return (
+    <span className="text-[13px] text-muted-foreground">
+      {k.inAusbildung === true
+        ? `In Ausbildung${k.ausbildungBis ? ` bis ${k.ausbildungBis}` : ""}`
+        : k.inAusbildung === false ? "Nicht in Ausbildung" : "Offen"}
+    </span>
+  );
+}
 
 /* ══════════════════════════════════════════
    EXTENDED MOCK DATA — HR detail fields
@@ -154,8 +210,8 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
     partnerName: "Anna Müller", partnerGeburtsdatum: "22.08.1980",
     partnerAhvNummer: "756.9876.5432.10", partnerZemisNummer: "—", partnerAufenthaltsstatus: "Schweizer/in",
     kinder: [
-      { id: "K-0101-1", nachname: "Müller", vorname: "Luca", geburtsdatum: "15.04.2010", ahvNummer: "756.1111.2222.33", geschlecht: "Männlich", zulagenart: "K", ausbildungsbeginn: "—", inAusbildung: "nein", ausbildungsstatus: "", typQuelle: "abgeleitet", overrideBegruendung: "", doppelbezug: "nein" },
-      { id: "K-0101-2", nachname: "Müller", vorname: "Sophie", geburtsdatum: "03.09.2012", ahvNummer: "756.4444.5555.66", geschlecht: "Weiblich", zulagenart: "K", ausbildungsbeginn: "—", inAusbildung: "nein", ausbildungsstatus: "", typQuelle: "abgeleitet", overrideBegruendung: "", doppelbezug: "nein" },
+      { id: "K-0101-1", nachname: "Müller", vorname: "Luca", geburtsdatum: "15.04.2010", ahvNummer: "756.1111.2222.33", geschlecht: "Männlich", inAusbildung: false, ausbildungBis: null, doppelbezug: "nein" },
+      { id: "K-0101-2", nachname: "Müller", vorname: "Sophie", geburtsdatum: "03.09.2012", ahvNummer: "756.4444.5555.66", geschlecht: "Weiblich", inAusbildung: null, ausbildungBis: null, doppelbezug: "nein" },
     ],
     kinderzulagenAktiv: "Ja", kinderzulagenUeberSpitex: "Ja", familienausgleichskasse: "SVA Zürich",
     lohnsumme: "3'540.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
@@ -209,7 +265,7 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
     partnerName: "—", partnerGeburtsdatum: "—",
     partnerAhvNummer: "—", partnerZemisNummer: "—", partnerAufenthaltsstatus: "—",
     kinder: [
-      { id: "K-0103-1", nachname: "Weber", vorname: "Tim", geburtsdatum: "20.01.2008", ahvNummer: "756.7777.8888.99", geschlecht: "Männlich", zulagenart: "W", ausbildungsbeginn: "01.08.2024", inAusbildung: "ja", ausbildungsstatus: "laufend", typQuelle: "abgeleitet", overrideBegruendung: "", doppelbezug: "nein" },
+      { id: "K-0103-1", nachname: "Weber", vorname: "Tim", geburtsdatum: "20.01.2008", ahvNummer: "756.7777.8888.99", geschlecht: "Männlich", inAusbildung: true, ausbildungBis: "31.07.2027", doppelbezug: "nein" },
     ],
     kinderzulagenAktiv: "Ja", kinderzulagenUeberSpitex: "Ja", familienausgleichskasse: "SVA Bern",
     lohnsumme: "4'160.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
@@ -775,9 +831,9 @@ function TabStammdaten({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
   const inputClass = "w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all";
 
   /* Kinder helpers — genau ein Weg, ein leeres Kind zu erzeugen: createEmptyKind() */
-  const addKind = () => setKinderList([...kinderList, { ...createEmptyKind(), zulagenart: "K" }]);
+  const addKind = () => setKinderList([...kinderList, createEmptyKind()]);
   const removeKind = (id: string) => setKinderList(kinderList.filter(k => k.id !== id));
-  const updateKind = (id: string, field: keyof KindEntry, value: string) => setKinderList(kinderList.map(k => k.id === id ? ({ ...k, [field]: value } as KindEntry) : k));
+  const updateKind = (id: string, field: keyof KindEntry, value: string | boolean | null) => setKinderList(kinderList.map(k => k.id === id ? ({ ...k, [field]: value } as KindEntry) : k));
 
   return (
     <div>
@@ -922,7 +978,7 @@ function TabStammdaten({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
                   <table className="w-full">
                     <thead>
                       <tr className="bg-muted/30">
-                        {["Name", "Geburtsdatum", "AHV-Nummer", "Zulagenart", "Ausbildungsbeginn", ...(isEd("kinder") ? [""] : [])].map((col, ci) => (
+                        {["Name", "Geburtsdatum", "AHV-Nummer", "Zulagenart", "Ausbildung", ...(isEd("kinder") ? [""] : [])].map((col, ci) => (
                           <th key={ci} className="px-3 py-2 text-left">
                             <span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>{col}</span>
                           </th>
@@ -964,23 +1020,10 @@ function TabStammdaten({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
                             )}
                           </td>
                           <td className="px-3 py-2.5">
-                            {isEd("kinder") ? (
-                              <select value={k.zulagenart} onChange={e => updateKind(k.id, "zulagenart", e.target.value)} className={inputClass + " !py-1.5 !text-[12px]"}>
-                                <option value="K">{ZULAGENART_LABEL.K}</option>
-                                <option value="W">{ZULAGENART_LABEL.W}</option>
-                              </select>
-                            ) : (
-                              <span className={`inline-flex items-center px-2 py-[2px] rounded-md text-[11px] ${k.zulagenart === "K" ? "bg-info-light text-info-foreground" : "bg-warning-light text-warning-foreground"}`} style={{ fontWeight: 500 }}>
-                                {zulagenartLabel(k.zulagenart)}
-                              </span>
-                            )}
+                            <ZulageChip k={k} />
                           </td>
                           <td className="px-3 py-2.5">
-                            {isEd("kinder") ? (
-                              <DateField wertFormat="display" bereich="any" value={k.ausbildungsbeginn || null} onChange={v => updateKind(k.id, "ausbildungsbeginn", (v as string) ?? "")} />
-                            ) : (
-                              <span className="text-[13px] text-muted-foreground">{k.ausbildungsbeginn || "—"}</span>
-                            )}
+                            <KindAusbildungCell k={k} editing={isEd("kinder")} selectClass={inputClass} updateKind={updateKind} />
                           </td>
                           {isEd("kinder") && (
                             <td className="px-3 py-2.5">
@@ -1887,10 +1930,10 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
   };
 
   const handleAddKind = () => {
-    setKinder((prev) => [...prev, { ...createEmptyKind(), zulagenart: "K" }]);
+    setKinder((prev) => [...prev, createEmptyKind()]);
   };
 
-  const updateKind = (id: string, field: keyof KindEntry, value: string) => {
+  const updateKind = (id: string, field: keyof KindEntry, value: string | boolean | null) => {
     setKinder((prev) => prev.map((k) => k.id === id ? ({ ...k, [field]: value } as KindEntry) : k));
   };
 
@@ -2005,7 +2048,7 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
                   <table className="w-full">
                     <thead>
                       <tr className="bg-muted/30">
-                        {["Name", "Geburtsdatum", "AHV-Nummer", "Zulagenart", "Ausbildungsbeginn", ...(isEditing ? [""] : [])].map((col) => (
+                        {["Name", "Geburtsdatum", "AHV-Nummer", "Zulagenart", "Ausbildung", ...(isEditing ? [""] : [])].map((col) => (
                           <th key={col || "actions"} className="px-3 py-2 text-left">
                             <span className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>{col}</span>
                           </th>
@@ -2049,26 +2092,13 @@ function TableSozial({ detail }: { detail: AngehoerigerDetail }) {
                               </div>
                             )}
                           </td>
-                          {/* Zulagenart */}
+                          {/* Zulagenart (abgeleitet) */}
                           <td className="px-3 py-2.5">
-                            {isEditing ? (
-                              <select value={k.zulagenart} onChange={(e) => updateKind(k.id, "zulagenart", e.target.value)} className={selectClass + " !py-1.5 !text-[12px]"}>
-                                <option value="K">{ZULAGENART_LABEL.K}</option>
-                                <option value="W">{ZULAGENART_LABEL.W}</option>
-                              </select>
-                            ) : (
-                              <span className={`inline-flex items-center px-2 py-[2px] rounded-md text-[11px] ${k.zulagenart === "K" ? "bg-info-light text-info-foreground" : "bg-warning-light text-warning-foreground"}`} style={{ fontWeight: 500 }}>
-                                {zulagenartLabel(k.zulagenart)}
-                              </span>
-                            )}
+                            <ZulageChip k={k} />
                           </td>
-                          {/* Ausbildungsbeginn */}
+                          {/* Ausbildung */}
                           <td className="px-3 py-2.5">
-                            {isEditing && k.zulagenart === "W" ? (
-                              <DateField wertFormat="display" bereich="any" value={k.ausbildungsbeginn || null} onChange={v => updateKind(k.id, "ausbildungsbeginn", (v as string) ?? "")} />
-                            ) : (
-                              <span className="text-[13px] text-muted-foreground">{k.ausbildungsbeginn}</span>
-                            )}
+                            <KindAusbildungCell k={k} editing={isEditing} selectClass={selectClass} updateKind={updateKind} />
                           </td>
                           {/* Remove action */}
                           {isEditing && (

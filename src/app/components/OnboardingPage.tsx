@@ -242,9 +242,8 @@ function angehoerigenEingabe(d: AngehoerigerFormData): AngehoerigenEingabe {
     // dort heisst das Feld nachname, hier name. Sonst deckungsgleich.
     kinder: d.kinder.map(k => ({
       id: k.id, vorname: k.vorname, name: k.nachname, geburtsdatum: k.geburtsdatum,
-      geschlecht: k.geschlecht, ahvNummer: k.ahvNummer, inAusbildung: k.inAusbildung,
-      ausbildungsbeginn: k.ausbildungsbeginn, zulagenart: k.zulagenart,
-      typQuelle: k.typQuelle, overrideBegruendung: k.overrideBegruendung,
+      geschlecht: k.geschlecht, ahvNummer: k.ahvNummer,
+      inAusbildung: k.inAusbildung, ausbildungBis: k.ausbildungBis,
     })),
     arbeitetExtern: d.arbeitetExtern, externeFunktion: d.externeFunktion,
     externesPensumProzent: d.externesPensumProzent, externerEintritt: d.externerEintritt,

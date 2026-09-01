@@ -4,6 +4,8 @@ import { X } from "lucide-react";
 interface GroupBoxProps {
   title: string;
   subtitle?: string;
+  /** Optionaler Auszeichner rechts neben Titel/Untertitel (z.B. Zulagenart-Chip). */
+  badge?: ReactNode;
   onRemove?: () => void;
   removeLabel?: string;
   removeDisabled?: boolean;
@@ -11,7 +13,7 @@ interface GroupBoxProps {
   children: ReactNode;
 }
 
-export function GroupBox({ title, subtitle, onRemove, removeLabel = "Entfernen", removeDisabled, removeDisabledTooltip, children }: GroupBoxProps) {
+export function GroupBox({ title, subtitle, badge, onRemove, removeLabel = "Entfernen", removeDisabled, removeDisabledTooltip, children }: GroupBoxProps) {
   return (
     <div style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius-card)", padding: "var(--space-5)" }}>
       <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-4)" }}>
@@ -23,6 +25,7 @@ export function GroupBox({ title, subtitle, onRemove, removeLabel = "Entfernen",
               <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{subtitle}</span>
             </>
           )}
+          {badge && <span style={{ marginLeft: "var(--space-1)" }}>{badge}</span>}
         </div>
         {onRemove && (
           <button
