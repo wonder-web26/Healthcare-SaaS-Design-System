@@ -94,6 +94,8 @@ export interface Patient {
   konfession: string;
   /** Im Gespräch erhoben, hatte bisher kein Ziel am Patienten. */
   telefon: string;
+  /** Festnetz getrennt vom Mobil — Erreichbarkeit trägt beide. */
+  mobil: string;
   email: string;
   /** BB13 Code 21 — Sprache als Freitext, wenn der Katalog sie nicht kennt. */
   spracheAndere: string;
@@ -375,6 +377,7 @@ export const patientenSeed: Patient[] = [
     aufenthaltsstatus: "",
     konfession: "",
     telefon: "",
+    mobil: "",
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
@@ -446,6 +449,7 @@ export const patientenSeed: Patient[] = [
     aufenthaltsstatus: "",
     konfession: "",
     telefon: "",
+    mobil: "",
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
@@ -517,6 +521,7 @@ export const patientenSeed: Patient[] = [
     aufenthaltsstatus: "",
     konfession: "",
     telefon: "",
+    mobil: "",
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
@@ -588,6 +593,7 @@ export const patientenSeed: Patient[] = [
     aufenthaltsstatus: "",
     konfession: "",
     telefon: "",
+    mobil: "",
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
@@ -655,6 +661,7 @@ export const patientenSeed: Patient[] = [
     aufenthaltsstatus: "",
     konfession: "",
     telefon: "",
+    mobil: "",
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
@@ -726,6 +733,7 @@ export const patientenSeed: Patient[] = [
     aufenthaltsstatus: "",
     konfession: "",
     telefon: "",
+    mobil: "",
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
@@ -797,6 +805,7 @@ export const patientenSeed: Patient[] = [
     aufenthaltsstatus: "",
     konfession: "",
     telefon: "",
+    mobil: "",
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
@@ -868,6 +877,7 @@ export const patientenSeed: Patient[] = [
     aufenthaltsstatus: "",
     konfession: "",
     telefon: "",
+    mobil: "",
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
@@ -939,6 +949,7 @@ export const patientenSeed: Patient[] = [
     aufenthaltsstatus: "",
     konfession: "",
     telefon: "",
+    mobil: "",
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",
@@ -1006,6 +1017,7 @@ export const patientenSeed: Patient[] = [
     aufenthaltsstatus: "",
     konfession: "",
     telefon: "",
+    mobil: "",
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",

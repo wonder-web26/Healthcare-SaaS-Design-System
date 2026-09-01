@@ -92,6 +92,7 @@ export interface AngehoerigerFormData {
   ort: string;
   email: string;
   telefon: string;
+  mobil: string;
   /* 1. Personalien – Krankenkasse (SP-02, SP-03) */
   krankenkasseName: string;
   /** SP-03: umbenannt von "Versicherungsnummer" zu "Kartennummer" (Nummer auf der Versichertenkarte) */
@@ -284,6 +285,7 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   ort: "",
   email: "",
   telefon: "",
+  mobil: "",
   krankenkasseName: "",
   kartennummer: "",
   bagNr: "",

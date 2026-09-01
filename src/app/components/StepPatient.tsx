@@ -135,6 +135,7 @@ export interface PatientFormData {
   ahvNummer: string;
   email: string;
   telefon: string;
+  mobil: string;
   adresseStrasse: string;
   adressePlz: string;
   adresseOrt: string;
@@ -256,6 +257,7 @@ export const emptyPatientForm: PatientFormData = {
   ahvNummer: "",
   email: "",
   telefon: "",
+  mobil: "",
   adresseStrasse: "",
   adressePlz: "",
   adresseOrt: "",

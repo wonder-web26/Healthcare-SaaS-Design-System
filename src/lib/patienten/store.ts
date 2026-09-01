@@ -168,6 +168,7 @@ export interface PatientStammdatenEingabe {
   aufenthaltsstatus: string;
   konfession: string;
   telefon: string;
+  mobil: string;
   email: string;
   spracheAndere: string;
   uebersetzerNotwendig: string;
@@ -224,7 +225,7 @@ function stammdatenAbbilden(
   "pflegeortAbweichend" | "pflegeortStrasse" | "pflegeortPlz" | "pflegeortOrt" |
   "sprache" |
   "angehoeriger" | "angehoerigerTelefon" |
-  "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
+  "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "mobil" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
   return {
     vorname: eingabe.vorname,
     nachname: eingabe.name,
@@ -254,6 +255,7 @@ function stammdatenAbbilden(
     aufenthaltsstatus: eingabe.aufenthaltsstatus,
     konfession: eingabe.konfession,
     telefon: eingabe.telefon,
+    mobil: eingabe.mobil,
     email: eingabe.email,
     spracheAndere: eingabe.spracheAndere,
     uebersetzerNotwendig: eingabe.uebersetzerNotwendig,
@@ -318,6 +320,7 @@ export function erfassePatientImOnboarding(
     aufenthaltsstatus: "",
     konfession: "",
     telefon: "",
+    mobil: "",
     email: "",
     spracheAndere: "",
     uebersetzerNotwendig: "",

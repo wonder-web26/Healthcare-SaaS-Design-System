@@ -99,6 +99,7 @@ interface AngehoerigerDetail {
   ort: string;
   email: string;
   telefon: string;
+  mobil: string;
   krankenkasseName: string;
   versicherungsnummer: string;
   /* Steuer & Sozialversicherung */
@@ -145,7 +146,7 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
     nationalitaet: "Schweiz", heimatort: "Luzern", aufenthaltsstatus: "—",
     zivilstand: "Verheiratet", zivilstandSeit: "12.06.2005",
     strasse: "Bahnhofstrasse 42", plz: "8001", ort: "Zürich",
-    email: "peter.mueller@bluewin.ch", telefon: "+41 44 321 65 87",
+    email: "peter.mueller@bluewin.ch", telefon: "+41 44 321 65 87", mobil: "",
     krankenkasseName: "CSS", versicherungsnummer: "KK-834291",
     quellensteuer: "Nein", konfession: "Evangelisch-reformiert",
     quellensteuerTarif: "—", steuergemeinde: "Zürich",
@@ -174,7 +175,7 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
     nationalitaet: "Deutschland", heimatort: "—", aufenthaltsstatus: "Bewilligung B",
     zivilstand: "Ledig", zivilstandSeit: "—",
     strasse: "Seestrasse 15", plz: "8002", ort: "Zürich",
-    email: "lisa.schmid@gmail.com", telefon: "+41 76 555 12 34",
+    email: "lisa.schmid@gmail.com", telefon: "+41 76 555 12 34", mobil: "",
     krankenkasseName: "Helsana", versicherungsnummer: "—",
     quellensteuer: "Ja", konfession: "Konfessionslos",
     quellensteuerTarif: "A", steuergemeinde: "Zürich",
@@ -200,7 +201,7 @@ const detailLookup: Record<string, AngehoerigerDetail> = {
     nationalitaet: "Schweiz", heimatort: "Bern", aufenthaltsstatus: "—",
     zivilstand: "Geschieden", zivilstandSeit: "01.03.2018",
     strasse: "Musterweg 7", plz: "3012", ort: "Bern",
-    email: "j.weber@gmx.ch", telefon: "+41 31 777 88 99",
+    email: "j.weber@gmx.ch", telefon: "+41 31 777 88 99", mobil: "",
     krankenkasseName: "Swica", versicherungsnummer: "KK-556783",
     quellensteuer: "Nein", konfession: "Römisch-katholisch",
     quellensteuerTarif: "—", steuergemeinde: "Bern",
@@ -233,7 +234,7 @@ function getDetail(id: string): AngehoerigerDetail {
     nationalitaet: "Schweiz", heimatort: "Basel", aufenthaltsstatus: "—",
     zivilstand: "Verheiratet", zivilstandSeit: "20.09.2002",
     strasse: "Hauptstrasse 10", plz: "4051", ort: "Basel",
-    email: "kontakt@example.ch", telefon: "+41 61 222 33 44",
+    email: "kontakt@example.ch", telefon: "+41 61 222 33 44", mobil: "",
     krankenkasseName: "Concordia", versicherungsnummer: "KK-112233",
     quellensteuer: "Nein", konfession: "Evangelisch-reformiert",
     quellensteuerTarif: "—", steuergemeinde: "Basel-Stadt",
@@ -693,6 +694,7 @@ function TabStammdaten({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
   const [ort, setOrt] = useState(detail.ort);
   const [email, setEmail] = useState(detail.email);
   const [telefon, setTelefon] = useState(detail.telefon);
+  const [mobil, setMobil] = useState(detail.mobil);
   const [kkName, setKkName] = useState(detail.krankenkasseName);
   const [kkNummer, setKkNummer] = useState(detail.versicherungsnummer);
 
@@ -730,7 +732,7 @@ function TabStammdaten({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
 
   const startEdit = (section: string) => {
     if (section === "personalien") {
-      setSnapshot({ vorname, nachname, geschlecht, geburtsdatum, ahvNummer, nationalitaet, heimatort, aufenthaltsstatus, zivilstand, zivilstandSeit, strasse, plz, ort, email, telefon, kkName, kkNummer });
+      setSnapshot({ vorname, nachname, geschlecht, geburtsdatum, ahvNummer, nationalitaet, heimatort, aufenthaltsstatus, zivilstand, zivilstandSeit, strasse, plz, ort, email, telefon, mobil, kkName, kkNummer });
     } else if (section === "steuer") {
       setSnapshot({ quellensteuer, konfession, qsTarif, steuergemeinde, sozialamtInvolviert, sozialamtKontakt, lohnabtretung });
     } else if (section === "partner") {
@@ -749,7 +751,7 @@ function TabStammdaten({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
       setHeimatort(snapshot.heimatort ?? heimatort); setAufenthaltsstatus(snapshot.aufenthaltsstatus ?? aufenthaltsstatus);
       setZivilstand(snapshot.zivilstand ?? zivilstand); setZivilstandSeit(snapshot.zivilstandSeit ?? zivilstandSeit);
       setStrasse(snapshot.strasse ?? strasse); setPlz(snapshot.plz ?? plz); setOrt(snapshot.ort ?? ort);
-      setEmail(snapshot.email ?? email); setTelefon(snapshot.telefon ?? telefon);
+      setEmail(snapshot.email ?? email); setTelefon(snapshot.telefon ?? telefon); setMobil(snapshot.mobil ?? mobil);
       setKkName(snapshot.kkName ?? kkName); setKkNummer(snapshot.kkNummer ?? kkNummer);
     } else if (section === "steuer") {
       setQuellensteuer(snapshot.quellensteuer ?? quellensteuer); setKonfession(snapshot.konfession ?? konfession);
@@ -830,7 +832,8 @@ function TabStammdaten({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
               {isEd("personalien") ? (
                 <>
                   <EditableField label="E-Mail" value={email} editing type="email" onChange={setEmail} />
-                  <EditableField label="Telefon" value={telefon} editing type="tel" onChange={setTelefon} />
+                  <EditableField label="Telefon (Festnetz)" value={telefon} editing type="tel" onChange={setTelefon} />
+                  <EditableField label="Mobil" value={mobil} editing type="tel" onChange={setMobil} />
                 </>
               ) : (
                 <>
@@ -844,8 +847,15 @@ function TabStammdaten({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
                   <div className="flex items-center gap-2">
                     <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                     <div>
-                      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>Telefon</div>
-                      <div className="text-[13px] text-primary">{telefon}</div>
+                      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>Telefon (Festnetz)</div>
+                      <div className="text-[13px] text-primary">{telefon || "—"}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <div>
+                      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-0.5" style={{ fontWeight: 500 }}>Mobil</div>
+                      <div className="text-[13px] text-primary">{mobil || "—"}</div>
                     </div>
                   </div>
                 </>

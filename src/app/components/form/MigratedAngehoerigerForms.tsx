@@ -146,7 +146,8 @@ export function PersonalienFormV2({
       <SectionHeader icon={Phone} label="Erreichbarkeit" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" required value={data.email} onChange={v => set("email", v)} onBlur={() => touch("email")} placeholder="name@example.com" /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" required value={data.telefon} onChange={v => set("telefon", v)} onBlur={() => touch("telefon")} placeholder="+41 79 123 45 67" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon (Festnetz)" required value={data.telefon} onChange={v => set("telefon", v)} onBlur={() => touch("telefon")} placeholder="+41 44 000 00 00" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Mobil" value={data.mobil} onChange={v => set("mobil", v)} onBlur={() => touch("mobil")} placeholder="+41 79 000 00 00" /></div>
       </div>
 
       {/* Adresse */}

@@ -3060,7 +3060,8 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
       // Politische Gemeinde: abgeleitet (patientGemeinde), nicht direkt editierbar — Erfassung im Onboarding.
       { k: "bfsNummer", label: "BFS-Nummer" },
       { k: "kanton", label: "Kanton", optionen: KANTON_OPTIONS },
-      { k: "telefon", label: "Telefon" },
+      { k: "telefon", label: "Telefon (Festnetz)" },
+      { k: "mobil", label: "Mobil" },
       { k: "email", label: "E-Mail" },
       { k: "sprache", label: "Sprache" },
       { k: "spracheAndere", label: "Sprache, andere" },

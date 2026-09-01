@@ -111,7 +111,8 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
       <SectionHeader icon={Phone} label="Erreichbarkeit" />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" value={data.email} onChange={v => onUpdate("email", v)} placeholder="name@example.com" /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="+41 44 000 00 00" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon (Festnetz)" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="+41 44 000 00 00" /></div>
+        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Mobil" value={data.mobil} onChange={v => onUpdate("mobil", v)} placeholder="+41 79 000 00 00" /></div>
       </div>
 
       <SectionHeader icon={MapPin} label="Adresse" />

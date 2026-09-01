@@ -260,7 +260,7 @@ export function KontaktWahl({
           <div style={{ marginTop: 12 }}>
             <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", marginBottom: 8 }}>Erreichbarkeit</div>
             <div className="grid grid-cols-1 sm:grid-cols-2" style={{ gap: 12 }}>
-              <TelFeld label="Telefon" wert={telefon} onAendern={setTelefon} />
+              <TelFeld label="Telefon (Festnetz)" wert={telefon} onAendern={setTelefon} />
               {feldsatz !== "organisation" && <TelFeld label="Mobil" wert={mobil} onAendern={setMobil} />}
               <FormFeld label="E-Mail" wert={email} onAendern={setEmail} />
             </div>

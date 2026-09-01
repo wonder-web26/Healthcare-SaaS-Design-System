@@ -75,6 +75,7 @@ export interface AngehoerigerErhebung {
   ort: string;
   email: string;
   telefon: string;
+  mobil: string;
   krankenkasseName: string;
   kartennummer: string;
   bagNr: string;
@@ -167,7 +168,7 @@ export function createEmptyAngehoerigerKind(): AngehoerigerKind {
 /** Leere Erhebung — jeder Wert "nicht erhoben". */
 export const LEERE_ERHEBUNG: AngehoerigerErhebung = {
   geschlecht: "", geburtsdatum: "", ahvNummer: "", zivilstand: "", zivilstandSeit: "",
-  strasse: "", plz: "", ort: "", email: "", telefon: "",
+  strasse: "", plz: "", ort: "", email: "", telefon: "", mobil: "",
   krankenkasseName: "", kartennummer: "", bagNr: "",
   nationalitaet: "", heimatort: "", aufenthaltsstatus: "", einreisedatum: "", zemisNummer: "",
   einreichungsdatumMigrationsamt: "", bewilligungAblaufdatum: "",
@@ -290,6 +291,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "Winterthur",
     email: "vera.steiner@bluewin.ch",
     telefon: "+41 79 412 55 08",
+    mobil: "",
     krankenkasseName: "helsana",
     kartennummer: "80756000112233445",
     bagNr: "0580",
@@ -372,6 +374,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "Herisau",
     email: "b.huebscher@gmx.ch",
     telefon: "+41 79 220 41 77",
+    mobil: "",
     krankenkasseName: "css",
     kartennummer: "80756000223344556",
     bagNr: "0008",
@@ -456,6 +459,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "Winterthur",
     email: "a.rexhepi@hispeed.ch",
     telefon: "+41 78 604 19 32",
+    mobil: "",
     krankenkasseName: "swica",
     kartennummer: "80756000334455667",
     bagNr: "1384",
@@ -543,6 +547,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "St. Gallen",
     email: "y.kaya@bluewin.ch",
     telefon: "+41 79 331 06 25",
+    mobil: "",
     krankenkasseName: "sanitas",
     kartennummer: "80756000445566778",
     bagNr: "1509",
@@ -630,6 +635,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "Sursee",
     email: "erika.huber@sunrise.ch",
     telefon: "+41 79 508 73 14",
+    mobil: "",
     krankenkasseName: "concordia",
     kartennummer: "80756000556677889",
     bagNr: "0290",
@@ -713,6 +719,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "Konstanz (DE)",
     email: "m.dasilva@outlook.com",
     telefon: "+49 173 448 21 90",
+    mobil: "",
     krankenkasseName: "visana",
     kartennummer: "80756000667788990",
     bagNr: "1555",
@@ -797,6 +804,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "Langenthal",
     email: "heidi.boesiger@bluewin.ch",
     telefon: "+41 79 645 12 08",
+    mobil: "",
     krankenkasseName: "kpt",
     kartennummer: "80756000778899001",
     bagNr: "0376",
@@ -887,6 +895,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "Zürich",
     email: "l.ferrari@gmail.com",
     telefon: "+41 76 209 55 41",
+    mobil: "",
     krankenkasseName: "assura",
     kartennummer: "80756000889900112",
     bagNr: "1542",
@@ -970,6 +979,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "Aarau",
     email: "karl.zimmermann@bluewin.ch",
     telefon: "+41 79 774 30 62",
+    mobil: "",
     krankenkasseName: "groupe_mutuel",
     kartennummer: "80756000990011223",
     bagNr: "0509",
@@ -1053,6 +1063,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "Zug",
     email: "margrit.keller@hispeed.ch",
     telefon: "+41 79 118 47 25",
+    mobil: "",
     krankenkasseName: "sympany",
     kartennummer: "80756001001122334",
     bagNr: "1384",
@@ -1136,6 +1147,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "Chur",
     email: "andreas.frei@bluewin.ch",
     telefon: "+41 79 290 66 13",
+    mobil: "",
     krankenkasseName: "oekk",
     kartennummer: "80756001112233445",
     bagNr: "0246",
@@ -1218,6 +1230,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     ort: "Luzern",
     email: "claudia.huber@sunrise.ch",
     telefon: "+41 79 836 22 49",
+    mobil: "",
     krankenkasseName: "atupri",
     kartennummer: "80756001223344556",
     bagNr: "0312",
