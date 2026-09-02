@@ -203,12 +203,6 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
         }} options={JA_NEIN} />
       </div>
 
-      {!hasKids && (
-        <div style={{ textAlign: "center", padding: "var(--space-4) 0" }}>
-          <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Keine unterhaltspflichtigen Kinder — Abschnitt wird als vollständig markiert.</div>
-        </div>
-      )}
-
       {/* Stufe 1: Anzahl Kinder (Pflicht, unabhaengig von Frage 2) */}
       {hasKids && (
         <>
