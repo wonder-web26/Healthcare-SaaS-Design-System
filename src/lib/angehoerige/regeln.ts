@@ -8,19 +8,6 @@
  */
 import type { Angehoeriger } from "../../app/components/angehoerigeData";
 
-/* ── R22 · Flüchtlingsstatus ─────────────────────────────────────────────────
-   Wahr bei Aufenthaltsstatus F (vorläufig aufgenommen) oder S
-   (Schutzbedürftige). Anzeige, kein gespeichertes Feld. ── */
-export function istFluechtling(aufenthaltsstatus: string): boolean {
-  return aufenthaltsstatus === "F" || aufenthaltsstatus === "S";
-}
-
-/* ── R23 · Grenzgänger ───────────────────────────────────────────────────────
-   Wahr bei Aufenthaltsstatus G. Anzeige, kein gespeichertes Feld. ── */
-export function istGrenzgaenger(aufenthaltsstatus: string): boolean {
-  return aufenthaltsstatus === "G";
-}
-
 /* ── R21 · SRK-Gate ──────────────────────────────────────────────────────────
    Quelle: Administrativvertrag Spitex Schweiz / ASPS mit HSK, gültig ab
    1.4.2023, Anhang 6, Ziffer 3.1 — die Ausbildung ist innerhalb eines Jahres

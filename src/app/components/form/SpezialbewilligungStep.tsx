@@ -9,10 +9,14 @@ import { DateField } from "./DateField";
 import { DocumentUploader, type UploadedFile } from "./DocumentUploader";
 import { DocumentPreviewModal } from "./DocumentPreviewModal";
 import type { AngehoerigerFormData } from "../StepAngehoeriger";
+import { auslaenderrechtEingabe } from "../StepAngehoeriger";
+import { pruefeAuslaenderrecht } from "../../../lib/regeln/auslaenderrecht";
 
 interface Props {
   data: AngehoerigerFormData;
   onChange: (d: AngehoerigerFormData) => void;
+  /** Kanton des Arbeitsorts — für die zuständige Stelle. */
+  arbeitsortKanton?: string | null;
 }
 
 function parseDate(iso: string): Date | null {
@@ -32,8 +36,9 @@ function formatDateDE(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
-export function SpezialbewilligungStep({ data, onChange }: Props) {
+export function SpezialbewilligungStep({ data, onChange, arbeitsortKanton }: Props) {
   const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
+  const stelle = pruefeAuslaenderrecht(auslaenderrechtEingabe(data, arbeitsortKanton ?? null)).zustaendigeStelle;
 
   const datumValue = parseDate(data.spezialbewilligungEinreichungsDatum);
   const hasDate = !!data.spezialbewilligungEinreichungsDatum;
@@ -83,9 +88,10 @@ export function SpezialbewilligungStep({ data, onChange }: Props) {
       <div className="flex" style={{ gap: "var(--space-3)", padding: "var(--space-5)", background: "var(--brand-primary-light)", borderRadius: "var(--radius-card)", marginBottom: "var(--space-8)" }}>
         <Info style={{ width: 20, height: 20, color: "var(--brand-primary)", flexShrink: 0, marginTop: 1 }} />
         <div>
-          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: "var(--space-1)" }}>Verfahren abklären</div>
+          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: "var(--space-1)" }}>Bewilligung erforderlich</div>
           <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.6 }}>
-            Ob eine Bewilligung erforderlich ist, hängt von der Staatsangehörigkeit und vom Grund der Bewilligung ab. Diese Angaben werden derzeit nicht erfasst. Kläre das Verfahren vor der Vertragsunterzeichnung ab und dokumentiere es hier.
+            Für diese Anstellung ist eine Bewilligung erforderlich. Sie ist vor Arbeitsbeginn beim zuständigen Amt zu beantragen. Erfasse hier das Einreichungsdatum und lade die Bestätigung hoch.
+            {stelle ? ` Zuständig: ${stelle}.` : ""}
           </div>
         </div>
       </div>

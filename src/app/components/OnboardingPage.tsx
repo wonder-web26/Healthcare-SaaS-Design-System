@@ -24,8 +24,10 @@ import {
 import {
   StepAngehoeriger,
   emptyAngehoerigerForm,
+  auslaenderrechtEingabe,
   type AngehoerigerFormData,
 } from "./StepAngehoeriger";
+import { pruefeAuslaenderrecht, type Regime } from "../../lib/regeln/auslaenderrecht";
 import {
   StepPatient,
   emptyPatientForm,
@@ -104,21 +106,29 @@ const baseSteps: WizardStep[] = [
   },
 ];
 
-function buildSteps(requiresB: boolean, bewilligungEingereicht: boolean): WizardStep[] {
-  if (!requiresB) return baseSteps;
-  const eingereicht = bewilligungEingereicht;
+/**
+ * Wizard-Schritte in Abhängigkeit vom ausländerrechtlichen Regime:
+ * - `bewilligung` → zusätzlicher, dokumentierender Spezialbewilligungs-Schritt
+ *   (sperrt nicht; das System kennt das Erteilungsdatum nicht).
+ * - `unzulaessig` → einzige harte Sperre: die Vertragsunterzeichnung wird
+ *   blockiert.
+ * Alle anderen Regime: unveränderte Basisschritte.
+ */
+function buildSteps(regime: Regime, bewilligungEingereicht: boolean): WizardStep[] {
+  const zeigeSpezial = regime === "bewilligung";
+  const sperre = regime === "unzulaessig";
+  if (!zeigeSpezial) {
+    return [baseSteps[0], baseSteps[1], { ...baseSteps[2], blocked: sperre }];
+  }
   return [
     baseSteps[0],
     {
       id: 2,
       key: "spezialbewilligung",
       label: "Spezialbewilligung B",
-      danger: !eingereicht,
+      danger: !bewilligungEingereicht,
     },
     { ...baseSteps[1], id: 3 },
-    // Ausweis B blockiert die Vertragsunterzeichnung nicht mehr: ob überhaupt ein
-    // Verfahren nötig ist, hängt an EU/EFTA vs. Drittstaat, was noch nicht erfasst
-    // wird. Der Schritt bleibt sichtbar und dokumentierbar (danger), sperrt aber nicht.
     { ...baseSteps[2], id: 4 },
   ];
 }
@@ -225,6 +235,7 @@ function angehoerigenEingabe(d: AngehoerigerFormData): AngehoerigenEingabe {
     strasse: d.strasse, plz: d.plz, ort: d.ort, email: d.email, telefon: d.telefon, mobil: d.mobil,
     krankenkasseName: d.krankenkasseName, kartennummer: d.kartennummer, bagNr: d.bagNr,
     nationalitaet: d.nationalitaet, heimatort: d.heimatort, aufenthaltsstatus: d.aufenthaltsstatus, aufenthaltsgrund: d.aufenthaltsgrund,
+    asylgesuchDatum: d.asylgesuchDatum, bundesasylzentrumVerlassen: d.bundesasylzentrumVerlassen,
     einreisedatum: d.einreisedatum, zemisNummer: d.zemisNummer,
     einreichungsdatumMigrationsamt: d.einreichungsdatumMigrationsamt,
     bewilligungAblaufdatum: d.bewilligungAblaufdatum,
@@ -339,10 +350,14 @@ export function OnboardingPage() {
   const isRecording = recording.phase === "recording" && obPerson != null && recording.session?.personId === obPerson.id;
   const hasRecording = false; // No "done" phase in new recording model
 
-  /* ── Dynamic steps based on Aufenthaltsstatus B ── */
-  const requiresB = angehoerigerData.aufenthaltsstatus === "B";
+  /* ── Ausländerrechtliches Regime steuert Schritte und Sperre ──
+     Der Arbeitsort-Kanton kommt vom gepflegten Patienten (dieselbe Quelle wie
+     das SEM-Formular). Nur regime === "unzulaessig" sperrt; der Bewilligungs-
+     Schritt erscheint bei regime === "bewilligung" und dokumentiert nur. */
+  const arRegime = pruefeAuslaenderrecht(auslaenderrechtEingabe(angehoerigerData, patientData.kanton || null)).regime;
+  const zeigeSpezialschritt = arRegime === "bewilligung";
   const bewilligungEingereicht = angehoerigerData.spezialbewilligungStatus === "eingereicht";
-  const wizardSteps = buildSteps(requiresB, bewilligungEingereicht);
+  const wizardSteps = buildSteps(arRegime, bewilligungEingereicht);
 
   /* ── Sync step validity with completedSteps ── */
   useEffect(() => {
@@ -355,7 +370,7 @@ export function OnboardingPage() {
   }, [step1Valid]);
 
   useEffect(() => {
-    if (requiresB) {
+    if (zeigeSpezialschritt) {
       setCompletedSteps((prev) => {
         const next = new Set(prev);
         if (bewilligungEingereicht) next.add(2);
@@ -363,27 +378,27 @@ export function OnboardingPage() {
         return next;
       });
     }
-  }, [requiresB, bewilligungEingereicht]);
+  }, [zeigeSpezialschritt, bewilligungEingereicht]);
 
   useEffect(() => {
     setCompletedSteps((prev) => {
       const next = new Set(prev);
-      const patientStepId = requiresB ? 3 : 2;
+      const patientStepId = zeigeSpezialschritt ? 3 : 2;
       if (step2Valid) next.add(patientStepId);
       else next.delete(patientStepId);
       return next;
     });
-  }, [step2Valid, requiresB]);
+  }, [step2Valid, zeigeSpezialschritt]);
 
   useEffect(() => {
     setCompletedSteps((prev) => {
       const next = new Set(prev);
-      const vertragStepId = requiresB ? 4 : 3;
+      const vertragStepId = zeigeSpezialschritt ? 4 : 3;
       if (step3Valid) next.add(vertragStepId);
       else next.delete(vertragStepId);
       return next;
     });
-  }, [step3Valid, requiresB]);
+  }, [step3Valid, zeigeSpezialschritt]);
 
   /* ── Progress calculation ──────────────── */
   const nonBlockedSteps = wizardSteps.filter((s) => !s.blocked);
@@ -425,10 +440,10 @@ export function OnboardingPage() {
       setCurrentStep(wizardSteps.length);
     }
     const currentKey = wizardSteps.find((s) => s.id === currentStep)?.key;
-    if (currentKey === "spezialbewilligung" && !requiresB) {
+    if (currentKey === "spezialbewilligung" && !zeigeSpezialschritt) {
       setCurrentStep(1);
     }
-  }, [requiresB, wizardSteps.length]);
+  }, [zeigeSpezialschritt, wizardSteps.length]);
 
   const activeStepData = wizardSteps.find((s) => s.id === currentStep) ?? wizardSteps[0];
 
@@ -614,7 +629,7 @@ export function OnboardingPage() {
   // "Öffnen" (Workflow-Aufgabe) → Reiter Workflow im Patienten-Schritt.
   const oeffneRhythmus = () => {
     if (activeStepData.key === "patient") { setRequestedPatientTab("workflow"); }
-    else { goToStep(requiresB ? 3 : 2); setTimeout(() => setRequestedPatientTab("workflow"), 100); }
+    else { goToStep(zeigeSpezialschritt ? 3 : 2); setTimeout(() => setRequestedPatientTab("workflow"), 100); }
   };
 
   // "Gespräch" (§E): startet die Aufzeichnung. Der Erklärsatz erscheint als Hinweis
@@ -995,7 +1010,7 @@ export function OnboardingPage() {
                 />
               )}
               {activeStepData.key === "spezialbewilligung" && (
-                <SpezialbewilligungStep data={angehoerigerData} onChange={setAngehoerigerData} />
+                <SpezialbewilligungStep data={angehoerigerData} onChange={setAngehoerigerData} arbeitsortKanton={patientData.kanton} />
               )}
               {activeStepData.key === "patient" && (
                 <StepPatient

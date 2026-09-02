@@ -298,6 +298,29 @@ Regeln sind Teil des Standards. Sie werden nicht je Kunde abgewandelt.
 | R20 | AN-F6 mit vorliegender KLV-Verordnung | Qualifikationsnachweis wird erzeugt |
 | R21 | AN-G3 und AN-F7 | **SRK-Gate.** Gilt nur bei Qualifikationsstufe `srk` und `ohne_srk`; bei `fage_dipl` entfällt es. **Frist = AN-F8 + 12 Monate.** Ampel: Zertifikat vorhanden → erlaubt · fehlt und Frist läuft → Risiko · fehlt und Frist überschritten → pausiert. Ohne AN-F8 keine Ampel — nicht „erlaubt" als Vorgabe |
 
+## Lauf 3 — Regel-Engine für die ausländerrechtliche Prüfung
+
+**Massgebend:** `docs/auslaenderrecht/Regelwerk_Auslaenderrecht_DE.md`, Fassung 1.2 (14 Regeln R01–R14, 4 Sperren S1–S4, 3 Zusatzprüfungen Z1–Z3, 6 Kantone). Die deutsche Fassung gilt bei Abweichungen.
+
+**Engine.** `src/lib/regeln/auslaenderrecht.ts` setzt das Regelwerk als reine Funktion `pruefeAuslaenderrecht(eingabe)` um — kein Store, keine Seiteneffekte, kein `new Date()`; alle Datumsvergleiche über die Eingabedaten. Auswertungsreihenfolge an einer Stelle: erst Sperren S1–S4 in Reihenfolge, dann die Matrix, dann die Zusatzprüfungen. Das Ergebnisobjekt trägt genau die Felder aus Abschnitt 4 (regime, arbeitsbeginn, kostenpflichtig, regelNummer, sicherheit, klaerung, hinweise, zustaendigeStelle, meldekanal). Anzeigetexte (Abschnitt 6) stehen ausschliesslich in der Textzuordnung derselben Datei. Die Kantonstabelle (Abschnitt 5) liegt in `src/lib/regeln/kantone-auslaenderrecht.ts`.
+
+**Ersetzte Verhaltensweisen.**
+- Der SEM-Knopf erschien bei `B|S|F`; jetzt **ausschliesslich beim Regime `meldung`** (an beiden Bannerstellen). Ein anerkannter Flüchtling mit Ausweis B bekommt ihn, eine EU-Angehörige mit Ausweis B nicht.
+- Der Spezialbewilligungs-Schritt erschien bei `aufenthaltsstatus === 'B'`; jetzt **beim Regime `bewilligung`**. Er dokumentiert, er sperrt nicht (das System kennt das Erteilungsdatum nicht).
+- Die Vertragssperre hängt jetzt **ausschliesslich an `regime === 'unzulaessig'`** (verankert an derselben Stelle wie in Lauf 1 gelöst), nicht mehr an `spezialbewilligungStatus`.
+- Der heutige Hinweisstreifen ist durch die Ergebnisanzeige (Abschnitt 6.1–6.4 inkl. Sicherheitsgrad) ersetzt.
+
+**Neue Eingaben.** Ausweisart um `keiner` (Kein gültiger Ausweis) erweitert; zwei Felder für Ausweis N: `asylgesuchDatum` und `bundesasylzentrumVerlassen` (beide nur bei N, Pflicht, beim Wechsel weg von N gelöscht). Der Arbeitsort-Kanton wird aus derselben Quelle wie in Lauf 1 wiederverwendet (`patientData.kanton`), nicht neu aufgelöst.
+
+**Nicht abschliessend belegte Regeln (Sicherheitsgrad sichtbar).** Sechs der vierzehn Regeln sind nicht `belegt`: R06 und R08 tragen `zu_bestaetigen`; für die Kantone SO, BS und BL ist die Zuständigkeit im Meldeverfahren `ungeklaert`, SO insgesamt `zu_bestaetigen`. Bei `zu_bestaetigen`/`ungeklaert` erscheint der Zusatz „Diese Einschätzung ist nicht abschliessend belegt. Vor dem Stellenantritt beim zuständigen Amt bestätigen lassen."
+
+**Interpretationen (im Regelwerk verstreut, hier festgehalten).**
+- Der Aufenthaltsgrund `andere` (Lauf 2) und ein nicht erfasster Grund (`null`) werden bei Drittstaat + B beide als „unbekannt" behandelt → `nicht_bestimmbar` (Z3, Hinweis `aufenthaltsgrund_fehlt`).
+- Die kanton-bedingte Sicherheits-Deckelung (SO/BS/BL im Meldeverfahren → `ungeklaert`, SO bei Bewilligung → `zu_bestaetigen`) folgt der ⚠️-Notiz und Abschnitt 5; die weniger belegte der beiden Einschätzungen gewinnt.
+- Der Sperrgrund (Abschnitt 6.2) wird aus `regelNummer` (S1–S4) abgeleitet, da das Ergebnisobjekt kein eigenes Grund-Feld führt.
+
+**Aufgeräumt.** `istFluechtling`/`istGrenzgaenger` (ohne Leser) entfernt. **Nicht angefasst:** die Workflow-Aufgabe bei der Konvertierung und der unerreichbare `SpezialbewilligungDialog` (eigene Läufe).
+
 ## Korrekturen Lauf 1 — falsche Aussagen im Ausländerrechtsteil
 
 Vier Anzeigen behaupteten etwas, das nicht zutrifft; sie wurden vor dem Umbau der Regeln (Lauf 3) beseitigt. **Keine neue Regellogik.**

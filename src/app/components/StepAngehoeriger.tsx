@@ -61,6 +61,8 @@ import { leiteTarifcodeAb } from "../../lib/stammdaten/quellensteuer-tarif";
 import { alterInJahren, AUSBILDUNGSFRAGE_AB_ALTER } from "../../lib/stammdaten/zulagenart";
 import { staatsangehoerigkeitsgruppe } from "../../lib/stammdaten/staatsangehoerigkeit";
 import type { Aufenthaltsgrund } from "../../lib/stammdaten/aufenthaltsgrund";
+import type { Aufenthaltsstatus } from "../../lib/stammdaten/aufenthaltsstatus";
+import type { AuslaenderrechtEingabe } from "../../lib/regeln/auslaenderrecht";
 
 /* ══════════════════════════════════════════
    TYPES (unchanged export contract)
@@ -80,6 +82,10 @@ export interface AngehoerigerFormData {
   aufenthaltsstatus: string;
   /** Grund der B-Bewilligung — nur bei Drittstaat + Ausweis B; sonst null. */
   aufenthaltsgrund: Aufenthaltsgrund | null;
+  /** Ausweis N: Datum des Asylgesuchs (bestimmt die dreimonatige Wartefrist). Nur bei N. */
+  asylgesuchDatum: string | null;
+  /** Ausweis N: Bundesasylzentrum verlassen? Nur bei N. */
+  bundesasylzentrumVerlassen: boolean | null;
   /** Bewilligungs-Felder (nur bei ausländischer Bewilligung, nicht CH/C) */
   einreisedatum: string;
   zemisNummer: string;
@@ -256,6 +262,8 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   heimatort: "",
   aufenthaltsstatus: "",
   aufenthaltsgrund: null,
+  asylgesuchDatum: null,
+  bundesasylzentrumVerlassen: null,
   einreisedatum: "",
   zemisNummer: "",
   einreichungsdatumMigrationsamt: "",
@@ -329,6 +337,24 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
     familienbuchlein: null,
   },
 };
+
+/**
+ * Baut die Eingabe der ausländerrechtlichen Prüfung aus den Formulardaten.
+ * Der Arbeitsort-Kanton kommt von aussen (Kanton des gepflegten Patienten —
+ * dieselbe Quelle wie beim SEM-Formular aus Lauf 1), nicht aus dem Formular.
+ */
+export function auslaenderrechtEingabe(data: AngehoerigerFormData, arbeitsortKanton: string | null): AuslaenderrechtEingabe {
+  return {
+    staatsangehoerigkeitsgruppe: staatsangehoerigkeitsgruppe(data.nationalitaet),
+    ausweisart: (data.aufenthaltsstatus || null) as Aufenthaltsstatus | null,
+    aufenthaltsgrund: data.aufenthaltsgrund,
+    ausweisGueltigBis: data.bewilligungAblaufdatum || null,
+    arbeitsortKanton: arbeitsortKanton || null,
+    asylgesuchDatum: data.asylgesuchDatum,
+    bundesasylzentrumVerlassen: data.bundesasylzentrumVerlassen,
+    arbeitsbeginnGeplant: data.eintrittsdatum || null,
+  };
+}
 
 /* ══════════════════════════════════════════
    VALIDATION HELPERS
@@ -455,6 +481,11 @@ function getSubStepStatus(
       // Aufenthaltsgrund ist Pflicht, wenn es sichtbar ist (Drittstaat + Ausweis B).
       if (staatsangehoerigkeitsgruppe(data.nationalitaet) === "drittstaat" && data.aufenthaltsstatus === "B") {
         checks.push(data.aufenthaltsgrund !== null);
+      }
+      // Ausweis N: Asylgesuch-Datum und Bundesasylzentrum-Angabe sind Pflicht.
+      if (data.aufenthaltsstatus === "N") {
+        checks.push(filled(data.asylgesuchDatum ?? ""));
+        checks.push(data.bundesasylzentrumVerlassen !== null);
       }
       const done = checks.filter(Boolean).length;
       if (done === checks.length) return "complete";

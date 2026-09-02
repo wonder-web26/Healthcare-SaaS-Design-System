@@ -12,6 +12,9 @@ import { type PersonenFeldWert, optionen, label } from "./personenfeld";
 /** Status, der die Spezialbewilligungs-Pflicht auslöst. */
 export const STATUS_B = "B";
 
+/** Ausweisart als Schlüssel-Union — Eingabe der ausländerrechtlichen Prüfung. */
+export type Aufenthaltsstatus = "B" | "C" | "L" | "G" | "F" | "N" | "S" | "keiner";
+
 export const AUFENTHALTSSTATUS: PersonenFeldWert[] = [
   { schluessel: "B", label: "B – Aufenthaltsbewilligung", sdaCode: null },
   { schluessel: "C", label: "C – Niederlassungsbewilligung", sdaCode: null },
@@ -20,6 +23,9 @@ export const AUFENTHALTSSTATUS: PersonenFeldWert[] = [
   { schluessel: "F", label: "F – Vorläufige Aufnahme", sdaCode: null },
   { schluessel: "N", label: "N – Asylsuchende", sdaCode: null },
   { schluessel: "S", label: "S – Schutzbedürftige", sdaCode: null },
+  // Ohne diesen Wert lässt sich R14/S1 nicht auslösen; ein leeres Feld bedeutet
+  // „noch nicht erfasst", nicht „kein Ausweis vorhanden".
+  { schluessel: "keiner", label: "Kein gültiger Ausweis", sdaCode: null },
 ];
 
 export const AUFENTHALTSSTATUS_OPTIONS = optionen(AUFENTHALTSSTATUS);

@@ -18,7 +18,9 @@ import { createEmptyKind } from "../StepAngehoeriger";
 import { zulagenart, zulagenartLabel, alterInJahren, alterAnzeige, AUSBILDUNGSFRAGE_AB_ALTER, type Zulagenart } from "../../../lib/stammdaten/zulagenart";
 import { pruefeQuellensteuerAutomatik } from "../../../lib/stammdaten/quellensteuer-automatik";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../../lib/stammdaten/dokumenttypen";
-import { SEMMeldeBanner } from "./MigratedAngehoerigerForms";
+import { AuslaenderrechtAnzeige } from "./MigratedAngehoerigerForms";
+import { auslaenderrechtEingabe } from "../StepAngehoeriger";
+import { pruefeAuslaenderrecht } from "../../../lib/regeln/auslaenderrecht";
 import { GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/geschlecht";
 import { STAATSANGEHOERIGKEIT_OPTIONS } from "../../../lib/stammdaten/staatsangehoerigkeit";
 import { istVerheiratetOderPartnerschaft } from "../../../lib/stammdaten/zivilstand";
@@ -540,9 +542,9 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung, arbe
           );
         })}
 
-        {/* SEM-Meldeformular im Dokumente-Tab (bei B, S, F) */}
-        {(data.aufenthaltsstatus === "B" || data.aufenthaltsstatus === "S" || data.aufenthaltsstatus === "F") && (
-          <SEMMeldeBanner data={data} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />
+        {/* SEM-Meldeformular im Dokumente-Tab — nur beim Regime meldung (Engine) */}
+        {pruefeAuslaenderrecht(auslaenderrechtEingabe(data, arbeitsortKanton || null)).regime === "meldung" && (
+          <AuslaenderrechtAnzeige data={data} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />
         )}
 
         {/* Pro-Kind-Dokumente: ein Upload pro Kind, das über Spitex abgerechnet wird */}
