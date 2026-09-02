@@ -34,7 +34,10 @@ export interface AdressWert {
 
 type Variante = "anschrift" | "mitKanton" | "voll";
 
-export function AdressBlock({ wert, onChange, onBlur, required, fehler, idPrefix = "adr", variante = "anschrift" }: {
+/** Was die Gemeinde am Wohnsitz bestimmt — der Regelfall des `voll`-Blocks. */
+const GEMEINDE_HINWEIS_WOHNSITZ = "Die Gemeinde bestimmt den Restkostensatz und den Empfänger der Restkostenrechnung.";
+
+export function AdressBlock({ wert, onChange, onBlur, required, fehler, idPrefix = "adr", variante = "anschrift", gemeindeHinweis = GEMEINDE_HINWEIS_WOHNSITZ }: {
   wert: AdressWert;
   onChange: (patch: Partial<AdressWert>) => void;
   /** Optional: meldet das Verlassen eines Felds (für die Pflichtfeld-/Touch-Logik). */
@@ -46,6 +49,9 @@ export function AdressBlock({ wert, onChange, onBlur, required, fehler, idPrefix
   /** `mitKanton` ergänzt Kanton/Land, `voll` zusätzlich Gemeinde/BFS (Patient);
    *  Default `anschrift`. */
   variante?: Variante;
+  /** Text unter den Gemeindefeldern (`voll`). Am Wohnsitz gilt der Restkosten-Satz;
+   *  am Pflegeort wäre er falsch — dort leer übergeben, dann entfällt die Zeile. */
+  gemeindeHinweis?: string;
 }) {
   const [suche, setSuche] = useState("");
   const [treffer, setTreffer] = useState<AdressTreffer[]>([]);
@@ -120,9 +126,11 @@ export function AdressBlock({ wert, onChange, onBlur, required, fehler, idPrefix
             <TextInput label="Kanton" value={wert.kanton ?? ""} onChange={v => onChange({ kanton: v })} placeholder="z.B. ZH" />
             <TextInput label="Land" value={wert.land ?? ""} onChange={v => onChange({ land: v })} placeholder="CH" />
           </div>
-          <div style={{ marginTop: "var(--space-2)", fontSize: 12, color: "var(--text-tertiary)" }}>
-            Die Gemeinde bestimmt den Restkostensatz und den Empfänger der Restkostenrechnung.
-          </div>
+          {gemeindeHinweis && (
+            <div style={{ marginTop: "var(--space-2)", fontSize: 12, color: "var(--text-tertiary)" }}>
+              {gemeindeHinweis}
+            </div>
+          )}
           {zeigeGemeindeHinweis && (
             <div className="flex items-start" style={{ gap: 8, marginTop: "var(--space-2)", fontSize: 12, color: "var(--status-warning-text)" }}>
               <AlertTriangle style={{ width: 13, height: 13, flexShrink: 0, marginTop: 1 }} aria-hidden="true" />

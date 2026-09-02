@@ -64,11 +64,17 @@ export interface Patient {
   /** BFS-Nummer der politischen Gemeinde; leer, solange kein Verzeichnis vorliegt. */
   bfsNummer: string;
   land: string;
-  /** Pflegeort weicht vom Wohnsitz ab (Betreuung z. B. bei der Tochter). */
+  /** Pflegeort weicht vom Wohnsitz ab (Betreuung z. B. bei der Tochter).
+   *  Gemeinde/BFS/Kanton werden auch hier erhoben: der Einsatz findet hier
+   *  statt. Die Restkostenpflicht bleibt am Wohnsitz (siehe pflegeAdresse). */
   pflegeortAbweichend: boolean;
   pflegeortStrasse: string;
   pflegeortPlz: string;
   pflegeortOrt: string;
+  pflegeortGemeinde: string;
+  pflegeortBfsNummer: string;
+  pflegeortKanton: string;
+  pflegeortLand: string;
   leistungsart: string;
   aufnahmeDatum: string;
   letzterBesuch: string;
@@ -356,6 +362,10 @@ export const patientenSeed: Patient[] = [
     pflegeortStrasse: "",
     pflegeortPlz: "",
     pflegeortOrt: "",
+    pflegeortGemeinde: "",
+    pflegeortBfsNummer: "",
+    pflegeortKanton: "",
+    pflegeortLand: "",
     leistungsart: "Pflege HKP",
     aufnahmeDatum: "12.01.2026",
     letzterBesuch: "31.07.2026",
@@ -427,6 +437,10 @@ export const patientenSeed: Patient[] = [
     pflegeortStrasse: "",
     pflegeortPlz: "",
     pflegeortOrt: "",
+    pflegeortGemeinde: "",
+    pflegeortBfsNummer: "",
+    pflegeortKanton: "",
+    pflegeortLand: "",
     leistungsart: "Hauswirtschaft",
     aufnahmeDatum: "20.02.2026",
     letzterBesuch: "—",
@@ -498,6 +512,10 @@ export const patientenSeed: Patient[] = [
     pflegeortStrasse: "",
     pflegeortPlz: "",
     pflegeortOrt: "",
+    pflegeortGemeinde: "",
+    pflegeortBfsNummer: "",
+    pflegeortKanton: "",
+    pflegeortLand: "",
     leistungsart: "Pflege A",
     aufnahmeDatum: "03.09.2025",
     letzterBesuch: "28.07.2026",
@@ -569,6 +587,10 @@ export const patientenSeed: Patient[] = [
     pflegeortStrasse: "",
     pflegeortPlz: "",
     pflegeortOrt: "",
+    pflegeortGemeinde: "",
+    pflegeortBfsNummer: "",
+    pflegeortKanton: "",
+    pflegeortLand: "",
     leistungsart: "Beratung",
     aufnahmeDatum: "15.06.2025",
     letzterBesuch: "14.07.2026",
@@ -636,6 +658,10 @@ export const patientenSeed: Patient[] = [
     pflegeortStrasse: "",
     pflegeortPlz: "",
     pflegeortOrt: "",
+    pflegeortGemeinde: "",
+    pflegeortBfsNummer: "",
+    pflegeortKanton: "",
+    pflegeortLand: "",
     leistungsart: "Pflege HKP",
     aufnahmeDatum: "28.07.2025",
     letzterBesuch: "27.07.2026",
@@ -707,6 +733,10 @@ export const patientenSeed: Patient[] = [
     pflegeortStrasse: "",
     pflegeortPlz: "",
     pflegeortOrt: "",
+    pflegeortGemeinde: "",
+    pflegeortBfsNummer: "",
+    pflegeortKanton: "",
+    pflegeortLand: "",
     leistungsart: "Therapie",
     aufnahmeDatum: "22.02.2026",
     letzterBesuch: "—",
@@ -778,6 +808,10 @@ export const patientenSeed: Patient[] = [
     pflegeortStrasse: "",
     pflegeortPlz: "",
     pflegeortOrt: "",
+    pflegeortGemeinde: "",
+    pflegeortBfsNummer: "",
+    pflegeortKanton: "",
+    pflegeortLand: "",
     leistungsart: "Pflege HKP",
     aufnahmeDatum: "01.11.2025",
     letzterBesuch: "30.07.2026",
@@ -849,6 +883,10 @@ export const patientenSeed: Patient[] = [
     pflegeortStrasse: "",
     pflegeortPlz: "",
     pflegeortOrt: "",
+    pflegeortGemeinde: "",
+    pflegeortBfsNummer: "",
+    pflegeortKanton: "",
+    pflegeortLand: "",
     leistungsart: "Pflege A",
     aufnahmeDatum: "05.04.2025",
     letzterBesuch: "25.07.2026",
@@ -920,6 +958,10 @@ export const patientenSeed: Patient[] = [
     pflegeortStrasse: "",
     pflegeortPlz: "",
     pflegeortOrt: "",
+    pflegeortGemeinde: "",
+    pflegeortBfsNummer: "",
+    pflegeortKanton: "",
+    pflegeortLand: "",
     leistungsart: "Hauswirtschaft",
     aufnahmeDatum: "18.12.2025",
     letzterBesuch: "02.08.2026",
@@ -987,6 +1029,10 @@ export const patientenSeed: Patient[] = [
     pflegeortStrasse: "",
     pflegeortPlz: "",
     pflegeortOrt: "",
+    pflegeortGemeinde: "",
+    pflegeortBfsNummer: "",
+    pflegeortKanton: "",
+    pflegeortLand: "",
     leistungsart: "Pflege HKP",
     aufnahmeDatum: "10.10.2025",
     letzterBesuch: "28.07.2026",

@@ -148,6 +148,10 @@ export interface PatientStammdatenEingabe {
   pflegeortStrasse: string;
   pflegeortPlz: string;
   pflegeortOrt: string;
+  pflegeortGemeinde: string;
+  pflegeortBfsNummer: string;
+  pflegeortKanton: string;
+  pflegeortLand: string;
   /* ── Bisher nicht übergeben ──────────────────────────────────────────────
      28 Angaben, die das Abklärungsgespräch erhebt und die nie beim Patienten
      ankamen. Sie standen im Formular und blieben dort. */
@@ -213,6 +217,7 @@ function stammdatenAbbilden(
   "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "aufnahmeDatum" |
   "strasse" | "plz" | "ort" | "gemeinde" | "bfsNummer" | "kanton" | "land" |
   "pflegeortAbweichend" | "pflegeortStrasse" | "pflegeortPlz" | "pflegeortOrt" |
+  "pflegeortGemeinde" | "pflegeortBfsNummer" | "pflegeortKanton" | "pflegeortLand" |
   "sprache" |
   "angehoeriger" | "angehoerigerTelefon" |
   "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "mobil" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
@@ -239,6 +244,11 @@ function stammdatenAbbilden(
     pflegeortStrasse: eingabe.pflegeortAbweichend ? eingabe.pflegeortStrasse : "",
     pflegeortPlz: eingabe.pflegeortAbweichend ? eingabe.pflegeortPlz : "",
     pflegeortOrt: eingabe.pflegeortAbweichend ? eingabe.pflegeortOrt : "",
+    // Wie beim Wohnsitz gilt der Ort, wenn keine abweichende Gemeinde erfasst ist.
+    pflegeortGemeinde: eingabe.pflegeortAbweichend ? (eingabe.pflegeortGemeinde || eingabe.pflegeortOrt) : "",
+    pflegeortBfsNummer: eingabe.pflegeortAbweichend ? eingabe.pflegeortBfsNummer : "",
+    pflegeortKanton: eingabe.pflegeortAbweichend ? eingabe.pflegeortKanton : "",
+    pflegeortLand: eingabe.pflegeortAbweichend ? (eingabe.pflegeortLand || "CH") : "",
     geschlecht: eingabe.geschlecht,
     staatsangehoerigkeit: eingabe.staatsangehoerigkeit,
     heimatort: eingabe.heimatort,

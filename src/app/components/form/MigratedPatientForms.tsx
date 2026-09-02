@@ -154,12 +154,28 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
       {data.pflegeortAbweichend && (
         <div style={{ marginTop: "var(--space-4)" }}>
           <SectionHeader icon={MapPin} label="Pflegeort" />
+          {/* Voll-Variante auch hier: der Einsatz findet an diesem Ort statt, darum
+              Gemeinde, BFS-Nummer und Kanton. Ohne Hinweistext — der Restkosten-Satz
+              gilt am Wohnsitz, nicht hier. */}
           <AdressBlock idPrefix="pflegeort"
-            wert={{ strasse: data.pflegeortStrasse, plz: data.pflegeortPlz, ort: data.pflegeortOrt }}
+            variante="voll"
+            gemeindeHinweis=""
+            wert={{
+              strasse: data.pflegeortStrasse, plz: data.pflegeortPlz, ort: data.pflegeortOrt,
+              land: data.pflegeortLand, gemeinde: data.pflegeortGemeinde,
+              bfsNummer: data.pflegeortBfsNummer, kanton: data.pflegeortKanton,
+            }}
             onChange={patch => {
-              if (patch.strasse !== undefined) onUpdate("pflegeortStrasse", patch.strasse);
-              if (patch.plz !== undefined) onUpdate("pflegeortPlz", patch.plz);
-              if (patch.ort !== undefined) onUpdate("pflegeortOrt", patch.ort);
+              const p: Partial<PatientFormData> = {};
+              if (patch.strasse !== undefined) p.pflegeortStrasse = patch.strasse;
+              if (patch.plz !== undefined) p.pflegeortPlz = patch.plz;
+              if (patch.ort !== undefined) p.pflegeortOrt = patch.ort;
+              if (patch.land !== undefined) p.pflegeortLand = patch.land;
+              if (patch.gemeinde !== undefined) p.pflegeortGemeinde = patch.gemeinde;
+              if (patch.bfsNummer !== undefined) p.pflegeortBfsNummer = patch.bfsNummer;
+              if (patch.kanton !== undefined) p.pflegeortKanton = patch.kanton;
+              if (onUpdateMehrere) onUpdateMehrere(p);
+              else Object.entries(p).forEach(([k, v]) => onUpdate(k as keyof PatientFormData, v as string));
             }} />
         </div>
       )}
