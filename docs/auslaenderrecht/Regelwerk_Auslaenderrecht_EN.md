@@ -2,12 +2,12 @@
 
 **Purpose:** Machine-readable specification. When a caring relative is entered, the system evaluates in the background whether a permit or a notification is required, and displays the result.
 
-**Version:** 1 September 2026 · 1.3 · Cantons BS, BL, AG, SO, BE, ZH
+**Version:** 1 September 2026 · 1.4 · Cantons BS, BL, AG, SO, BE, ZH
 **Draft, subject to legal review.** The rule set supports a decision; it does not make one.
 
 > **The German version governs.** This English version is a translation for explanation. In case of divergence the German version `regelwerk.de.md` prevails. Keys, value lists, display strings and authority names are identical in both versions and remain in German.
 
-> ⚠️ **Six of the fourteen rules are not conclusively evidenced.** R05, R06, R08 and R10 carry confidence `zu_bestaetigen`; for `SO`, `BS` and `BL` competence in the notification procedure is `ungeklaert`. The rule set is implementable but not yet reliable. The confidence level belongs visibly in the user interface.
+> ⚠️ **One of the fourteen rules is not conclusively evidenced.** R08 carries confidence `zu_bestaetigen`; for `SO`, `BS` and `BL` competence in the notification procedure is `ungeklaert`. The rule set is implementable but not yet reliable. The confidence level belongs visibly in the user interface.
 
 
 ---
@@ -120,7 +120,7 @@ Row key: `staatsangehoerigkeitsgruppe` + `ausweisart` + `aufenthaltsgrund`.
 | R03 | `eu_efta` | `B` | any | `frei` | `sofort` | none | — | belegt |
 | R04 | `eu_efta` | `L` | any | `frei` | `sofort` | none | — | belegt |
 | R05 | `eu_efta` | `G` | any | `bewilligung` | `nach_bewilligung` | yes | — | belegt |
-| R06 | `drittstaat` | `B` | `familiennachzug` | `frei` | `sofort` | none | `meldung_kantonal_pruefen` | zu_bestaetigen |
+| R06 | `drittstaat` | `B` | `familiennachzug` | `frei` | `sofort` | none | — | belegt |
 | R07 | `drittstaat` | `B` | `asyl_anerkannt` | `meldung` | `nach_meldung` | none | — | belegt |
 | R08 | `drittstaat` | `B` | `erwerbstaetigkeit` | `bewilligung` | `nach_bewilligung` | yes | `stellenwechsel_pruefen` | zu_bestaetigen |
 | R09 | `drittstaat` | `L` | any | `bewilligung` | `nach_bewilligung` | yes | — | belegt |
@@ -137,6 +137,12 @@ Row key: `staatsangehoerigkeitsgruppe` + `ausweisart` + `aufenthaltsgrund`.
 ### 3.1 Notes on individual rules
 
 **R05 — EU and EFTA cross-border commuters need an application.** Before employment starts, the employer files an application for a cross-border commuter permit with the migration authority competent for the place of work. There is an **entitlement to the permit** — the authority reviews but does not normally refuse. On a change of employer, the **new** employer files a fresh application; the previous permit lapses and a new permit G is issued. The procedure carries a fee.
+
+**R06 — family reunification from a third state: no procedure.** Evidenced by the directive of the canton of Zurich, the information sheet of the canton of Lucerne and the statement of the canton of Solothurn: spouses and children of Swiss nationals and of holders of a settlement or residence permit may work anywhere in Switzerland and may take up that work without any additional permit procedure. The basis is Art. 46 AIG and Art. 27 VZAE.
+
+Two boundaries: family members of holders of a **short-term permit** do not have this entitlement — there every start and change of employment requires a permit. They hold an L permit themselves and therefore fall under R09.
+
+And the entitlement is **tied to the permit of the sponsoring person**: if that residence permit is not renewed, the entitlement lapses. The system cannot detect this; hence the notice `familiennachzug_gebunden`.
 
 **R08 — why a permit is needed although the person is already employed.** A residence permit B granted to a third-state national for gainful employment is tied to the canton, the employer and often the activity. It authorises work **with that employer**, not work as such. A move to us therefore requires a fresh decision by the authority.
 
@@ -216,6 +222,7 @@ Keys are stable, the German text is what the user sees.
 |---|---|
 | `ablauf_nah` | Der Ausweis läuft in weniger als 90 Tagen ab. Die Verlängerung frühzeitig anstossen. |
 | `kanton_unbekannt` | Die zuständige Stelle ergibt sich aus dem Arbeitsort, sobald die Klientin erfasst ist. |
+| `familiennachzug_gebunden` | Das Recht zur Erwerbstätigkeit ist an die Bewilligung der Person gebunden, die den Familiennachzug geltend gemacht hat. Wird deren Bewilligung nicht verlängert, entfällt es. |
 | `aufenthaltsgrund_fehlt` | Bei einem Ausweis B aus einem Drittstaat entscheidet der Aufenthaltsgrund über das Verfahren. Bitte erfassen. |
 
 ### 6.4 Clarifications
