@@ -25,7 +25,7 @@ import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/kra
 import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
 import { GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/geschlecht";
 import { STAATSANGEHOERIGKEIT_OPTIONS, istSchweiz, staatsangehoerigkeitsgruppe } from "../../../lib/stammdaten/staatsangehoerigkeit";
-import { AUFENTHALTSSTATUS_OPTIONS, STATUS_B } from "../../../lib/stammdaten/aufenthaltsstatus";
+import { AUFENTHALTSSTATUS_OPTIONS } from "../../../lib/stammdaten/aufenthaltsstatus";
 import { AUFENTHALTSGRUND_OPTIONS, type Aufenthaltsgrund } from "../../../lib/stammdaten/aufenthaltsgrund";
 import { FELD_MAX } from "./feldbreiten";
 import { leiteTarifcodeAb } from "../../../lib/stammdaten/quellensteuer-tarif";
@@ -118,15 +118,15 @@ export function PersonalienFormV2({
         {showAufenthalt && (
           <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Aufenthaltsstatus" required value={data.aufenthaltsstatus || null} onChange={v => {
             const neuerStatus = v || "";
-            // Aufenthaltsgrund nur behalten, solange Drittstaat + Ausweis B; sonst löschen.
+            // Engine-Eingaben, die nur für einen bestimmten Ausweis gelten, werden beim
+            // Wechsel geleert. Nachweise (Meldung/Bewilligung) bleiben dagegen erhalten —
+            // eine erfolgte Meldung ist eine Tatsache (Regelwerk 7a).
             const grundBleibt = staatsangehoerigkeitsgruppe(data.nationalitaet) === "drittstaat" && neuerStatus === "B";
-            // Ausweis-N-Felder nur behalten, solange N gewählt ist; sonst löschen.
             const nBleibt = neuerStatus === "N";
             onChange({ ...data, aufenthaltsstatus: neuerStatus,
               aufenthaltsgrund: grundBleibt ? data.aufenthaltsgrund : null,
               asylgesuchDatum: nBleibt ? data.asylgesuchDatum : null,
-              bundesasylzentrumVerlassen: nBleibt ? data.bundesasylzentrumVerlassen : null,
-              spezialbewilligungStatus: neuerStatus === STATUS_B ? "ausstehend" : "nicht_erforderlich", spezialbewilligungDokument: neuerStatus === STATUS_B ? data.spezialbewilligungDokument : null, spezialbewilligungEinreichungsDatum: neuerStatus === STATUS_B ? data.spezialbewilligungEinreichungsDatum : "" });
+              bundesasylzentrumVerlassen: nBleibt ? data.bundesasylzentrumVerlassen : null });
             touch("aufenthaltsstatus");
           }} options={AUFENTHALTSSTATUS_OPTIONS} placeholder="Status wählen" error={touched.aufenthaltsstatus && !filled(data.aufenthaltsstatus) ? "Pflichtfeld" : undefined} /></div>
         )}
@@ -465,21 +465,25 @@ const REGIME_STIL: Record<AuslaenderrechtErgebnis["regime"], { bg: string; borde
 function AuslaenderrechtAnzeige({ data, arbeitsortKanton, arbeitsortOrt }: { data: AngehoerigerFormData; arbeitsortKanton?: string; arbeitsortOrt?: string }) {
   const [loading, setLoading] = useState(false);
   const [showLuecken, setShowLuecken] = useState(false);
+  const [kantonWahl, setKantonWahl] = useState("");
+  const [ortWahl, setOrtWahl] = useState("");
 
-  const ergebnis = pruefeAuslaenderrecht(auslaenderrechtEingabe(data, arbeitsortKanton || null));
+  // §1: Der wirksame Kanton wird an EINER Stelle bestimmt — die manuelle Auswahl
+  // zuerst, sonst der aus den Patientendaten abgeleitete — und sowohl der Engine
+  // als auch dem SEM-Formular übergeben. Keine zweite Auflösung.
+  const derivedKanton = (arbeitsortKanton ?? "").trim();
+  const effektiverKanton = kantonWahl || derivedKanton;
+  const effektiverOrt = ortWahl || (arbeitsortOrt ?? "").trim();
+
+  const ergebnis = pruefeAuslaenderrecht(auslaenderrechtEingabe(data, effektiverKanton || null));
   const stil = REGIME_STIL[ergebnis.regime];
   const Icon = stil.icon;
   const sperrgrund = ergebnis.regime === "unzulaessig" ? sperrgrundText(ergebnis.regelNummer) : null;
 
-  // Kanton/Ort für das SEM-Formular (nur Regime meldung): vorgegeben oder gewählt.
-  const kantonVorgegeben = (arbeitsortKanton ?? "").trim();
-  const ortVorgegeben = (arbeitsortOrt ?? "").trim();
-  const [kantonWahl, setKantonWahl] = useState(kantonVorgegeben);
-  const [ortWahl, setOrtWahl] = useState(ortVorgegeben);
-  const kantonBekannt = !!kantonVorgegeben;
-  const effektiverKanton = kantonBekannt ? kantonVorgegeben : kantonWahl;
-  const effektiverOrt = kantonBekannt ? ortVorgegeben : ortWahl;
   const kantonFehlt = !effektiverKanton;
+  const brauchtStelle = ergebnis.regime === "meldung" || ergebnis.regime === "bewilligung";
+  const zeigeKantonAuswahl = brauchtStelle && kantonFehlt;
+
   const semDaten = formDataToSEM(data, { kanton: effektiverKanton ? kantonName(effektiverKanton) : "", ort: effektiverOrt });
   const fehlend = ermittleFehlendeFelderSEM(semDaten);
 
@@ -536,15 +540,20 @@ function AuslaenderrechtAnzeige({ data, arbeitsortKanton, arbeitsortOrt }: { dat
             </div>
           )}
 
+          {/* Kanton des Arbeitsorts wählen — wenn ein Regime eine Stelle braucht (meldung/bewilligung)
+              und keiner aus den Patientendaten vorliegt. Fliesst in Engine und SEM-Formular. */}
+          {zeigeKantonAuswahl && (
+            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-3)", marginTop: "var(--space-3)", maxWidth: 520 }}>
+              <FormSelect label="Kanton des Arbeitsorts" required value={kantonWahl || null} onChange={v => setKantonWahl(v || "")} options={KANTON_OPTIONS} placeholder="Kanton wählen" />
+              {ergebnis.regime === "meldung" && (
+                <TextInput label="Ort des Arbeitsorts" value={ortWahl} onChange={setOrtWahl} placeholder="z.B. Winterthur" />
+              )}
+            </div>
+          )}
+
           {/* SEM-Meldeformular — nur beim Regime meldung */}
           {ergebnis.regime === "meldung" && (
             <div style={{ marginTop: 10 }}>
-              {!kantonBekannt && (
-                <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-3)", marginBottom: "var(--space-3)", maxWidth: 520 }}>
-                  <FormSelect label="Kanton des Arbeitsorts" required value={kantonWahl || null} onChange={v => setKantonWahl(v || "")} options={KANTON_OPTIONS} placeholder="Kanton wählen" />
-                  <TextInput label="Ort des Arbeitsorts" value={ortWahl} onChange={setOrtWahl} placeholder="z.B. Winterthur" />
-                </div>
-              )}
               {fehlend.length > 0 && (
                 <div style={{ marginBottom: 8 }}>
                   <button onClick={() => setShowLuecken(!showLuecken)} className="cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", fontWeight: 500, textDecoration: "underline" }}>

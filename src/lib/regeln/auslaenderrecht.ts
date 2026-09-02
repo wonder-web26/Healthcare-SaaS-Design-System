@@ -53,8 +53,8 @@ export type AuslaenderrechtErgebnis = {
 /** 6.1 Regime. */
 export const REGIME_TEXT: Record<Regime, string> = {
   frei: "Keine Bewilligung und keine Meldung erforderlich.",
-  meldung: "Der Stellenantritt ist vor Arbeitsbeginn zu melden. Die Meldung ist kostenlos. Unmittelbar nach der Meldung darf gearbeitet werden.",
-  bewilligung: "Für den Stellenantritt ist eine Bewilligung erforderlich. Sie ist kostenpflichtig. Die Arbeitsaufnahme darf erst nach Erteilung erfolgen.",
+  meldung: "Der Stellenantritt ist vor Arbeitsbeginn zu melden. Unmittelbar nach der Meldung darf gearbeitet werden.",
+  bewilligung: "Für den Stellenantritt ist eine Bewilligung erforderlich. Die Arbeitsaufnahme darf erst nach Erteilung erfolgen.",
   unzulaessig: "Eine Anstellung ist nicht zulässig.",
   nicht_bestimmbar: "Das Verfahren lässt sich mit den erfassten Angaben nicht bestimmen.",
 };
@@ -79,7 +79,7 @@ export const SPERRGRUND_ZU_REGEL: Record<"S1" | "S2" | "S3" | "S4", SperrgrundSc
 /** 6.3 Hinweise. */
 export const HINWEIS_TEXT: Record<string, string> = {
   ablauf_nah: "Der Ausweis läuft in weniger als 90 Tagen ab. Die Verlängerung frühzeitig anstossen.",
-  kanton_unbekannt: "Für den Kanton des Arbeitsorts ist keine zuständige Stelle hinterlegt.",
+  kanton_unbekannt: "Die zuständige Stelle ergibt sich aus dem Arbeitsort, sobald die Klientin erfasst ist.",
   aufenthaltsgrund_fehlt: "Bei einem Ausweis B aus einem Drittstaat entscheidet der Aufenthaltsgrund über das Verfahren. Bitte erfassen.",
 };
 

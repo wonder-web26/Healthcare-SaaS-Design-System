@@ -4,7 +4,8 @@ export type WorkflowTyp =
   | "AUSWEIS_B_ANMELDUNG"
   | "QUELLENSTEUER_ANMELDUNG"
   | "KINDERZULAGEN_ANTRAG"
-  | "LOHNANPASSUNG_NACH_SRK";
+  | "LOHNANPASSUNG_NACH_SRK"
+  | "AUSLAENDERRECHT_UNGEKLAERT";
 
 export type TaskStatus = "offen" | "in_bearbeitung" | "erledigt";
 export type Prioritaet = "hoch" | "mittel" | "niedrig";
@@ -35,6 +36,7 @@ export const workflowTypLabel: Record<WorkflowTyp, string> = {
   QUELLENSTEUER_ANMELDUNG: "Quellensteuer",
   KINDERZULAGEN_ANTRAG: "Kinderzulagen",
   LOHNANPASSUNG_NACH_SRK: "Lohnanpassung",
+  AUSLAENDERRECHT_UNGEKLAERT: "Ausländerrecht",
 };
 
 const P = {

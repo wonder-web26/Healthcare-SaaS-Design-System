@@ -15,6 +15,8 @@ const templates: Record<WorkflowTyp, string> = {
     "Für {person} ist ein Kinderzulagen-Antrag einzureichen. {kontext}. Die Ausgleichskasse benötigt die Geburtsurkunden sowie den Arbeitsvertrag.",
   LOHNANPASSUNG_NACH_SRK:
     "{person} hat den SRK-Pflegekurs bestanden. {kontext}. Die Lohnanpassung gemäss Tarifordnung muss durchgeführt werden. Neuer Stundenlohn-Satz: gemäss Personalreglement.",
+  AUSLAENDERRECHT_UNGEKLAERT:
+    "Bei {person} ist das ausländerrechtliche Verfahren ungeklärt. {kontext}. Vor dem Stellenantritt beim zuständigen Amt abklären.",
 };
 
 export function generateWorkflowBeschreibung(entry: UnifiedEntry): string {

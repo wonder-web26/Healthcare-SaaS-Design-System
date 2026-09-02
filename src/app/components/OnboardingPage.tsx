@@ -28,6 +28,8 @@ import {
   type AngehoerigerFormData,
 } from "./StepAngehoeriger";
 import { pruefeAuslaenderrecht, type Regime } from "../../lib/regeln/auslaenderrecht";
+import { vertragFreigabe, zeigeNachweisschritt, nichtBestimmbarAufgabe } from "../../lib/regeln/freigabe";
+import { workflowTasks } from "../../lib/mocks/workflow-tasks";
 import {
   StepPatient,
   emptyPatientForm,
@@ -56,7 +58,7 @@ import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand
 import { erfassePatientImOnboarding, patientFuerOnboarding } from "../../lib/patienten/store";
 import { erfasseAngehoerigenImOnboarding, angehoerigerFuerOnboarding, type AngehoerigenEingabe } from "../../lib/angehoerige/store";
 import { sichereGepflegteAngehoerige } from "../../lib/beziehungen/store";
-import { GEGENWART } from "../../lib/gegenwart";
+import { GEGENWART, GEGENWART_ISO } from "../../lib/gegenwart";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
 import { getKlvVerordnungen, getKlvFuerOnboarding } from "../../lib/klv/store";
 import { lpbStatusLabel } from "../../lib/stammdaten/lpb-status";
@@ -107,29 +109,24 @@ const baseSteps: WizardStep[] = [
 ];
 
 /**
- * Wizard-Schritte in Abhängigkeit vom ausländerrechtlichen Regime:
- * - `bewilligung` → zusätzlicher, dokumentierender Spezialbewilligungs-Schritt
- *   (sperrt nicht; das System kennt das Erteilungsdatum nicht).
- * - `unzulaessig` → einzige harte Sperre: die Vertragsunterzeichnung wird
- *   blockiert.
- * Alle anderen Regime: unveränderte Basisschritte.
+ * Wizard-Schritte je Regime (Regelwerk 7a). Der Nachweisschritt erscheint bei
+ * `meldung` und bei `bewilligung`; die Sperre des Vertragsschritts kommt aus der
+ * einen Freigabe-Bestimmung (`vertragFreigabe`) und wird hier nur eingesetzt.
  */
-function buildSteps(regime: Regime, bewilligungEingereicht: boolean): WizardStep[] {
-  const zeigeSpezial = regime === "bewilligung";
-  const sperre = regime === "unzulaessig";
-  if (!zeigeSpezial) {
-    return [baseSteps[0], baseSteps[1], { ...baseSteps[2], blocked: sperre }];
+function buildSteps(regime: Regime, zeigeNachweis: boolean, vertragGesperrt: boolean): WizardStep[] {
+  if (!zeigeNachweis) {
+    return [baseSteps[0], baseSteps[1], { ...baseSteps[2], blocked: vertragGesperrt }];
   }
   return [
     baseSteps[0],
     {
       id: 2,
       key: "spezialbewilligung",
-      label: "Spezialbewilligung B",
-      danger: !bewilligungEingereicht,
+      label: regime === "meldung" ? "Meldung" : "Spezialbewilligung B",
+      danger: vertragGesperrt,
     },
     { ...baseSteps[1], id: 3 },
-    { ...baseSteps[2], id: 4 },
+    { ...baseSteps[2], id: 4, blocked: vertragGesperrt },
   ];
 }
 
@@ -236,6 +233,7 @@ function angehoerigenEingabe(d: AngehoerigerFormData): AngehoerigenEingabe {
     krankenkasseName: d.krankenkasseName, kartennummer: d.kartennummer, bagNr: d.bagNr,
     nationalitaet: d.nationalitaet, heimatort: d.heimatort, aufenthaltsstatus: d.aufenthaltsstatus, aufenthaltsgrund: d.aufenthaltsgrund,
     asylgesuchDatum: d.asylgesuchDatum, bundesasylzentrumVerlassen: d.bundesasylzentrumVerlassen,
+    meldungDatum: d.meldungDatum, meldungBestaetigung: d.meldungBestaetigung,
     einreisedatum: d.einreisedatum, zemisNummer: d.zemisNummer,
     einreichungsdatumMigrationsamt: d.einreichungsdatumMigrationsamt,
     bewilligungAblaufdatum: d.bewilligungAblaufdatum,
@@ -354,10 +352,16 @@ export function OnboardingPage() {
      Der Arbeitsort-Kanton kommt vom gepflegten Patienten (dieselbe Quelle wie
      das SEM-Formular). Nur regime === "unzulaessig" sperrt; der Bewilligungs-
      Schritt erscheint bei regime === "bewilligung" und dokumentiert nur. */
-  const arRegime = pruefeAuslaenderrecht(auslaenderrechtEingabe(angehoerigerData, patientData.kanton || null)).regime;
-  const zeigeSpezialschritt = arRegime === "bewilligung";
-  const bewilligungEingereicht = angehoerigerData.spezialbewilligungStatus === "eingereicht";
-  const wizardSteps = buildSteps(arRegime, bewilligungEingereicht);
+  const arErgebnis = pruefeAuslaenderrecht(auslaenderrechtEingabe(angehoerigerData, patientData.kanton || null));
+  const arRegime = arErgebnis.regime;
+  // Freigabe des Vertragsschritts — an genau EINER Stelle bestimmt.
+  const freigabe = vertragFreigabe(arErgebnis, {
+    meldungDatum: angehoerigerData.meldungDatum,
+    einreichungsdatum: angehoerigerData.spezialbewilligungEinreichungsDatum,
+  });
+  const zeigeSpezialschritt = zeigeNachweisschritt(arRegime);
+  const nachweisDokumentiert = zeigeSpezialschritt && !freigabe.gesperrt;
+  const wizardSteps = buildSteps(arRegime, zeigeSpezialschritt, freigabe.gesperrt);
 
   /* ── Sync step validity with completedSteps ── */
   useEffect(() => {
@@ -373,12 +377,12 @@ export function OnboardingPage() {
     if (zeigeSpezialschritt) {
       setCompletedSteps((prev) => {
         const next = new Set(prev);
-        if (bewilligungEingereicht) next.add(2);
+        if (nachweisDokumentiert) next.add(2);
         else next.delete(2);
         return next;
       });
     }
-  }, [zeigeSpezialschritt, bewilligungEingereicht]);
+  }, [zeigeSpezialschritt, nachweisDokumentiert]);
 
   useEffect(() => {
     setCompletedSteps((prev) => {
@@ -980,7 +984,7 @@ export function OnboardingPage() {
                     aria-selected={isSelected}
                     onClick={() => !isBlocked && goToStep(step.id)}
                     disabled={isBlocked}
-                    title={isBlocked ? "Blockiert — Spezialbewilligung zuerst einreichen" : undefined}
+                    title={isBlocked ? (freigabe.grund ?? undefined) : undefined}
                     className="ui-fokusring relative inline-flex items-center whitespace-nowrap shrink-0 cursor-pointer"
                     style={{
                       height: 52, gap: 6, padding: 0, background: "transparent", border: "none", fontFamily: "inherit",
@@ -996,6 +1000,14 @@ export function OnboardingPage() {
                 );
               })}
             </div>
+
+            {/* §5: Grund der Vertragssperre im Klartext */}
+            {freigabe.gesperrt && freigabe.grund && (
+              <div className="flex items-center" style={{ gap: 8, margin: "0 var(--space-6)", marginTop: "var(--space-2)", padding: "8px 12px", background: "var(--status-danger-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-danger)" }}>
+                <Ban style={{ width: 15, height: 15, flexShrink: 0 }} />
+                <span>Vertragsschritt gesperrt: {freigabe.grund}</span>
+              </div>
+            )}
 
             <div data-scroll-area className="flex-1 overflow-y-auto" style={{ paddingBottom: "var(--space-4)" }}>
               {activeStepData.key === "angehoeriger" && (
@@ -1201,6 +1213,26 @@ export function OnboardingPage() {
                       qualifikation: qualifikationAusFunktion(angehoerigerData.funktion),
                       eintrittsdatum: angehoerigerData.eintrittsdatum,
                     }, ausloeser);
+
+                    // Regelwerk 7a: bei nicht bestimmbarem Verfahren keine Sperre, aber eine
+                    // sichtbare Aufgabe zur Nachklärung — mit dem Hinweis, welche Angabe fehlt.
+                    const aufgabe = nichtBestimmbarAufgabe(arErgebnis);
+                    if (aufgabe) {
+                      const nachname = `${angehoerigerData.vorname || ""} ${angehoerigerData.name || ""}`.trim() || "Angehörige";
+                      const faellig = new Date(GEGENWART.getFullYear(), GEGENWART.getMonth(), GEGENWART.getDate() + 14).toISOString().slice(0, 10);
+                      workflowTasks.push({
+                        id: `W-ARUK-${Date.now()}`,
+                        typ: "AUSLAENDERRECHT_UNGEKLAERT",
+                        titel: aufgabe.titel,
+                        kontext: aufgabe.hinweis,
+                        betroffenePerson: { name: nachname, initialen: nachname.split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2) },
+                        erstellt: GEGENWART_ISO,
+                        faellig,
+                        status: "offen",
+                        verantwortlich: { name: "Kathrin Meier", initialen: "KM" },
+                        prioritaet: "hoch",
+                      });
+                    }
 
                     // Qualifizierte Erfolgsmeldung
                     const a = ergebnis.konvertierteArtefakte;

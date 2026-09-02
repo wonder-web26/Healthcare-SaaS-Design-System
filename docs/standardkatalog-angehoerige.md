@@ -321,6 +321,26 @@ Regeln sind Teil des Standards. Sie werden nicht je Kunde abgewandelt.
 
 **Aufgeräumt.** `istFluechtling`/`istGrenzgaenger` (ohne Leser) entfernt. **Nicht angefasst:** die Workflow-Aufgabe bei der Konvertierung und der unerreichbare `SpezialbewilligungDialog` (eigene Läufe).
 
+## Lauf 4 — Gate-Logik je Regime und vier Korrekturen
+
+**Massgebend:** Regelwerk `docs/auslaenderrecht/Regelwerk_Auslaenderrecht_DE.md`, **Fassung 1.3**, neu **Abschnitt 7a (Freigabe des Vertragsschritts)**. Die Engine (`pruefeAuslaenderrecht`, Kantonstabelle, Ergebnisobjekt) bleibt unverändert; geändert sind Anzeige, Texte und die Freigabe.
+
+**Gate-Logik je Regime (7a).** Das Regime allein sperrt nicht; es bestimmt, was dokumentiert sein muss. Die Freigabe wird an **einer** Stelle bestimmt — `vertragFreigabe` in `src/lib/regeln/freigabe.ts` — und sowohl vom Wizard (Sperre) als auch von der Sperranzeige (Grund) gelesen:
+
+| Regime | Freigabe durch | Vertragsschritt |
+|---|---|---|
+| `frei` | nichts | sofort frei |
+| `meldung` | Meldedatum (Bestätigung optional) | gesperrt bis Meldedatum |
+| `bewilligung` | Einreichungsdatum (Bestätigung optional) | gesperrt bis Einreichungsdatum |
+| `unzulaessig` | — | dauerhaft gesperrt (Sperrgrund 6.2) |
+| `nicht_bestimmbar` | — | frei, Aufgabe „Ausländerrechtliches Verfahren ungeklärt" bei der Konvertierung |
+
+Der Spezialbewilligungs-Schritt ist zum **Nachweisschritt** für `meldung` **und** `bewilligung` geworden (unterschiedlicher Inhalt). Neue Felder am Angehörigen: `meldungDatum`, `meldungBestaetigung`; die Bewilligungsfelder bleiben. Nachweiswerte werden beim Regimewechsel **nicht** gelöscht — eine erfolgte Meldung bleibt eine Tatsache.
+
+**Die Lücke bei der Bewilligung (7a).** Dokumentiert wird die **Einreichung**, nicht die **Erteilung**. Das System kennt das Erteilungsdatum nicht und kann die Regel „Arbeitsaufnahme erst nach Erteilung" nicht erzwingen; sie wird angezeigt („Das System kann das nicht prüfen"), nicht erzwungen. Ein Feld für das Bewilligungsdatum wäre nötig, um sie zu erzwingen — bewusst nicht gebaut.
+
+**Drei Textkorrekturen.** 6.1 `meldung`/`bewilligung` ohne Kostenangabe (kostenlos/kostenpflichtig entfällt aus der Anzeige; `kostenpflichtig` bleibt im Ergebnisobjekt). 6.3 `kanton_unbekannt` neu: „Die zuständige Stelle ergibt sich aus dem Arbeitsort, sobald die Klientin erfasst ist." Kanton-Auswahl im Banner fliesst jetzt in die Engine zurück (wirksamer Kanton an einer Stelle: manuelle Auswahl zuerst, sonst der aus den Patientendaten abgeleitete).
+
 ## Korrekturen Lauf 1 — falsche Aussagen im Ausländerrechtsteil
 
 Vier Anzeigen behaupteten etwas, das nicht zutrifft; sie wurden vor dem Umbau der Regeln (Lauf 3) beseitigt. **Keine neue Regellogik.**

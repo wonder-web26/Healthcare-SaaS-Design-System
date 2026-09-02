@@ -37,6 +37,7 @@ const workflowToPendenzTyp: Record<WorkflowTyp, PendenzTyp> = {
   QUELLENSTEUER_ANMELDUNG: "quellensteuer",
   KINDERZULAGEN_ANTRAG: "kinderzulagen",
   LOHNANPASSUNG_NACH_SRK: "lohn-anpassung",
+  AUSLAENDERRECHT_UNGEKLAERT: "compliance-audit",
 };
 
 /** Maps legacy TicketTyp to typed PendenzTyp */

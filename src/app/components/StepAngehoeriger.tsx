@@ -86,6 +86,9 @@ export interface AngehoerigerFormData {
   asylgesuchDatum: string | null;
   /** Ausweis N: Bundesasylzentrum verlassen? Nur bei N. */
   bundesasylzentrumVerlassen: boolean | null;
+  /** Nachweis Regime meldung: Meldedatum + optionale Bestätigung. Bleibt erhalten, auch wenn das Regime wechselt. */
+  meldungDatum: string | null;
+  meldungBestaetigung: { name: string; size: string } | null;
   /** Bewilligungs-Felder (nur bei ausländischer Bewilligung, nicht CH/C) */
   einreisedatum: string;
   zemisNummer: string;
@@ -264,6 +267,8 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   aufenthaltsgrund: null,
   asylgesuchDatum: null,
   bundesasylzentrumVerlassen: null,
+  meldungDatum: null,
+  meldungBestaetigung: null,
   einreisedatum: "",
   zemisNummer: "",
   einreichungsdatumMigrationsamt: "",
