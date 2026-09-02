@@ -113,14 +113,14 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
       )}
 
       <SectionHeader icon={Users} label="Partnerangaben" first />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required={istPflicht} value={data.partnerVorname} onChange={v => set("partnerVorname", v)} onBlur={() => touch("partnerVorname")} placeholder="Vorname" error={errIfPflicht("partnerVorname", data.partnerVorname)} /></div>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Nachname" required={istPflicht} value={data.partnerName} onChange={v => set("partnerName", v)} onBlur={() => touch("partnerName")} placeholder="Nachname" error={errIfPflicht("partnerName", data.partnerName)} /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required={istPflicht} wertFormat="display" bereich="past" value={data.partnerGeburtsdatum || null} onChange={v => set("partnerGeburtsdatum", (v as string) ?? "")} onBlur={() => touch("partnerGeburtsdatum")} /></div>
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Nationalität" value={data.partnerNationalitaet || null} onChange={v => set("partnerNationalitaet", v || "")} options={STAATSANGEHOERIGKEIT_OPTIONS} placeholder="Nationalität wählen" /></div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         {/* SP-06/SP-07: Aufenthaltsbewilligung des Partners — triggert Quellensteuer-Automatik (Regel 1) */}
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Aufenthaltsbewilligung" required={istPflicht} value={data.partnerAufenthaltsstatus || null} onChange={v => {
           const bewilligung = v || "";
@@ -206,7 +206,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
       {/* Stufe 1: Anzahl Kinder (Pflicht, unabhaengig von Frage 2) */}
       {hasKids && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
+          <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-5)" }}>
             <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput
               label="Anzahl unterhaltspflichtige Kinder"
               required
@@ -260,7 +260,7 @@ export function KinderFormV2({ data, onChange }: { data: AngehoerigerFormData; o
                     removeDisabled={data.kinder.length <= 1}
                     removeDisabledTooltip="Mindestens ein Kind erforderlich"
                   >
-                    <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+                    <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
                       <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Vorname" required value={kind.vorname} onChange={v => updateKind(kind.id, "vorname", v)} placeholder="Vorname" /></div>
                       <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Nachname" required value={kind.nachname} onChange={v => updateKind(kind.id, "nachname", v)} placeholder="Nachname" /></div>
                       <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={kind.geburtsdatum || null} onChange={v => updateKind(kind.id, "geburtsdatum", (v as string) ?? "")} /></div>
@@ -507,7 +507,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung, arbe
                   </div>
                   {istDokumentVollstaendig(doc, data.scans) && <Check style={{ width: 16, height: 16, color: "var(--status-success)" }} />}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-3)" }}>
+                <div className="grid grid-cols-1 lg:grid-cols-2" style={{ gap: "var(--space-3)" }}>
                   <ScanSlot label="Vorderseite" scanKey={`${doc.code}_vorne`} docLabel={`${doc.label} — Vorderseite`} scan={scanVorne} onFile={handleScanFile} onRemove={removeScan} previewOpen={previewOpen} setPreviewOpen={setPreviewOpen} />
                   <ScanSlot label="Rückseite" scanKey={`${doc.code}_hinten`} docLabel={`${doc.label} — Rückseite`} scan={scanHinten} onFile={handleScanFile} onRemove={removeScan} previewOpen={previewOpen} setPreviewOpen={setPreviewOpen} />
                 </div>

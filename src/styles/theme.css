@@ -385,3 +385,103 @@ html {
   outline: 2px solid var(--action-primary-bg);
   outline-offset: 2px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Mobile/Tablet — Muster-Hilfsklassen (Lauf 1)
+
+   Alle Regeln greifen AUSSCHLIESSLICH unter dem Desktop-Breakpoint
+   (< 1024px). Desktop-Stile werden nicht verändert, nur nach unten
+   überschrieben. Die sechs Muster liegen hier an einer Stelle:
+
+   m1-leiste-scroll  · Muster C — Leiste scrollt waagrecht statt umzubrechen
+   m1-verlauf        · Muster C — Verlaufshinweis am rechten Rand
+   m1-kopf-stapel    · Kopfbereich — Zeile stapelt zu Spalte
+   m1-dialog-wrap /
+   m1-blatt          · Muster E — zentriertes Modal wird Blatt von unten
+   m1-blatt-griff    · Muster E — sichtbarer Griff, nur auf dem Blatt
+   Touchflächen      · Muster F — 44px, breitenbasiert
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Griff ist auf Desktop nie sichtbar (Dialog bleibt zentriertes Modal). */
+.m1-blatt-griff { display: none; }
+
+@media (max-width: 1023px) {
+  /* ── Muster C: waagrecht scrollen statt umbrechen ── */
+  .m1-leiste-scroll {
+    display: flex;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .m1-leiste-scroll::-webkit-scrollbar { display: none; }
+  .m1-leiste-scroll > * { flex-shrink: 0; }
+  /* Liegt die Klasse auf dem Scroll-Rahmen einer Reiterliste, darf die
+     innere Liste nicht umbrechen — sie wächst und der Rahmen scrollt. */
+  .m1-leiste-scroll > [role="tablist"] { flex-wrap: nowrap !important; }
+
+  /* ── Kopfbereich: Titelzeile stapelt, Pills rücken unter den Namen ── */
+  .m1-kopf-stapel {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .m1-kopf-stapel > .m1-kopf-pills {
+    justify-content: flex-start !important;
+  }
+
+  /* ── Muster E: Dialog wird Blatt ──
+     m1-dialog-wrap liegt auf dem Overlay (fixed inset-0, flex),
+     m1-blatt auf der Dialogfläche. Innen: Kopf und Aktionen fest,
+     der Erfassungsblock scrollt (m1-blatt-inhalt). */
+  .m1-dialog-wrap {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  .m1-blatt {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border-radius: 16px 16px 0 0 !important;
+    border-bottom: none !important;
+    max-height: 92dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden !important;
+  }
+  .m1-blatt-inhalt {
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .m1-blatt-griff {
+    display: block;
+    flex-shrink: 0;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-default);
+    margin: 8px auto 4px;
+  }
+
+  /* ── P5: Mindestschrift auf kleinen Geräten ──
+     Der Styleguide erlaubt als kleinste Grösse 11px (--text-micro).
+     Elemente, die auf Desktop bewusst kleiner gesetzt sind (Tabellen-
+     Kopfzeilen, Karten-Etiketten, Avatar-Initialen), werden unterhalb
+     des Desktop-Breakpoints auf dieses Minimum angehoben.
+     !important, weil die Quellen Inline-Stile tragen. */
+  .m1-mindestschrift { font-size: 11px !important; }
+
+  /* ── Muster F: Touchflächen mindestens 44px hoch ──
+     Breitenbasiert (nicht nur pointer:coarse), damit es auf allen
+     kleinen Fenstern gilt. Breite bleibt dem Layout überlassen;
+     eng beieinanderliegende Textknöpfe wachsen über die Höhe. */
+  button,
+  [role="button"],
+  [role="link"],
+  [role="checkbox"],
+  [role="tab"],
+  select {
+    min-height: 44px;
+  }
+  a { min-height: 44px; display: inline-flex; align-items: center; }
+}

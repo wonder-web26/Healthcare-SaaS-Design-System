@@ -199,8 +199,9 @@ function CameraModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-card rounded-2xl border border-border shadow-2xl w-full max-w-lg overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 m1-dialog-wrap">
+      <div className="bg-card rounded-2xl border border-border shadow-2xl w-full max-w-lg overflow-hidden m1-blatt">
+        <div className="m1-blatt-griff" aria-hidden="true" />
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border-light">
           <div className="flex items-center gap-2.5">

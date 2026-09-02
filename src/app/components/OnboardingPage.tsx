@@ -20,6 +20,7 @@ import {
   Circle,
   CircleDot,
   AlertCircle,
+  PanelRight,
 } from "lucide-react";
 import {
   StepAngehoeriger,
@@ -581,6 +582,36 @@ export function OnboardingPage() {
 
   // Abbruch-Dialog (Grund erforderlich) — ausgelöst über die Status-Auswahl im Abzeichen
   const [abbruchOffen, setAbbruchOffen] = useState(false);
+  // Muster D: unterhalb des Desktop-Breakpoints ist die Zustandsspalte
+  // (Bezugsperson, Workflow, Notizen) über eine Kopfbereich-Schaltfläche
+  // als überlagerndes Feld erreichbar.
+  const [seitenspalteOffen, setSeitenspalteOffen] = useState(false);
+
+  // Muster C: Verlauf am rechten Rand der Phasenleiste, solange waagrecht
+  // scrollbar (nicht am Ende) — gleiche Mechanik wie die Abschnittszeile
+  // in StepAngehoeriger/StepPatient.
+  const phasenScrollRef = React.useRef<HTMLDivElement>(null);
+  const [phasenVerlauf, setPhasenVerlauf] = useState(false);
+  const pruefePhasenVerlauf = useCallback(() => {
+    const el = phasenScrollRef.current;
+    if (el) setPhasenVerlauf(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+  useEffect(() => {
+    pruefePhasenVerlauf();
+    const el = phasenScrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(pruefePhasenVerlauf);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    window.addEventListener("resize", pruefePhasenVerlauf);
+    return () => { ro.disconnect(); window.removeEventListener("resize", pruefePhasenVerlauf); };
+  }, [pruefePhasenVerlauf]);
+  // Der aktive Phasen-Reiter ist beim Öffnen und nach Schrittwechsel sichtbar.
+  useEffect(() => {
+    phasenScrollRef.current
+      ?.querySelector('[aria-selected="true"]')
+      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [currentStep]);
   const [abbruchGrund, setAbbruchGrund] = useState("");
   const waehleStatus = (s: OnboardingStatus) => {
     if (!wirksameFallKennung) return;
@@ -706,8 +737,9 @@ export function OnboardingPage() {
           <ArrowLeft style={{ width: 14, height: 14 }} /><span>{returnLabel}</span>
         </button>
 
-        {/* Zeile 2 */}
-        <div className="flex items-start justify-between" style={{ gap: 12 }}>
+        {/* Zeile 2 — unterhalb des Desktop-Breakpoints stapelt die Zeile:
+            Name oben, Marken darunter (m1-kopf-stapel, siehe theme.css). */}
+        <div className="flex items-start justify-between m1-kopf-stapel" style={{ gap: 12 }}>
           {/* Links: Patientenname (Titel) · bedienbare Statusmarke · Angehörige (Kontext) */}
           <div className="min-w-0 flex items-center flex-wrap" style={{ gap: 8, rowGap: 4, minHeight: 26 }}>
             <span style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere", minWidth: 0 }}>
@@ -758,7 +790,7 @@ export function OnboardingPage() {
           </div>
 
           {/* Rechts: überfällig (nur wenn vorhanden) · Schrittzähler · Dokumente · Überlaufmenü */}
-          <div className="flex items-center shrink-0 flex-wrap justify-end" style={{ gap: 6 }}>
+          <div className="flex items-center shrink-0 flex-wrap justify-end m1-kopf-pills" style={{ gap: 6 }}>
             {ueberfaelligAnzahl > 0 && <StatusMarke label={`${ueberfaelligAnzahl} überfällig`} variante="warnung" />}
             <StatusMarke label={`${completedCount} von ${nonBlockedSteps.length} Schritten`} variante="neutral" />
             {fehlendeDocs > 0 && (
@@ -766,6 +798,16 @@ export function OnboardingPage() {
                 ? <StatusMarke label={`${fehlendeDocs} Pflichtdok. fehlen`} variante="warnung" />
                 : <StatusMarke label={`${fehlendeDocs} Dokumente offen`} variante="neutral" />
             )}
+            {/* Muster D: Zugang zur Zustandsspalte, nur unterhalb des Desktop-Breakpoints */}
+            <button
+              type="button"
+              aria-label="Bezugsperson, Workflow und Notizen anzeigen"
+              onClick={() => setSeitenspalteOffen(true)}
+              className="ui-fokusring lg:hidden flex items-center justify-center shrink-0 cursor-pointer"
+              style={{ width: "var(--marke-height-interaktiv)", height: "var(--marke-height-interaktiv)", borderRadius: "var(--control-radius)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", color: "var(--text-secondary)" }}
+            >
+              <PanelRight style={{ width: 16, height: 16 }} />
+            </button>
             {hatKennung && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -803,7 +845,7 @@ export function OnboardingPage() {
          ═══════════════════════════════════════ */}
       {abbruchOffen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
+          className="fixed inset-0 z-50 flex items-center justify-center m1-dialog-wrap"
           style={{ background: "color-mix(in srgb, var(--text-primary) 40%, transparent)", padding: 16 }}
           onClick={() => setAbbruchOffen(false)}
           onKeyDown={e => { if (e.key === "Escape") setAbbruchOffen(false); }}
@@ -812,9 +854,11 @@ export function OnboardingPage() {
           aria-label="Onboarding-Fall abbrechen"
         >
           <div
+            className="m1-blatt"
             onClick={e => e.stopPropagation()}
             style={{ width: "100%", maxWidth: 440, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", padding: "var(--space-6)" }}
           >
+            <div className="m1-blatt-griff" aria-hidden="true" />
             <div className="flex items-center" style={{ gap: 10, marginBottom: 8 }}>
               <span className="shrink-0 flex items-center justify-center" style={{ width: 32, height: 32, borderRadius: "var(--radius-pill)", background: "var(--status-danger-bg)" }}>
                 <Ban style={{ width: 16, height: 16, color: "var(--status-danger)" }} />
@@ -867,8 +911,42 @@ export function OnboardingPage() {
       <div className="flex-1 flex min-h-0" style={{ padding: "var(--space-3) var(--space-6) var(--space-4)" }}>
         {/* §B: EIN Container mit Aussenlinie + Radius 10, kein Schatten; zwei Spalten, senkrechte Haarlinie 0.5. */}
         <div className="flex w-full min-h-0" style={{ border: "var(--border-thin) solid var(--border-default)", borderRadius: 10, background: "var(--bg-elevated)", overflow: "hidden" }}>
-          {/* ── Zustandsspalte (260px fest; breiter, damit Notizen und Hinweistext nicht umbrechen; kein Kürzen) ── */}
-          <div className="hidden lg:flex shrink-0 flex-col min-h-0 overflow-y-auto" style={{ width: 260, borderRight: "var(--border-thin) solid var(--border-default)", padding: "var(--space-4)" }}>
+          {/* Muster D: Abdunkelung hinter dem Overlay, nur unterhalb Desktop */}
+          {seitenspalteOffen && (
+            <div
+              className="fixed inset-0 z-40 lg:hidden"
+              style={{ background: "color-mix(in srgb, var(--text-primary) 40%, transparent)" }}
+              onClick={() => setSeitenspalteOffen(false)}
+              aria-hidden="true"
+            />
+          )}
+          {/* ── Zustandsspalte (260px fest; breiter, damit Notizen und Hinweistext nicht umbrechen; kein Kürzen).
+                 Unterhalb des Desktop-Breakpoints ist sie ausgeblendet und erscheint über die
+                 Kopfbereich-Schaltfläche als überlagerndes Feld von rechts (Muster D) —
+                 dieselbe Spalte, kein Parallel-Bau. ── */}
+          <div
+            className={seitenspalteOffen
+              ? "flex flex-col min-h-0 overflow-y-auto fixed inset-y-0 right-0 z-50 shadow-2xl lg:static lg:z-auto lg:shadow-none lg:shrink-0"
+              : "hidden lg:flex shrink-0 flex-col min-h-0 overflow-y-auto"}
+            style={{ width: 260, background: seitenspalteOffen ? "var(--bg-elevated)" : undefined, borderRight: "var(--border-thin) solid var(--border-default)", padding: "var(--space-4)" }}
+            role={seitenspalteOffen ? "dialog" : undefined}
+            aria-label="Bezugsperson, Workflow und Notizen"
+          >
+                {/* Nur im Overlay: Schliessen-Zeile (auf Desktop nie sichtbar) */}
+                {seitenspalteOffen && (
+                  <div className="lg:hidden flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+                    <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" }}>Fall-Übersicht</span>
+                    <button
+                      type="button"
+                      aria-label="Übersicht schliessen"
+                      onClick={() => setSeitenspalteOffen(false)}
+                      className="ui-fokusring flex items-center justify-center cursor-pointer"
+                      style={{ width: 32, height: 32, borderRadius: "var(--control-radius)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
+                    >
+                      <X style={{ width: 16, height: 16 }} />
+                    </button>
+                  </div>
+                )}
                 {/* Abschnitt FORTSCHRITT entfernt (§C): die Phasen sind jetzt die erste
                    Reiterebene oben. Die Spalte zeigt nur noch, was zugewiesen ist und was ansteht. */}
 
@@ -952,10 +1030,13 @@ export function OnboardingPage() {
             {/* ── ERSTE Reiterebene: Phasen (§B). Höhe 52, Zustandssymbol 16 links, Schrift 13,
                  aktiver Eintrag mittlerer Schnitt + 2px-Unterstreichung an der Unterkante,
                  Abstand 20. Containerfläche ohne Tönung, Haarlinie unten trennt die Ebenen. ── */}
+            <div className="shrink-0 relative">
             <div
+              ref={phasenScrollRef}
+              onScroll={pruefePhasenVerlauf}
               role="tablist"
               aria-label="Phasen"
-              className="shrink-0 flex overflow-x-auto"
+              className="flex overflow-x-auto"
               style={{ background: "var(--bg-elevated)", padding: "0 20px", gap: 20, borderBottom: "var(--border-thin) solid var(--border-default)" }}
               onKeyDown={e => {
                 if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
@@ -999,6 +1080,11 @@ export function OnboardingPage() {
                   </button>
                 );
               })}
+            </div>
+            {/* Muster C: Verlauf von Flächenfarbe zu durchsichtig am rechten Rand, nur wenn scrollbar */}
+            {phasenVerlauf && (
+              <div aria-hidden="true" style={{ position: "absolute", top: 0, bottom: 1, right: 0, width: 28, pointerEvents: "none", background: "linear-gradient(to right, transparent, var(--bg-elevated))" }} />
+            )}
             </div>
 
             {/* §5: Grund der Vertragssperre im Klartext */}
@@ -1108,8 +1194,10 @@ export function OnboardingPage() {
          ABSCHLUSS-DIALOG (shared abschlussPruefung)
          ═══════════════════════════════════════ */}
       {showAbschlussDialog && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: "rgba(19,19,20,0.5)" }} onClick={() => setShowAbschlussDialog(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", maxWidth: 520, width: "92%", maxHeight: "85vh", overflow: "auto", padding: 24 }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center m1-dialog-wrap" style={{ background: "rgba(19,19,20,0.5)" }} onClick={() => setShowAbschlussDialog(false)}>
+          <div className="m1-blatt" onClick={e => e.stopPropagation()} style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)", maxWidth: 520, width: "92%", maxHeight: "85vh", overflow: "auto", padding: 24 }}>
+            <div className="m1-blatt-griff" aria-hidden="true" />
+            <div className="m1-blatt-inhalt">
             <div style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>Onboarding abschliessen?</div>
             <div style={{ fontSize: "var(--text-body)", color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 20 }}>
               Mit dem Abschluss werden Patient und Angehöriger als aktive Datensätze erzeugt. Die klinischen Artefakte bleiben verbunden.
@@ -1186,6 +1274,7 @@ export function OnboardingPage() {
                 </div>
               ));
             })()}
+            </div>
 
             <div className="flex items-center justify-end" style={{ gap: "var(--space-2)", marginTop: 20 }}>
               <AppButton variant="sekundaer" onClick={() => setShowAbschlussDialog(false)}>Abbrechen</AppButton>

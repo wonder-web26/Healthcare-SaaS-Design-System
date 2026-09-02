@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { Plus, X, AlertTriangle, Check, ArrowLeft, Send, Sparkles, Search, ChevronDown, ExternalLink, Pencil } from "lucide-react";
 import { getUnifiedEntries, entryBetreff, entryPersonName, CURRENT_USER, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
@@ -483,13 +483,16 @@ export function ServiceDeskPage() {
   // Spaltenfall (abwerfRang, kleinster zuerst): Beschreibung, dann Art, dann Zuständig.
   const spalten: SpalteDef<UnifiedEntry>[] = [
     { id: "kennzeichen", label: "", festBreitePx: 24, align: "center", sortierbar: true, ausKarte: true, render: kennzeichenIcon },
-    { id: "art", label: "Kategorie", minCh: 14, maxSpur: "21ch", abwerfRang: 2, align: "left", sortierbar: true, render: artZelle },
+    // ausKarte auf Kategorie/Beschreibung/Zuständig: die Karte (Telefon) zeigt nur,
+    // was zum Wiedererkennen nötig ist — Titel und Fälligkeit im Kartenkopf,
+    // Status und Person darunter (Muster B).
+    { id: "art", label: "Kategorie", minCh: 14, maxSpur: "21ch", abwerfRang: 2, align: "left", sortierbar: true, ausKarte: true, render: artZelle },
     { id: "betreff", label: "Titel", minCh: 20, maxSpur: "40ch", align: "left", sortierbar: true, ausKarte: true, render: betreffZelle },
     { id: "status", label: "Status", minCh: 16, maxSpur: "16ch", align: "left", sortierbar: true, render: statusZelle },
     { id: "person", label: "Person", minCh: 18, maxSpur: "34ch", align: "left", sortierbar: true, render: personZelle },
-    { id: "beschreibung", label: "Beschreibung", minCh: 13, maxSpur: "34ch", abwerfRang: 1, align: "left", sortierbar: true, render: beschreibungZelle },
+    { id: "beschreibung", label: "Beschreibung", minCh: 13, maxSpur: "34ch", abwerfRang: 1, align: "left", sortierbar: true, ausKarte: true, render: beschreibungZelle },
     { id: "faellig", label: "Fällig", minCh: 13, maxSpur: "14ch", align: "left", sortierbar: true, ausKarte: true, render: faelligZelle },
-    { id: "zustaendig", label: "Zuständig", minCh: 10, maxSpur: "11ch", abwerfRang: 3, align: "center", sortierbar: true, render: zustaendigZelle },
+    { id: "zustaendig", label: "Zuständig", minCh: 10, maxSpur: "11ch", abwerfRang: 3, align: "center", sortierbar: true, ausKarte: true, render: zustaendigZelle },
   ];
 
   // Flächentönung ausschliesslich für Dringlichkeit (rot kräftiger als gelb) bzw.
@@ -509,6 +512,25 @@ export function ServiceDeskPage() {
 
   const keineTreffer = sorted.length === 0;
   const suchButton = { background: "transparent", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-pill)", padding: "5px 12px", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", cursor: "pointer" } as const;
+
+  // Muster C: Verlauf am rechten Rand der Filterleiste, solange waagrecht
+  // scrollbar (nicht am Ende) — gleiche Mechanik wie die Reiterleisten
+  // in StepAngehoeriger/StepPatient/OnboardingPage.
+  const chipScrollRef = useRef<HTMLDivElement>(null);
+  const [chipVerlauf, setChipVerlauf] = useState(false);
+  const pruefeChipVerlauf = useCallback(() => {
+    const el = chipScrollRef.current;
+    if (el) setChipVerlauf(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+  useEffect(() => {
+    pruefeChipVerlauf();
+    const el = chipScrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(pruefeChipVerlauf);
+    ro.observe(el);
+    window.addEventListener("resize", pruefeChipVerlauf);
+    return () => { ro.disconnect(); window.removeEventListener("resize", pruefeChipVerlauf); };
+  }, [pruefeChipVerlauf]);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -553,8 +575,11 @@ export function ServiceDeskPage() {
             <AuswahlDropdown label="Zuständig" optionen={alleZustaendige.map(n => ({ value: n, label: n }))} ausgewaehlt={filter.zustaendige} onToggle={toggleZustaendig} />
           </div>
 
-          {/* Status-Chips — kombinierbar (UND), Zahl aus denselben Daten */}
-          <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
+          {/* Status-Chips — kombinierbar (UND), Zahl aus denselben Daten.
+              Unter dem Desktop-Breakpoint scrollt die Leiste waagrecht (Muster C),
+              mit Verlauf am rechten Rand, solange mehr folgt. */}
+          <div className="relative">
+          <div ref={chipScrollRef} onScroll={pruefeChipVerlauf} className="flex items-center flex-wrap m1-leiste-scroll" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
             {STATUS_CHIPS.map(chip => {
               const aktiv = filter.statusChips.has(chip.id);
               const n = chipCounts[chip.id];
@@ -569,6 +594,11 @@ export function ServiceDeskPage() {
                 </button>
               );
             })}
+          </div>
+          {/* Muster C: Verlauf von Flächenfarbe zu durchsichtig am rechten Rand, nur wenn scrollbar */}
+          {chipVerlauf && (
+            <div aria-hidden="true" style={{ position: "absolute", top: 0, bottom: "var(--space-2)", right: 0, width: 28, pointerEvents: "none", background: "linear-gradient(to right, transparent, var(--bg-primary))" }} />
+          )}
           </div>
 
           {/* Aktivzeile */}
@@ -654,6 +684,7 @@ export function ServiceDeskPage() {
               karteTitel={karteTitel}
               containerHaltepunkte
               karteAbPx={500}
+              tabletQuerscroll
               auswahl={isBulkMode ? { istGewaehlt: e => bulkSelected.has(e.id), onToggle: e => toggleBulk(e.id), zeilenLabel: e => entryBetreff(e) } : undefined}
               fusszeile={<><span>{sorted.length} von {entries.length} Pendenzen</span><span>Stand: {isoZuAnzeige(TODAY)}</span></>}
               leerText="Keine Pendenzen mit diesen Filtern."
@@ -1003,8 +1034,10 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
         </div>
       </div>
 
-      {/* ── FUSS (fest): Status-Umschalter · Zuständigkeit ── */}
-      <div className="shrink-0 flex items-center justify-between" style={{ gap: "var(--space-2)", padding: "12px 16px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+      {/* ── FUSS (fest): Status-Umschalter · Zuständigkeit.
+             flex-wrap: auf schmalen Fenstern rückt die Zuständigkeit in eine zweite
+             Zeile, statt rechts hinauszuragen (P3); auf Desktop bricht nie etwas um. ── */}
+      <div className="shrink-0 flex items-center justify-between flex-wrap" style={{ gap: "var(--space-2)", padding: "12px 16px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
         <div className="inline-flex" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
           {STATUS_SEGMENTE.map(([val, lbl]) => {
             const aktiv = entry.status === val;
@@ -1045,7 +1078,8 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
 function MiniAvatar({ person, size = 22 }: { person: { name: string; initialen: string; color?: string }; size?: number }) {
   return (
     <div className="shrink-0 flex items-center justify-center" style={{ width: size, height: size, borderRadius: "var(--radius-pill)", background: person.color || "var(--text-tertiary)" }}>
-      <span style={{ color: "var(--text-on-dark)", fontSize: size <= 20 ? 8 : 9, fontWeight: "var(--weight-medium)" }}>
+      {/* m1-mindestschrift: unterhalb Desktop auf die Styleguide-Untergrenze (11px) angehoben (P5) */}
+      <span className="m1-mindestschrift" style={{ color: "var(--text-on-dark)", fontSize: size <= 20 ? 8 : 9, fontWeight: "var(--weight-medium)" }}>
         {person.initialen}
       </span>
     </div>

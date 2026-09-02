@@ -658,6 +658,12 @@ export function StepAngehoeriger({
     window.addEventListener("resize", pruefeVerlauf);
     return () => { ro.disconnect(); window.removeEventListener("resize", pruefeVerlauf); };
   }, [pruefeVerlauf]);
+  // Der aktive Reiter ist beim Öffnen und nach Reiterwechsel sichtbar (Muster C).
+  useEffect(() => {
+    abschnittScrollRef.current
+      ?.querySelector('[aria-selected="true"]')
+      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [activeTab]);
 
   /* ── Compute statuses ──────────────────── */
   const statuses = subSteps.map((s) => ({
@@ -706,7 +712,9 @@ export function StepAngehoeriger({
           zusätzliche Tönung. Nur die untere Haarlinie, keine zweite oben. */}
       <div className="flex items-center" style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--bg-elevated)", padding: "0 20px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
         <div className="relative flex-1 min-w-0">
-        <div ref={abschnittScrollRef} onScroll={pruefeVerlauf}>
+        {/* Muster C: unterhalb des Desktop-Breakpoints scrollt die Leiste waagrecht
+            statt umzubrechen (m1-leiste-scroll, siehe theme.css). Desktop unverändert. */}
+        <div ref={abschnittScrollRef} onScroll={pruefeVerlauf} className="m1-leiste-scroll">
         <div
           role="tablist"
           aria-label="Abschnitte"

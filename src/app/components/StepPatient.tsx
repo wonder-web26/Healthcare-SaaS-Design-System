@@ -586,6 +586,33 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
     [data, onChange]
   );
 
+  // Muster C: Verlauf am rechten Rand der Abschnittszeile, solange waagrecht
+  // scrollbar (nicht am Ende) — gleiche Mechanik wie in StepAngehoeriger.
+  const abschnittScrollRef = useRef<HTMLDivElement>(null);
+  const [zeigtVerlauf, setZeigtVerlauf] = useState(false);
+  const pruefeVerlauf = useCallback(() => {
+    const el = abschnittScrollRef.current;
+    if (el) setZeigtVerlauf(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+  useEffect(() => {
+    pruefeVerlauf();
+    const el = abschnittScrollRef.current;
+    if (!el) return;
+    document.fonts?.ready.then(pruefeVerlauf).catch(() => {});
+    const ro = new ResizeObserver(pruefeVerlauf);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    window.addEventListener("resize", pruefeVerlauf);
+    return () => { ro.disconnect(); window.removeEventListener("resize", pruefeVerlauf); };
+  }, [pruefeVerlauf]);
+  // Der aktive Abschnitts-Reiter ist beim Öffnen und nach Reiterwechsel sichtbar
+  // (z. B. Sprung auf "Bedarfsabklärung" über die URL).
+  useEffect(() => {
+    abschnittScrollRef.current
+      ?.querySelector('[aria-selected="true"]')
+      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [activeTab]);
+
   return (
     <div className="space-y-0">
       {/* Workspace-Kopf entfernt — Tab-Leiste rückt direkt unter den Onboarding-Header.
@@ -603,7 +630,10 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           `--bg-elevated` ist genau die Farbe, die vorher durchschien, also keine
           zusätzliche Tönung. Nur die untere Haarlinie, keine zweite oben. */}
       <div className="flex items-center" style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--bg-elevated)", padding: "0 20px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
-        <div className="flex-1 min-w-0">
+        <div className="relative flex-1 min-w-0">
+        {/* Muster C: unterhalb des Desktop-Breakpoints scrollt die Leiste waagrecht
+            statt umzubrechen (m1-leiste-scroll, siehe theme.css). Desktop unverändert. */}
+        <div ref={abschnittScrollRef} onScroll={pruefeVerlauf} className="m1-leiste-scroll">
         <div
           role="tablist"
           aria-label="Abschnitte"
@@ -647,6 +677,11 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
             );
           })}
         </div>
+        </div>
+        {/* Muster C: Verlauf von Flächenfarbe zu durchsichtig am rechten Rand, nur wenn scrollbar */}
+        {zeigtVerlauf && (
+          <div aria-hidden="true" style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: 28, pointerEvents: "none", background: "linear-gradient(to right, transparent, var(--bg-elevated))" }} />
+        )}
         </div>
         {reiterAktion && (
           <div className="flex items-center shrink-0" style={{ paddingLeft: 12 }}>{reiterAktion}</div>

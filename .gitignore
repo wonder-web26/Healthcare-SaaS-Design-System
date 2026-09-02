@@ -22,3 +22,6 @@ npm-debug.log*
 
 # Vercel
 .vercel
+
+# Responsive-Lauf: Referenz- und Prüf-Bildschirmabzüge (lokal, nicht versioniert)
+.responsive-ref/

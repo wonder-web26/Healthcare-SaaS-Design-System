@@ -86,7 +86,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={User} label="Identität" first />
       {/* Durchgängig zwei Felder pro Zeile; Anrede vor dem Namen. */}
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div><FormSelect label="Anrede" value={data.anrede || null} onChange={v => onUpdate("anrede", v || "")} options={ANREDE_OPTIONS} placeholder="Anrede wählen" /></div>
         <div><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => onUpdate("geschlecht", v || "")} options={GESCHLECHT_OPTIONS} placeholder="Geschlecht wählen" /></div>
         <div><TextInput label="Name" required value={data.name} onChange={v => onUpdate("name", v)} onBlur={() => onBlur("name")} placeholder="Nachname" error={t("name") && !filled(data.name) ? "Pflichtfeld" : undefined} /></div>
@@ -94,7 +94,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
         <div><DateField label="Geburtsdatum" required wertFormat="display" bereich="past" value={data.geburtsdatum || null} onChange={v => onUpdate("geburtsdatum", (v as string) ?? "")} onBlur={() => onBlur("geburtsdatum")} /></div>
         <div><AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => onUpdate("ahvNummer", v)} /></div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Staatsangehörigkeit" value={data.staatsangehoerigkeit || null} onChange={v => onUpdate("staatsangehoerigkeit", v || "")} options={STAATSANGEHOERIGKEIT_OPTIONS} placeholder="Staatsangehörigkeit wählen" /></div>
         {istSchweizerin && <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Heimatort" value={data.heimatort} onChange={v => onUpdate("heimatort", v)} placeholder="z.B. Bern" /></div>}
         {istAusland && (
@@ -108,7 +108,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
           grössten, aufklappbaren Abschnitt (Adresse mit Gemeinde- und Pflegeort-
           Umschaltern). */}
       <SectionHeader icon={Phone} label="Erreichbarkeit" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" value={data.email} onChange={v => onUpdate("email", v)} placeholder="name@example.com" /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon (Festnetz)" value={data.telefon} onChange={v => onUpdate("telefon", v)} placeholder="+41 44 000 00 00" /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Mobil" value={data.mobil} onChange={v => onUpdate("mobil", v)} placeholder="+41 79 000 00 00" /></div>
@@ -229,7 +229,7 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={IdCard} label="IV & Sozialversicherung" first />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <SegmentedControl label="IV-Bezug?" required value={data.ivBezug} onChange={v => onUpdate("ivBezug", v)} options={JA_NEIN} />
       </div>
       {data.ivBezug === "ja" && (
@@ -237,13 +237,13 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
           <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="IV-Bezug" required value={data.ivBezugProzent} onChange={v => onUpdate("ivBezugProzent", v)} suffix="%" placeholder="z.B. 100" /></div>
         </div>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <SegmentedControl label="Hilflosenentschädigung?" required value={data.hilflosenentschaedigung} onChange={v => onUpdate("hilflosenentschaedigung", v)} options={JA_NEIN} />
         <SegmentedControl label="Bezieht der Patient einen IV-Assistenzbeitrag?" required value={data.assistenzbeitrag} onChange={v => onUpdate("assistenzbeitrag", v)} options={JA_NEIN} />
       </div>
 
       <SectionHeader icon={Users} label="Soziales" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <SegmentedControl label="Sozialamt involviert?" required value={data.sozialamtInvolviert} onChange={v => onUpdate("sozialamtInvolviert", v)} options={JA_NEIN} />
         <SegmentedControl label="Gesetzliche Vertretung besteht?" required value={data.gesetzlicheVertretung} onChange={v => onUpdate("gesetzlicheVertretung", v)} options={JA_NEIN} />
       </div>
@@ -284,7 +284,7 @@ export function TabWohnenUmfeldV2({ data, touched, onUpdate }: TabProps) {
       {/* Wohnsituation und Form des Zusammenlebens nebeneinander; Personen im
           Haushalt unter der Wohnsituation. Neu zusammenlebend und die Wohn-
           Vorgeschichte sind ins Registrierungsformular herausgelöst. */}
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", alignItems: "start" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", alignItems: "start" }}>
         <div className="flex flex-col" style={{ rowGap: "var(--space-3)" }}>
           <div style={bWohnsituation.zelle}>
             <FormSelect label="Wohnsituation zur Zeit der Abklärung" required steuerelementMaxBreite={bWohnsituation.steuerelement}
@@ -305,7 +305,7 @@ export function TabWohnenUmfeldV2({ data, touched, onUpdate }: TabProps) {
       </div>
 
       <SectionHeader icon={Home} label="Ergänzende Angaben zum Zugang" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div><TextInput label="Etage" steuerelementMaxBreite={FELD_MAX.schmal} value={data.etage} onChange={v => onUpdate("etage", v)} placeholder="z.B. 2. OG" /></div>
         <SegmentedControl label="Lift vorhanden" value={data.liftVorhanden} onChange={v => onUpdate("liftVorhanden", v)} options={JA_NEIN} />
         <SegmentedControl label="Treppen" value={data.treppen} onChange={v => onUpdate("treppen", v)} options={JA_NEIN} />
@@ -333,12 +333,12 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur, onboardingId }:
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={Stethoscope} label="Basisanamnese" first />
 
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="Grösse" required value={data.groesse} onChange={v => onUpdate("groesse", v)} suffix="cm" placeholder="170" error={t("groesse") && !filled(data.groesse) ? "Pflichtfeld" : undefined} /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="Gewicht" required value={data.gewicht} onChange={v => onUpdate("gewicht", v)} suffix="kg" placeholder="72" error={t("gewicht") && !filled(data.gewicht) ? "Pflichtfeld" : undefined} /></div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-3" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <SegmentedControl label="Gewichtsverlust" required value={data.gewichtsverlust} onChange={v => onUpdate("gewichtsverlust", v)} options={JA_NEIN} />
         <SegmentedControl label="Brille" required value={data.brille} onChange={v => onUpdate("brille", v)} options={JA_NEIN} />
         <SegmentedControl label="Hörgerät" required value={data.hoergeraet} onChange={v => onUpdate("hoergeraet", v)} options={JA_NEIN} />
@@ -348,7 +348,7 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur, onboardingId }:
         <TextareaInput label="Chronische Erkrankungen" required value={data.chronischeErkrankungen} onChange={v => onUpdate("chronischeErkrankungen", v)} onBlur={() => onBlur("chronischeErkrankungen")} placeholder="z.B. Diabetes mellitus Typ 2, Arterielle Hypertonie" error={t("chronischeErkrankungen") && !filled(data.chronischeErkrankungen) ? "Mindestens eine Diagnose erforderlich" : undefined} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zeit seit dem letzten Spitalaufenthalt" value={spital || null} onChange={v => setSpital(v || "")} options={SDA_SPITALAUFENTHALT_OPTIONS} placeholder="Bitte wählen" /></div>
         <TextareaInput label="Operationen" value={data.operationen} onChange={v => onUpdate("operationen", v)} placeholder="z.B. Hüft-TEP rechts (2024), Knie-TEP links (2022), Appendektomie (2018)" rows={4} />
       </div>
@@ -374,7 +374,7 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur, onboardingId }:
           { value: "7_bis_12_monate", label: "Ja, vor 7–12 Monaten" },
         ]} placeholder="Bitte wählen" /></div>
         {data.sturzLetzte12m && data.sturzLetzte12m !== "kein_sturz" && (
-          <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-3)" }}>
+          <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-3)" }}>
             <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="Anzahl Stürze" value={data.sturzAnzahl} onChange={v => onUpdate("sturzAnzahl", v)} placeholder="z.B. 2" /></div>
             <TextareaInput label="Bemerkungen (Umstände, Verletzungen, Ort)" value={data.sturzKommentar} onChange={v => onUpdate("sturzKommentar", v)} placeholder="z.B. Sturz im Bad, Prellung am Arm" />
           </div>

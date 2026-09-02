@@ -96,7 +96,7 @@ export function PersonalienFormV2({
       {/* Identität */}
       <SectionHeader icon={User} label="Identität" first />
       {/* Durchgängig zwei Felder pro Zeile; Anrede vor dem Namen. */}
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div><FormSelect label="Anrede" value={data.anrede || null} onChange={v => set("anrede", v || "")} options={ANREDE_OPTIONS} placeholder="Anrede wählen" /></div>
         <div><FormSelect label="Geschlecht" required value={data.geschlecht || null} onChange={v => { set("geschlecht", v || ""); touch("geschlecht"); }} options={GESCHLECHT_OPTIONS} placeholder="Geschlecht wählen" error={touched.geschlecht && !filled(data.geschlecht) ? "Pflichtfeld" : undefined} /></div>
         <div><TextInput label="Name" required value={data.name} onChange={v => set("name", v)} onBlur={() => touch("name")} placeholder="Nachname" error={touched.name && !filled(data.name) ? "Pflichtfeld" : undefined} /></div>
@@ -107,7 +107,7 @@ export function PersonalienFormV2({
       <div style={{ marginTop: "var(--space-3)", maxWidth: FELD_MAX.mittel }}>
         <AHVNummerInput label="AHV-Nummer" required value={data.ahvNummer} onChange={v => set("ahvNummer", v)} />
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><Combobox label="Staatsangehörigkeit" required value={data.nationalitaet || null} onChange={v => {
           touch("nationalitaet");
           // Schweizer Bürgerrecht: Heimatort statt Aufenthaltsstatus — und umgekehrt.
@@ -166,14 +166,14 @@ export function PersonalienFormV2({
               )}
               {/* Ausweis N: Asylgesuch-Datum und Bundesasylzentrum */}
               {sicht.asylgesuch && (
-                <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-3)" }}>
+                <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-3)" }}>
                   <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Datum des Asylgesuchs" required wertFormat="display" bereich="past" value={data.asylgesuchDatum || null} onChange={v => onChange({ ...data, asylgesuchDatum: (v as string) || null })} onBlur={() => touch("asylgesuchDatum")} hint="Bestimmt die dreimonatige Wartefrist bis zur Erwerbstätigkeit." /></div>
                   <div style={{ maxWidth: FELD_MAX.mittel }}><SegmentedControl label="Bundesasylzentrum verlassen" required value={data.bundesasylzentrumVerlassen === null ? "" : data.bundesasylzentrumVerlassen ? "ja" : "nein"} onChange={v => onChange({ ...data, bundesasylzentrumVerlassen: v === "ja" })} options={JA_NEIN} /></div>
                 </div>
               )}
               {/* Einreise / ZEMIS / Ablauf — je eigene Bedingung */}
               {(sicht.einreise || sicht.zemis || sicht.ablauf) && (
-                <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+                <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
                   {sicht.einreise && (
                     <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Einreisedatum" wertFormat="display" bereich="past" value={data.einreisedatum || null} onChange={v => set("einreisedatum", (v as string) ?? "")} onBlur={() => touch("einreisedatum")} /></div>
                   )}
@@ -192,7 +192,7 @@ export function PersonalienFormV2({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zivilstand" required value={data.zivilstand || null} onChange={v => set("zivilstand", v || "")} options={ZIVILSTAND_OPTIONS} placeholder="Zivilstand wählen" /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Zivilstand seit" required wertFormat="display" bereich="past" value={data.zivilstandSeit || null} onChange={v => set("zivilstandSeit", (v as string) ?? "")} onBlur={() => touch("zivilstandSeit")} /></div>
       </div>
@@ -200,7 +200,7 @@ export function PersonalienFormV2({
       {/* Erreichbarkeit steht über der Adresse — gleiche Reihenfolge wie im
           Patienten-Onboarding. */}
       <SectionHeader icon={Phone} label="Erreichbarkeit" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="E-Mail" required value={data.email} onChange={v => set("email", v)} onBlur={() => touch("email")} placeholder="name@example.com" /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Telefon (Festnetz)" required value={data.telefon} onChange={v => set("telefon", v)} onBlur={() => touch("telefon")} placeholder="+41 44 000 00 00" /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Mobil" value={data.mobil} onChange={v => set("mobil", v)} onBlur={() => touch("mobil")} placeholder="+41 79 000 00 00" /></div>
@@ -228,7 +228,7 @@ export function PersonalienFormV2({
 
       {/* Krankenkasse (SP-02, SP-03) */}
       <SectionHeader icon={Shield} label="Krankenkasse" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         {/* SP-02: Picklist statt Freitext */}
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Krankenkasse" required value={data.krankenkasseName || null} onChange={v => { const bag = getBagNummer(v || ""); onChange({ ...data, krankenkasseName: v || "", ...(bag ? { bagNr: bag } : {}) }); touch("krankenkasseName"); }} options={KRANKENKASSEN_OPTIONS} placeholder="Krankenkasse wählen" error={touched.krankenkasseName && !filled(data.krankenkasseName) ? "Pflichtfeld" : undefined} /></div>
         {/* SP-03: Kartennummer (umbenannt von Versicherungsnummer) */}
@@ -239,7 +239,7 @@ export function PersonalienFormV2({
 
       {/* Qualifikation */}
       <SectionHeader icon={User} label="Qualifikation" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         {/* Qualifikationsstufe entfällt als Erhebungsfeld — sie wird nach R14 aus
             der Funktion abgeleitet (lib/stammdaten/funktionen.ts). */}
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Deutschkenntnisse" required value={data.deutschNiveau || null} onChange={v => { set("deutschNiveau", v || ""); touch("deutschNiveau"); }} options={DEUTSCH_NIVEAU_OPTIONS} placeholder="Niveau wählen" error={touched.deutschNiveau && !filled(data.deutschNiveau) ? "Bitte ausfüllen" : undefined} /></div>
@@ -286,7 +286,7 @@ export function SteuerFormV2({
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={Receipt} label="Quellensteuer" first />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         {/* Der Umschalter bleibt manuell; der Hinweistext ist abgeleitet (bestimmt nur den Text, nie den Wert). */}
         <SegmentedControl label="Quellensteuerpflichtig?" required value={data.quellensteuer} onChange={v => { if (v === "nein") onChange({ ...data, quellensteuer: v, quellensteuerTarif: "" }); else set("quellensteuer", v); }} options={JA_NEIN} hint={steuerpflichtHinweis({ nationalitaet: data.nationalitaet, aufenthaltsstatus: data.aufenthaltsstatus, zivilstand: data.zivilstand, partnerNationalitaet: data.partnerNationalitaet, partnerAufenthaltsstatus: data.partnerAufenthaltsstatus })} />
         <div id="qst-konfession" style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Konfession" required value={data.konfession || null} onChange={v => { set("konfession", v || ""); touch("konfession"); }} options={KONFESSION_OPTIONS} placeholder="Konfession wählen" hint="Relevant für Kirchensteuer" error={touched.konfession && !filled(data.konfession) ? "Pflichtfeld" : undefined} /></div>
@@ -367,7 +367,7 @@ export function SteuerFormV2({
                 <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: "var(--space-3)" }}>
                   Abgeleitet wäre {tarifErgebnis.code}. Eine Abweichung wird an die Buchhaltung zur Prüfung weitergeleitet.
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+                <div className="grid grid-cols-1 lg:grid-cols-3" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
                   <FormSelect label="Tarif" value={ovBuchstabe || null} onChange={v => setOvBuchstabe(v || "")} options={TARIF_BUCHSTABEN.map(b => ({ value: b.code, label: b.label }))} placeholder="Tarif wählen" />
                   <FormSelect label="Kinder" value={ovKinder} onChange={v => setOvKinder(v || "0")} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i), label: String(i) }))} placeholder="0" />
                   <FormSelect label="Kirchensteuer" value={ovKirche} onChange={v => setOvKirche(v || "N")} options={[{ value: "Y", label: "mit Kirchensteuer" }, { value: "N", label: "ohne Kirchensteuer" }]} placeholder="wählen" />
@@ -410,7 +410,7 @@ export function SteuerFormV2({
       })()}
 
       <SectionHeader icon={Shield} label="Sozialversicherungen" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <SegmentedControl label="BVG-versichert?" required value={data.bvgVersichert} onChange={v => set("bvgVersichert", v)} options={JA_NEIN} />
         <SegmentedControl label="UVG-versichert?" required value={data.uvgVersichert} onChange={v => set("uvgVersichert", v)} options={JA_NEIN} />
         <SegmentedControl label="Sozialamt involviert?" required value={data.sozialamtInvolviert} onChange={v => { if (v === "nein") onChange({ ...data, sozialamtInvolviert: v, sozialamtKontakt: "" }); else set("sozialamtInvolviert", v); }} options={JA_NEIN} />
@@ -444,7 +444,7 @@ export function AnstellungFormV2({
       <SectionHeader icon={Briefcase} label="Externe Anstellung" first />
       <SegmentedControl label="Bereits bei einem anderen Arbeitgeber angestellt?" required value={data.arbeitetExtern} onChange={v => set("arbeitetExtern", v)} options={JA_NEIN} />
       {data.arbeitetExtern === "ja" && (
-        <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+        <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
           <div style={{ maxWidth: FELD_MAX.mittel }}><TextInput label="Funktion extern" required value={data.externeFunktion} onChange={v => set("externeFunktion", v)} onBlur={() => touch("externeFunktion")} placeholder="z.B. Pflegehelferin" error={touched.externeFunktion && !filled(data.externeFunktion) ? "Bitte ausfüllen" : undefined} /></div>
           <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="Pensum extern" required value={data.externesPensumProzent} onChange={v => set("externesPensumProzent", v)} suffix="%" placeholder="50" /></div>
           <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Eintritt extern" required wertFormat="display" bereich="any" value={data.externerEintritt || null} onChange={v => set("externerEintritt", (v as string) ?? "")} onBlur={() => touch("externerEintritt")} /></div>
@@ -453,7 +453,7 @@ export function AnstellungFormV2({
       )}
       {/* Anstellung Spitex — Lohnart ist immer Stundenlohn in der Angehörigenpflege */}
       <SectionHeader icon={Briefcase} label="Anstellung" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Funktion" required value={data.funktion || null} onChange={v => { set("funktion", v || ""); touch("funktion"); }} options={FUNKTIONEN} placeholder="Funktion wählen" error={touched.funktion && !filled(data.funktion) ? "Pflichtfeld" : undefined} /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Eintrittsdatum" required wertFormat="display" bereich="any" value={data.eintrittsdatum || null} onChange={v => set("eintrittsdatum", (v as string) ?? "")} onBlur={() => touch("eintrittsdatum")} /></div>
         <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="Stundenlohn" required value={data.stundenlohn} onChange={v => set("stundenlohn", v)} suffix="CHF" placeholder="32.00" /></div>
@@ -476,7 +476,7 @@ export function AnstellungFormV2({
       })()}
 
       {/* Pflegeleistungen (Multi-Pick B/C) + voraussichtliche Arbeitszeit */}
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         <div>
           <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>Pflegeleistungen</div>
           <div className="flex flex-wrap" style={{ gap: 8 }}>
@@ -501,7 +501,7 @@ export function AnstellungFormV2({
       </div>
 
       <SectionHeader icon={CreditCard} label="Auszahlung" />
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <div><TextInput label="Bankname" required value={data.bankname} onChange={v => set("bankname", v)} onBlur={() => touch("bankname")} placeholder="z.B. PostFinance, UBS, Raiffeisen" error={touched.bankname && !filled(data.bankname) ? "Pflichtfeld" : undefined} /></div>
         <div><IBANInput label="IBAN" required value={data.iban} onChange={v => set("iban", v)} /></div>
       </div>
@@ -599,7 +599,7 @@ function AuslaenderrechtAnzeige({ data, arbeitsortKanton, arbeitsortOrt }: { dat
           {/* Kanton des Arbeitsorts wählen — wenn ein Regime eine Stelle braucht (meldung/bewilligung)
               und keiner aus den Patientendaten vorliegt. Fliesst in Engine und SEM-Formular. */}
           {zeigeKantonAuswahl && (
-            <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "var(--space-3)", marginTop: "var(--space-3)", maxWidth: 520 }}>
+            <div className="grid grid-cols-1 lg:grid-cols-2" style={{ gap: "var(--space-3)", marginTop: "var(--space-3)", maxWidth: 520 }}>
               <FormSelect label="Kanton des Arbeitsorts" required value={kantonWahl || null} onChange={v => setKantonWahl(v || "")} options={KANTON_OPTIONS} placeholder="Kanton wählen" />
               {ergebnis.regime === "meldung" && (
                 <TextInput label="Ort des Arbeitsorts" value={ortWahl} onChange={setOrtWahl} placeholder="z.B. Winterthur" />

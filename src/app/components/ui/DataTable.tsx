@@ -107,6 +107,11 @@ export interface DataTableProps<T> {
   /** Instanz-Override der Kartenschwelle in px. Fehlt sie, gilt der geteilte
    *  Wert TABELLE_LAYOUT.haltepunktePx.karte — bestehende Listen bleiben unberührt. */
   karteAbPx?: number;
+  /** Muster B (Tablet): zwischen 640px und 1023px Fensterbreite bleibt die
+   *  volle Tabelle stehen und scrollt waagrecht, die erste Spalte ist fixiert.
+   *  Spaltenabwurf und Zweitzeilen sind in dem Band ausgesetzt. Standard aus —
+   *  bestehende Listen behalten den Spaltenfall. Desktop (>=1024) unberührt. */
+  tabletQuerscroll?: boolean;
 }
 
 /** Fensterbreite, reaktiv. SSR-sicher: startet gross, damit initial alle Spalten erscheinen. */
@@ -187,23 +192,31 @@ function Kontrollkaestchen({ gewaehlt, onToggle, label }: { gewaehlt: boolean; o
 export function DataTable<T>({
   spalten, zeilen, zeilenKey, onZeileKlick, zeilenHintergrund, zeilenAkzent,
   sort, onSort, fusszeile, karteTitel, leerText = "Keine Ergebnisse.",
-  auswahl, containerHaltepunkte = false, karteAbPx, gruppen,
+  auswahl, containerHaltepunkte = false, karteAbPx, gruppen, tabletQuerscroll = false,
 }: DataTableProps<T>) {
   const rahmenRef = React.useRef<HTMLDivElement>(null);
   const fensterBreite = useFensterBreite();
   const containerBreite = useContainerBreite(rahmenRef, containerHaltepunkte);
   const breite = containerHaltepunkte ? containerBreite : fensterBreite;
   const hatAbwurf = spalten.some(s => s.abwerfRang != null);
-  const { chPx, remPx } = useTabellenMasse(rahmenRef, hatAbwurf);
   const bp = TABELLE_LAYOUT.haltepunktePx;
-  const istKarte = breite < (karteAbPx ?? bp.karte);
-  const zweizeilig = breite < bp.zweizeilig;
+  /* Muster B: im Tablet-Band (640–1023px Fenster) volle Tabelle mit Querscroll;
+     unter 640px erzwungen Karten. Beides nur, wenn die Liste es bestellt hat. */
+  const querscrollAktiv = tabletQuerscroll && fensterBreite >= 640 && fensterBreite < 1024;
+  const { chPx, remPx } = useTabellenMasse(rahmenRef, hatAbwurf || querscrollAktiv);
+  const istKarte = querscrollAktiv
+    ? false
+    : breite < (karteAbPx ?? bp.karte) || (tabletQuerscroll && fensterBreite < 640);
+  const zweizeilig = !querscrollAktiv && breite < bp.zweizeilig;
 
   // Sichtbare Spalten: "eng"-Spalten entfallen unter ihrem Haltepunkt; Zweitzeile-Spalten
-  // verlassen die Spaltenliste (sie rutschen in ihre Leitspalte).
+  // verlassen die Spaltenliste (sie rutschen in ihre Leitspalte). Im Querscroll-Band
+  // entfällt nichts — die volle Tabelle bleibt stehen und scrollt.
   const entfaellt = (s: SpalteDef<T>) =>
-    (s.ausblendenUnter && breite < bp[s.ausblendenUnter]) ||
-    (s.zweitzeileUnter && zweizeilig);
+    !querscrollAktiv && (
+      (s.ausblendenUnter && breite < bp[s.ausblendenUnter]) ||
+      (s.zweitzeileUnter && zweizeilig)
+    );
   const sichtbare = spalten.filter(s => !entfaellt(s));
 
   // Zweitzeile-Zuordnung: Leitspalten-id → dort einzuklinkende Spalten (nur wenn zweizeilig).
@@ -222,6 +235,94 @@ export function DataTable<T>({
     background: "var(--bg-elevated)", borderRadius: "var(--radius-card)",
     border: "var(--border-thin) solid var(--border-default)", overflow: "hidden",
   };
+
+  /* ── Spaltenfall: reicht die Breite nicht für alle Mindestbreiten, entfallen
+     Spalten nach abwerfRang (kleinster zuerst), bis die Summe passt — nie klippen.
+     Im Querscroll-Band ausgesetzt: dort scrollt die Tabelle statt abzuwerfen.
+     (Läuft VOR dem Karten-Zweig, damit die Hook-Reihenfolge in beiden
+     Darstellungen identisch ist — sonst bricht der Wechsel Tabelle→Karte.) ── */
+  const auswahlPx = auswahl ? 40 : 0;
+  // Footprint einer Spalte = Textbreite (ch→px) PLUS die tatsächlichen Innenabstände
+  // der Zelle (beide Seiten), nicht nur die ch-Umrechnung.
+  const zellInnenPx = parseFloat(TABELLE_LAYOUT.zeilePadX) * remPx * 2;
+  const SICHERHEIT_PX = 24; // deckt Rahmenlinien, Rundung und einen möglichen senkrechten Bildlaufbalken
+  const minPx = (s: SpalteDef<T>) => s.festBreitePx != null ? s.festBreitePx : (s.minCh ?? 8) * chPx + zellInnenPx;
+  let anzeige = sichtbare;
+  if (hatAbwurf && !querscrollAktiv) {
+    const weg = new Set<string>();
+    const summe = () => auswahlPx + sichtbare.filter(s => !weg.has(s.id)).reduce((n, s) => n + minPx(s), 0);
+    const abwerfbar = sichtbare.filter(s => s.abwerfRang != null).sort((a, b) => a.abwerfRang! - b.abwerfRang!);
+    // Sicherheitsabstand: eine Spalte bleibt nur, wenn die Summe den Container um
+    // mindestens SICHERHEIT_PX unterschreitet; bei Gleichstand fällt die niederrangigste.
+    for (const s of abwerfbar) { if (summe() <= breite - SICHERHEIT_PX) break; weg.add(s.id); }
+    anzeige = sichtbare.filter(s => !weg.has(s.id));
+  }
+
+  /* ── Spurbreiten: keine eigene Pixelrechnung. Je Spalte minmax(Mindestbreite,
+     Obergrenze) in ch (bzw. fr, wenn keine Obergrenze gesetzt ist) — der Browser
+     verteilt zwischen den Grenzen und überschreitet den Container nicht, solange die
+     Summe der Mindestbreiten (via Abwurf oben gesichert) hineinpasst.
+     Im Querscroll-Band px-basierte Mindestbreiten plus Gesamt-Mindestbreite je
+     Zeile, damit alle Zeilen deckungsgleich über den Container hinauswachsen. ── */
+  const auswahlSpur = auswahl ? ["40px"] : [];
+  const gridCols = [
+    ...auswahlSpur,
+    ...anzeige.map(s => s.festBreitePx != null
+      ? `${s.festBreitePx}px`
+      : querscrollAktiv
+        ? `minmax(${Math.ceil(minPx(s))}px, ${s.maxSpur ?? `${s.anteil ?? 1}fr`})`
+        : `minmax(${s.minCh ?? 8}ch, ${s.maxSpur ?? `${s.anteil ?? 1}fr`})`),
+  ].join(" ");
+  const querscrollMinBreite = querscrollAktiv
+    ? Math.ceil(auswahlPx + anzeige.reduce((n, s) => n + minPx(s), 0))
+    : undefined;
+  const zellPad = `${TABELLE_LAYOUT.zeilePadY} ${TABELLE_LAYOUT.zeilePadX}`;
+
+  /* ── Fixierte erste Spalte (Muster B, nur Querscroll-Band): die Auswahl-Spalte
+     (falls vorhanden), führende feste Kennzeichen-Spalten und die erste
+     beschriftete Spalte bleiben beim Scrollen stehen. Fixierte Zellen brauchen
+     eine eigene deckende Fläche. Index zählt inkl. Auswahl-Spalte. ── */
+  let stickyAnzahl = 0;
+  const stickyLinks: number[] = [];
+  if (querscrollAktiv) {
+    let links = 0;
+    if (auswahl) { stickyLinks.push(0); links += auswahlPx; stickyAnzahl += 1; }
+    for (const s of anzeige) {
+      stickyLinks.push(links);
+      links += minPx(s);
+      stickyAnzahl += 1;
+      if (s.festBreitePx == null) break; // erste beschriftete Spalte ist die letzte fixierte
+    }
+  }
+  const stickyStil = (spaltenIndex: number, flaeche: string): React.CSSProperties =>
+    querscrollAktiv && spaltenIndex < stickyAnzahl
+      ? {
+          position: "sticky",
+          left: Math.round(stickyLinks[spaltenIndex] ?? 0),
+          zIndex: 1,
+          background: flaeche,
+          boxShadow: spaltenIndex === stickyAnzahl - 1 ? "1px 0 0 var(--border-default)" : undefined,
+        }
+      : {};
+
+  /* ── Gruppenzeile ──────────────────────────────────────────────────────────
+     Aus den tatsächlich angezeigten Spalten gebildet, nicht aus der Vorgabe:
+     fällt eine Spalte unter einem Haltepunkt weg, schrumpft ihre Gruppe mit,
+     und eine Gruppe ohne verbleibende Spalte entfällt ganz. Zusammenhängende
+     Läufe werden zu einer Zelle mit `span` verdichtet; Spalten ohne Gruppe
+     bekommen eine leere Zelle, damit das Raster deckungsgleich bleibt. */
+  const gruppenZeile = React.useMemo(() => {
+    if (!gruppen?.length) return null;
+    const gruppeVon = (id: string) => gruppen.find(g => g.spalten.includes(id)) ?? null;
+    const felder: { label: string | null; span: number }[] = [];
+    for (const s of anzeige) {
+      const g = gruppeVon(s.id);
+      const letztes = felder[felder.length - 1];
+      if (g && letztes && letztes.label === g.label) letztes.span += 1;
+      else felder.push({ label: g?.label ?? null, span: 1 });
+    }
+    return felder.some(f => f.label) ? felder : null;
+  }, [gruppen, anzeige]);
 
   /* ── Kartendarstellung (unter dem Karte-Haltepunkt): kein horizontales Scrollen ── */
   if (istKarte) {
@@ -249,7 +350,7 @@ export function DataTable<T>({
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.5rem 1rem" }}>
                 {koerper.map(s => (
                   <div key={s.id} style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)", fontWeight: "var(--weight-medium)" }}>{s.label}</div>
+                    <div className="m1-mindestschrift" style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)", fontWeight: "var(--weight-medium)" }}>{s.label}</div>
                     <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{s.render(row)}</div>
                   </div>
                 ))}
@@ -263,68 +364,20 @@ export function DataTable<T>({
     );
   }
 
-  /* ── Spaltenfall: reicht die Breite nicht für alle Mindestbreiten, entfallen
-     Spalten nach abwerfRang (kleinster zuerst), bis die Summe passt — nie klippen. ── */
-  const auswahlPx = auswahl ? 40 : 0;
-  // Footprint einer Spalte = Textbreite (ch→px) PLUS die tatsächlichen Innenabstände
-  // der Zelle (beide Seiten), nicht nur die ch-Umrechnung.
-  const zellInnenPx = parseFloat(TABELLE_LAYOUT.zeilePadX) * remPx * 2;
-  const SICHERHEIT_PX = 24; // deckt Rahmenlinien, Rundung und einen möglichen senkrechten Bildlaufbalken
-  const minPx = (s: SpalteDef<T>) => s.festBreitePx != null ? s.festBreitePx : (s.minCh ?? 8) * chPx + zellInnenPx;
-  let anzeige = sichtbare;
-  if (hatAbwurf) {
-    const weg = new Set<string>();
-    const summe = () => auswahlPx + sichtbare.filter(s => !weg.has(s.id)).reduce((n, s) => n + minPx(s), 0);
-    const abwerfbar = sichtbare.filter(s => s.abwerfRang != null).sort((a, b) => a.abwerfRang! - b.abwerfRang!);
-    // Sicherheitsabstand: eine Spalte bleibt nur, wenn die Summe den Container um
-    // mindestens SICHERHEIT_PX unterschreitet; bei Gleichstand fällt die niederrangigste.
-    for (const s of abwerfbar) { if (summe() <= breite - SICHERHEIT_PX) break; weg.add(s.id); }
-    anzeige = sichtbare.filter(s => !weg.has(s.id));
-  }
-
-  /* ── Spurbreiten: keine eigene Pixelrechnung. Je Spalte minmax(Mindestbreite,
-     Obergrenze) in ch (bzw. fr, wenn keine Obergrenze gesetzt ist) — der Browser
-     verteilt zwischen den Grenzen und überschreitet den Container nicht, solange die
-     Summe der Mindestbreiten (via Abwurf oben gesichert) hineinpasst. ── */
-  const auswahlSpur = auswahl ? ["40px"] : [];
-  const gridCols = [
-    ...auswahlSpur,
-    ...anzeige.map(s => s.festBreitePx != null ? `${s.festBreitePx}px` : `minmax(${s.minCh ?? 8}ch, ${s.maxSpur ?? `${s.anteil ?? 1}fr`})`),
-  ].join(" ");
-  const zellPad = `${TABELLE_LAYOUT.zeilePadY} ${TABELLE_LAYOUT.zeilePadX}`;
-
-  /* ── Gruppenzeile ──────────────────────────────────────────────────────────
-     Aus den tatsächlich angezeigten Spalten gebildet, nicht aus der Vorgabe:
-     fällt eine Spalte unter einem Haltepunkt weg, schrumpft ihre Gruppe mit,
-     und eine Gruppe ohne verbleibende Spalte entfällt ganz. Zusammenhängende
-     Läufe werden zu einer Zelle mit `span` verdichtet; Spalten ohne Gruppe
-     bekommen eine leere Zelle, damit das Raster deckungsgleich bleibt. */
-  const gruppenZeile = React.useMemo(() => {
-    if (!gruppen?.length) return null;
-    const gruppeVon = (id: string) => gruppen.find(g => g.spalten.includes(id)) ?? null;
-    const felder: { label: string | null; span: number }[] = [];
-    for (const s of anzeige) {
-      const g = gruppeVon(s.id);
-      const letztes = felder[felder.length - 1];
-      if (g && letztes && letztes.label === g.label) letztes.span += 1;
-      else felder.push({ label: g?.label ?? null, span: 1 });
-    }
-    return felder.some(f => f.label) ? felder : null;
-  }, [gruppen, anzeige]);
-
   return (
     <div ref={rahmenRef} style={rahmen}>
       <div style={karte}>
-        <div role="table" aria-rowcount={zeilen.length}>
+        <div role="table" aria-rowcount={zeilen.length}
+          style={querscrollAktiv ? { overflowX: "auto", WebkitOverflowScrolling: "touch" } : undefined}>
           {/* Gruppenzeile über der Kopfzeile — nur wenn Gruppen gesetzt sind */}
           {gruppenZeile && (
-            <div role="row" style={{ display: "grid", gridTemplateColumns: gridCols, alignItems: "end", background: "var(--bg-secondary)", paddingTop: "0.4rem" }}>
+            <div role="row" style={{ display: "grid", gridTemplateColumns: gridCols, alignItems: "end", background: "var(--bg-secondary)", paddingTop: "0.4rem", minWidth: querscrollMinBreite }}>
               {auswahl && <div />}
               {gruppenZeile.map((f, i) => (
                 <div key={i} role="columnheader" aria-label={f.label ?? undefined}
                   style={{ gridColumn: `span ${f.span}`, padding: `0 ${TABELLE_LAYOUT.zeilePadX}`, minWidth: 0 }}>
                   {f.label && (
-                    <span style={{ display: "block", paddingBottom: "0.25rem", borderBottom: "var(--border-thin) solid var(--border-default)",
+                    <span className="m1-mindestschrift" style={{ display: "block", paddingBottom: "0.25rem", borderBottom: "var(--border-thin) solid var(--border-default)",
                       fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: "var(--weight-medium)",
                       color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
                       {f.label}
@@ -335,9 +388,9 @@ export function DataTable<T>({
             </div>
           )}
           {/* Kopfzeile */}
-          <div role="row" style={{ display: "grid", gridTemplateColumns: gridCols, alignItems: "center", background: "var(--bg-secondary)" }}>
-            {auswahl && <div role="columnheader" aria-label="Auswahl" style={{ padding: zellPad }} />}
-            {anzeige.map(s => {
+          <div role="row" style={{ display: "grid", gridTemplateColumns: gridCols, alignItems: "center", background: "var(--bg-secondary)", minWidth: querscrollMinBreite }}>
+            {auswahl && <div role="columnheader" aria-label="Auswahl" style={{ padding: zellPad, ...stickyStil(0, "var(--bg-secondary)") }} />}
+            {anzeige.map((s, si) => {
               const aktiv = s.sortierbar && sort?.key === s.id;
               const klick = s.sortierbar && onSort ? () => onSort(s.id) : undefined;
               return (
@@ -345,9 +398,9 @@ export function DataTable<T>({
                   aria-sort={aktiv ? (sort!.dir === "asc" ? "ascending" : "descending") : undefined}
                   onClick={klick}
                   title={typeof s.label === "string" ? s.label : undefined}
-                  style={{ padding: zellPad, textAlign: s.align ?? "left", cursor: klick ? "pointer" : "default", userSelect: "none", minWidth: 0 }}>
+                  style={{ padding: zellPad, textAlign: s.align ?? "left", cursor: klick ? "pointer" : "default", userSelect: "none", minWidth: 0, ...stickyStil(si + (auswahl ? 1 : 0), "var(--bg-secondary)") }}>
                   {/* Kopf wird nie gekürzt (§148); die Mindestbreite trägt ihn (minCh = max(Datenwert, Kopf)). */}
-                  <span style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: "var(--weight-medium)", color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                  <span className="m1-mindestschrift" style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: "var(--weight-medium)", color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", whiteSpace: "nowrap" }}>
                     {s.label}
                     {aktiv && <span aria-hidden="true" style={{ marginLeft: "0.25rem" }}>{sort!.dir === "asc" ? "↑" : "↓"}</span>}
                   </span>
@@ -365,16 +418,16 @@ export function DataTable<T>({
               onClick={onZeileKlick ? () => onZeileKlick(row) : undefined}
               onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
               onMouseLeave={e => (e.currentTarget.style.background = zeilenHintergrund?.(row) || "transparent")}
-              style={{ display: "grid", gridTemplateColumns: gridCols, alignItems: "center", borderTop: "var(--border-thin) solid var(--border-default)", cursor: onZeileKlick ? "pointer" : "default", background: zeilenHintergrund?.(row) || "transparent", boxShadow: akzent ? `inset 3px 0 0 ${akzent}, inset 0 0 0 1px ${akzent}` : undefined }}>
+              style={{ display: "grid", gridTemplateColumns: gridCols, alignItems: "center", borderTop: "var(--border-thin) solid var(--border-default)", cursor: onZeileKlick ? "pointer" : "default", background: zeilenHintergrund?.(row) || "transparent", boxShadow: akzent ? `inset 3px 0 0 ${akzent}, inset 0 0 0 1px ${akzent}` : undefined, minWidth: querscrollMinBreite }}>
               {auswahl && (
-                <div role="cell" style={{ padding: zellPad, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0 }}>
+                <div role="cell" style={{ padding: zellPad, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 0, ...stickyStil(0, zeilenHintergrund?.(row) || "var(--bg-elevated)") }}>
                   <Kontrollkaestchen gewaehlt={auswahl.istGewaehlt(row)} onToggle={() => auswahl.onToggle(row)} label={auswahl.zeilenLabel?.(row)} />
                 </div>
               )}
-              {anzeige.map(s => {
+              {anzeige.map((s, si) => {
                 const tucked = zweitzeilen.get(s.id);
                 return (
-                  <div key={s.id} role="cell" style={{ padding: zellPad, textAlign: s.align ?? "left", minWidth: 0, overflowWrap: "anywhere" }}>
+                  <div key={s.id} role="cell" style={{ padding: zellPad, textAlign: s.align ?? "left", minWidth: 0, overflowWrap: "anywhere", ...stickyStil(si + (auswahl ? 1 : 0), zeilenHintergrund?.(row) || "var(--bg-elevated)") }}>
                     {s.render(row)}
                     {tucked?.map(tc => (
                       <div key={tc.id} style={{ marginTop: "0.125rem", fontSize: "0.75rem", color: "var(--text-secondary)", overflowWrap: "anywhere" }}>

@@ -34,11 +34,12 @@ export function DocumentPreviewModal({ file, isOpen, onClose }: Props) {
   const isPdf = file.mimeType.includes("pdf");
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: "rgba(19,19,20,0.5)" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="flex flex-col" style={{
+    <div className="fixed inset-0 z-[70] flex items-center justify-center m1-dialog-wrap" style={{ background: "rgba(19,19,20,0.5)" }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="flex flex-col m1-blatt" style={{
         background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-overlay)",
         maxWidth: 800, maxHeight: "90vh", width: "90%", overflow: "hidden",
       }}>
+        <div className="m1-blatt-griff" aria-hidden="true" />
         {/* Header */}
         <div className="flex items-center justify-between shrink-0" style={{ padding: "16px 20px", borderBottom: "var(--border-thin) solid var(--border-default)" }}>
           <div>
