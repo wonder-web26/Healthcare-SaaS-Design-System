@@ -24,8 +24,9 @@ import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../../lib/stammdaten/krankenkassen";
 import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
 import { GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/geschlecht";
-import { STAATSANGEHOERIGKEIT_OPTIONS, istSchweiz } from "../../../lib/stammdaten/staatsangehoerigkeit";
+import { STAATSANGEHOERIGKEIT_OPTIONS, istSchweiz, staatsangehoerigkeitsgruppe } from "../../../lib/stammdaten/staatsangehoerigkeit";
 import { AUFENTHALTSSTATUS_OPTIONS, STATUS_B } from "../../../lib/stammdaten/aufenthaltsstatus";
+import { AUFENTHALTSGRUND_OPTIONS, type Aufenthaltsgrund } from "../../../lib/stammdaten/aufenthaltsgrund";
 import { FELD_MAX } from "./feldbreiten";
 import { leiteTarifcodeAb } from "../../../lib/stammdaten/quellensteuer-tarif";
 import { formDataToSEM, erstelleSEMFormular, ermittleFehlendeFelderSEM, downloadBlob } from "../../../lib/sem/meldeformular";
@@ -103,8 +104,10 @@ export function PersonalienFormV2({
         <div style={{ maxWidth: FELD_MAX.mittel }}><Combobox label="Staatsangehörigkeit" required value={data.nationalitaet || null} onChange={v => {
           touch("nationalitaet");
           // Schweizer Bürgerrecht: Heimatort statt Aufenthaltsstatus — und umgekehrt.
-          if (istSchweiz(v || "")) onChange({ ...data, nationalitaet: v || "", aufenthaltsstatus: "" });
-          else onChange({ ...data, nationalitaet: v || "", heimatort: "", aufenthaltsstatus: "" });
+          // Der Aufenthaltsstatus wird zurückgesetzt; damit entfällt auch der
+          // Aufenthaltsgrund (er ist nur bei Drittstaat + Ausweis B von Bedeutung).
+          if (istSchweiz(v || "")) onChange({ ...data, nationalitaet: v || "", aufenthaltsstatus: "", aufenthaltsgrund: null });
+          else onChange({ ...data, nationalitaet: v || "", heimatort: "", aufenthaltsstatus: "", aufenthaltsgrund: null });
         }} options={STAATSANGEHOERIGKEIT_OPTIONS} placeholder="Staatsangehörigkeit wählen" error={touched.nationalitaet && !filled(data.nationalitaet) ? "Pflichtfeld" : undefined} /></div>
 
         {isSwiss && (
@@ -112,7 +115,10 @@ export function PersonalienFormV2({
         )}
         {showAufenthalt && (
           <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Aufenthaltsstatus" required value={data.aufenthaltsstatus || null} onChange={v => {
-            onChange({ ...data, aufenthaltsstatus: v || "", spezialbewilligungStatus: v === STATUS_B ? "ausstehend" : "nicht_erforderlich", spezialbewilligungDokument: v === STATUS_B ? data.spezialbewilligungDokument : null, spezialbewilligungEinreichungsDatum: v === STATUS_B ? data.spezialbewilligungEinreichungsDatum : "" });
+            const neuerStatus = v || "";
+            // Aufenthaltsgrund nur behalten, solange Drittstaat + Ausweis B; sonst löschen.
+            const grundBleibt = staatsangehoerigkeitsgruppe(data.nationalitaet) === "drittstaat" && neuerStatus === "B";
+            onChange({ ...data, aufenthaltsstatus: neuerStatus, aufenthaltsgrund: grundBleibt ? data.aufenthaltsgrund : null, spezialbewilligungStatus: neuerStatus === STATUS_B ? "ausstehend" : "nicht_erforderlich", spezialbewilligungDokument: neuerStatus === STATUS_B ? data.spezialbewilligungDokument : null, spezialbewilligungEinreichungsDatum: neuerStatus === STATUS_B ? data.spezialbewilligungEinreichungsDatum : "" });
             touch("aufenthaltsstatus");
           }} options={AUFENTHALTSSTATUS_OPTIONS} placeholder="Status wählen" error={touched.aufenthaltsstatus && !filled(data.aufenthaltsstatus) ? "Pflichtfeld" : undefined} /></div>
         )}
@@ -126,6 +132,23 @@ export function PersonalienFormV2({
           <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>
             Angaben zur Aufenthaltsbewilligung
           </div>
+          {/* Grund der Bewilligung — nur Drittstaat + Ausweis B; unmittelbar nach dem Aufenthaltsstatus */}
+          {staatsangehoerigkeitsgruppe(data.nationalitaet) === "drittstaat" && data.aufenthaltsstatus === "B" && (
+            <div style={{ maxWidth: FELD_MAX.mittel, marginBottom: "var(--space-3)" }}>
+              <FormSelect
+                label="Grund der Aufenthaltsbewilligung"
+                required
+                value={data.aufenthaltsgrund}
+                onChange={v => { onChange({ ...data, aufenthaltsgrund: (v as Aufenthaltsgrund) || null }); touch("aufenthaltsgrund"); }}
+                options={AUFENTHALTSGRUND_OPTIONS}
+                placeholder="Grund wählen"
+                error={touched.aufenthaltsgrund && !data.aufenthaltsgrund ? "Pflichtfeld" : undefined}
+              />
+              <div style={{ marginTop: "var(--space-2)", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
+                Der Grund steht nicht auf dem Ausweis, sondern in der Verfügung des Migrationsamts. Im Zweifel bei der Angehörigen erfragen und „Anderer Grund" wählen.
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
             <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Einreisedatum" required wertFormat="display" bereich="past" value={data.einreisedatum || null} onChange={v => set("einreisedatum", (v as string) ?? "")} onBlur={() => touch("einreisedatum")} /></div>
             <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="ZEMIS-Nummer" required value={data.zemisNummer} onChange={v => set("zemisNummer", v)} onBlur={() => touch("zemisNummer")} placeholder="ZEMIS-Nummer" hint="Zentrales Migrationsinformationssystem" error={touched.zemisNummer && !filled(data.zemisNummer) ? "Bitte ausfüllen" : undefined} /></div>

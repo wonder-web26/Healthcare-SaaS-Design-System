@@ -77,6 +77,7 @@ import { exportiereArbeitskontrollePDF } from "../../lib/arbeitskontrolle/pdf-ex
 import { DataTable, type SpalteDef } from "./ui/DataTable";
 import { type KindEntry, createEmptyKind } from "./StepAngehoeriger";
 import { zulagenart, zulagenartLabel, alterInJahren, AUSBILDUNGSFRAGE_AB_ALTER } from "../../lib/stammdaten/zulagenart";
+import { aufenthaltsgrundLabel } from "../../lib/stammdaten/aufenthaltsgrund";
 import { isoZuAnzeige, anzeigeZuIso } from "../../lib/datum";
 import "../../lib/schulung/demo-seed";
 import "../../lib/arbeitskontrolle/demo-seed";
@@ -862,6 +863,8 @@ function TabStammdaten({ a, detail }: { a: Angehoeriger; detail: AngehoerigerDet
             <EditableField label="Nationalität" value={nationalitaet} editing={isEd("personalien")} onChange={setNationalitaet} />
             <EditableField label="Heimatort" value={heimatort} editing={isEd("personalien")} onChange={setHeimatort} />
             <EditableField label="Aufenthaltsstatus" value={aufenthaltsstatus} editing={isEd("personalien")} onChange={setAufenthaltsstatus} />
+            {/* Aufenthaltsgrund: aus dem Bestand (Erhebung), nur bei Drittstaat + Ausweis B erfasst. Anzeige, nicht editierbar. */}
+            <EditableField label="Aufenthaltsgrund" value={aufenthaltsgrundLabel(a.aufenthaltsgrund)} editing={false} onChange={() => {}} />
             <EditableField label="Zivilstand" value={zivilstand} editing={isEd("personalien")} onChange={setZivilstand} />
             <EditableField label="Zivilstand seit" value={zivilstandSeit} editing={isEd("personalien")} onChange={setZivilstandSeit} />
           </div>

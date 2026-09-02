@@ -4,6 +4,7 @@
  * ─────────────────────────────────────────
  */
 
+import type { Aufenthaltsgrund } from "../../lib/stammdaten/aufenthaltsgrund";
 
 export type Qualifikation = "ohne_srk" | "srk" | "fage_dipl";
 
@@ -82,6 +83,8 @@ export interface AngehoerigerErhebung {
   nationalitaet: string;
   heimatort: string;
   aufenthaltsstatus: string;
+  /** Grund der B-Bewilligung — nur bei Drittstaat + Ausweis B; sonst null. Lauf 2: erfasst, nicht ausgewertet. */
+  aufenthaltsgrund: Aufenthaltsgrund | null;
   einreisedatum: string;
   zemisNummer: string;
   einreichungsdatumMigrationsamt: string;
@@ -166,7 +169,7 @@ export const LEERE_ERHEBUNG: AngehoerigerErhebung = {
   geschlecht: "", geburtsdatum: "", ahvNummer: "", zivilstand: "", zivilstandSeit: "",
   strasse: "", plz: "", ort: "", email: "", telefon: "", mobil: "",
   krankenkasseName: "", kartennummer: "", bagNr: "",
-  nationalitaet: "", heimatort: "", aufenthaltsstatus: "", einreisedatum: "", zemisNummer: "",
+  nationalitaet: "", heimatort: "", aufenthaltsstatus: "", aufenthaltsgrund: null, einreisedatum: "", zemisNummer: "",
   einreichungsdatumMigrationsamt: "", bewilligungAblaufdatum: "",
   spezialbewilligungEinreichungsDatum: "", spezialbewilligungStatus: "",
   quellensteuer: "", konfession: "", quellensteuerTarif: "", tarifcodeQuelle: "",
@@ -294,6 +297,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "schweiz",
     heimatort: "Winterthur ZH",
     aufenthaltsstatus: "",
+    aufenthaltsgrund: null,
     einreisedatum: "",
     zemisNummer: "",
     einreichungsdatumMigrationsamt: "",
@@ -377,6 +381,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "schweiz",
     heimatort: "Herisau AR",
     aufenthaltsstatus: "",
+    aufenthaltsgrund: null,
     einreisedatum: "",
     zemisNummer: "",
     einreichungsdatumMigrationsamt: "",
@@ -462,6 +467,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "andere",
     heimatort: "",
     aufenthaltsstatus: "B",
+    aufenthaltsgrund: null,
     einreisedatum: "12.03.2003",
     zemisNummer: "84512367",
     einreichungsdatumMigrationsamt: "18.06.2026",
@@ -550,6 +556,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "tuerkei",
     heimatort: "",
     aufenthaltsstatus: "C",
+    aufenthaltsgrund: null,
     einreisedatum: "",
     zemisNummer: "",
     einreichungsdatumMigrationsamt: "",
@@ -638,6 +645,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "schweiz",
     heimatort: "Sursee LU",
     aufenthaltsstatus: "",
+    aufenthaltsgrund: null,
     einreisedatum: "",
     zemisNummer: "",
     einreichungsdatumMigrationsamt: "",
@@ -722,6 +730,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "portugal",
     heimatort: "",
     aufenthaltsstatus: "G",
+    aufenthaltsgrund: null,
     einreisedatum: "01.02.2019",
     zemisNummer: "71223344",
     einreichungsdatumMigrationsamt: "",
@@ -807,6 +816,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "schweiz",
     heimatort: "Langenthal BE",
     aufenthaltsstatus: "",
+    aufenthaltsgrund: null,
     einreisedatum: "",
     zemisNummer: "",
     einreichungsdatumMigrationsamt: "",
@@ -898,6 +908,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "andere",
     heimatort: "",
     aufenthaltsstatus: "F",
+    aufenthaltsgrund: null,
     einreisedatum: "04.09.2016",
     zemisNummer: "93344556",
     einreichungsdatumMigrationsamt: "25.06.2026",
@@ -982,6 +993,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "schweiz",
     heimatort: "Aarau AG",
     aufenthaltsstatus: "",
+    aufenthaltsgrund: null,
     einreisedatum: "",
     zemisNummer: "",
     einreichungsdatumMigrationsamt: "",
@@ -1066,6 +1078,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "schweiz",
     heimatort: "Zug",
     aufenthaltsstatus: "",
+    aufenthaltsgrund: null,
     einreisedatum: "",
     zemisNummer: "",
     einreichungsdatumMigrationsamt: "",
@@ -1150,6 +1163,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "schweiz",
     heimatort: "Chur GR",
     aufenthaltsstatus: "",
+    aufenthaltsgrund: null,
     einreisedatum: "",
     zemisNummer: "",
     einreichungsdatumMigrationsamt: "",
@@ -1233,6 +1247,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     nationalitaet: "oesterreich",
     heimatort: "",
     aufenthaltsstatus: "B",
+    aufenthaltsgrund: null,
     einreisedatum: "20.08.2007",
     zemisNummer: "66778899",
     einreichungsdatumMigrationsamt: "09.07.2026",

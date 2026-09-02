@@ -311,6 +311,14 @@ Vier Anzeigen behaupteten etwas, das nicht zutrifft; sie wurden vor dem Umbau de
 
 **Bekannter Restposten (nicht Teil dieses Laufs):** `SpezialbewilligungDialog` trägt noch die Formulierungen „Vertragsphase … freigegeben/blockiert". Der Dialog ist im heutigen Onboarding nicht erreichbar (`onOpenSpezialbewilligung` wird nirgends aufgerufen); der Text bleibt als offener Posten für einen späteren Lauf.
 
+## Lauf 2 — Staatsangehörigkeitsgruppe und Aufenthaltsgrund erfassbar
+
+Zwei Angaben werden **erfasst, gespeichert und angezeigt, aber nicht ausgewertet** (die Auswertung folgt in Lauf 3 nach `Regelwerk_Auslaenderrecht_DE.md`).
+
+1. **Länderliste kommt produktiv vom Backend.** Die acht Seed-Länder plus `andere` sind nur ein Platzhalter. Die erwartete Struktur ist das Feld `gruppe: 'schweiz' | 'eu_efta' | 'drittstaat' | null` an jedem Eintrag; das Engineering-Team ersetzt später den Seed, nicht die Struktur. `null` steht für ein nicht benanntes Land („Andere"), dessen Gruppe unbekannt ist — es wird keine Zuordnung erfunden.
+2. **`sdaCode` und `gruppe` bestehen nebeneinander.** `sdaCode` ist binär (1 = Schweiz, 2 = übriges Land) und dient dem SDA-/interRAI-Export; `gruppe` ist dreiwertig und dient der ausländerrechtlichen Prüfung — dort darf eine EU-/EFTA-Angehörige mit Ausweis B ohne Verfahren arbeiten, eine Drittstaatsangehörige nicht. Beide beantworten verschiedene Fragen und bleiben getrennt.
+3. **`aufenthaltsgrund = 'andere'` steht für fachlich ungeklärte Gründe**, namentlich Studium und Härtefall. Ohne diesen Wert wählte jemand einen der drei benannten Gründe (Erwerbstätigkeit, Familiennachzug, anerkannter Flüchtling), weil das Formular eine Antwort verlangt. Das Feld erscheint nur bei Drittstaat + Ausweis B, ist dann Pflicht, und wird gelöscht, sobald eine der beiden Bedingungen unwahr wird.
+
 **Quelle zu R21:** Administrativvertrag Spitex Schweiz / ASPS mit
 Einkaufsgemeinschaft HSK, gültig ab 1.4.2023, Anhang 6 «Pflegende
 Angehörige», Ziffer 3.1: Die Ausbildung ist innerhalb eines Jahres ab

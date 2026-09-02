@@ -224,7 +224,7 @@ function angehoerigenEingabe(d: AngehoerigerFormData): AngehoerigenEingabe {
     zivilstand: d.zivilstand, zivilstandSeit: d.zivilstandSeit,
     strasse: d.strasse, plz: d.plz, ort: d.ort, email: d.email, telefon: d.telefon, mobil: d.mobil,
     krankenkasseName: d.krankenkasseName, kartennummer: d.kartennummer, bagNr: d.bagNr,
-    nationalitaet: d.nationalitaet, heimatort: d.heimatort, aufenthaltsstatus: d.aufenthaltsstatus,
+    nationalitaet: d.nationalitaet, heimatort: d.heimatort, aufenthaltsstatus: d.aufenthaltsstatus, aufenthaltsgrund: d.aufenthaltsgrund,
     einreisedatum: d.einreisedatum, zemisNummer: d.zemisNummer,
     einreichungsdatumMigrationsamt: d.einreichungsdatumMigrationsamt,
     bewilligungAblaufdatum: d.bewilligungAblaufdatum,

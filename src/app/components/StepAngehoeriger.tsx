@@ -59,6 +59,8 @@ import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand
 import { Combobox } from "./form/Combobox";
 import { leiteTarifcodeAb } from "../../lib/stammdaten/quellensteuer-tarif";
 import { alterInJahren, AUSBILDUNGSFRAGE_AB_ALTER } from "../../lib/stammdaten/zulagenart";
+import { staatsangehoerigkeitsgruppe } from "../../lib/stammdaten/staatsangehoerigkeit";
+import type { Aufenthaltsgrund } from "../../lib/stammdaten/aufenthaltsgrund";
 
 /* ══════════════════════════════════════════
    TYPES (unchanged export contract)
@@ -76,6 +78,8 @@ export interface AngehoerigerFormData {
   nationalitaet: string;
   heimatort: string;
   aufenthaltsstatus: string;
+  /** Grund der B-Bewilligung — nur bei Drittstaat + Ausweis B; sonst null. */
+  aufenthaltsgrund: Aufenthaltsgrund | null;
   /** Bewilligungs-Felder (nur bei ausländischer Bewilligung, nicht CH/C) */
   einreisedatum: string;
   zemisNummer: string;
@@ -251,6 +255,7 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   nationalitaet: "",
   heimatort: "",
   aufenthaltsstatus: "",
+  aufenthaltsgrund: null,
   einreisedatum: "",
   zemisNummer: "",
   einreichungsdatumMigrationsamt: "",
@@ -447,6 +452,10 @@ function getSubStepStatus(
       // Conditional: Heimatort only for Swiss, Aufenthaltsstatus only for non-Swiss
       if (isSwiss) checks.push(filled(data.heimatort));
       if (filled(data.nationalitaet) && !isSwiss) checks.push(filled(data.aufenthaltsstatus));
+      // Aufenthaltsgrund ist Pflicht, wenn es sichtbar ist (Drittstaat + Ausweis B).
+      if (staatsangehoerigkeitsgruppe(data.nationalitaet) === "drittstaat" && data.aufenthaltsstatus === "B") {
+        checks.push(data.aufenthaltsgrund !== null);
+      }
       const done = checks.filter(Boolean).length;
       if (done === checks.length) return "complete";
       if (done > 0) return "partial";
