@@ -15,7 +15,7 @@
  * abgeschlossenen.
  */
 import { useSyncExternalStore } from "react";
-import { type Patient, type PatientStatus, type AbrechnungsStatus, patientenSeed, patientGemeinde } from "../../app/components/patientData";
+import { type Patient, type PatientStatus, type AbrechnungsStatus, patientenSeed } from "../../app/components/patientData";
 import { isoZuDate, anzeigeZuIso, jetztAnzeige } from "../datum";
 import { GEGENWART_ISO } from "../gegenwart";
 import { ENTLASSUNG_SONSTIGES } from "../stammdaten/entlassung";
@@ -99,15 +99,6 @@ export function pflegeAdresse(patientId: string): PflegeAdresse | null {
 }
 
 /**
- * Politische Gemeinde eines Patienten — die abweichende Gemeinde, wenn gesetzt,
- * sonst der Ort. Einzige Entscheidungsstelle über die Kennung (wie pflegeAdresse).
- */
-export function politischeGemeinde(patientId: string): string {
-  const p = getPatient(patientId);
-  return p ? patientGemeinde(p) : "";
-}
-
-/**
  * Der Patient eines Onboardings, sofern dieses bereits einen erzeugt hat.
  *
  * Exportiert, weil die Notizspur eines neu begonnenen Onboardings eine
@@ -149,7 +140,6 @@ export interface PatientStammdatenEingabe {
   adresseStrasse: string;
   adressePlz: string;
   adresseOrt: string;
-  gemeindeAbweichend: boolean;
   gemeinde: string;
   bfsNummer: string;
   kanton: string;
@@ -221,7 +211,7 @@ function stammdatenAbbilden(
   angehoeriger: AngehoerigerVerknuepfung | null,
 ): Pick<Patient,
   "vorname" | "nachname" | "geburtsdatum" | "ahvNummer" | "aufnahmeDatum" |
-  "strasse" | "plz" | "ort" | "gemeindeAbweichend" | "gemeinde" | "bfsNummer" | "kanton" | "land" |
+  "strasse" | "plz" | "ort" | "gemeinde" | "bfsNummer" | "kanton" | "land" |
   "pflegeortAbweichend" | "pflegeortStrasse" | "pflegeortPlz" | "pflegeortOrt" |
   "sprache" |
   "angehoeriger" | "angehoerigerTelefon" |
@@ -239,8 +229,9 @@ function stammdatenAbbilden(
     strasse: eingabe.adresseStrasse,
     plz: eingabe.adressePlz,
     ort: eingabe.adresseOrt,
-    gemeindeAbweichend: eingabe.gemeindeAbweichend,
-    gemeinde: eingabe.gemeindeAbweichend ? eingabe.gemeinde : "",
+    // Migration: `gemeinde` hält immer den Namen. Ohne erfasste Gemeinde gilt der
+    // Ort (vormals „nicht abweichend → Ort"), damit die Kennung nie leer ist.
+    gemeinde: eingabe.gemeinde || eingabe.adresseOrt,
     bfsNummer: eingabe.bfsNummer,
     kanton: eingabe.kanton,
     land: eingabe.land || "CH",

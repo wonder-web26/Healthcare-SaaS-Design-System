@@ -73,6 +73,9 @@ export interface AngehoerigerErhebung {
   strasse: string;
   plz: string;
   ort: string;
+  /** Kanton (Code) und Land der Wohnadresse; optional, Bestandsdaten kennen sie nicht. */
+  kanton?: string;
+  land?: string;
   email: string;
   telefon: string;
   mobil: string;
@@ -174,7 +177,7 @@ export function createEmptyAngehoerigerKind(): AngehoerigerKind {
 /** Leere Erhebung — jeder Wert "nicht erhoben". */
 export const LEERE_ERHEBUNG: AngehoerigerErhebung = {
   geschlecht: "", geburtsdatum: "", ahvNummer: "", zivilstand: "", zivilstandSeit: "",
-  strasse: "", plz: "", ort: "", email: "", telefon: "", mobil: "",
+  strasse: "", plz: "", ort: "", kanton: "", land: "CH", email: "", telefon: "", mobil: "",
   krankenkasseName: "", kartennummer: "", bagNr: "",
   nationalitaet: "", heimatort: "", aufenthaltsstatus: "", aufenthaltsgrund: null, asylgesuchDatum: null, bundesasylzentrumVerlassen: null, meldungDatum: null, meldungBestaetigung: null, einreisedatum: "", zemisNummer: "",
   einreichungsdatumMigrationsamt: "", bewilligungAblaufdatum: "",

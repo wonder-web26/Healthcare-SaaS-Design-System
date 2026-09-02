@@ -210,11 +210,14 @@ export function PersonalienFormV2({
       <SectionHeader icon={MapPin} label="Adresse" />
       <AdressBlock
         required
-        wert={{ strasse: data.strasse, plz: data.plz, ort: data.ort }}
+        variante="mitKanton"
+        wert={{ strasse: data.strasse, plz: data.plz, ort: data.ort, kanton: data.kanton, land: data.land }}
         onChange={patch => {
           if (patch.strasse !== undefined) set("strasse", patch.strasse);
           if (patch.plz !== undefined) set("plz", patch.plz);
           if (patch.ort !== undefined) set("ort", patch.ort);
+          if (patch.kanton !== undefined) set("kanton", patch.kanton);
+          if (patch.land !== undefined) set("land", patch.land);
         }}
         onBlur={feld => touch(feld)}
         fehler={{

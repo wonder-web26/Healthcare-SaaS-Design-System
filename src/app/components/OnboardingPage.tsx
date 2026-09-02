@@ -229,7 +229,7 @@ function angehoerigenEingabe(d: AngehoerigerFormData): AngehoerigenEingabe {
     vorname: d.vorname, nachname: d.name,
     geschlecht: d.geschlecht, geburtsdatum: d.geburtsdatum, ahvNummer: d.ahvNummer,
     zivilstand: d.zivilstand, zivilstandSeit: d.zivilstandSeit,
-    strasse: d.strasse, plz: d.plz, ort: d.ort, email: d.email, telefon: d.telefon, mobil: d.mobil,
+    strasse: d.strasse, plz: d.plz, ort: d.ort, kanton: d.kanton, land: d.land, email: d.email, telefon: d.telefon, mobil: d.mobil,
     krankenkasseName: d.krankenkasseName, kartennummer: d.kartennummer, bagNr: d.bagNr,
     nationalitaet: d.nationalitaet, heimatort: d.heimatort, aufenthaltsstatus: d.aufenthaltsstatus, aufenthaltsgrund: d.aufenthaltsgrund,
     asylgesuchDatum: d.asylgesuchDatum, bundesasylzentrumVerlassen: d.bundesasylzentrumVerlassen,

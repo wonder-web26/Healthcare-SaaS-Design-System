@@ -104,6 +104,9 @@ export interface AngehoerigerFormData {
   strasse: string;
   plz: string;
   ort: string;
+  /** Kanton (Code, z. B. „ZH") und Land der Wohnadresse. */
+  kanton: string;
+  land: string;
   email: string;
   telefon: string;
   mobil: string;
@@ -282,6 +285,8 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   strasse: "",
   plz: "",
   ort: "",
+  kanton: "",
+  land: "CH",
   email: "",
   telefon: "",
   mobil: "",

@@ -972,6 +972,9 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const [strasse, setStrasse] = useState(patient.strasse);
   const [plz, setPlz] = useState(patient.plz);
   const [ort, setOrt] = useState(patient.ort);
+  const [gemeinde, setGemeinde] = useState(patient.gemeinde);
+  const [bfsNummer, setBfsNummer] = useState(patient.bfsNummer);
+  const [land, setLand] = useState(patient.land);
   const [kanton, setKanton] = useState(patient.kanton);
   const [leistungsart, setLeistungsart] = useState(patient.leistungsart);
 
@@ -996,7 +999,7 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const startEdit = (section: string) => {
     // Snapshot current values for the section
     if (section === "adresse") {
-      setSnapshot({ strasse, plz, ort, kanton, leistungsart });
+      setSnapshot({ strasse, plz, ort, gemeinde, bfsNummer, land, kanton, leistungsart });
     }
     setEditingSection(section);
   };
@@ -1007,6 +1010,9 @@ function TabUeberblick({ patient }: { patient: Patient }) {
       setStrasse(snapshot.strasse ?? strasse);
       setPlz(snapshot.plz ?? plz);
       setOrt(snapshot.ort ?? ort);
+      setGemeinde(snapshot.gemeinde ?? gemeinde);
+      setBfsNummer(snapshot.bfsNummer ?? bfsNummer);
+      setLand(snapshot.land ?? land);
       setKanton(snapshot.kanton ?? kanton);
       setLeistungsart(snapshot.leistungsart ?? leistungsart);
     }
@@ -1022,7 +1028,7 @@ function TabUeberblick({ patient }: { patient: Patient }) {
   const saveEdit = () => {
     if (editingSection === "adresse") {
       aktualisierePatient(patient.id, {
-        strasse, plz, ort, kanton, leistungsart,
+        strasse, plz, ort, gemeinde, bfsNummer, land, kanton, leistungsart,
       });
     }
     setEditingSection(null);
@@ -1053,12 +1059,19 @@ function TabUeberblick({ patient }: { patient: Patient }) {
               Felder ausserhalb von AdressBlock (§3). */}
           {editingSection === "adresse" && (
             <div style={{ marginBottom: "var(--space-4)" }}>
+              {/* Voll-Variante: Gemeinde, BFS-Nummer und Kanton stehen im Block
+                  (Erfassung + Suchauflösung an EINER Stelle, kein separates Kantonfeld). */}
               <AdressBlock
-                wert={{ strasse, plz, ort }}
+                variante="voll"
+                wert={{ strasse, plz, ort, land, gemeinde, bfsNummer, kanton }}
                 onChange={patch => {
                   if (patch.strasse !== undefined) setStrasse(patch.strasse);
                   if (patch.plz !== undefined) setPlz(patch.plz);
                   if (patch.ort !== undefined) setOrt(patch.ort);
+                  if (patch.land !== undefined) setLand(patch.land);
+                  if (patch.gemeinde !== undefined) setGemeinde(patch.gemeinde);
+                  if (patch.bfsNummer !== undefined) setBfsNummer(patch.bfsNummer);
+                  if (patch.kanton !== undefined) setKanton(patch.kanton);
                 }} />
             </div>
           )}
@@ -1066,9 +1079,14 @@ function TabUeberblick({ patient }: { patient: Patient }) {
             {editingSection !== "adresse" && (
               <PEditableField label="Adresse" value={patientAdresse(patient)} editing={false} onChange={() => {}} />
             )}
-            {/* Politische Gemeinde: abgeleitet (patientGemeinde), nie direkt gelesen. Erfassung im Onboarding. */}
-            <PEditableField label="Politische Gemeinde" value={patientGemeinde(patient)} editing={false} onChange={() => {}} />
-            <KantonFeld value={kanton} editing={editingSection === "adresse"} onChange={setKanton} />
+            {/* Gemeinde und Kanton stehen im Lesemodus als Anzeige; im Bearbeiten
+                sind sie Teil des AdressBlock (voll), nicht doppelt. */}
+            {editingSection !== "adresse" && (
+              <PEditableField label="Politische Gemeinde" value={patientGemeinde(patient)} editing={false} onChange={() => {}} />
+            )}
+            {editingSection !== "adresse" && (
+              <KantonFeld value={kanton} editing={false} onChange={setKanton} />
+            )}
             {patient.pflegeortAbweichend && (
               <PEditableField label="Pflegeort" value={adresseAnzeige(patient.pflegeortStrasse, patient.pflegeortPlz, patient.pflegeortOrt)} editing={false} onChange={() => {}} />
             )}

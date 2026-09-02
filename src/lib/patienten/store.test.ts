@@ -6,7 +6,8 @@
  * Wohnsitzadresse — kein Aufrufer entscheidet das selbst.
  */
 import assert from "node:assert/strict";
-import { pflegeAdresse, politischeGemeinde, aktualisierePatient, getPatient } from "./store";
+import { pflegeAdresse, aktualisierePatient, getPatient } from "./store";
+import { patientGemeinde } from "../../app/components/patientData";
 
 const ID = "P-2026-0041"; // Seed-Patient
 const p = getPatient(ID);
@@ -43,22 +44,21 @@ assert.equal(pflegeAdresse(ID)!.ort, p!.ort);
 // Unbekannter Patient → null.
 assert.equal(pflegeAdresse("P-GIBTS-NICHT"), null);
 
-// ── politische Gemeinde: entspricht dem Ort, sonst die abweichende Gemeinde ──
+// ── politische Gemeinde: `gemeinde` hält immer den Namen (kein Abweichend-Schalter) ──
 {
-  // Seed: gemeindeAbweichend false → politischeGemeinde liefert den Ort.
   const ort = getPatient(ID)!.ort;
-  assert.equal(getPatient(ID)!.gemeindeAbweichend, false, "Seed: nicht abweichend");
-  assert.equal(getPatient(ID)!.gemeinde, "", "Seed: gemeinde leer, wenn nicht abweichend");
-  assert.equal(politischeGemeinde(ID), ort, "nicht abweichend → Ort");
+  // Migration: der Seed hält die Gemeinde als Namen (= Ort, weil vormals nicht abweichend).
+  assert.equal(getPatient(ID)!.gemeinde, ort, "Seed: gemeinde = Ort nach Migration");
+  assert.equal(patientGemeinde(getPatient(ID)!), ort, "patientGemeinde liefert die erfasste Gemeinde");
 
-  // Abweichend gesetzt → politischeGemeinde liefert die Gemeinde.
-  aktualisierePatient(ID, { gemeindeAbweichend: true, gemeinde: "Illnau-Effretikon" });
-  assert.equal(politischeGemeinde(ID), "Illnau-Effretikon");
-  assert.notEqual(politischeGemeinde(ID), ort);
+  // Abweichende Gemeinde erfassen → patientGemeinde liefert sie.
+  aktualisierePatient(ID, { gemeinde: "Illnau-Effretikon" });
+  assert.equal(patientGemeinde(getPatient(ID)!), "Illnau-Effretikon");
+  assert.notEqual(patientGemeinde(getPatient(ID)!), ort);
 
-  // Zurückgesetzt → wieder der Ort.
-  aktualisierePatient(ID, { gemeindeAbweichend: false });
-  assert.equal(politischeGemeinde(ID), ort);
+  // Zurück auf den Ort.
+  aktualisierePatient(ID, { gemeinde: ort });
+  assert.equal(patientGemeinde(getPatient(ID)!), ort);
 }
 
 console.log("patienten/store.test.ts: alle Zusicherungen erfüllt");

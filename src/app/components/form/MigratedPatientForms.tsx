@@ -13,7 +13,6 @@ import { AHVNummerInput } from "./AHVNummerInput";
 import { SegmentedControl } from "./SegmentedControl";
 import { Combobox as FormSelect } from "./Combobox";
 import { AdressBlock } from "../ui/AdressBlock";
-import { KANTON_OPTIONS } from "../../../lib/stammdaten/kantone";
 import { FormField } from "./FormField";
 import { DateField } from "./DateField";
 import type { PatientFormData } from "../StepPatient";
@@ -116,13 +115,26 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
       </div>
 
       <SectionHeader icon={MapPin} label="Adresse" />
+      {/* Voll-Variante: Gemeinde, BFS-Nummer und Kanton gehören zum Patienten und
+          stehen im Block; die Adresssuche löst sie mit auf. */}
       <AdressBlock
         required
-        wert={{ strasse: data.adresseStrasse, plz: data.adressePlz, ort: data.adresseOrt }}
+        variante="voll"
+        wert={{
+          strasse: data.adresseStrasse, plz: data.adressePlz, ort: data.adresseOrt,
+          land: data.land, gemeinde: data.gemeinde, bfsNummer: data.bfsNummer, kanton: data.kanton,
+        }}
         onChange={patch => {
-          if (patch.strasse !== undefined) onUpdate("adresseStrasse", patch.strasse);
-          if (patch.plz !== undefined) onUpdate("adressePlz", patch.plz);
-          if (patch.ort !== undefined) onUpdate("adresseOrt", patch.ort);
+          const p: Partial<PatientFormData> = {};
+          if (patch.strasse !== undefined) p.adresseStrasse = patch.strasse;
+          if (patch.plz !== undefined) p.adressePlz = patch.plz;
+          if (patch.ort !== undefined) p.adresseOrt = patch.ort;
+          if (patch.land !== undefined) p.land = patch.land;
+          if (patch.gemeinde !== undefined) p.gemeinde = patch.gemeinde;
+          if (patch.bfsNummer !== undefined) p.bfsNummer = patch.bfsNummer;
+          if (patch.kanton !== undefined) p.kanton = patch.kanton;
+          if (onUpdateMehrere) onUpdateMehrere(p);
+          else Object.entries(p).forEach(([k, v]) => onUpdate(k as keyof PatientFormData, v as string));
         }}
         onBlur={feld => onBlur(feld === "strasse" ? "adresseStrasse" : feld === "plz" ? "adressePlz" : "adresseOrt")}
         fehler={{
@@ -130,25 +142,6 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
           ort: t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined,
         }}
       />
-      <div style={{ marginTop: "var(--space-3)" }}>
-        <SegmentedControl label="Politische Gemeinde" value={data.gemeindeAbweichend ? "abweichend" : "gleich"}
-          onChange={v => onUpdateMehrere?.({ gemeindeAbweichend: v === "abweichend" })}
-          options={[
-            { value: "gleich", label: "Politische Gemeinde entspricht dem Ort" },
-            { value: "abweichend", label: "Politische Gemeinde weicht ab" },
-          ]} />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-3)" }}>
-        {data.gemeindeAbweichend && (
-          <TextInput label="Politische Gemeinde" value={data.gemeinde} onChange={v => onUpdate("gemeinde", v)} placeholder="z.B. Illnau-Effretikon" />
-        )}
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="BFS-Nummer" value={data.bfsNummer} onChange={v => onUpdate("bfsNummer", v.replace(/\D/g, ""))} placeholder="optional" /></div>
-        <FormSelect label="Kanton" value={data.kanton || null} onChange={v => onUpdate("kanton", v || "")} options={KANTON_OPTIONS} placeholder="Kanton wählen" />
-        <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Land" value={data.land} onChange={v => onUpdate("land", v)} placeholder="CH" /></div>
-      </div>
-      <div style={{ marginTop: "var(--space-2)", fontSize: 12, color: "var(--text-tertiary)" }}>
-        Bestimmt den Restkostensatz und den Empfänger der Restkostenrechnung.
-      </div>
 
       <div style={{ marginTop: "var(--space-4)" }}>
         <SegmentedControl label="Pflegeort" value={data.pflegeortAbweichend ? "abweichend" : "gleich"}

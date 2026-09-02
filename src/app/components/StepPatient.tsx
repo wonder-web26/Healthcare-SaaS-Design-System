@@ -139,8 +139,7 @@ export interface PatientFormData {
   adresseStrasse: string;
   adressePlz: string;
   adresseOrt: string;
-  /** Politische Gemeinde (nur wenn abweichend) + BFS-Nummer; Kanton als Auswahl; Land CH. */
-  gemeindeAbweichend: boolean;
+  /** Politische Gemeinde (hält den Namen) + BFS-Nummer; Kanton als Auswahl (Code); Land CH. */
   gemeinde: string;
   bfsNummer: string;
   kanton: string;
@@ -261,7 +260,6 @@ export const emptyPatientForm: PatientFormData = {
   adresseStrasse: "",
   adressePlz: "",
   adresseOrt: "",
-  gemeindeAbweichend: false,
   gemeinde: "",
   bfsNummer: "",
   kanton: "",

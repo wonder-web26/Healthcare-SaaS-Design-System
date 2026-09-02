@@ -408,6 +408,51 @@ AN-A4 fehlt. `[Setzung]`
 
 ---
 
+## Adressblock — Suche löst Gemeinde und Kanton auf
+
+Der geteilte `AdressBlock` (`src/app/components/ui/AdressBlock.tsx`) bekommt eine
+Auflösung und zwei Zustände. Die Auflösung liegt an einer Stelle:
+`src/lib/adresse/adresssuche.ts` (`sucheAdresse`, `AdressTreffer`,
+`trefferAnwenden`, `braucheGemeindeHinweis`, `kantonNameZuCode`).
+
+- **Suchfeld immer sichtbar.** Es steht dauerhaft über den Feldern; kein
+  Umschalten zwischen Zuständen. Ein Treffer füllt die Felder, ersetzt die
+  manuelle Eingabe aber nicht — von Hand lässt sich jederzeit direkt in den
+  Feldern erfassen.
+- **`sucheAdresse` liefert ohne Backend `[]`** — kein Mock. Ein Treffer wird
+  im echten Dienst aus zwei Quellen zusammengesetzt (Adressregister +
+  Gemeindeverzeichnis). **Gemeinde/BFS werden nie aus der PLZ abgeleitet**
+  (eine PLZ kann mehrere Gemeinden umfassen); fehlen sie im Treffer, bleiben
+  die Felder leer und der Hinweis „Gemeinde nicht ermittelbar" erscheint
+  (nur nach einem Treffer, nicht sperrend).
+- **Variante steuert die Tiefe.** `voll` (nur Patient) zeigt Politische
+  Gemeinde, BFS-Nummer, Kanton und Land unter einer Trennlinie; `mitKanton`
+  (Angehörige) ergänzt nur Kanton und Land direkt unter der Anschrift, ohne
+  Gemeinde/BFS; `anschrift` (Default, Kontakt/Pflegeort) endet nach der
+  Anschrift. Die Zusatzfelder von `AdressWert` sind optional; `anschrift`-
+  Verwender bleiben unverändert. Der Angehörige trägt `kanton`/`land` in
+  `AngehoerigerErhebung` (optional — Bestandsdaten kennen sie nicht).
+- **Kanton ist ein Textfeld** (auf Wunsch, statt Auswahl). Die Adresssuche füllt
+  weiterhin den **Code** über `kantonNameZuCode` (eine Zuordnung, keine zweite
+  Liste; kein Treffer → leer, nie ein Klarname), damit aufgelöste Adressen
+  tarifkompatibel bleiben.
+
+  > **Achtung — Tarifzuordnung ohne Normalisierung.** `pflegetarife.tarifgrundlage`
+  > vergleicht Kantonscodes per `===`, ohne Normalisierung. Ein frei getippter
+  > Kanton („Zürich", „zh") findet dann **keinen** Tarif — nur der exakte Code
+  > („ZH") trifft. Das Textfeld verlagert diese Prüfung an die Erfassung. Eine
+  > Normalisierung in der Tarifzuordnung (oder die Rückkehr zur Auswahl) wäre der
+  > robustere Endzustand und ist ein **eigener Lauf mit Regressionsvergleich**.
+
+- **`gemeindeAbweichend` und `politischeGemeinde` entfallen.** `gemeinde` hält
+  jetzt immer den Namen. Migration: vormals nicht abweichend → `gemeinde = ort`;
+  vormals abweichend → `gemeinde` unverändert. Gelesen wird über
+  `patientGemeinde(p) = p.gemeinde` (einzige Lesestelle). Die Store-Abbildung
+  setzt `gemeinde = eingabe.gemeinde || eingabe.adresseOrt`, damit die Kennung
+  nie leer ist.
+
+---
+
 # Dokumente
 
 | Code | Beschriftung | Pflicht | beidseitig | Bedingung |
