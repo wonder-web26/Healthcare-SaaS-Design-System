@@ -66,7 +66,7 @@ export function SpezialbewilligungStep({ data, onChange, arbeitsortKanton }: Pro
     onChange(istMeldung ? { ...data, meldungBestaetigung: doc } : { ...data, spezialbewilligungDokument: doc });
   };
 
-  const titel = istMeldung ? "Meldung des Stellenantritts" : "Spezialbewilligung B";
+  const titel = istMeldung ? "Meldung des Stellenantritts" : "Bewilligung für den Stellenantritt";
 
   return (
     <div style={{ padding: "16px 32px var(--space-8)" }}>

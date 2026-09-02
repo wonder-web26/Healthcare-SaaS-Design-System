@@ -498,7 +498,9 @@ function AuslaenderrechtAnzeige({ data, arbeitsortKanton, arbeitsortOrt }: { dat
 
   const kantonFehlt = !effektiverKanton;
   const brauchtStelle = ergebnis.regime === "meldung" || ergebnis.regime === "bewilligung";
-  const zeigeKantonAuswahl = brauchtStelle && kantonFehlt;
+  // Auswahl sichtbar, solange kein Kanton aus den Patientendaten vorliegt — auch nach
+  // einer manuellen Wahl, damit sie änderbar bleibt.
+  const zeigeKantonAuswahl = brauchtStelle && !derivedKanton;
 
   const semDaten = formDataToSEM(data, { kanton: effektiverKanton ? kantonName(effektiverKanton) : "", ort: effektiverOrt });
   const fehlend = ermittleFehlendeFelderSEM(semDaten);

@@ -122,7 +122,7 @@ function buildSteps(regime: Regime, zeigeNachweis: boolean, vertragGesperrt: boo
     {
       id: 2,
       key: "spezialbewilligung",
-      label: regime === "meldung" ? "Meldung" : "Spezialbewilligung B",
+      label: regime === "meldung" ? "Meldung" : "Bewilligung",
       danger: vertragGesperrt,
     },
     { ...baseSteps[1], id: 3 },
