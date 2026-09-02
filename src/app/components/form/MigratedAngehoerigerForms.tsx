@@ -28,7 +28,7 @@ import { STAATSANGEHOERIGKEIT_OPTIONS, istSchweiz, staatsangehoerigkeitsgruppe }
 import { AUFENTHALTSSTATUS_OPTIONS } from "../../../lib/stammdaten/aufenthaltsstatus";
 import { AUFENTHALTSGRUND_OPTIONS, type Aufenthaltsgrund } from "../../../lib/stammdaten/aufenthaltsgrund";
 import { FELD_MAX } from "./feldbreiten";
-import { leiteTarifcodeAb } from "../../../lib/stammdaten/quellensteuer-tarif";
+import { leiteTarifcodeAb, steuerpflichtHinweis, TARIF_BUCHSTABEN } from "../../../lib/stammdaten/quellensteuer-tarif";
 import { formDataToSEM, erstelleSEMFormular, ermittleFehlendeFelderSEM, downloadBlob } from "../../../lib/sem/meldeformular";
 import { KANTON_OPTIONS, kantonName } from "../../../lib/stammdaten/kantone";
 import { auslaenderrechtEingabe } from "../StepAngehoeriger";
@@ -267,13 +267,19 @@ export function PersonalienFormV2({
    TAB 2: STEUER & SOZIALVERSICHERUNG (migrated)
    ══════════════════════════════════════════ */
 export function SteuerFormV2({
-  data, onChange,
+  data, onChange, onNavigate,
 }: {
   data: AngehoerigerFormData;
   onChange: (d: AngehoerigerFormData) => void;
+  /** Sprung in einen anderen Reiter (Index) für die Ändern-Links der Herleitung. */
+  onNavigate?: (tab: number) => void;
 }) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [tarifOverrideOpen, setTarifOverrideOpen] = useState(false);
+  // Lokaler Zustand der strukturierten Abweichung (Buchstabe · Kinder · Kirchensteuer).
+  const [ovBuchstabe, setOvBuchstabe] = useState("");
+  const [ovKinder, setOvKinder] = useState("0");
+  const [ovKirche, setOvKirche] = useState("N");
   const touch = (f: string) => setTouched(p => ({ ...p, [f]: true }));
   const set = (f: keyof AngehoerigerFormData, v: string) => onChange({ ...data, [f]: v });
 
@@ -281,8 +287,9 @@ export function SteuerFormV2({
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={Receipt} label="Quellensteuer" first />
       <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <SegmentedControl label="Quellensteuerpflichtig?" required value={data.quellensteuer} onChange={v => { if (v === "nein") onChange({ ...data, quellensteuer: v, quellensteuerTarif: "" }); else set("quellensteuer", v); }} options={JA_NEIN} hint="Nicht-CH-Bürger mit B/L sind i.d.R. quellensteuerpflichtig" />
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Konfession" required value={data.konfession || null} onChange={v => { set("konfession", v || ""); touch("konfession"); }} options={KONFESSION_OPTIONS} placeholder="Konfession wählen" hint="Relevant für Kirchensteuer" error={touched.konfession && !filled(data.konfession) ? "Pflichtfeld" : undefined} /></div>
+        {/* Der Umschalter bleibt manuell; der Hinweistext ist abgeleitet (bestimmt nur den Text, nie den Wert). */}
+        <SegmentedControl label="Quellensteuerpflichtig?" required value={data.quellensteuer} onChange={v => { if (v === "nein") onChange({ ...data, quellensteuer: v, quellensteuerTarif: "" }); else set("quellensteuer", v); }} options={JA_NEIN} hint={steuerpflichtHinweis({ nationalitaet: data.nationalitaet, aufenthaltsstatus: data.aufenthaltsstatus, zivilstand: data.zivilstand, partnerNationalitaet: data.partnerNationalitaet, partnerAufenthaltsstatus: data.partnerAufenthaltsstatus })} />
+        <div id="qst-konfession" style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Konfession" required value={data.konfession || null} onChange={v => { set("konfession", v || ""); touch("konfession"); }} options={KONFESSION_OPTIONS} placeholder="Konfession wählen" hint="Relevant für Kirchensteuer" error={touched.konfession && !filled(data.konfession) ? "Pflichtfeld" : undefined} /></div>
       </div>
       {/* SP-10: QSt-Tarifcode — abgeleitet, read-only + kontrollierter Override */}
       {data.quellensteuer === "ja" && (() => {
@@ -300,21 +307,48 @@ export function SteuerFormV2({
           setTimeout(() => set("quellensteuerTarif", tarifErgebnis.code), 0);
         }
         const istOverride = data.tarifcodeQuelle === "manuell_ueberschrieben";
+        const angezeigterCode = istOverride ? data.quellensteuerTarif : tarifErgebnis.code;
         const hatAbweichung = istOverride && data.quellensteuerTarif !== tarifErgebnis.code;
+        const ovCode = `${ovBuchstabe}${ovKinder}${ovKirche}`;
+
+        // Ändern-Link je Zeichen: in den Quell-Reiter springen (Konfession steht hier).
+        const springe = (anker: "zivilstand" | "kinder" | "konfession") => {
+          if (anker === "zivilstand") onNavigate?.(0);
+          else if (anker === "kinder") onNavigate?.(3);
+          else document.getElementById("qst-konfession")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        };
+        const oeffneOverride = () => {
+          const m = (angezeigterCode || "").match(/^([A-Z])(\d)([YN])$/);
+          setOvBuchstabe(m ? m[1] : tarifErgebnis.buchstabe);
+          setOvKinder(m ? m[2] : String(tarifErgebnis.anzahlKinder));
+          setOvKirche(m ? m[3] : (tarifErgebnis.kirchensteuer ? "Y" : "N"));
+          setTarifOverrideOpen(true);
+        };
 
         return (
           <div style={{ marginTop: "var(--space-4)" }}>
-            <div style={{ padding: "12px 16px", background: "var(--status-info-bg)", borderRadius: 10 }}>
-              <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 2 }}>
-                Ermittelter QSt-Tarifcode: {istOverride ? data.quellensteuerTarif : tarifErgebnis.code}
+            <div style={{ padding: "14px 16px", background: "var(--status-info-bg)", borderRadius: 10 }}>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--text-tertiary)", marginBottom: 4 }}>Abgeleiteter QSt-Tarifcode</div>
+              <div style={{ fontSize: 28, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: "var(--text-primary)", lineHeight: 1.1 }}>{angezeigterCode}</div>
+
+              {/* Herleitung: eine Zeile je Zeichen mit Bedeutung, Quelle und Ändern-Link. */}
+              <div style={{ marginTop: "var(--space-3)", display: "flex", flexDirection: "column", gap: 6 }}>
+                {tarifErgebnis.herleitung.map((h, i) => (
+                  <div key={i} className="flex items-center" style={{ gap: 12 }}>
+                    <span style={{ width: 26, textAlign: "center", flexShrink: 0, fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "var(--text-small)", color: "var(--text-primary)", background: "var(--bg-elevated)", borderRadius: 6, padding: "2px 0" }}>{h.zeichen}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{h.bedeutung} <span style={{ color: "var(--text-tertiary)" }}>· {h.quelleFeld}</span></span>
+                    <button type="button" onClick={() => springe(h.quelleAnker)} className="ui-fokusring cursor-pointer" style={{ flexShrink: 0, background: "none", border: "none", padding: 0, fontSize: "var(--text-meta)", color: "var(--brand-primary)", fontWeight: 500 }}>Ändern</button>
+                  </div>
+                ))}
               </div>
-              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                {istOverride
-                  ? `Manuell festgelegt. Ermittlung wäre: ${tarifErgebnis.code} (${tarifErgebnis.begruendung})`
-                  : tarifErgebnis.begruendung}
+
+              {/* Kanton, an dem der Tarifsatz hängt — nur Hinweis, keine Berechnung. */}
+              <div style={{ marginTop: "var(--space-3)", fontSize: 12, color: "var(--text-tertiary)" }}>
+                Der Tarifsatz richtet sich nach dem Wohnsitzkanton der Angehörigen{data.kanton ? `, hier ${kantonName(data.kanton)}` : ""}.
               </div>
+
               {!tarifOverrideOpen && (
-                <button onClick={() => setTarifOverrideOpen(true)} style={{ marginTop: 6, background: "none", border: "none", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", padding: 0, cursor: "pointer" }}>
+                <button type="button" onClick={oeffneOverride} className="ui-fokusring cursor-pointer" style={{ marginTop: 8, background: "none", border: "none", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", padding: 0 }}>
                   Abweichend festlegen…
                 </button>
               )}
@@ -322,27 +356,37 @@ export function SteuerFormV2({
 
             {hatAbweichung && !tarifOverrideOpen && (
               <div style={{ marginTop: "var(--space-2)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
-                Abweichung: gespeichert «{data.quellensteuerTarif}», aktuell ermittelt «{tarifErgebnis.code}».
+                Abweichung: gespeichert «{data.quellensteuerTarif}», abgeleitet «{tarifErgebnis.code}».
                 {data.tarifcodeOverrideBegruendung && <> Begründung: {data.tarifcodeOverrideBegruendung}</>}
               </div>
             )}
 
             {tarifOverrideOpen && (
-              <div style={{ marginTop: "var(--space-3)", padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
-                <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>Tarifcode abweichend festlegen</div>
-                <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Tarifcode" required value={data.quellensteuerTarif} onChange={v => set("quellensteuerTarif", v)} placeholder="z.B. B2Y, A0N, H1Y" /></div>
+              <div style={{ marginTop: "var(--space-3)", padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "var(--border-thin) solid var(--border-default)" }}>
+                <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: 4 }}>Tarifcode abweichend festlegen</div>
+                <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: "var(--space-3)" }}>
+                  Abgeleitet wäre {tarifErgebnis.code}. Eine Abweichung wird an die Buchhaltung zur Prüfung weitergeleitet.
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+                  <FormSelect label="Tarif" value={ovBuchstabe || null} onChange={v => setOvBuchstabe(v || "")} options={TARIF_BUCHSTABEN.map(b => ({ value: b.code, label: b.label }))} placeholder="Tarif wählen" />
+                  <FormSelect label="Kinder" value={ovKinder} onChange={v => setOvKinder(v || "0")} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i), label: String(i) }))} placeholder="0" />
+                  <FormSelect label="Kirchensteuer" value={ovKirche} onChange={v => setOvKirche(v || "N")} options={[{ value: "Y", label: "mit Kirchensteuer" }, { value: "N", label: "ohne Kirchensteuer" }]} placeholder="wählen" />
+                </div>
+                <div style={{ marginTop: "var(--space-3)", fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
+                  Ergibt <span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{ovCode}</span>
+                </div>
                 <div style={{ marginTop: "var(--space-3)" }}>
-                  <TextInput label="Begründung der Abweichung" required value={data.tarifcodeOverrideBegruendung} onChange={v => set("tarifcodeOverrideBegruendung", v)} placeholder="z.B. Grenzgänger Tarif G, gemäss Verfügung Steueramt" hint="Pflichtfeld — wird an die Buchhaltung zur Prüfung weitergeleitet" />
+                  <TextInput label="Begründung der Abweichung" required value={data.tarifcodeOverrideBegruendung} onChange={v => set("tarifcodeOverrideBegruendung", v)} placeholder="z.B. Grenzgängerin Deutschland, gemäss Verfügung des Steueramts" hint="Pflichtfeld — wird an die Buchhaltung zur Prüfung weitergeleitet" />
                 </div>
                 <div className="flex items-center" style={{ gap: 8, marginTop: "var(--space-3)" }}>
                   <button
                     onClick={() => {
-                      if (!filled(data.tarifcodeOverrideBegruendung)) return;
-                      set("tarifcodeQuelle", "manuell_ueberschrieben");
+                      if (!filled(data.tarifcodeOverrideBegruendung) || !ovBuchstabe) return;
+                      onChange({ ...data, quellensteuerTarif: ovCode, tarifcodeQuelle: "manuell_ueberschrieben" });
                       setTarifOverrideOpen(false);
-                      console.info(`[SP-10 Audit] Override QSt-Tarifcode: ${tarifErgebnis.code} → ${data.quellensteuerTarif}, Begründung: ${data.tarifcodeOverrideBegruendung}`);
+                      console.info(`[SP-10 Audit] Override QSt-Tarifcode: ${tarifErgebnis.code} → ${ovCode}, Begründung: ${data.tarifcodeOverrideBegruendung}`);
                     }}
-                    disabled={!filled(data.tarifcodeOverrideBegruendung)}
+                    disabled={!filled(data.tarifcodeOverrideBegruendung) || !ovBuchstabe}
                     className="inline-flex items-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ gap: 4, padding: "8px 16px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
                   >
@@ -350,9 +394,7 @@ export function SteuerFormV2({
                   </button>
                   <button
                     onClick={() => {
-                      set("quellensteuerTarif", tarifErgebnis.code);
-                      set("tarifcodeQuelle", "abgeleitet");
-                      set("tarifcodeOverrideBegruendung", "");
+                      onChange({ ...data, quellensteuerTarif: tarifErgebnis.code, tarifcodeQuelle: "abgeleitet", tarifcodeOverrideBegruendung: "" });
                       setTarifOverrideOpen(false);
                     }}
                     className="cursor-pointer"

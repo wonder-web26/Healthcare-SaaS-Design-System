@@ -767,7 +767,7 @@ export function StepAngehoeriger({
       <div style={{ background: "var(--bg-elevated)" }}>
         <div style={{ padding: "20px 32px 24px", maxWidth: FORMULAR_MAX }}>
           {activeTab === 0 && <PersonalienFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />}
-          {activeTab === 1 && <SteuerFormV2 data={data} onChange={onChange} />}
+          {activeTab === 1 && <SteuerFormV2 data={data} onChange={onChange} onNavigate={setActiveTab} />}
           {activeTab === 2 && <PartnerFormV2 data={data} onChange={onChange} />}
           {activeTab === 3 && <KinderFormV2 data={data} onChange={onChange} />}
           {activeTab === 4 && <AnstellungFormV2 data={data} onChange={onChange} />}

@@ -453,6 +453,48 @@ Auflösung und zwei Zustände. Die Auflösung liegt an einer Stelle:
 
 ---
 
+## Quellensteuer — Herleitung, strukturierte Abweichung, drei Korrekturen
+
+Der Tarifcode bleibt in seiner Ableitung ([quellensteuer-tarif.ts](../src/lib/stammdaten/quellensteuer-tarif.ts) `leiteTarifcodeAb`), wird aber nachvollziehbar und die Abweichung strukturiert.
+
+- **Herleitung sichtbar.** `leiteTarifcodeAb` liefert zusätzlich `herleitung` — je
+  Zeichen eine Zeile (Zeichen, Bedeutung, Quellfeld + Reiter, Sprung-Anker). Die
+  Ableitungslogik ist **unverändert**. Anker: Buchstabe → Zivilstand (Personalien),
+  Ziffer → Kinderzahl (Kinder und Zulagen), Suffix → Konfession (im Reiter selbst,
+  Scroll). Der Buchstabe ist primär am Zivilstand verankert; die
+  Einverdiener/Doppelverdiener-Unterscheidung (B/C) nennt die Bedeutung, sie wird
+  im Reiter Partner erfasst.
+- **Strukturierte Abweichung.** Das Freitextfeld entfällt; an seiner Stelle Tarif ·
+  Kinder (0–9) · Kirchensteuer (Y/N), darunter der zusammengesetzte Code
+  („Ergibt L1Y"). Die Werteliste der Tarifbuchstaben liegt an **einer** Stelle
+  (`TARIF_BUCHSTABEN`) und wird von Ableitung und Abweichung gelesen.
+- **Grenzgängercodes ergänzt:** L, M, N, P, Q — entsprechend A, B, C, H, G. Sie
+  stehen **nur** in der Auswahl der Abweichung, **nicht** in der Ableitung: ob eine
+  Person Grenzgängerin ist, ergibt sich aus heute nicht erfassten Angaben. Die
+  Ableitung erkennt heute **keinen** Grenzgängerfall.
+- **Hinweis zur Steuerpflicht — `[fachlich zu bestätigen]`.** Der Umschalter bleibt
+  **manuell**; nur der Hinweistext darunter ist aus den vorhandenen Daten
+  abgeleitet (`steuerpflichtHinweis`, eine Stelle): eigene CH/Ausweis C → nicht
+  pflichtig; verheiratet mit CH/Ausweis-C-Partner → möglicherweise nicht pflichtig,
+  vor der ersten Lohnabrechnung klären; sonst pflichtig mit Vorbehalt. Die Ausnahme
+  bei Ehe mit einer Schweizerin oder einem Niedergelassenen ist **fachlich zu
+  bestätigen** — ein automatisch gesetzter Umschalter wäre riskant (falsch
+  abgezogene oder unterlassene Quellensteuer ist ein Rückforderungsfall). Der
+  Hinweis macht aufmerksam, die Entscheidung bleibt beim Menschen. Partner-
+  Nationalität und -Ausweisart werden im Reiter Partner erfasst, die Ableitung wäre
+  also möglich — bewusst nicht automatisiert.
+- **Kantonshinweis:** „Der Tarifsatz richtet sich nach dem Wohnsitzkanton der
+  Angehörigen" — mit Nennung des Kantons, sofern aus der Adresse (`kanton`) bekannt.
+  Kein Tarifsatz, keine Berechnung.
+- **Grammatik:** „1 Kind" statt „1 Kinder" (Herleitung und Begründung).
+
+**Offene Frage — Kinderzahl:** Die Tarifziffer meint minderjährige
+unterhaltspflichtige Kinder. Das Formularfeld `anzahlKinder` bildet das heute nicht
+zwingend ab (volljährige oder nicht unterhaltspflichtige Kinder). Welche Kinder für
+die Ziffer zählen, ist fachlich zu klären. `[fachlich zu bestätigen]`
+
+---
+
 # Dokumente
 
 | Code | Beschriftung | Pflicht | beidseitig | Bedingung |
