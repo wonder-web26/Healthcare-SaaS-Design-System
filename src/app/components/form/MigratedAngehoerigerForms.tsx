@@ -4,7 +4,7 @@
  * Form logic (state, validation, conditional fields) unchanged.
  */
 import { useState } from "react";
-import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Info, Download, AlertTriangle, Check, MapPin, Phone, CircleCheck, Bell, Stamp, Ban, HelpCircle } from "lucide-react";
+import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Download, Check, MapPin, Phone, CircleCheck, Bell, Stamp, Ban, HelpCircle } from "lucide-react";
 import { AdressBlock } from "../ui/AdressBlock";
 import { SectionHeader } from "./SectionHeader";
 import { GEGENWART_ISO } from "../../../lib/gegenwart";
@@ -32,7 +32,8 @@ import { leiteTarifcodeAb } from "../../../lib/stammdaten/quellensteuer-tarif";
 import { formDataToSEM, erstelleSEMFormular, ermittleFehlendeFelderSEM, downloadBlob } from "../../../lib/sem/meldeformular";
 import { KANTON_OPTIONS, kantonName } from "../../../lib/stammdaten/kantone";
 import { auslaenderrechtEingabe } from "../StepAngehoeriger";
-import { pruefeAuslaenderrecht, REGIME_TEXT, HINWEIS_TEXT, KLAERUNG_TEXT, SICHERHEIT_ZUSATZ, sperrgrundText, type AuslaenderrechtErgebnis } from "../../../lib/regeln/auslaenderrecht";
+import { pruefeAuslaenderrecht, REGIME_TEXT, HINWEIS_TEXT, sperrgrundText, type AuslaenderrechtErgebnis } from "../../../lib/regeln/auslaenderrecht";
+import { aufenthaltSichtbarkeit, aufenthaltWarnung } from "../../../lib/regeln/freigabe";
 import { FUNKTIONEN_OPTIONS } from "../../../lib/stammdaten/funktionen";
 import { DEUTSCH_NIVEAU_OPTIONS } from "../../../lib/stammdaten/sprachkenntnisse";
 import { FIRMEN_DEFAULT_FERIENWOCHEN, berechneFerienzuschlagProzent, pruefeFerienMinimum } from "../../../lib/stammdaten/ferien";
@@ -86,6 +87,10 @@ export function PersonalienFormV2({
   const isNatSelected = filled(data.nationalitaet);
   const showAufenthalt = isNatSelected && !isSwiss;
 
+  // Feldweise Sichtbarkeit des Aufenthaltsblocks — an einer Stelle bestimmt (Regime ist kanton-unabhängig).
+  const arRegime = pruefeAuslaenderrecht(auslaenderrechtEingabe(data, arbeitsortKanton ?? null)).regime;
+  const sicht = aufenthaltSichtbarkeit(staatsangehoerigkeitsgruppe(data.nationalitaet), data.aufenthaltsstatus, arRegime);
+
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       {/* Identität */}
@@ -135,44 +140,54 @@ export function PersonalienFormV2({
       {/* Angaben zur Aufenthaltsbewilligung + ausländerrechtliches Ergebnis —
           sobald eine Ausweisart gewählt ist. */}
       {filled(data.aufenthaltsstatus) && data.aufenthaltsstatus !== "CH" && (
-        <div style={{ marginTop: "var(--space-4)", padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
-          <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>
-            Angaben zur Aufenthaltsbewilligung
-          </div>
-          {/* Grund der Bewilligung — nur Drittstaat + Ausweis B; unmittelbar nach dem Aufenthaltsstatus */}
-          {staatsangehoerigkeitsgruppe(data.nationalitaet) === "drittstaat" && data.aufenthaltsstatus === "B" && (
-            <div style={{ maxWidth: FELD_MAX.mittel, marginBottom: "var(--space-3)" }}>
-              <FormSelect
-                label="Grund der Aufenthaltsbewilligung"
-                required
-                value={data.aufenthaltsgrund}
-                onChange={v => { onChange({ ...data, aufenthaltsgrund: (v as Aufenthaltsgrund) || null }); touch("aufenthaltsgrund"); }}
-                options={AUFENTHALTSGRUND_OPTIONS}
-                placeholder="Grund wählen"
-                error={touched.aufenthaltsgrund && !data.aufenthaltsgrund ? "Pflichtfeld" : undefined}
-              />
-              <div style={{ marginTop: "var(--space-2)", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
-                Der Grund steht nicht auf dem Ausweis, sondern in der Verfügung des Migrationsamts. Im Zweifel bei der Angehörigen erfragen und „Anderer Grund" wählen.
+        <div style={{ marginTop: "var(--space-4)" }}>
+          {/* Feldweiser Block — erscheint nur, wenn mindestens ein Feld sichtbar ist */}
+          {sicht.block && (
+            <div style={{ padding: "12px 16px", background: "var(--bg-secondary)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+              <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>
+                Angaben zum Aufenthalt
               </div>
+              {/* Grund der Bewilligung — Drittstaat + Ausweis B */}
+              {sicht.grund && (
+                <div style={{ maxWidth: FELD_MAX.mittel, marginBottom: "var(--space-3)" }}>
+                  <FormSelect
+                    label="Grund der Aufenthaltsbewilligung"
+                    required
+                    value={data.aufenthaltsgrund}
+                    onChange={v => { onChange({ ...data, aufenthaltsgrund: (v as Aufenthaltsgrund) || null }); touch("aufenthaltsgrund"); }}
+                    options={AUFENTHALTSGRUND_OPTIONS}
+                    placeholder="Grund wählen"
+                    error={touched.aufenthaltsgrund && !data.aufenthaltsgrund ? "Pflichtfeld" : undefined}
+                  />
+                  <div style={{ marginTop: "var(--space-2)", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
+                    Der Grund steht nicht auf dem Ausweis, sondern in der Verfügung des Migrationsamts. Im Zweifel bei der Angehörigen erfragen und „Anderer Grund" wählen.
+                  </div>
+                </div>
+              )}
+              {/* Ausweis N: Asylgesuch-Datum und Bundesasylzentrum */}
+              {sicht.asylgesuch && (
+                <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-3)" }}>
+                  <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Datum des Asylgesuchs" required wertFormat="display" bereich="past" value={data.asylgesuchDatum || null} onChange={v => onChange({ ...data, asylgesuchDatum: (v as string) || null })} onBlur={() => touch("asylgesuchDatum")} hint="Bestimmt die dreimonatige Wartefrist bis zur Erwerbstätigkeit." /></div>
+                  <div style={{ maxWidth: FELD_MAX.mittel }}><SegmentedControl label="Bundesasylzentrum verlassen" required value={data.bundesasylzentrumVerlassen === null ? "" : data.bundesasylzentrumVerlassen ? "ja" : "nein"} onChange={v => onChange({ ...data, bundesasylzentrumVerlassen: v === "ja" })} options={JA_NEIN} /></div>
+                </div>
+              )}
+              {/* Einreise / ZEMIS / Ablauf — je eigene Bedingung */}
+              {(sicht.einreise || sicht.zemis || sicht.ablauf) && (
+                <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
+                  {sicht.einreise && (
+                    <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Einreisedatum" wertFormat="display" bereich="past" value={data.einreisedatum || null} onChange={v => set("einreisedatum", (v as string) ?? "")} onBlur={() => touch("einreisedatum")} /></div>
+                  )}
+                  {sicht.zemis && (
+                    <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="ZEMIS-Nummer" required value={data.zemisNummer} onChange={v => set("zemisNummer", v)} onBlur={() => touch("zemisNummer")} placeholder="ZEMIS-Nummer" hint="Für die Meldung des Stellenantritts" error={touched.zemisNummer && !filled(data.zemisNummer) ? "Bitte ausfüllen" : undefined} /></div>
+                  )}
+                  {sicht.ablauf && (
+                    <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Ablaufdatum Bewilligung" wertFormat="display" bereich="any" value={data.bewilligungAblaufdatum || null} onChange={v => set("bewilligungAblaufdatum", (v as string) ?? "")} hint="Optional. Das Datum steht auf dem Ausweis." /></div>
+                  )}
+                </div>
+              )}
             </div>
           )}
-          {/* Ausweis N: Asylgesuch-Datum und Bundesasylzentrum */}
-          {data.aufenthaltsstatus === "N" && (
-            <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-3)" }}>
-              <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Datum des Asylgesuchs" required wertFormat="display" bereich="past" value={data.asylgesuchDatum || null} onChange={v => onChange({ ...data, asylgesuchDatum: (v as string) || null })} onBlur={() => touch("asylgesuchDatum")} hint="Bestimmt die dreimonatige Wartefrist bis zur Erwerbstätigkeit." /></div>
-              <div style={{ maxWidth: FELD_MAX.mittel }}><SegmentedControl label="Bundesasylzentrum verlassen" required value={data.bundesasylzentrumVerlassen === null ? "" : data.bundesasylzentrumVerlassen ? "ja" : "nein"} onChange={v => onChange({ ...data, bundesasylzentrumVerlassen: v === "ja" })} options={JA_NEIN} /></div>
-            </div>
-          )}
-          {/* Bewilligungs-Datenfelder: nicht bei C und nicht bei „keiner" */}
-          {data.aufenthaltsstatus !== "C" && data.aufenthaltsstatus !== "keiner" && (
-            <div className="grid grid-cols-1 md:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-              <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Einreisedatum" required wertFormat="display" bereich="past" value={data.einreisedatum || null} onChange={v => set("einreisedatum", (v as string) ?? "")} onBlur={() => touch("einreisedatum")} /></div>
-              <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="ZEMIS-Nummer" required value={data.zemisNummer} onChange={v => set("zemisNummer", v)} onBlur={() => touch("zemisNummer")} placeholder="ZEMIS-Nummer" hint="Zentrales Migrationsinformationssystem" error={touched.zemisNummer && !filled(data.zemisNummer) ? "Bitte ausfüllen" : undefined} /></div>
-              <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Einreichungsdatum Migrationsamt" required wertFormat="display" bereich="any" value={data.einreichungsdatumMigrationsamt || null} onChange={v => set("einreichungsdatumMigrationsamt", (v as string) ?? "")} onBlur={() => touch("einreichungsdatumMigrationsamt")} /></div>
-              <div style={{ maxWidth: FELD_MAX.schmal }}><DateField label="Ablaufdatum Bewilligung" wertFormat="display" bereich="any" value={data.bewilligungAblaufdatum || null} onChange={v => set("bewilligungAblaufdatum", (v as string) ?? "")} hint="Optional. Das Datum steht auf dem Ausweis." /></div>
-            </div>
-          )}
-          {/* Ausländerrechtliches Ergebnis (Engine) */}
+          {/* Ausländerrechtliches Ergebnis (Engine) — unabhängig vom Feld-Block */}
           <AuslaenderrechtAnzeige data={data} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />
         </div>
       )}
@@ -479,6 +494,7 @@ function AuslaenderrechtAnzeige({ data, arbeitsortKanton, arbeitsortOrt }: { dat
   const stil = REGIME_STIL[ergebnis.regime];
   const Icon = stil.icon;
   const sperrgrund = ergebnis.regime === "unzulaessig" ? sperrgrundText(ergebnis.regelNummer) : null;
+  const warnung = aufenthaltWarnung(ergebnis); // §5: eine zusammengelegte Warnung
 
   const kantonFehlt = !effektiverKanton;
   const brauchtStelle = ergebnis.regime === "meldung" || ergebnis.regime === "bewilligung";
@@ -522,22 +538,15 @@ function AuslaenderrechtAnzeige({ data, arbeitsortKanton, arbeitsortOrt }: { dat
             </div>
           )}
 
-          {/* Klärungen (6.4) */}
-          {ergebnis.klaerung && KLAERUNG_TEXT[ergebnis.klaerung] && (
-            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 4 }}>{KLAERUNG_TEXT[ergebnis.klaerung]}</div>
-          )}
-
           {/* Hinweise (6.3) */}
           {ergebnis.hinweise.map(h => HINWEIS_TEXT[h] && (
             <div key={h} style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 4 }}>{HINWEIS_TEXT[h]}</div>
           ))}
 
-          {/* Sicherheitsgrad, sofern nicht belegt */}
-          {ergebnis.sicherheit !== "belegt" && (
-            <div className="flex items-start" style={{ gap: 6, marginTop: 8, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
-              <Info style={{ width: 13, height: 13, flexShrink: 0, marginTop: 1 }} />
-              <span>{SICHERHEIT_ZUSATZ}</span>
-            </div>
+          {/* Eine zusammengelegte Warnung (§5). Kein eigenes Symbol — der Sicherheitsgrad
+              zeigt sich in der Formulierung, das Symbol richtet sich nach dem Regime (§6). */}
+          {warnung && (
+            <div style={{ marginTop: 8, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{warnung}</div>
           )}
 
           {/* Kanton des Arbeitsorts wählen — wenn ein Regime eine Stelle braucht (meldung/bewilligung)

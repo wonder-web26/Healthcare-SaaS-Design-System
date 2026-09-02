@@ -62,7 +62,7 @@ import { alterInJahren, AUSBILDUNGSFRAGE_AB_ALTER } from "../../lib/stammdaten/z
 import { staatsangehoerigkeitsgruppe } from "../../lib/stammdaten/staatsangehoerigkeit";
 import type { Aufenthaltsgrund } from "../../lib/stammdaten/aufenthaltsgrund";
 import type { Aufenthaltsstatus } from "../../lib/stammdaten/aufenthaltsstatus";
-import type { AuslaenderrechtEingabe } from "../../lib/regeln/auslaenderrecht";
+import { pruefeAuslaenderrecht, type AuslaenderrechtEingabe } from "../../lib/regeln/auslaenderrecht";
 
 /* ══════════════════════════════════════════
    TYPES (unchanged export contract)
@@ -491,6 +491,11 @@ function getSubStepStatus(
       if (data.aufenthaltsstatus === "N") {
         checks.push(filled(data.asylgesuchDatum ?? ""));
         checks.push(data.bundesasylzentrumVerlassen !== null);
+      }
+      // ZEMIS-Nummer ist Pflicht, wenn sie sichtbar ist (Regime meldung — fürs SEM-Formular).
+      // Einreise-/Einreichungsdatum sind keine Pflicht mehr (Lauf 5).
+      if (filled(data.aufenthaltsstatus) && !isSwiss && pruefeAuslaenderrecht(auslaenderrechtEingabe(data, null)).regime === "meldung") {
+        checks.push(filled(data.zemisNummer));
       }
       const done = checks.filter(Boolean).length;
       if (done === checks.length) return "complete";

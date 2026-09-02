@@ -3,8 +3,8 @@
  * Lauf mit: npx tsx src/lib/regeln/freigabe.test.ts
  */
 import assert from "node:assert";
-import { pruefeAuslaenderrecht, SPERRGRUND_TEXT, type AuslaenderrechtEingabe } from "./auslaenderrecht";
-import { vertragFreigabe, zeigeNachweisschritt, nichtBestimmbarAufgabe } from "./freigabe";
+import { pruefeAuslaenderrecht, SPERRGRUND_TEXT, KLAERUNG_TEXT, SICHERHEIT_ZUSATZ, type AuslaenderrechtEingabe } from "./auslaenderrecht";
+import { vertragFreigabe, zeigeNachweisschritt, nichtBestimmbarAufgabe, aufenthaltSichtbarkeit, aufenthaltWarnung } from "./freigabe";
 
 const BASIS: AuslaenderrechtEingabe = {
   staatsangehoerigkeitsgruppe: null, ausweisart: null, aufenthaltsgrund: null,
@@ -69,5 +69,69 @@ assert.ok(aufgabeGruppe!.hinweis.includes("Staatsangehörigkeit"), "Hinweis nenn
 // Andere Regime → keine Aufgabe.
 assert.strictEqual(nichtBestimmbarAufgabe(frei), null);
 assert.strictEqual(nichtBestimmbarAufgabe(meldung), null);
+
+// ── Feldweise Sichtbarkeit des Aufenthaltsblocks (§1) ──
+// Deutschland + B (frei): nur Ablaufdatum.
+{
+  const s = aufenthaltSichtbarkeit("eu_efta", "B", frei.regime);
+  assert.deepStrictEqual(
+    { grund: s.grund, asylgesuch: s.asylgesuch, einreise: s.einreise, zemis: s.zemis, ablauf: s.ablauf, block: s.block },
+    { grund: false, asylgesuch: false, einreise: false, zemis: false, ablauf: true, block: true }, "DE+B nur Ablauf");
+}
+// Drittstaat + B + Familiennachzug (frei): Grund + Ablauf, keine ZEMIS, keine Einreise.
+{
+  const r = pruefeAuslaenderrecht(mit({ staatsangehoerigkeitsgruppe: "drittstaat", ausweisart: "B", aufenthaltsgrund: "familiennachzug" }));
+  const s = aufenthaltSichtbarkeit("drittstaat", "B", r.regime);
+  assert.deepStrictEqual({ grund: s.grund, zemis: s.zemis, einreise: s.einreise, ablauf: s.ablauf }, { grund: true, zemis: false, einreise: false, ablauf: true });
+}
+// Drittstaat + B + anerkannter Flüchtling (meldung): Grund + ZEMIS + Ablauf.
+{
+  const s = aufenthaltSichtbarkeit("drittstaat", "B", meldung.regime);
+  assert.strictEqual(s.zemis, true, "ZEMIS bei meldung");
+  assert.strictEqual(s.einreise, false, "keine Einreise bei meldung");
+}
+// Drittstaat + B + Erwerbstätigkeit (bewilligung): Einreise sichtbar (nicht N).
+{
+  const r = pruefeAuslaenderrecht(mit({ staatsangehoerigkeitsgruppe: "drittstaat", ausweisart: "B", aufenthaltsgrund: "erwerbstaetigkeit" }));
+  const s = aufenthaltSichtbarkeit("drittstaat", "B", r.regime);
+  assert.strictEqual(s.einreise, true, "Einreise bei bewilligung, nicht N");
+}
+// Ausweis N: Asyl + Bundesasyl + Ablauf, keine Einreise, keine ZEMIS.
+{
+  const r = pruefeAuslaenderrecht(mit({ staatsangehoerigkeitsgruppe: "drittstaat", ausweisart: "N", bundesasylzentrumVerlassen: true, asylgesuchDatum: "01.01.2026" }));
+  const s = aufenthaltSichtbarkeit("drittstaat", "N", r.regime);
+  assert.deepStrictEqual({ asyl: s.asylgesuch, bundes: s.bundesasylzentrum, einreise: s.einreise, zemis: s.zemis, ablauf: s.ablauf }, { asyl: true, bundes: true, einreise: false, zemis: false, ablauf: true });
+}
+// C und keiner: kein Block.
+assert.strictEqual(aufenthaltSichtbarkeit("drittstaat", "C", pruefeAuslaenderrecht(mit({ ausweisart: "C", staatsangehoerigkeitsgruppe: "drittstaat" })).regime).block, false, "C kein Block");
+assert.strictEqual(aufenthaltSichtbarkeit("drittstaat", "keiner", unzulaessig.regime).block, false, "keiner kein Block");
+
+// Werte-Sichtbarkeit ist rein — verändert die Eingabe nicht (§7).
+{
+  const vorher = aufenthaltSichtbarkeit("eu_efta", "B", frei.regime);
+  aufenthaltSichtbarkeit("eu_efta", "B", frei.regime);
+  assert.strictEqual(vorher.zemis, false);
+}
+
+// ── Eine Warnung statt zwei (§5/§10) ──
+// R06: Klärung + zu_bestaetigen → eine Warnung mit angehängtem Satz.
+{
+  const r = pruefeAuslaenderrecht(mit({ staatsangehoerigkeitsgruppe: "drittstaat", ausweisart: "B", aufenthaltsgrund: "familiennachzug" }));
+  assert.strictEqual(aufenthaltWarnung(r), `${KLAERUNG_TEXT.meldung_kantonal_pruefen} Vor dem Stellenantritt beim zuständigen Amt bestätigen lassen.`);
+}
+// Keine Klärung, aber zu_bestaetigen (Drittstaat L in SO) → allgemeiner Zusatz.
+{
+  const r = pruefeAuslaenderrecht(mit({ staatsangehoerigkeitsgruppe: "drittstaat", ausweisart: "L", arbeitsortKanton: "SO" }));
+  assert.strictEqual(r.sicherheit, "zu_bestaetigen");
+  assert.strictEqual(aufenthaltWarnung(r), SICHERHEIT_ZUSATZ);
+}
+// Klärung bei belegt (R13, N) → Klärung ohne Zusatz.
+{
+  const r = pruefeAuslaenderrecht(mit({ staatsangehoerigkeitsgruppe: "drittstaat", ausweisart: "N", bundesasylzentrumVerlassen: true, asylgesuchDatum: "01.01.2026" }));
+  assert.strictEqual(r.sicherheit, "belegt");
+  assert.strictEqual(aufenthaltWarnung(r), KLAERUNG_TEXT.branchenbeschraenkung_pruefen);
+}
+// frei, belegt → keine Warnung.
+assert.strictEqual(aufenthaltWarnung(frei), null);
 
 console.log("freigabe.test: OK");

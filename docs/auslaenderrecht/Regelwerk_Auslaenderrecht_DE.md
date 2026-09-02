@@ -2,12 +2,12 @@
 
 **Zweck:** Maschinell auswertbare Spezifikation. Bei Erfassung einer pflegenden Angehörigen prüft das System im Hintergrund, ob eine Bewilligung oder eine Meldung erforderlich ist, und zeigt das Ergebnis an.
 
-**Stand:** 1. September 2026 · Fassung 1.3 · Kantone BS, BL, AG, SO, BE, ZH
+**Stand:** 1. September 2026 · Fassung 1.4 · Kantone BS, BL, AG, SO, BE, ZH
 **Entwurf, anwaltlich zu prüfen.** Das Regelwerk unterstützt eine Entscheidung, es trifft sie nicht.
 
 > **Massgebend ist die deutsche Fassung.** Die englische Fassung `regelwerk.en.md` ist eine Übersetzung zur Erläuterung. Bei Abweichungen gilt die deutsche. Schlüssel, Wertelisten, Anzeigetexte und Behördennamen sind in beiden Fassungen identisch und bleiben deutsch.
 
-> ⚠️ **Sechs der vierzehn Regeln sind nicht abschliessend belegt.** R05, R06, R08 und R10 tragen den Sicherheitsgrad `zu_bestaetigen`; für `SO`, `BS` und `BL` ist die Zuständigkeit im Meldeverfahren `ungeklaert`. Das Regelwerk ist implementierbar, aber noch nicht verlässlich. Der Sicherheitsgrad gehört sichtbar in die Oberfläche.
+> ⚠️ **Eine der vierzehn Regeln ist nicht abschliessend belegt.** R08 trägt den Sicherheitsgrad `zu_bestaetigen`; für `SO`, `BS` und `BL` ist die Zuständigkeit im Meldeverfahren `ungeklaert`. Das Regelwerk ist implementierbar, aber noch nicht verlässlich. Der Sicherheitsgrad gehört sichtbar in die Oberfläche.
 
 
 ---
@@ -100,7 +100,7 @@ Schlüssel der Zeile: `staatsangehoerigkeitsgruppe` + `ausweisart` + `aufenthalt
 | R03 | `eu_efta` | `B` | beliebig | `frei` | `sofort` | keine | — | belegt |
 | R04 | `eu_efta` | `L` | beliebig | `frei` | `sofort` | keine | — | belegt |
 | R05 | `eu_efta` | `G` | beliebig | `bewilligung` | `nach_bewilligung` | ja | — | belegt |
-| R06 | `drittstaat` | `B` | `familiennachzug` | `frei` | `sofort` | keine | `meldung_kantonal_pruefen` | zu_bestaetigen |
+| R06 | `drittstaat` | `B` | `familiennachzug` | `frei` | `sofort` | keine | — | belegt |
 | R07 | `drittstaat` | `B` | `asyl_anerkannt` | `meldung` | `nach_meldung` | keine | — | belegt |
 | R08 | `drittstaat` | `B` | `erwerbstaetigkeit` | `bewilligung` | `nach_bewilligung` | ja | `stellenwechsel_pruefen` | zu_bestaetigen |
 | R09 | `drittstaat` | `L` | beliebig | `bewilligung` | `nach_bewilligung` | ja | — | belegt |
@@ -117,6 +117,12 @@ Schlüssel der Zeile: `staatsangehoerigkeitsgruppe` + `ausweisart` + `aufenthalt
 ### 3.1 Erläuterungen zu einzelnen Regeln
 
 **R05 — Grenzgängerinnen aus EU und EFTA brauchen ein Gesuch.** Der Arbeitgeber reicht vor Stellenantritt ein Gesuch um Grenzgängerbewilligung bei der für den Arbeitsort zuständigen Migrationsbehörde ein. Es besteht ein **Anspruch auf Erteilung** — die Behörde prüft, lehnt aber im Regelfall nicht ab. Bei einem Stellenwechsel reicht der **neue** Arbeitgeber ein neues Gesuch ein; die bisherige Bewilligung wird ungültig und ein neuer Ausweis G wird ausgestellt. Das Verfahren ist gebührenpflichtig.
+
+**R06 — Familiennachzug aus einem Drittstaat: kein Verfahren.** Belegt durch die Weisung des Kantons Zürich, das Merkblatt des Kantons Luzern und die Auskunft des Kantons Solothurn: Ehegatten und Kinder von Schweizerinnen sowie von Personen mit Niederlassungs- oder Aufenthaltsbewilligung dürfen in der ganzen Schweiz erwerbstätig sein und die Tätigkeit ohne zusätzliches Bewilligungsverfahren aufnehmen. Grundlage sind Art. 46 AIG und Art. 27 VZAE.
+
+Zwei Abgrenzungen: Angehörige von Personen mit einer **Kurzaufenthaltsbewilligung** haben diesen Anspruch nicht — dort ist jeder Stellenantritt und Stellenwechsel bewilligungspflichtig. Sie tragen selbst einen Ausweis L und fallen damit unter R09.
+
+Und das Recht ist **an die Bewilligung des Nachziehenden gebunden**: Wird dessen Aufenthaltsbewilligung nicht mehr verlängert, entfällt es. Das System kann das nicht erkennen; deshalb der Hinweis `familiennachzug_gebunden`.
 
 **R08 — Warum eine Bewilligung, obwohl die Person bereits erwerbstätig ist.** Eine Aufenthaltsbewilligung B, die einem Drittstaatsangehörigen für eine Erwerbstätigkeit erteilt wurde, ist an Kanton, Arbeitgeber und häufig an die Tätigkeit gebunden. Sie berechtigt zur Arbeit **bei diesem Arbeitgeber**, nicht zur Arbeit schlechthin. Ein Stellenwechsel zu uns verlangt deshalb eine neue behördliche Entscheidung.
 
@@ -196,6 +202,7 @@ Die Schlüssel sind stabil, die Texte änderbar.
 |---|---|
 | `ablauf_nah` | Der Ausweis läuft in weniger als 90 Tagen ab. Die Verlängerung frühzeitig anstossen. |
 | `kanton_unbekannt` | Die zuständige Stelle ergibt sich aus dem Arbeitsort, sobald die Klientin erfasst ist. |
+| `familiennachzug_gebunden` | Das Recht zur Erwerbstätigkeit ist an die Bewilligung der Person gebunden, die den Familiennachzug geltend gemacht hat. Wird deren Bewilligung nicht verlängert, entfällt es. |
 | `aufenthaltsgrund_fehlt` | Bei einem Ausweis B aus einem Drittstaat entscheidet der Aufenthaltsgrund über das Verfahren. Bitte erfassen. |
 
 ### 6.4 Klärungen
@@ -209,6 +216,17 @@ Die Schlüssel sind stabil, die Texte änderbar.
 ### 6.5 Dauerhinweis beim Onboarding-Start
 
 > Als Arbeitgeber gilt bereits, wer eine Person unter seinen Weisungen beschäftigt — unabhängig davon, ob ein schriftlicher Vertrag besteht und ob die Arbeit unentgeltlich oder gegen Kost und Logis erfolgt. Die ausländerrechtliche Prüfung gehört an den Anfang, nicht ans Ende des Onboardings.
+
+### 6.6 Zusammengelegte Warnung
+
+Klärung (6.4) und allgemeiner Sicherheitszusatz sagen bei nicht abschliessend belegten Regeln dasselbe. Es erscheint deshalb **nur eine** Warnung:
+
+- Klärung vorhanden **und** `sicherheit ≠ belegt` → die Klärung, ergänzt um den Satz „Vor dem Stellenantritt beim zuständigen Amt bestätigen lassen."
+- keine Klärung, aber `sicherheit ≠ belegt` → der allgemeine Zusatz „Diese Einschätzung ist nicht abschliessend belegt. Vor dem Stellenantritt beim zuständigen Amt bestätigen lassen."
+- Klärung bei `sicherheit = belegt` → die Klärung ohne Zusatz.
+- sonst → keine Warnung.
+
+Das Symbol der Anzeige richtet sich nach dem **Regime**, nicht nach dem Sicherheitsgrad; der Sicherheitsgrad zeigt sich in der Formulierung. So trägt eine Aussage `frei` kein Warnsymbol, auch wenn die Regel `zu_bestaetigen` ist.
 
 ---
 

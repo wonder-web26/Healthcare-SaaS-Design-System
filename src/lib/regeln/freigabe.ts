@@ -9,7 +9,8 @@
  * Rein und ohne UI-Abhängigkeit: der Nachweis wird als schmales Objekt
  * übergeben, nicht das Formular.
  */
-import { sperrgrundText, type AuslaenderrechtErgebnis, type Regime } from "./auslaenderrecht";
+import { sperrgrundText, KLAERUNG_TEXT, SICHERHEIT_ZUSATZ, type AuslaenderrechtErgebnis, type Regime } from "./auslaenderrecht";
+import type { StaatsangehoerigkeitsGruppe } from "../stammdaten/staatsangehoerigkeit";
 
 /** Grundtexte der regime-abhängigen Gate-Sperre (Abschnitt 6/7a). */
 const GATE_SPERRE_MELDUNG = "Der Stellenantritt ist vor Arbeitsbeginn zu melden.";
@@ -56,6 +57,59 @@ export function vertragFreigabe(
 /** Der Spezialbewilligungs-Schritt wird zum Nachweisschritt: bei meldung und bewilligung. */
 export function zeigeNachweisschritt(regime: Regime): boolean {
   return regime === "meldung" || regime === "bewilligung";
+}
+
+/* ══════════════════════════════════════════ AUFENTHALTSBLOCK — FELDWEISE SICHTBARKEIT ══════════════════════════════════════════ */
+
+/** Welche Felder des Aufenthaltsblocks sind sichtbar — an genau einer Stelle bestimmt (Lauf 5, §1). */
+export type AufenthaltSichtbarkeit = {
+  grund: boolean;
+  asylgesuch: boolean;
+  bundesasylzentrum: boolean;
+  einreise: boolean;
+  zemis: boolean;
+  ablauf: boolean;
+  /** Der Block erscheint nur, wenn mindestens ein Feld sichtbar ist. */
+  block: boolean;
+};
+
+export function aufenthaltSichtbarkeit(
+  gruppe: StaatsangehoerigkeitsGruppe | null,
+  ausweisart: string,
+  regime: Regime,
+): AufenthaltSichtbarkeit {
+  const nichtCnochKeiner = ausweisart !== "C" && ausweisart !== "keiner";
+  const felder = {
+    grund: gruppe === "drittstaat" && ausweisart === "B",
+    asylgesuch: ausweisart === "N",
+    bundesasylzentrum: ausweisart === "N",
+    // Einreisedatum (nicht Pflicht): nur wo ein Bewilligungsverfahren läuft und nicht bei N —
+    // bei N zählt das Datum des Asylgesuchs, nicht die Einreise.
+    einreise: regime === "bewilligung" && ausweisart !== "N",
+    // ZEMIS-Nummer wird ausschliesslich für das SEM-Meldeformular gebraucht → nur bei Meldung.
+    zemis: regime === "meldung",
+    ablauf: nichtCnochKeiner,
+  };
+  const block = felder.grund || felder.asylgesuch || felder.bundesasylzentrum || felder.einreise || felder.zemis || felder.ablauf;
+  return { ...felder, block };
+}
+
+/* ══════════════════════════════════════════ EINE WARNUNG STATT ZWEI ══════════════════════════════════════════ */
+
+/**
+ * Zusammengelegte Warnung (Lauf 5, §5) — an genau einer Stelle bestimmt:
+ * - Klärung UND Sicherheit ≠ belegt → Klärung + „…bestätigen lassen".
+ * - keine Klärung, Sicherheit ≠ belegt → allgemeiner Zusatz.
+ * - Klärung bei Sicherheit = belegt → Klärung ohne Zusatz.
+ * - sonst → keine Warnung.
+ */
+export function aufenthaltWarnung(ergebnis: AuslaenderrechtErgebnis): string | null {
+  const klaerung = ergebnis.klaerung ? KLAERUNG_TEXT[ergebnis.klaerung] ?? null : null;
+  const unbelegt = ergebnis.sicherheit !== "belegt";
+  if (klaerung && unbelegt) return `${klaerung} Vor dem Stellenantritt beim zuständigen Amt bestätigen lassen.`;
+  if (!klaerung && unbelegt) return SICHERHEIT_ZUSATZ;
+  if (klaerung && !unbelegt) return klaerung;
+  return null;
 }
 
 /**

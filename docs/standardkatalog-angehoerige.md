@@ -321,6 +321,30 @@ Regeln sind Teil des Standards. Sie werden nicht je Kunde abgewandelt.
 
 **Aufgeräumt.** `istFluechtling`/`istGrenzgaenger` (ohne Leser) entfernt. **Nicht angefasst:** die Workflow-Aufgabe bei der Konvertierung und der unerreichbare `SpezialbewilligungDialog` (eigene Läufe).
 
+## Lauf 5 — Aufenthaltsblock feldweise, eine Warnung
+
+**Feldweise Sichtbarkeit.** Der Block hiess bisher „Angaben zur Aufenthaltsbewilligung" und erschien als Ganzes bei jedem Ausweis ausser C — mit drei Pflichtfeldern auch dort, wo kein Verfahren läuft. Jetzt hat jedes Feld eine eigene Bedingung, bestimmt an **einer** Stelle (`aufenthaltSichtbarkeit` in `src/lib/regeln/freigabe.ts`); der Block erscheint nur, wenn mindestens ein Feld sichtbar ist. Titel neu: **„Angaben zum Aufenthalt"** (ein Asylgesuch ist keine Bewilligung).
+
+| Feld | Sichtbar | Pflicht |
+|---|---|---|
+| Grund der Aufenthaltsbewilligung | Drittstaat + Ausweis B | ja |
+| Datum des Asylgesuchs · Bundesasylzentrum | Ausweis N | ja |
+| ZEMIS-Nummer | Regime `meldung` | ja |
+| Einreisedatum | Regime `bewilligung` und Ausweis ≠ N | nein |
+| Ablaufdatum Bewilligung | jeder Ausweis ausser C und keiner | nein |
+
+Werte werden beim Unsichtbarwerden **nicht** gelöscht.
+
+**ZEMIS-Nummer** wird ausschliesslich vom SEM-Meldeformular gelesen (`lib/sem/meldeformular.ts`), sonst nirgends → nur bei `meldung` erhoben.
+
+**Aufgelöste Doppelung.** `einreichungsdatumMigrationsamt` im Block war derselbe Sachverhalt wie das Einreichungsdatum im Nachweisschritt (Lauf 4). Das Blockfeld hatte ausser der Abbildung in den Bestand keinen Leser und **entfällt aus dem Block**; der Nachweisschritt (`spezialbewilligungEinreichungsDatum`) ist die einzige Stelle. Das Typfeld bleibt am Modell (Abbildung), ohne Eingabe.
+
+**Befund Einreisedatum.** Kein Leser ausser der Abbildung in den Bestand; ausländerrechtlich ohne Bedeutung (bei Ausweis N zählt das Asylgesuch, nicht die Einreise). Es wird **nicht mehr Pflicht** und erhält — per Entscheid — eine eigene Sichtbarkeit (`bewilligung` und Ausweis ≠ N), damit Deutschland + B nur noch das optionale Ablaufdatum zeigt.
+
+**Eine Warnung statt zwei.** Klärung (6.4) und Sicherheitszusatz sagten bei `zu_bestaetigen` dasselbe. Neu: eine zusammengelegte Warnung (`aufenthaltWarnung`, eine Stelle; Regel in Regelwerk **Abschnitt 6.6**). Das Symbol richtet sich nach dem Regime, nicht nach dem Sicherheitsgrad — `frei` trägt kein Warnsymbol.
+
+**Engine unverändert** (Regeln, Matrix, Kantonstabelle, Ergebnisobjekt).
+
 ## Lauf 4 — Gate-Logik je Regime und vier Korrekturen
 
 **Massgebend:** Regelwerk `docs/auslaenderrecht/Regelwerk_Auslaenderrecht_DE.md`, **Fassung 1.3**, neu **Abschnitt 7a (Freigabe des Vertragsschritts)**. Die Engine (`pruefeAuslaenderrecht`, Kantonstabelle, Ergebnisobjekt) bleibt unverändert; geändert sind Anzeige, Texte und die Freigabe.
