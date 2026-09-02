@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk '/^function InlineSelect/{s=NR} s&&/^}$/{print s\"-\"NR; exit}' src/app/components/ServiceDeskPage.tsx)",
+      "Bash(node -e \"const p=require\\('@babel/parser'\\);const fs=require\\('fs'\\);try{p.parse\\(fs.readFileSync\\('src/app/components/ServiceDeskPage.tsx','utf8'\\),{sourceType:'module',plugins:['typescript','jsx']}\\);console.log\\('parse OK'\\);}catch\\(e\\){console.log\\('FAIL',e.message\\);process.exit\\(1\\);}\")",
+      "Bash(awk '/^function DetailPanel\\\\\\(/{s=NR} s&&/^}$/{print s\"-\"NR; exit}' src/app/components/ServiceDeskPage.tsx)",
+      "Bash(xargs -I{} sh -c 'echo \"{}:\"; grep -oE \"ListenGeruest|DataTable\" {} | sort -u')",
+      "Bash(git status *)",
+      "Bash(node -e ' *)",
+      "Bash(npx tsx *)",
+      "Bash(grep -rnE \"#[0-9a-fA-F]{3,8}\" src/lib/interrai/abklaerung src/app/components/interrai-neu/abklaerung)"
+    ]
+  }
+}
