@@ -5,17 +5,18 @@ import { getAlleTickets, type RhythmusTicket } from "../rhythmus/engine";
 import { personName, type PersonenBezug } from "./personen-aufloesung";
 import type { PendenzTyp } from "../../types/pendenz";
 
-export type Quelle = "workflow" | "ticket" | "rhythmus";
+export type Quelle = "workflow" | "ticket" | "rhythmus" | "manuell";
 
 export interface UnifiedEntry {
   id: string;
   quelle: Quelle;
-  typ: WorkflowTyp | TicketTyp;
+  typ: WorkflowTyp | TicketTyp | "MANUELL";
   typLabel: string;
   pendenzTyp: PendenzTyp;
-  /** Typisierter Personenbezug (Art + Kennung), Pflicht. Der Name wird zur
-   *  Anzeigezeit aufgelöst (personName), nie hier gespeichert. */
-  personBezug: PersonenBezug;
+  /** Typisierter Personenbezug (Art + Kennung). Der Name wird zur Anzeigezeit
+   *  aufgelöst (personName), nie hier gespeichert. Bei automatisch erzeugten
+   *  Pendenzen Pflicht; manuell erstellte dürfen ohne Person existieren (null). */
+  personBezug: PersonenBezug | null;
   /** Betreff = die Sache, nie ein Personenname. */
   betreff: string;
   kontext: string;
@@ -182,6 +183,49 @@ function toUnifiedRhythmus(t: RhythmusTicket): UnifiedEntry {
   };
 }
 
+/* ── Manuell erstellte Pendenzen (Lauf «Pendenzen erstellen») ──
+   In-Memory-Bestand des Prototyps (keine Persistenz). Herkunft ist die
+   erstellende Person + Zeitpunkt (erstelltVon/erstellt, quelle "manuell");
+   automatisch erzeugte tragen stattdessen ihren Auslöser (quelle). */
+const manuelleEintraege: UnifiedEntry[] = [];
+let manuellLaufnummer = 1;
+
+export interface NeuePendenzFelder {
+  betreff: string;
+  pendenzTyp: PendenzTyp;
+  pendenzTypLabel: string;
+  faellig: string; // ISO
+  beschreibung?: string;
+  personBezug?: PersonenBezug | null;
+  verantwortlich?: Person | null;
+  prioritaet?: Prioritaet;
+  erstelltVon: Person;
+  erstelltAm: string; // ISO
+}
+
+/** Erzeugt eine manuelle Pendenz. Status ist immer "offen" — keine Auswahl. */
+export function erstelleManuellePendenz(f: NeuePendenzFelder): UnifiedEntry {
+  const entry: UnifiedEntry = {
+    id: `PD-M${String(manuellLaufnummer++).padStart(3, "0")}`,
+    quelle: "manuell",
+    typ: "MANUELL",
+    typLabel: f.pendenzTypLabel,
+    pendenzTyp: f.pendenzTyp,
+    personBezug: f.personBezug ?? null,
+    betreff: f.betreff,
+    kontext: f.beschreibung ?? "",
+    erstellt: f.erstelltAm,
+    erstelltVon: f.erstelltVon,
+    faellig: f.faellig,
+    status: "offen",
+    verantwortlich: f.verantwortlich ?? NICHT_ZUGEWIESEN,
+    prioritaet: f.prioritaet ?? "mittel",
+    beschreibung: f.beschreibung ?? "",
+  };
+  manuelleEintraege.push(entry);
+  return entry;
+}
+
 /** Dynamisch: enthält Rhythmus-Tickets die zur Laufzeit generiert werden */
 export function getUnifiedEntries(): UnifiedEntry[] {
   /* Erledigte tragen niemand mehr auf; entfallene ebenso wenig — ihr Subjekt
@@ -193,6 +237,7 @@ export function getUnifiedEntries(): UnifiedEntry[] {
     ...workflowTasks.map(toUnifiedWorkflow),
     ...serviceTickets.map(toUnifiedTicket),
     ...rhythmusTickets.map(toUnifiedRhythmus),
+    ...manuelleEintraege,
   ];
 }
 
@@ -202,9 +247,9 @@ export const unifiedEntries: UnifiedEntry[] = [
   ...serviceTickets.map(toUnifiedTicket),
 ];
 
-/** Aufgelöster Personenname (nie gespeichert). */
+/** Aufgelöster Personenname (nie gespeichert); ohne Personenbezug ein stiller Strich. */
 export function entryPersonName(e: UnifiedEntry): string {
-  return personName(e.personBezug);
+  return e.personBezug ? personName(e.personBezug) : "–";
 }
 
 /** Betreff = die Sache. */
@@ -217,7 +262,7 @@ export function entryBetreff(e: UnifiedEntry): string {
  * (Die Pendenzenliste selbst nutzt entryBetreff + entryPersonName getrennt.)
  */
 export function entryTitle(e: UnifiedEntry): string {
-  return personName(e.personBezug);
+  return e.personBezug ? personName(e.personBezug) : e.betreff;
 }
 
 export function countOpenByWorkflowTyp(typ: WorkflowTyp): number {

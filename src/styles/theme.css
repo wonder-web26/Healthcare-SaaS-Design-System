@@ -513,6 +513,12 @@ html {
   .m1-fuss-rechts > :last-child { grid-row: 1; grid-column: 1 / -1; width: 100%; }
   .m1-fuss-rechts > :last-child button { width: 100%; justify-content: center; }
 
+  /* ── Statuswechsel-Bestätigung (Pendenzen): unter 640px zweizeilig,
+     Speichern über die volle Breite. ── */
+  .m1-status-bestaetigen { flex-wrap: wrap; }
+  .m1-status-bestaetigen > button { flex: 1 1 100%; }
+  .m1-status-bestaetigen > .m1-status-speichern { order: -1; }
+
   /* ── Vertragsunterzeichnung: Banner-Aktion und Karten-Aktionen rücken
      unter den Text statt daneben — nichts wird abgeschnitten. ── */
   .m1-vertrag-banner { flex-wrap: wrap; }

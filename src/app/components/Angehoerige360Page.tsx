@@ -59,6 +59,8 @@ import { patientenSeed as patients, adresseAnzeige } from "./patientData";
 import { AdressBlock } from "./ui/AdressBlock";
 import { FORMULAR_MAX } from "./form/feldbreiten";
 import { NotizSpur } from "./notizen/NotizSpur";
+import { NeuePendenzDialog } from "./pendenzen/NeuePendenzDialog";
+import { toast } from "sonner";
 import { type NotizReferenz } from "../../lib/notizen/notizen";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
 import { PersonenAuswahl, type PersonOption } from "./ui/PersonenAuswahl";
@@ -489,6 +491,10 @@ export function Angehoerige360Page() {
     setSearchParams(next, { replace: true });
   };
 
+  // Neue Pendenz aus dem Dossier: Person ist vorbelegt und änderbar (Lauf
+  // «Pendenzen erstellen»); nach dem Anlegen kein Sprung — nur eine Bestätigung.
+  const [neuePendenzOffen, setNeuePendenzOffen] = useState(false);
+
   const allAngehoerigeIds = angehoerige.map(x => x.id);
   const a = angehoerige.find((x) => x.id === angehoerigerIdOrNew);
 
@@ -577,11 +583,18 @@ export function Angehoerige360Page() {
                 <AlertTriangle style={{ width: 11, height: 11 }} /> {kennzeichen.grund}
               </span>
             )}
-            <button onClick={() => navigate("/servicedesk")} className="inline-flex items-center cursor-pointer transition-colors"
+            <button onClick={() => setNeuePendenzOffen(true)} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
               style={{ gap: 6, padding: "7px 14px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}
               onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
               <Plus style={{ width: 14, height: 14 }} /> Neue Pendenz
             </button>
+            {/* Person aus dem Dossier vorbelegt; kein Sprung nach dem Anlegen */}
+            <NeuePendenzDialog
+              offen={neuePendenzOffen}
+              onClose={() => setNeuePendenzOffen(false)}
+              onErstellt={() => { setNeuePendenzOffen(false); toast("Pendenz angelegt — sichtbar in den Pendenzen"); }}
+              vorbelegtePerson={{ art: "angehoeriger", kennung: a.id }}
+            />
           </div>
         </div>
 
@@ -634,7 +647,7 @@ export function Angehoerige360Page() {
               </div>
             )}
             {activeTab === "dokumente" && <TabDokumenteAngehoerige a={a} />}
-            {activeTab === "pendenzen" && <TabTickets tickets={tickets} navigate={navigate} />}
+            {activeTab === "pendenzen" && <TabTickets tickets={tickets} navigate={navigate} personBezug={{ art: "angehoeriger", kennung: a.id }} />}
             {activeTab === "historie" && <TabHistorie />}
           </div>
         </div>
@@ -2699,7 +2712,9 @@ function sortTickets(list: Ticket[], key: string, dir: "asc" | "desc"): Ticket[]
   });
 }
 
-function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path: string) => void }) {
+function TabTickets({ tickets, navigate, personBezug }: { tickets: Ticket[]; navigate: (path: string) => void; personBezug?: { art: "angehoeriger" | "patient"; kennung: string } }) {
+  // Neue Pendenz aus dem Reiter: Person vorbelegt, kein Sprung nach dem Anlegen.
+  const [neuOffen, setNeuOffen] = useState(false);
   // Nur die Abweichung trägt Farbe/Fläche; Regelzustände sind stiller Text (wie in den vier Listen).
   const STATUS_CFG: Record<Ticket["status"], { label: string; dot: string; color: string; weight: string }> = {
     offen: { label: "Offen", dot: "var(--text-tertiary)", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
@@ -2749,13 +2764,19 @@ function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path:
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate("/servicedesk")}
-            className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors"
+            onClick={() => setNeuOffen(true)}
+            className="ui-fokusring inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors"
             style={{ fontWeight: 500 }}
           >
             <Plus className="w-3.5 h-3.5" />
             Neue Pendenz
           </button>
+          <NeuePendenzDialog
+            offen={neuOffen}
+            onClose={() => setNeuOffen(false)}
+            onErstellt={() => { setNeuOffen(false); toast("Pendenz angelegt — sichtbar in den Pendenzen"); }}
+            vorbelegtePerson={personBezug ?? null}
+          />
           <button
             onClick={() => navigate("/servicedesk")}
             className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors"

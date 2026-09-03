@@ -6,6 +6,7 @@ import { personLink, personArtLabel, type PersonenBezug } from "../../lib/mocks/
 import { type Person } from "../../lib/mocks/workflow-tasks";
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
 import { DataTable, useFensterBreite, type SpalteDef } from "./ui/DataTable";
+import { NeuePendenzDialog } from "./pendenzen/NeuePendenzDialog";
 import { isoZuAnzeige, formatTagMonat, isoZuDate } from "../../lib/datum";
 import { PersonenAuswahl, type PersonOption } from "./ui/PersonenAuswahl";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
@@ -272,7 +273,13 @@ export function ServiceDeskPage() {
 
   const isBulkMode = role === "backoffice" || role === "management";
 
-  const allEntries = useMemo(() => getUnifiedEntries(), []);
+  // datenVersion: erhöht sich nach dem Anlegen einer Pendenz — die Liste liest
+  // den Bestand neu, ohne Neuladen der Seite (Lauf «Pendenzen erstellen»).
+  const [datenVersion, setDatenVersion] = useState(0);
+  const [neueOffen, setNeueOffen] = useState(false);
+  const [zuletztNeuId, setZuletztNeuId] = useState<string | null>(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const allEntries = useMemo(() => getUnifiedEntries(), [datenVersion]);
   // Bearbeitete Felder liegen als lokale Overlays je Pendenz über den Quelldaten
   // (derselbe Weg wie bisher der Status — nur jetzt für alle bearbeitbaren Felder).
   const entries = useMemo(
@@ -341,9 +348,13 @@ export function ServiceDeskPage() {
   };
 
   // Statuswechsel: Sonderfall (Signatur bleibt für Bulk/Demo erhalten).
-  const handleStatusChange = (id: string, newStatus: string, by = BEARBEITER) => {
+  // Jeder Wechsel läuft über eine Bestätigung (DetailPanel-Bestätigungszeile bzw.
+  // Rückfrage bei Sammelaktionen); der Verlaufseintrag hält alt→neu, Person und
+  // Zeitpunkt fest. Eine Abschlussbemerkung wird als eigener Verlaufseintrag geführt.
+  const handleStatusChange = (id: string, newStatus: string, by = BEARBEITER, abschlussBemerkung?: string) => {
     const alt = entries.find(e => e.id === id)?.status ?? "offen";
     aendereFeld(id, { feld: "status", feldLabel: "Status", patch: { status: newStatus as UnifiedEntry["status"] }, alt: STATUS_LABEL[alt] || alt, neu: STATUS_LABEL[newStatus] || newStatus, typ: "status" }, by);
+    if (abschlussBemerkung) pushVerlauf(id, { typ: "kommentar", text: `Abschlussbemerkung: ${abschlussBemerkung}`, by, at: BEARBEITET_AM });
   };
 
   // Personenwechsel: verschiebt die Pendenz ins Dossier einer anderen Person → Rückfrage.
@@ -376,11 +387,15 @@ export function ServiceDeskPage() {
   const bulkAction = bulkTypDef?.bulkAction;
 
   const handleBulkExecute = () => {
+    // Kurze Rückfrage statt Bestätigungszeile: Sammelaktion ist ein Statuswechsel.
+    if (!window.confirm(`${bulkSelected.size} Pendenzen auf «${bulkAction?.isDemoMock ? "Abgeschlossen" : "In Arbeit"}» setzen?`)) return;
     for (const id of bulkSelected) handleStatusChange(id, bulkAction?.isDemoMock ? "erledigt" : "in_bearbeitung", "Anna");
     toast(bulkAction?.resultDescription?.replace("{N}", String(bulkSelected.size)) || `${bulkSelected.size} Pendenzen aktualisiert`);
     setBulkSelected(new Set());
   };
   const handleBulkErledigen = () => {
+    // Kurze Rückfrage statt Bestätigungszeile: Sammelaktion ist ein Statuswechsel.
+    if (!window.confirm(`${bulkSelected.size} Pendenzen abschliessen?`)) return;
     for (const id of bulkSelected) handleStatusChange(id, "erledigt", "Anna");
     toast(`${bulkSelected.size} Pendenzen abgeschlossen`);
     setBulkSelected(new Set());
@@ -429,6 +444,8 @@ export function ServiceDeskPage() {
   // Zeilenauswahl aus. Kürzung mit Auslassungspunkten, voller Wert im title.
   const personZelle = (e: UnifiedEntry) => {
     const name = entryPersonName(e);
+    // Manuelle Pendenz ohne Personenbezug: stiller Strich statt Link.
+    if (!e.personBezug) return <span style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>–</span>;
     return (
       <button type="button" title={name} onClick={ev => { ev.stopPropagation(); navigate(personLink(e.personBezug)); }}
         className="ui-fokusring inline-flex items-center cursor-pointer" style={{ gap: 4, maxWidth: "100%", minWidth: 0, background: "transparent", border: "none", padding: 0, fontFamily: "inherit", textAlign: "left" }}>
@@ -518,7 +535,7 @@ export function ServiceDeskPage() {
   // Auswahl-/Aktivakzent (linker Streifen + kräftigerer Rahmen): offene Detailzeile
   // und Bulk-Auswahl. Getrennt von der Tönung — überschreibt die Dringlichkeit nie.
   const zeilenAkzent = (e: UnifiedEntry): string | undefined =>
-    (e.id === selectedId || (isBulkMode && bulkSelected.has(e.id))) ? "var(--brand-primary)" : undefined;
+    (e.id === selectedId || e.id === zuletztNeuId || (isBulkMode && bulkSelected.has(e.id))) ? "var(--brand-primary)" : undefined;
 
   const keineTreffer = sorted.length === 0;
   const suchButton = { background: "transparent", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-pill)", padding: "5px 12px", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", cursor: "pointer" } as const;
@@ -556,7 +573,9 @@ export function ServiceDeskPage() {
           <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
             <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Pendenzen</h1>
             <button
-              className="inline-flex items-center shrink-0 cursor-pointer transition-colors"
+              className="ui-fokusring inline-flex items-center shrink-0 cursor-pointer transition-colors"
+              onClick={() => setNeueOffen(true)}
+              aria-label="Neue Pendenz anlegen"
               style={{ gap: "var(--space-2)", padding: "10px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
               onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"}
               onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}
@@ -744,10 +763,10 @@ export function ServiceDeskPage() {
               draftComment={draftComment}
               onDraftChange={setDraftComment}
               onAddComment={() => handleAddComment(selected.id)}
-              onStatusChange={s => handleStatusChange(selected.id, s)}
+              onStatusChange={(s, bemerkung) => handleStatusChange(selected.id, s, BEARBEITER, bemerkung)}
               onClose={() => waehle(null)}
               onDemoAction={handleDemoAction}
-              onPersonKlick={() => navigate(personLink(selected.personBezug))}
+              onPersonKlick={() => { if (selected.personBezug) navigate(personLink(selected.personBezug)); }}
               onFeld={a => aendereFeld(selected.id, a)}
               onPerson={(bezug, neuName) => handlePersonChange(selected.id, bezug, neuName)}
               onDirty={setEntwurfDirty}
@@ -755,6 +774,21 @@ export function ServiceDeskPage() {
           </div>
         )}
       </div>
+
+      {/* ── NEUE PENDENZ (aus der Liste geöffnet: keine Vorbelegung) ── */}
+      <NeuePendenzDialog
+        offen={neueOffen}
+        onClose={() => setNeueOffen(false)}
+        onErstellt={e => {
+          setDatenVersion(v => v + 1);
+          setZuletztNeuId(e.id);
+          setNeueOffen(false);
+          // Die neue Pendenz muss sofort sichtbar sein: fällt sie nicht ins
+          // Segment «Mir zugewiesen», wird auf «Alle» gewechselt.
+          if (!imSegment(e, filter.segment)) setSegment("alle");
+          toast("Pendenz angelegt");
+        }}
+      />
 
       {/* ── MOBILE / TABLET: Detail-Overlay ── */}
       {selected && (
@@ -773,10 +807,10 @@ export function ServiceDeskPage() {
               draftComment={draftComment}
               onDraftChange={setDraftComment}
               onAddComment={() => handleAddComment(selected.id)}
-              onStatusChange={s => handleStatusChange(selected.id, s)}
+              onStatusChange={(s, bemerkung) => handleStatusChange(selected.id, s, BEARBEITER, bemerkung)}
               onClose={() => waehle(null)}
               onDemoAction={handleDemoAction}
-              onPersonKlick={() => navigate(personLink(selected.personBezug))}
+              onPersonKlick={() => { if (selected.personBezug) navigate(personLink(selected.personBezug)); }}
               onFeld={a => aendereFeld(selected.id, a)}
               onPerson={(bezug, neuName) => handlePersonChange(selected.id, bezug, neuName)}
               onDirty={setEntwurfDirty}
@@ -851,7 +885,7 @@ interface DetailPanelProps {
   draftComment: string;
   onDraftChange: (v: string) => void;
   onAddComment: () => void;
-  onStatusChange: (s: string) => void;
+  onStatusChange: (s: string, abschlussBemerkung?: string) => void;
   onClose: () => void;
   onDemoAction?: (mockType: string) => void;
   onPersonKlick: () => void;
@@ -866,7 +900,8 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
   const faellig = entry.faellig ? faelligDarstellung(entry.faellig, entry.status) : null;
   const faelligFarbe = faellig?.ton === "danger" ? "var(--status-danger)" : faellig?.ton === "warning" ? "var(--status-warning-text)" : "var(--text-tertiary)";
 
-  const erstellEintrag: VerlaufEintrag = { typ: "erstellt", text: "Pendenz erstellt", by: entry.erstelltVon.name, at: formatDate(entry.erstellt) };
+  // Herkunft: automatisch erzeugte tragen ihren Auslöser (Quelle), manuelle die Person.
+  const erstellEintrag: VerlaufEintrag = { typ: "erstellt", text: entry.quelle === "manuell" ? "Pendenz manuell erstellt" : "Pendenz erstellt", by: entry.erstelltVon.name, at: formatDate(entry.erstellt) };
   const eintraege = [erstellEintrag, ...verlauf].reverse();
   const verlaufText = (v: VerlaufEintrag): string =>
     v.feld ? `${v.feldLabel} ${v.freitext ? "bearbeitet" : `geändert · ${v.alt} → ${v.neu}`}` : (v.text || "");
@@ -881,9 +916,22 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
     entwurf.betreff !== entry.betreff || entwurf.beschreibung !== entry.beschreibung ||
     entwurf.pendenzTyp !== entry.pendenzTyp || entwurf.prioritaet !== entry.prioritaet ||
     entwurf.faellig !== entry.faellig ||
-    entwurf.personBezug.art !== entry.personBezug.art || entwurf.personBezug.kennung !== entry.personBezug.kennung
+    entwurf.personBezug?.art !== entry.personBezug?.art || entwurf.personBezug?.kennung !== entry.personBezug?.kennung
   );
-  useEffect(() => { onDirty?.(geaendert); }, [geaendert, onDirty]);
+  // Statuswechsel bestätigen: Klick wählt vor, gespeichert wird erst über die
+  // Bestätigungszeile. Beim Wechsel auf "Abgeschlossen" zusätzlich eine
+  // optionale Abschlussbemerkung. Der schwebende Entwurf meldet sich als
+  // ungesichert (onDirty) — Verlassen ohne Speichern fragt nach.
+  const [statusEntwurf, setStatusEntwurf] = useState<string | null>(null);
+  const [abschlussBemerkung, setAbschlussBemerkung] = useState("");
+  const statusSpeichern = () => {
+    if (!statusEntwurf) return;
+    onStatusChange(statusEntwurf, statusEntwurf === "erledigt" && abschlussBemerkung.trim() ? abschlussBemerkung.trim() : undefined);
+    setStatusEntwurf(null);
+    setAbschlussBemerkung("");
+  };
+  const statusVerwerfen = () => { setStatusEntwurf(null); setAbschlussBemerkung(""); };
+  useEffect(() => { onDirty?.(geaendert || statusEntwurf != null); }, [geaendert, statusEntwurf, onDirty]);
   useEffect(() => () => onDirty?.(false), [onDirty]);
   const start = () => { setEntwurf(leseEntwurf(entry)); setBearbeiten(true); };
   const abbrechen = () => { if (geaendert && !window.confirm("Änderungen verwerfen?")) return; setEntwurf(leseEntwurf(entry)); setBearbeiten(false); };
@@ -906,13 +954,13 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
     if (u.pendenzTyp !== entry.pendenzTyp) onFeld({ feld: "pendenzTyp", feldLabel: "Kategorie", patch: { pendenzTyp: u.pendenzTyp }, alt: pendenzTypen[entry.pendenzTyp]?.label || entry.pendenzTyp, neu: pendenzTypen[u.pendenzTyp]?.label || u.pendenzTyp });
     if (u.prioritaet !== entry.prioritaet) onFeld({ feld: "prioritaet", feldLabel: "Priorität", patch: { prioritaet: u.prioritaet }, alt: PRIO_CFG[entry.prioritaet]?.label || entry.prioritaet, neu: PRIO_CFG[u.prioritaet]?.label || u.prioritaet });
     if (u.faellig !== entry.faellig) onFeld({ feld: "faellig", feldLabel: "Fälligkeit", patch: { faellig: u.faellig }, alt: entry.faellig ? isoZuAnzeige(entry.faellig) : "—", neu: u.faellig ? isoZuAnzeige(u.faellig) : "—" });
-    if (u.personBezug.art !== entry.personBezug.art || u.personBezug.kennung !== entry.personBezug.kennung) {
-      const t = ALLE_PERSONEN.find(p => p.bezug.art === u.personBezug.art && p.bezug.kennung === u.personBezug.kennung);
+    if (u.personBezug?.art !== entry.personBezug?.art || u.personBezug?.kennung !== entry.personBezug?.kennung) {
+      const t = ALLE_PERSONEN.find(p => p.bezug.art === u.personBezug?.art && p.bezug.kennung === u.personBezug?.kennung);
       if (t) onPerson(t.bezug, t.name);
     }
     setBearbeiten(false);
   };
-  const entwurfPersonName = ALLE_PERSONEN.find(p => p.bezug.art === entwurf.personBezug.art && p.bezug.kennung === entwurf.personBezug.kennung)?.name ?? personName;
+  const entwurfPersonName = ALLE_PERSONEN.find(p => p.bezug.art === entwurf.personBezug?.art && p.bezug.kennung === entwurf.personBezug?.kennung)?.name ?? personName;
   const editFeld: React.CSSProperties = { width: "100%", fontFamily: "inherit", padding: "6px 10px", borderRadius: "var(--radius-input)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", outline: "none", fontSize: "var(--text-small)" };
 
   return (
@@ -973,7 +1021,7 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
           ) : (
             <span className="inline-flex items-center" style={{ gap: 4, minWidth: 0, flex: "0 1 auto", overflow: "hidden" }}>
               <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)" }}>{personName}</span>
-              <span style={{ flexShrink: 0, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>· {personArtLabel(entry.personBezug.art)}</span>
+              {entry.personBezug && <span style={{ flexShrink: 0, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>· {personArtLabel(entry.personBezug.art)}</span>}
             </span>
           )}
           {/* Fälligkeit — Lesezustand nur Text; Bearbeitung: Produkt-Datumsfeld (DateField) */}
@@ -1077,16 +1125,23 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
       </div>
 
       {/* ── FUSS (fest): Status-Umschalter · Zuständigkeit.
-             flex-wrap: auf schmalen Fenstern rückt die Zuständigkeit in eine zweite
-             Zeile, statt rechts hinauszuragen (P3); auf Desktop bricht nie etwas um. ── */}
-      <div className="shrink-0 flex items-center justify-between flex-wrap" style={{ gap: "var(--space-2)", padding: "12px 16px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+             Statuswechsel wählt VOR und speichert nicht — die Bestätigungszeile
+             darunter sichert oder verwirft (ein Statuswechsel ist eine Aussage
+             über die Wirklichkeit, keine beiläufige Geste). ── */}
+      <div className="shrink-0" style={{ borderTop: "var(--border-thin) solid var(--border-default)" }}>
+      <div className="flex items-center justify-between flex-wrap" style={{ gap: "var(--space-2)", padding: "12px 16px" }}>
         <div className="inline-flex" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
           {STATUS_SEGMENTE.map(([val, lbl]) => {
-            const aktiv = entry.status === val;
+            const gewaehlt = (statusEntwurf ?? entry.status) === val;
+            const bisher = statusEntwurf != null && entry.status === val;
             return (
-              <button key={val} type="button" onClick={() => { if (!aktiv) onStatusChange(val); }} className="ui-fokusring cursor-pointer transition-colors"
-                style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--bg-elevated)" : "transparent", border: aktiv ? "var(--border-thin) solid var(--border-default)" : "var(--border-thin) solid transparent", fontSize: "var(--text-small)", fontWeight: aktiv ? "var(--weight-medium)" : "var(--weight-regular)", color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-                {lbl}
+              <button key={val} type="button"
+                onClick={() => { if (val === entry.status) statusVerwerfen(); else setStatusEntwurf(val); }}
+                title={bisher ? "Bisheriger Status" : undefined}
+                aria-pressed={gewaehlt}
+                className="ui-fokusring cursor-pointer transition-colors"
+                style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", background: gewaehlt ? "var(--bg-elevated)" : "transparent", border: gewaehlt ? "var(--border-thin) solid var(--brand-primary)" : bisher ? "var(--border-thin) dashed var(--border-default)" : "var(--border-thin) solid transparent", fontSize: "var(--text-small)", fontWeight: gewaehlt ? "var(--weight-medium)" : "var(--weight-regular)", color: gewaehlt ? "var(--text-primary)" : "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                {lbl}{bisher ? " (bisher)" : ""}
               </button>
             );
           })}
@@ -1108,6 +1163,39 @@ function DetailPanel({ entry, verlauf, draftComment, onDraftChange, onAddComment
             </button>
           )}
         />
+      </div>
+      {/* Bestätigungszeile: erscheint nur bei Vorauswahl; unter 640px zweizeilig,
+          Speichern über die volle Breite (m1-status-bestaetigen, theme.css). */}
+      {statusEntwurf != null && (
+        <div style={{ padding: "0 16px 12px" }}>
+          {statusEntwurf === "erledigt" && (
+            <div style={{ marginBottom: "var(--space-2)" }}>
+              <label htmlFor="abschluss-bemerkung" style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>
+                Bemerkung zum Abschluss (optional)
+              </label>
+              <textarea
+                id="abschluss-bemerkung"
+                value={abschlussBemerkung}
+                onChange={e => setAbschlussBemerkung(e.target.value)}
+                rows={2}
+                placeholder="Wie wurde erledigt?"
+                className="ui-fokusring"
+                style={{ width: "100%", resize: "vertical", padding: "8px 10px", fontSize: "var(--text-small)", fontFamily: "inherit", color: "var(--text-primary)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-input)" }}
+              />
+            </div>
+          )}
+          <div className="flex items-center m1-status-bestaetigen" style={{ gap: "var(--space-2)" }}>
+            <button type="button" onClick={statusSpeichern} className="ui-fokusring m1-status-speichern cursor-pointer"
+              style={{ padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none", fontFamily: "inherit" }}>
+              Speichern
+            </button>
+            <button type="button" onClick={statusVerwerfen} className="ui-fokusring cursor-pointer"
+              style={{ padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", fontFamily: "inherit" }}>
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

@@ -103,6 +103,7 @@ import {
   patientGemeinde,
   type Patient,
 } from "./patientData";
+import { NeuePendenzDialog } from "./pendenzen/NeuePendenzDialog";
 import { usePatienten, getPatient, aktualisierePatient, pflegeAdresse, tageBisReAssessment,
   austrittErfassen, AUSTRITT_FEHLERTEXT, type AustrittFehler } from "../../lib/patienten/store";
 import { KANTON_OPTIONS } from "../../lib/stammdaten/kantone";
@@ -817,7 +818,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "ordnerstruktur": return <AnsichtOrdnerstruktur patient={patient} />;
     case "dokumente": return <AnsichtDokumente patient={patient} />;
     case "pflichtluecken": return <AnsichtPflichtluecken patient={patient} />;
-    case "pendenzen": return <TabTickets tickets={tickets} navigate={navigate} />;
+    case "pendenzen": return <TabTickets tickets={tickets} navigate={navigate} personBezug={{ art: "patient", kennung: patient.id }} />;
     case "verlauf": return <TabHistorie patient={patient} />;
     default:
       return ANSICHT_UMFANG[schluessel]
@@ -6084,7 +6085,9 @@ function sortTickets(list: Ticket[], key: string, dir: "asc" | "desc"): Ticket[]
   });
 }
 
-function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path: string) => void }) {
+function TabTickets({ tickets, navigate, personBezug }: { tickets: Ticket[]; navigate: (path: string) => void; personBezug?: { art: "angehoeriger" | "patient"; kennung: string } }) {
+  // Neue Pendenz aus dem Reiter: Person vorbelegt, kein Sprung nach dem Anlegen.
+  const [neuOffen, setNeuOffen] = useState(false);
   // Nur die Abweichung trägt Farbe/Fläche; Regelzustände sind stiller Text (wie in den vier Listen).
   const STATUS_CFG: Record<Ticket["status"], { label: string; dot: string; color: string; weight: string }> = {
     offen: { label: "Offen", dot: "var(--text-tertiary)", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
@@ -6134,13 +6137,19 @@ function TabTickets({ tickets, navigate }: { tickets: Ticket[]; navigate: (path:
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate("/servicedesk")}
-            className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors"
+            onClick={() => setNeuOffen(true)}
+            className="ui-fokusring inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors"
             style={{ fontWeight: 500 }}
           >
             <Plus className="w-3.5 h-3.5" />
             Neue Pendenz
           </button>
+          <NeuePendenzDialog
+            offen={neuOffen}
+            onClose={() => setNeuOffen(false)}
+            onErstellt={() => { setNeuOffen(false); toast("Pendenz angelegt — sichtbar in den Pendenzen"); }}
+            vorbelegtePerson={personBezug ?? null}
+          />
           <button
             onClick={() => navigate("/servicedesk")}
             className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors"

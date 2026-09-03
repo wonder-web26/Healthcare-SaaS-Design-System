@@ -20,6 +20,25 @@ Ihre Zahlen erscheinen stattdessen:
 | «N Dokumente offen» / «N Pflichtdok. fehlen» | Zähler am Reiter «Dokumente» des Angehörigen-Schritts und des Patienten-Schritts (je eigener Anteil) |
 | «N von M Schritten» | **entfällt als Zähler** — die Schrittleiste zeigt denselben Stand über die Zustandssymbole je Schritt (erledigt/in Bearbeitung/ausstehend) |
 
+## Pendenzen: Statuswechsel und manuelles Anlegen (Lauf «Pendenzen erstellen»)
+
+- **Bestätigungspflicht Statuswechsel:** Ein Klick auf einen anderen Status wählt vor
+  und speichert nicht. Gespeichert wird über die Bestätigungszeile (Speichern/Abbrechen)
+  im Detail; Sammelaktionen und Anna-Demoaktionen bestätigen über eine kurze Rückfrage
+  bzw. den bestehenden Demo-Dialog. Verlassen mit offener Vorauswahl fragt nach.
+  Jeder Wechsel steht im Verlauf: alt → neu, Person, Zeitpunkt. Beim Wechsel auf
+  «Abgeschlossen» zusätzlich eine optionale Abschlussbemerkung (eigener Verlaufseintrag).
+- **Wiedereröffnen:** Eine abgeschlossene Pendenz kann heute über denselben Umschalter
+  wieder geöffnet werden (bestehendes Verhalten, von diesem Lauf nicht berührt).
+- **Herkunft:** Manuell erstellte Pendenzen tragen `quelle: "manuell"` mit erstellender
+  Person und Zeitpunkt; der Verlauf zeigt «Pendenz manuell erstellt». Automatisch
+  erzeugte tragen ihren Auslöser (workflow/ticket/rhythmus).
+- **Entfallenes Feld:** Die Personensuche im Neue-Pendenz-Dialog umfasst Klientinnen
+  und Angehörige, **nicht Mitarbeitende** — PersonArt kennt bewusst keine Mitarbeitenden
+  (personen-aufloesung.ts: Personaladministration ausserhalb des Produktumfangs).
+  Kategorie- und Prioritäts-Werteliste sowie der Mitarbeitendenbestand für «Zuständig»
+  existieren; kein weiteres Feld entfällt.
+
 ## Gekürzte Filterbezeichnungen (Lauf 1b, Änderung 2, nur unter 1024 px)
 
 Volle Bezeichnung bleibt als `title`/`aria-label` erhalten.
