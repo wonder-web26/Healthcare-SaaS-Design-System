@@ -4,6 +4,7 @@
  */
 import { useState } from "react";
 import { FileSignature, FileText, AlertTriangle, CircleCheck, Eye } from "lucide-react";
+import { useFensterBreite } from "../ui/DataTable";
 import { SignaturModal, type SignatureData } from "./SignaturModal";
 
 type DocKey = "stellenbeschreibung" | "arbeitsvertrag";
@@ -37,6 +38,9 @@ function formatTimeDE(d: Date): string {
 }
 
 export function VertragsStep({ angehoerigerName, stundenlohn, eintrittsdatum, onValidityChange, onComplete }: Props) {
+  // Lauf 1c (Muster J): unter 1024px trägt die Dokumentkarte den Zustand als
+  // Textzeile (statt Pille) und «Unterschreiben» über die volle Breite.
+  const istSchmal = useFensterBreite() < 1024;
   const [signatures, setSignatures] = useState<Record<DocKey, DocumentSignature>>(() => ({
     stellenbeschreibung: { signed: false, signedAt: null, signedBy: null },
     arbeitsvertrag: { signed: false, signedAt: null, signedBy: null },
@@ -129,28 +133,34 @@ export function VertragsStep({ angehoerigerName, stundenlohn, eintrittsdatum, on
                 <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 2 }}>
                   {doc.pages} Seiten
                   {sig.signed && sig.signedAt && <> · unterschrieben am {formatDateDE(sig.signedAt)} um {formatTimeDE(sig.signedAt)}</>}
+                  {/* J: unter 1024px ist der Zustand Text in der Metazeile, keine Pille */}
+                  {istSchmal && <> · {statusLabel}</>}
                 </div>
               </div>
 
-              {/* Status + Action */}
+              {/* Status + Action.
+                  Unter 1024px (J): keine Zustandspille — die Aktion steht allein
+                  über die volle Breite unter dem Inhalt. */}
               <div className="flex items-center shrink-0 m1-dok-aktion" style={{ gap: "var(--space-2)" }}>
-                <span className="inline-flex items-center" style={{
-                  gap: 4, padding: "4px 12px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
-                  background: isSigned ? "var(--status-success-bg)" : "var(--bg-secondary)",
-                  color: isSigned ? "var(--status-success-text)" : "var(--text-secondary)",
-                }}>
-                  {isSigned ? <CircleCheck style={{ width: 12, height: 12 }} /> : <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "currentColor" }} />}
-                  {statusLabel}
-                </span>
+                {!istSchmal && (
+                  <span className="inline-flex items-center" style={{
+                    gap: 4, padding: "4px 12px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
+                    background: isSigned ? "var(--status-success-bg)" : "var(--bg-secondary)",
+                    color: isSigned ? "var(--status-success-text)" : "var(--text-secondary)",
+                  }}>
+                    {isSigned ? <CircleCheck style={{ width: 12, height: 12 }} /> : <span style={{ width: 5, height: 5, borderRadius: "var(--radius-pill)", background: "currentColor" }} />}
+                    {statusLabel}
+                  </span>
+                )}
 
                 {isSigned ? (
-                  <button type="button" onClick={() => openView(doc.key)} className="inline-flex items-center cursor-pointer transition-colors"
-                    style={{ gap: "var(--space-1)", padding: "6px 14px", borderRadius: "var(--radius-pill)", background: "transparent", border: "none", fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)" }}
+                  <button type="button" onClick={() => openView(doc.key)} className={istSchmal ? "ui-fokusring m1-kartenaktion inline-flex items-center cursor-pointer transition-colors" : "inline-flex items-center cursor-pointer transition-colors"}
+                    style={{ gap: "var(--space-1)", padding: "6px 14px", borderRadius: "var(--radius-pill)", background: "transparent", border: istSchmal ? "var(--border-thin) solid var(--border-default)" : "none", fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)" }}
                     onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                     <Eye style={{ width: 14, height: 14 }} /> Ansehen
                   </button>
                 ) : (
-                  <button type="button" onClick={() => openSign(doc.key)} className="inline-flex items-center cursor-pointer transition-colors"
+                  <button type="button" onClick={() => openSign(doc.key)} className={istSchmal ? "ui-fokusring m1-kartenaktion inline-flex items-center cursor-pointer transition-colors" : "inline-flex items-center cursor-pointer transition-colors"}
                     style={{ gap: "var(--space-2)", padding: "10px 22px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "none" }}
                     onMouseEnter={e => e.currentTarget.style.background = "var(--brand-primary-dark)"} onMouseLeave={e => e.currentTarget.style.background = "var(--brand-primary)"}>
                     <FileSignature style={{ width: 14, height: 14 }} /> Unterschreiben

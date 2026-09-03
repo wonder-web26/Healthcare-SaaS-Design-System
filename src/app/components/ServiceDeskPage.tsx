@@ -626,7 +626,8 @@ export function ServiceDeskPage() {
     const ueberfaellig = e.status !== "erledigt" && e.faellig != null && daysFromToday(e.faellig)! < 0;
     return (
       <div className="flex flex-col" style={{ gap: 6 }}>
-        <div style={{ fontSize: "var(--text-small)" }}>{personZelle(e)}</div>
+        {/* H (Lauf 1c): ohne Personenbezug entfällt die Zeile — kein Strich */}
+        {e.personBezug && <div style={{ fontSize: "var(--text-small)" }}>{personZelle(e)}</div>}
         <div className="flex items-center flex-wrap" style={{ gap: 10 }}>
           {statusZelle(e)}
           {faelligZelle(e)}

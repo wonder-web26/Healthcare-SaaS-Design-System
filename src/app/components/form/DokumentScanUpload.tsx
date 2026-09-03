@@ -8,6 +8,7 @@
  * Gilt für BEIDE Seiten: entitaet=patient UND entitaet=angehoeriger.
  */
 import React, { useState, useEffect, useRef } from "react";
+import { useFensterBreite } from "../ui/DataTable";
 import {
   Camera,
   Upload,
@@ -53,6 +54,10 @@ interface DokumentScanUploadProps {
 export function DokumentScanUpload({ scanKey, docLabel, onFile }: DokumentScanUploadProps) {
   const [cameraOpen, setCameraOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Lauf 1c (Muster J): unter 1024px «Scannen» über die volle Breite, die
+  // zweitrangige Dateiwahl als Symbolknopf (≥44px) daneben — nie zwei gleich
+  // grosse Knöpfe nebeneinander. Desktop unverändert.
+  const istSchmal = useFensterBreite() < 1024;
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -88,24 +93,50 @@ export function DokumentScanUpload({ scanKey, docLabel, onFile }: DokumentScanUp
         className="hidden"
         onChange={handleFileInput}
       />
-      <button
-        type="button"
-        onClick={() => setCameraOpen(true)}
-        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-[12px] hover:bg-primary/90 transition-colors cursor-pointer"
-        style={{ fontWeight: 500, border: "none" }}
-      >
-        <Camera className="w-3.5 h-3.5" />
-        Scannen
-      </button>
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border text-[12px] text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
-        style={{ fontWeight: 500 }}
-      >
-        <Upload className="w-3.5 h-3.5" />
-        Datei wählen
-      </button>
+      {istSchmal ? (
+        <div className="flex items-center" style={{ gap: 8, width: "100%" }}>
+          <button
+            type="button"
+            onClick={() => setCameraOpen(true)}
+            className="ui-fokusring inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary text-primary-foreground text-[12px] hover:bg-primary/90 transition-colors cursor-pointer"
+            style={{ fontWeight: 500, border: "none", flex: "1 1 auto", padding: "10px 12px" }}
+          >
+            <Camera className="w-3.5 h-3.5" />
+            Scannen
+          </button>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            aria-label="Datei wählen"
+            title="Datei wählen"
+            className="ui-fokusring m1-nebenaktion inline-flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+            style={{ width: 44, flexShrink: 0, padding: "10px 0" }}
+          >
+            <Upload className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={() => setCameraOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground text-[12px] hover:bg-primary/90 transition-colors cursor-pointer"
+            style={{ fontWeight: 500, border: "none" }}
+          >
+            <Camera className="w-3.5 h-3.5" />
+            Scannen
+          </button>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-border text-[12px] text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+            style={{ fontWeight: 500 }}
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Datei wählen
+          </button>
+        </>
+      )}
 
       <CameraModal
         open={cameraOpen}

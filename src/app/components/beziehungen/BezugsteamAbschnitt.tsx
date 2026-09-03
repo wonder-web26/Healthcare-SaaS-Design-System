@@ -23,6 +23,7 @@
  */
 import { useState } from "react";
 import { Plus, Check, AlertTriangle, MoreVertical, ArrowRight, Stethoscope, Users } from "lucide-react";
+import { useFensterBreite } from "../ui/DataTable";
 import { InlineSelect } from "../ui/InlineSelect";
 import { KontaktWahl } from "../ui/KontaktWahl";
 import { AppButton } from "../ui/AppButton";
@@ -133,6 +134,17 @@ function Zeile({ b, name, zugehoerigkeit, menuOffen, onMenu, onBearbeiten, onEnt
 }) {
   const aktiv = beziehungAktiv(b);
   const gepflegt = b.rolle === "pflegende_angehoerige"; // aus dem Angehörigen-Reiter
+  // Lauf 1c (G/I): unter 1024px trägt der Kartenkopf nur Name + Menü; die
+  // Chips fliessen in einer eigenen Zeile unter den Angaben. Desktop unverändert.
+  const istSchmal = useFensterBreite() < 1024;
+  const chips = (
+    <>
+      <Chip>{rolleLabel(b.rolle)}</Chip>
+      {b.notfallkontakt && <Chip ton="warnung">Notfallkontakt</Chip>}
+      {b.auskunftsberechtigt && <Chip ton="info">Auskunftsberechtigt</Chip>}
+      {!aktiv && <Chip>beendet</Chip>}
+    </>
+  );
   const detail = [
     b.rolle === "beistand"
       ? (istBeistandschaftErfasst(b.beistandschaft) ? beistandschaftLabels(b.beistandschaft).join(", ") : "Umfang nicht erfasst")
@@ -144,11 +156,8 @@ function Zeile({ b, name, zugehoerigkeit, menuOffen, onMenu, onBearbeiten, onEnt
   return (
     <div style={{ border: "0.5px solid var(--border-default)", borderRadius: 12, padding: "10px 14px", background: "var(--bg-elevated)", opacity: aktiv ? 1 : 0.6 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>{name}</span>
-        <Chip>{rolleLabel(b.rolle)}</Chip>
-        {b.notfallkontakt && <Chip ton="warnung">Notfallkontakt</Chip>}
-        {b.auskunftsberechtigt && <Chip ton="info">Auskunftsberechtigt</Chip>}
-        {!aktiv && <Chip>beendet</Chip>}
+        <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)", minWidth: 0 }}>{name}</span>
+        {!istSchmal && chips}
         <div style={{ marginLeft: "auto", position: "relative", flexShrink: 0 }}>
           <button type="button" aria-label="Aktionen" onClick={onMenu} className="ui-fokusring inline-flex items-center justify-center"
             style={{ width: 28, height: 28, borderRadius: 999, border: "none", background: "transparent", color: "var(--text-tertiary)", cursor: "pointer" }}>
@@ -167,6 +176,12 @@ function Zeile({ b, name, zugehoerigkeit, menuOffen, onMenu, onBearbeiten, onEnt
       {detail.length > 0 && (
         <div style={{ marginLeft: 2, marginTop: 6, fontSize: 12, color: "var(--text-tertiary)", display: "flex", flexWrap: "wrap", gap: "2px 16px" }}>
           {detail.map((d, i) => <span key={i}>{d}</span>)}
+        </div>
+      )}
+      {/* I: Chips fliessen unter den Angaben in einer Zeile mit Umbruch */}
+      {istSchmal && (
+        <div className="m1-chips-fliessen" style={{ marginTop: 6 }}>
+          {chips}
         </div>
       )}
       {gepflegt && (

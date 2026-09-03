@@ -212,6 +212,83 @@ async function messungen(page: Page): Promise<Befund[]> {
       }
     }
 
+    /* P17–P21 (Lauf 1c) — Karteninneres bei 390px. "Karte" = Element mit
+       Rahmen und Rundung ≥8px. */
+    const karten = alle.filter(el => {
+      if (!sichtbar(el)) return false;
+      const cs = getComputedStyle(el);
+      return parseFloat(cs.borderTopLeftRadius) >= 8 && cs.borderTopStyle !== "none" && parseFloat(cs.borderTopWidth) > 0;
+    });
+
+    if (W < 640) {
+      /* P17 — keine Beschriftung neben dem Wert: das alte Muster ist ein Span,
+         dessen zwei Span-Kinder (Beschriftung tertiär + Wert) auf EINER Zeile
+         stehen. Gestapelte (display:block) Kinder sind konform. */
+      for (const karte of karten) {
+        for (const el of Array.from(karte.querySelectorAll("span"))) {
+          const kinder = Array.from(el.children).filter(k => k.tagName === "SPAN" && (k.textContent || "").trim());
+          if (kinder.length !== 2) continue;
+          if (!sichtbar(el)) continue;
+          const [a, b] = kinder.map(k => k.getBoundingClientRect());
+          const gleicheZeile = Math.abs(a.top - b.top) < 4 && b.left > a.left;
+          const ersteTertiaer = getComputedStyle(kinder[0]).color === getComputedStyle(el).color ? false : true;
+          if (gleicheZeile && ersteTertiaer && a.width > 30 && b.width > 10) {
+            befunde.push({ pruefung: "P17", element: beschreibe(el), detail: "Beschriftung neben dem Wert" });
+          }
+        }
+      }
+
+      /* P18 — keine leeren Werte (Gedankenstrich) in Karten */
+      for (const karte of karten) {
+        for (const el of Array.from(karte.querySelectorAll("span, div"))) {
+          const t = (el.textContent || "").trim();
+          if ((t === "—" || t === "–") && sichtbar(el) && el.children.length === 0) {
+            befunde.push({ pruefung: "P18", element: beschreibe(el.parentElement || el), detail: "Gedankenstrich als leerer Wert" });
+          }
+        }
+      }
+
+      /* P19 — Chips gestapelt, obwohl sie nebeneinander Platz hätten */
+      for (const karte of karten) {
+        const chipContainers = Array.from(karte.querySelectorAll("div, span")).filter(c => {
+          const chips = Array.from(c.children).filter(k => {
+            const cs = getComputedStyle(k);
+            const r = k.getBoundingClientRect();
+            return parseFloat(cs.borderTopLeftRadius) >= 99 && r.height > 0 && r.height < 40 && (k.textContent || "").trim();
+          });
+          return chips.length >= 2 && chips.length === c.children.length;
+        });
+        for (const c of chipContainers) {
+          const chips = Array.from(c.children).map(k => k.getBoundingClientRect());
+          const zeilen = new Set(chips.map(r => Math.round(r.top / 8)));
+          const summe = chips.reduce((n, r) => n + r.width + 6, 0);
+          if (zeilen.size === chips.length && chips.length >= 2 && summe < c.getBoundingClientRect().width) {
+            befunde.push({ pruefung: "P19", element: beschreibe(c), detail: `${chips.length} Chips gestapelt trotz Platz` });
+          }
+        }
+      }
+
+      /* P20 — Pflegeort-Zeile höchstens 64px (Messwert wird berichtet) */
+      const pflegeort = document.querySelector("[data-pflegeort-zeile]");
+      if (pflegeort && sichtbar(pflegeort)) {
+        const h = Math.round(pflegeort.getBoundingClientRect().height);
+        befunde.push({ pruefung: h > 64 ? "P20" : "P20-INFO", element: "Pflegeort-Zeile", detail: `${h}px (Grenze 64px)` });
+      }
+
+      /* P21 — keine zwei gleich grossen Knöpfe nebeneinander in einer Karte */
+      for (const karte of karten) {
+        const knoepfe = Array.from(karte.querySelectorAll("button")).filter(b => sichtbar(b) && b.getBoundingClientRect().width > 80);
+        for (let i = 0; i < knoepfe.length; i++) {
+          for (let j = i + 1; j < knoepfe.length; j++) {
+            const a = knoepfe[i].getBoundingClientRect(), b = knoepfe[j].getBoundingClientRect();
+            if (Math.abs(a.top - b.top) < 4 && Math.abs(a.width - b.width) < 8 && knoepfe[i].parentElement === knoepfe[j].parentElement) {
+              befunde.push({ pruefung: "P21", element: `${beschreibe(knoepfe[i])} × ${beschreibe(knoepfe[j])}`, detail: "zwei gleich grosse Knöpfe nebeneinander" });
+            }
+          }
+        }
+      }
+    }
+
     /* P7 — Überdeckungen interaktiver Elemente (Heuristik: >40% Fläche überlappt,
        kein Vorfahr/Nachfahr-Verhältnis, beide sichtbar und bedienbar).
        Elemente, die unter einem Overlay liegen (Dialog, Blatt, Detail-Overlay),

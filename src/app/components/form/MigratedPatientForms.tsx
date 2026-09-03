@@ -33,6 +33,7 @@ import { SDA_EROEFFNUNGSGRUND_OPTIONS } from "../../../lib/stammdaten/sda-eroeff
 import { SDA_ANMELDENDE_INSTITUTION_OPTIONS, INSTITUTION_ANDERE } from "../../../lib/stammdaten/sda-anmeldende-institution";
 import { SDA_ZUSAMMENLEBEN_OPTIONS } from "../../../lib/stammdaten/sda-zusammenleben";
 import { SDA_JA_NEIN_OPTIONS } from "../../../lib/stammdaten/sda-ja-nein";
+import { Switch } from "../ui/switch";
 import { SDA_SPRACHE_OPTIONS, SPRACHE_ANDERE } from "../../../lib/stammdaten/sda-sprache";
 import { AppButton } from "../ui/AppButton";
 
@@ -144,12 +145,30 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
       />
 
       <div style={{ marginTop: "var(--space-4)" }}>
-        <SegmentedControl label="Pflegeort" value={data.pflegeortAbweichend ? "abweichend" : "gleich"}
-          onChange={v => onUpdateMehrere?.({ pflegeortAbweichend: v === "abweichend" })}
-          options={[
-            { value: "gleich", label: "Pflege findet an dieser Adresse statt" },
-            { value: "abweichend", label: "Pflege findet an einer anderen Adresse statt" },
-          ]} />
+        {/* Muster K (Lauf 1c): unter 1024px eine Zeile — Frage links, Schalter
+            rechts, der erklärende Satz gedämpft darunter. Vorgabe aus = Pflege
+            an der Wohnadresse. Desktop behält die zwei Pillen unverändert. */}
+        <div className="hidden lg:block">
+          <SegmentedControl label="Pflegeort" value={data.pflegeortAbweichend ? "abweichend" : "gleich"}
+            onChange={v => onUpdateMehrere?.({ pflegeortAbweichend: v === "abweichend" })}
+            options={[
+              { value: "gleich", label: "Pflege findet an dieser Adresse statt" },
+              { value: "abweichend", label: "Pflege findet an einer anderen Adresse statt" },
+            ]} />
+        </div>
+        <div className="lg:hidden m1-schalterzeile" data-pflegeort-zeile>
+          {/* Frage links, der erklärende Satz gedämpft DARUNTER (nicht im
+              Bedienelement); der Schalter rechts, vertikal zentriert. */}
+          <div style={{ minWidth: 0 }}>
+            <label htmlFor="pflegeort-schalter" style={{ display: "block", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", cursor: "pointer", lineHeight: 1.3 }}>
+              Pflege an einer anderen Adresse
+            </label>
+            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2, lineHeight: 1.3 }}>
+              Wohnsitz bleibt für die Restkosten massgebend
+            </div>
+          </div>
+          <Switch id="pflegeort-schalter" checked={data.pflegeortAbweichend} onCheckedChange={c => onUpdateMehrere?.({ pflegeortAbweichend: c })} />
+        </div>
       </div>
       {data.pflegeortAbweichend && (
         <div style={{ marginTop: "var(--space-4)" }}>

@@ -13,6 +13,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { Combobox as FormSelect } from "./Combobox";
 import { GroupBox } from "./GroupBox";
 import { DokumentScanUpload, type ScanFile } from "./DokumentScanUpload";
+import { useFensterBreite } from "../ui/DataTable";
 import type { AngehoerigerFormData } from "../StepAngehoeriger";
 import { createEmptyKind } from "../StepAngehoeriger";
 import { zulagenart, zulagenartLabel, alterInJahren, alterAnzeige, AUSBILDUNGSFRAGE_AB_ALTER, type Zulagenart } from "../../../lib/stammdaten/zulagenart";
@@ -345,6 +346,9 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung, arbe
   arbeitsortOrt?: string;
 }) {
   const [previewOpen, setPreviewOpen] = useState<string | null>(null);
+  // Lauf 1c (Muster J): unter 1024px sind Vorder- und Rückseite eigene Karten,
+  // kein Kasten im Kasten — der äussere Dokumentrahmen entfällt dort.
+  const istSchmal = useFensterBreite() < 1024;
 
   // Bedingungen aus LIVE-Formulardaten ableiten (reaktiv bei jeder Änderung)
   const kontext: DokumentKontext = {
@@ -500,7 +504,11 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung, arbe
             const scanVorne = data.scans[`${doc.code}_vorne`];
             const scanHinten = data.scans[`${doc.code}_hinten`];
             return (
-              <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
+              // J: unter 1024px kein Kasten im Kasten — der äussere Rahmen entfällt,
+              // die Bezeichnung bleibt als Zwischentitel, je Seite eine eigene Karte.
+              <div key={doc.code} style={istSchmal
+                ? { padding: 0 }
+                : { padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
                 <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
                   <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
                     {doc.label} {doc.pflicht && <span style={{ color: "var(--status-danger)" }}>*</span>}
@@ -641,15 +649,24 @@ export function ScanSlot({ label, scanKey, docLabel, scan, onFile, onRemove, pre
   setPreviewOpen: (v: string | null) => void;
 }) {
   const s = scan as { name: string; size: string; timestamp?: string; previewUrl?: string | null } | null | undefined;
+  // Lauf 1c (Muster J): unter 1024px ist jede Seite eine eigene Karte —
+  // Bezeichnung, darunter der Zustand als Text, darunter die Aktion in voller
+  // Breite (die Aufteilung der Aktion übernimmt DokumentScanUpload).
+  const istSchmal = useFensterBreite() < 1024;
   return (
-    <div style={{ padding: "8px 12px", background: "var(--bg-elevated)", borderRadius: 8, border: "0.5px solid var(--border-default)" }}>
+    <div style={{ padding: istSchmal ? "10px 14px" : "8px 12px", background: "var(--bg-elevated)", borderRadius: istSchmal ? 10 : 8, border: "0.5px solid var(--border-default)" }}>
       <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 6, fontWeight: 500 }}>{label}</div>
       {s ? (
         <ScanDisplay scanKey={scanKey} scan={s} onRemove={onRemove} previewOpen={previewOpen} setPreviewOpen={setPreviewOpen} />
       ) : (
-        <div className="flex items-center" style={{ gap: 8 }}>
-          <DokumentScanUpload scanKey={scanKey} docLabel={docLabel} onFile={onFile} />
-        </div>
+        <>
+          {istSchmal && (
+            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginBottom: 8 }}>Noch nicht erfasst</div>
+          )}
+          <div className="flex items-center" style={{ gap: 8 }}>
+            <DokumentScanUpload scanKey={scanKey} docLabel={docLabel} onFile={onFile} />
+          </div>
+        </>
       )}
     </div>
   );

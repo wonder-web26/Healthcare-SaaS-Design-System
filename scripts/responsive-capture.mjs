@@ -59,6 +59,32 @@ export const VIEWS = [
     },
   },
   {
+    // Lauf 1c: Versicherungen + Bezugs-/Pflegeteam (Muster G/H/I/J).
+    name: "onboarding-soziales",
+    path: "/onboarding/OB-2026-101?step=patient&tab=steuer",
+    keinP1: true,
+  },
+  {
+    // Lauf 1c: Kinder & Zulagen (GroupBox-Kartenkopf, Muster G/I).
+    name: "onboarding-kinder",
+    path: "/onboarding/OB-2026-101",
+    keinP1: true,
+    actions: async (page) => {
+      await page.locator("button", { hasText: "Kinder & Zulagen" }).first().click();
+      await page.waitForTimeout(400);
+    },
+  },
+  {
+    // Lauf 1c: Dokumente scannen (Muster J, Karten statt Kästen).
+    name: "onboarding-dokumente",
+    path: "/onboarding/OB-2026-101",
+    keinP1: true,
+    actions: async (page) => {
+      await page.locator("button", { hasText: "Dokumente" }).first().click();
+      await page.waitForTimeout(400);
+    },
+  },
+  {
     // Lauf 1b: Vertragsunterzeichnung (P15 — keine abgeschnittenen Beschriftungen).
     // keinP1: erst nach Lauf 1 aufgenommen, es gibt kein Vorher-Referenzbild.
     name: "onboarding-vertrag",

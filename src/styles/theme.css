@@ -467,6 +467,44 @@ html {
      !important, weil die Quellen Inline-Stile tragen. */
   .m1-mindestschrift { font-size: 11px !important; }
 
+  /* ── Muster G–K (Lauf 1c): Karteninnere, nur unter 1024px ──
+     G  m1-karte-stapel   · Beschriftung über Wert, kein Zweispalter in Karten
+     H  (kein CSS — leere Werte entfallen an der Aufrufstelle)
+     I  m1-chips-fliessen · Chips in einer Zeile mit Umbruch, nie gestapelt
+     J  m1-kartenaktion   · Hauptaktion volle Breite unter dem Inhalt,
+        m1-nebenaktion    · zweitrangige Aktion als Symbolknopf ≥44px
+     K  m1-schalterzeile  · Ja-Nein als Zeile: Frage links, Schalter rechts ── */
+  .m1-karte-stapel {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 2px !important;
+  }
+  .m1-chips-fliessen {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .m1-kartenaktion {
+    display: flex !important;
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    justify-content: center !important;
+    margin-top: var(--space-2);
+  }
+  .m1-nebenaktion { min-width: 44px; }
+  .m1-schalterzeile {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: var(--space-3);
+  }
+  /* J auf den Dokumentkarten der Vertragsunterzeichnung: die Aktionsgruppe
+     rückt unter den Inhalt (Lauf 1b <640, per Muster J neu bis 1023). */
+  .m1-dok-karte { flex-wrap: wrap; }
+  .m1-dok-karte > .m1-dok-aktion { flex: 1 1 100%; justify-content: flex-end; }
+
   /* ── Muster F: Touchflächen mindestens 44px hoch ──
      Breitenbasiert (nicht nur pointer:coarse), damit es auf allen
      kleinen Fenstern gilt. Breite bleibt dem Layout überlassen;
@@ -523,6 +561,4 @@ html {
      unter den Text statt daneben — nichts wird abgeschnitten. ── */
   .m1-vertrag-banner { flex-wrap: wrap; }
   .m1-vertrag-banner > button { flex: 1 1 100%; justify-content: center; }
-  .m1-dok-karte { flex-wrap: wrap; }
-  .m1-dok-karte > .m1-dok-aktion { flex: 1 1 100%; justify-content: flex-end; }
 }

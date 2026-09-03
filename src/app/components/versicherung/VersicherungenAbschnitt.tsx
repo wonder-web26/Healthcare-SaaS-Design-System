@@ -8,6 +8,7 @@
  */
 import { useState } from "react";
 import { Plus, MoreVertical, Lock, Check, AlertTriangle, X, Search, Pencil, Ban, Trash2, StickyNote } from "lucide-react";
+import { useFensterBreite } from "../ui/DataTable";
 import { GEGENWART_ISO } from "../../../lib/gegenwart";
 import { isoZuAnzeige } from "../../../lib/datum";
 import { KRANKENKASSEN, getVersicherer } from "../../../lib/stammdaten/krankenkassen";
@@ -54,6 +55,10 @@ export function VersicherungenAbschnitt({ patientId }: { patientId: string }) {
   const liste = useVersicherungenFuerPatient(patientId);
   const [dialog, setDialog] = useState<Entwurf | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
+  // Lauf 1c (Muster G/H/I/J): unter 1024px stapelt der Karteninhalt —
+  // Beschriftung über Wert, leere Werte entfallen, ein GLN-Hinweis unter
+  // der Liste statt Gedankenstriche je Karte. Desktop unverändert.
+  const istSchmal = useFensterBreite() < 1024;
 
   const aktive = liste.filter(v => istAktiv(v));
   const abgelaufen = liste.filter(v => !istAktiv(v));
@@ -107,7 +112,7 @@ export function VersicherungenAbschnitt({ patientId }: { patientId: string }) {
           ];
           return (
             <div key={v.id} style={{ border: "0.5px solid var(--border-default)", borderRadius: 12, padding: "12px 14px", opacity: aktiv ? 1 : 0.6, background: "var(--bg-elevated)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: istSchmal ? "wrap" : undefined }}>
                 <span style={{ flexShrink: 0, width: 44, textAlign: "center", padding: "3px 0", borderRadius: 999, fontSize: 12, fontWeight: 500, background: "var(--bg-secondary)", color: "var(--text-primary)" }}>{TYP_CHIP[v.typ]}</span>
                 <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>{versicherer?.label ?? v.versichererId}</span>
                 {v.abrechnungsart && (
@@ -118,11 +123,14 @@ export function VersicherungenAbschnitt({ patientId }: { patientId: string }) {
                     <Lock style={{ width: 11, height: 11 }} /> abgelaufen
                   </span>
                 )}
-                <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
-                  {v.gueltigBis ? `bis ${isoZuAnzeige(v.gueltigBis)}` : `seit ${isoZuAnzeige(v.gueltigAb)}`}
-                </span>
-                {/* Kontextmenü */}
-                <div style={{ position: "relative", flexShrink: 0 }}>
+                {/* Zeitraum: auf Desktop inline rechts, unter 1024px als Zeile unter dem Namen (G) */}
+                {!istSchmal && (
+                  <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                    {v.gueltigBis ? `bis ${isoZuAnzeige(v.gueltigBis)}` : `seit ${isoZuAnzeige(v.gueltigAb)}`}
+                  </span>
+                )}
+                {/* Kontextmenü — sitzt oben rechts auf Höhe des Titels (I) */}
+                <div style={{ position: "relative", flexShrink: 0, marginLeft: istSchmal ? "auto" : undefined }}>
                   <button type="button" aria-label="Aktionen" onClick={() => setMenuId(menuId === v.id ? null : v.id)} className="ui-fokusring inline-flex items-center justify-center"
                     style={{ width: 28, height: 28, borderRadius: 999, border: "none", background: "transparent", color: "var(--text-tertiary)", cursor: "pointer" }}>
                     <MoreVertical style={{ width: 16, height: 16 }} />
@@ -136,25 +144,41 @@ export function VersicherungenAbschnitt({ patientId }: { patientId: string }) {
                   )}
                 </div>
               </div>
-              {/* typabhängige Nummern + GLN/BAG */}
-              <div style={{ marginLeft: 54, marginTop: 8, display: "flex", flexWrap: "wrap", gap: "4px 20px" }}>
-                {zahlen.map(([label, wert]) => (
-                  <span key={label} style={{ fontSize: 12 }}>
-                    <span style={{ color: "var(--text-tertiary)" }}>{label} </span>
-                    <span style={{ color: wert === "—" ? "var(--text-tertiary)" : "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{wert}</span>
+              {/* typabhängige Nummern + GLN/BAG.
+                  Unter 1024px (G/H): Zeitraum als eigene Zeile, Angaben unter-
+                  einander mit Beschriftung ÜBER dem Wert, leere entfallen. */}
+              {istSchmal ? (
+                <div className="m1-karte-stapel" style={{ marginTop: 8 }}>
+                  <span style={{ fontSize: 12, color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", marginBottom: 4 }}>
+                    {v.gueltigBis ? `bis ${isoZuAnzeige(v.gueltigBis)}` : `seit ${isoZuAnzeige(v.gueltigAb)}`}
                   </span>
-                ))}
-              </div>
+                  {zahlen.filter(([, wert]) => wert !== "—").map(([label, wert]) => (
+                    <span key={label} style={{ fontSize: 12, marginBottom: 4 }}>
+                      <span style={{ display: "block", color: "var(--text-tertiary)" }}>{label}</span>
+                      <span style={{ display: "block", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{wert}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ marginLeft: 54, marginTop: 8, display: "flex", flexWrap: "wrap", gap: "4px 20px" }}>
+                  {zahlen.map(([label, wert]) => (
+                    <span key={label} style={{ fontSize: 12 }}>
+                      <span style={{ color: "var(--text-tertiary)" }}>{label} </span>
+                      <span style={{ color: wert === "—" ? "var(--text-tertiary)" : "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{wert}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
               {/* Bemerkung — eigene, eingerückte Zeile mit Notizsymbol, nur wenn gesetzt, einzeilig gekürzt. */}
               {v.bemerkung && (
-                <div style={{ marginLeft: 54, marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-secondary)", minWidth: 0 }}>
+                <div style={{ marginLeft: istSchmal ? 0 : 54, marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-secondary)", minWidth: 0 }}>
                   <StickyNote style={{ width: 12, height: 12, color: "var(--text-tertiary)", flexShrink: 0 }} />
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.bemerkung}</span>
                 </div>
               )}
               {/* §5 Mandatsbezug */}
               {mandat && (
-                <div style={{ marginLeft: 54, marginTop: 6, fontSize: 12, color: "var(--status-info)" }}>
+                <div style={{ marginLeft: istSchmal ? 0 : 54, marginTop: 6, fontSize: 12, color: "var(--status-info)" }}>
                   Mandat {mandat.id} · seit {mandat.beginn}
                 </div>
               )}
@@ -162,6 +186,24 @@ export function VersicherungenAbschnitt({ patientId }: { patientId: string }) {
           );
         })}
       </div>
+
+      {/* H: Die Abwesenheit einer GLN ist für die Rechnungsstellung wichtig —
+          EIN Hinweis unter der Liste (nur unter 1024px; Desktop zeigt wie bisher
+          Gedankenstriche in den Karten). */}
+      {istSchmal && (() => {
+        const ohneGln = liste
+          .filter(v => istAktiv(v))
+          .map(v => getVersicherer(v.versichererId))
+          .filter(ver => ver && (!ver.glnVersicherung || !ver.glnEmpfaenger))
+          .map(ver => ver!.label);
+        if (ohneGln.length === 0) return null;
+        return (
+          <div className="flex items-start" style={{ gap: 6, marginTop: 8, fontSize: 12, color: "var(--text-secondary)" }}>
+            <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
+            <span>GLN fehlt bei: {[...new Set(ohneGln)].join(", ")} — für die Rechnungsstellung nötig.</span>
+          </div>
+        );
+      })()}
 
       {dialog && (
         <VersicherungDialog
