@@ -16,12 +16,20 @@ import { patientenSeed } from "./patientData";
 import { angehoerigeSeed } from "./angehoerigeData";
 import { useCurrentRole } from "../auth";
 import { AnsichtsUmschalter } from "./pendenzen/AnsichtsUmschalter";
-import { LISTENANSICHTEN, STANDARD_ANSICHT, ALLE_ANSICHT, findeAnsicht, ansichtFiltern, filterZusammenfassung } from "../../lib/pendenzen/listenansichten";
+import { AnsichtErstellenDialog } from "./pendenzen/AnsichtErstellenDialog";
+import { useListenansichten, STANDARD_ANSICHT, ALLE_ANSICHT, findeAnsicht, ansichtFiltern, filterZusammenfassung, type AnsichtFilter } from "../../lib/pendenzen/listenansichten";
 import { AnnaPendenzVorschlag } from "../anna/AnnaPendenzVorschlag";
 import { AnnaDemoMockModal } from "../anna/AnnaDemoMockModal";
 import { toast } from "sonner";
 
 const TODAY = "2026-03-03";
+
+/** TODAY plus n Tage als ISO — dieselbe Zeitbasis wie die Fälligkeits-Chips. */
+function inTagen(n: number): string {
+  const d = new Date(TODAY);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 /* ══════════════════════════════════════════
    HELPERS
@@ -269,8 +277,17 @@ export function ServiceDeskPage() {
      überstehen sie ein Neuladen und den Rückweg aus dem Detail — und da
      Nutzerinnen keine eigenen Ansichten speichern können, ist der erhaltene
      Ad-hoc-Filter ihr einziger Ersatz dafür. ── */
+  const ansichten = useListenansichten();
   const ansichtId = searchParams.get("ansicht") || STANDARD_ANSICHT;
-  const ansicht = findeAnsicht(ansichtId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ansicht = useMemo(() => findeAnsicht(ansichtId), [ansichtId, ansichten]);
+
+  /* Ansichten anlegen ist Sache der Administration. Die Rollenquelle des Repos
+     ist `useCurrentRole`; „Administration" ist dort `backoffice`
+     (ROLE_DESCRIPTIONS). Für alle anderen steht der Ausgang nicht im DOM —
+     Ausgrauen wäre falsch, die Fähigkeit ist nichts zum Anfordern. */
+  const darfAnsichtErstellen = role === "backoffice";
+  const [erstellenOffen, setErstellenOffen] = useState(false);
 
   const filter = useMemo<FilterZustand>(() => {
     const liste = (k: string) => (searchParams.get(k) || "").split(",").filter(Boolean);
@@ -356,9 +373,9 @@ export function ServiceDeskPage() {
   /** Trefferzahl je Ansicht für das Menü — nur der Ansichtsfilter, ohne Ad-hoc. */
   const ansichtZaehler = useMemo(() => {
     const r: Record<string, number> = {};
-    for (const a of LISTENANSICHTEN) r[a.id] = ansichtFiltern(entries, a.filter).length;
+    for (const a of ansichten) r[a.id] = ansichtFiltern(entries, a.filter).length;
     return r;
-  }, [entries]);
+  }, [entries, ansichten]);
 
   const gefiltert = useMemo(() => filterEntries(ansichtBasis, filter), [ansichtBasis, filter]);
   // Die geöffnete Pendenz bleibt sichtbar, auch wenn sie durch eine Bearbeitung aus
@@ -385,6 +402,46 @@ export function ServiceDeskPage() {
     if (!selectedId) return null;
     return entries.find(e => e.id === selectedId) || null;
   }, [selectedId, entries]);
+
+  /**
+   * Was gerade auf dem Bildschirm steht, als `AnsichtFilter`: der Ansichtsfilter
+   * plus das, was die Ad-hoc-Steuerung davon ausdrücken kann.
+   *
+   * `AnsichtFilter` bleibt unverändert (Vorbedingung), und darum passt nicht
+   * alles hinein — die Grenzen sind bewusst und im Bericht benannt: die Suche,
+   * der Chip „Nicht zugewiesen" und eine Mehrfachauswahl von Zuständigen haben
+   * dort kein Gegenstück und werden NICHT gespeichert.
+   */
+  const neuerAnsichtFilter = useMemo<AnsichtFilter>(() => {
+    const f: AnsichtFilter = { ...(ansicht?.filter ?? {}) };
+    if (filter.arten.size > 0) f.pendenzTypen = [...filter.arten];
+    // Zuständig: der Ansichtsfilter kennt genau eine Person, als Initialen.
+    if (filter.zustaendige.size === 1) {
+      const name = [...filter.zustaendige][0];
+      const init = entries.find(e => e.verantwortlich.name === name)?.verantwortlich.initialen;
+      if (init) f.verantwortlich = init;
+    }
+    if (filter.statusChips.has("in_bearbeitung")) f.status = ["in_bearbeitung"];
+    else if (filter.statusChips.has("abgeschlossen")) f.status = ["erledigt"];
+    // Fristen-Chips werden zum Datum, damit die Ansicht später dasselbe meint.
+    if (filter.statusChips.has("ueberfaellig")) f.faelligBis = TODAY;
+    else if (filter.statusChips.has("diese_woche")) f.faelligBis = inTagen(7);
+    return f;
+  }, [ansicht, filter, entries]);
+
+  /* Auswahl im Erstellen-Dialog: der GESAMTE Bestand, nicht die aktive Ansicht —
+     eine neue Linse soll sich nicht auf die gerade offene beschränken müssen. */
+  const alleArtenGesamt = useMemo(() => {
+    const vorhanden = new Set(entries.map(e => e.pendenzTyp));
+    return (Object.keys(pendenzTypen) as PendenzTyp[]).filter(t => vorhanden.has(t));
+  }, [entries]);
+  const allePersonen = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of entries) {
+      if (!istNichtZugewiesen(e)) m.set(e.verantwortlich.initialen, e.verantwortlich.name);
+    }
+    return [...m].map(([initialen, name]) => ({ initialen, name })).sort((a, b) => a.name.localeCompare(b.name, "de"));
+  }, [entries]);
 
   const setSuche = (suche: string) => setParam({ q: suche || null });
   const toggleChip = (id: StatusChipId) => toggleParam("chips", id);
@@ -646,6 +703,22 @@ export function ServiceDeskPage() {
           {/* Titel + Primäraktion */}
           <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
             <h1 style={{ fontSize: "var(--text-h1)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", letterSpacing: "var(--tracking-tight)" }}>Pendenzen</h1>
+            <div className="flex items-center shrink-0" style={{ gap: "var(--space-2)" }}>
+            {/* Ansichten anlegen ist Sache der Administration; für alle anderen
+                steht der Knopf nicht im DOM. Sekundär gestaltet — der
+                Primärknopf des Abschnitts ist «Neue Pendenz». */}
+            {darfAnsichtErstellen && (
+              <button
+                className="ui-fokusring inline-flex items-center shrink-0 cursor-pointer transition-colors"
+                onClick={() => setErstellenOffen(true)}
+                aria-label="Ansicht erstellen"
+                style={{ gap: "var(--space-2)", padding: "10px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", border: "var(--border-thin) solid var(--border-default)", fontFamily: "inherit" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"}
+                onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}
+              >
+                <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Ansicht erstellen</span>
+              </button>
+            )}
             <button
               className="ui-fokusring inline-flex items-center shrink-0 cursor-pointer transition-colors"
               onClick={() => setNeueOffen(true)}
@@ -656,6 +729,7 @@ export function ServiceDeskPage() {
             >
               <Plus style={{ width: 16, height: 16 }} /> <span className="hidden sm:inline">Neue Pendenz</span>
             </button>
+            </div>
           </div>
 
           {/* Steuerleiste + Status-Chips.
@@ -673,7 +747,7 @@ export function ServiceDeskPage() {
             );
             const ansichtsSchalter = (
               <AnsichtsUmschalter
-                ansichten={LISTENANSICHTEN}
+                ansichten={ansichten}
                 aktivId={ansichtId}
                 zaehler={ansichtZaehler}
                 gefiltert={hatAdhocFilter}
@@ -758,6 +832,8 @@ export function ServiceDeskPage() {
                   </button>
                 ))}
                 <button type="button" onClick={zurueckZurAnsicht} className="ui-fokusring cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", padding: "3px 6px", fontFamily: "inherit" }}>Zurück zur Ansicht</button>
+                {/* Ansicht erstellen steht dauerhaft in der Kopfzeile, nicht hier —
+                    ein Weg, nicht zwei. */}
                 <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Deine Filter gelten nur für Dich und nur in dieser Sitzung</span>
               </>
             )}
@@ -880,6 +956,29 @@ export function ServiceDeskPage() {
           </div>
         )}
       </div>
+
+      {/* ── ANSICHT ERSTELLEN (nur Administration, nur im gefilterten Zustand) ── */}
+      {darfAnsichtErstellen && erstellenOffen && (
+        <AnsichtErstellenDialog
+          offen
+          onClose={() => setErstellenOffen(false)}
+          kategorien={alleArtenGesamt.map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))}
+          personen={allePersonen}
+          statusOptionen={[
+            { value: "offen", label: "Offen" },
+            { value: "in_bearbeitung", label: "In Bearbeitung" },
+            { value: "erledigt", label: "Abgeschlossen" },
+          ]}
+          zaehle={f => ansichtFiltern(entries, f).length}
+          startFilter={neuerAnsichtFilter}
+          onErstellt={a => {
+            setErstellenOffen(false);
+            // Die neue Ansicht wird aktiv; damit endet der gefilterte Zustand.
+            waehleAnsicht(a.id);
+            toast("Ansicht erstellt");
+          }}
+        />
+      )}
 
       {/* ── NEUE PENDENZ (aus der Liste geöffnet: keine Vorbelegung) ── */}
       <NeuePendenzDialog
