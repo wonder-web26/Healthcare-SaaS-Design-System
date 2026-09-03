@@ -494,12 +494,41 @@ html {
     margin-top: var(--space-2);
   }
   .m1-nebenaktion { min-width: 44px; }
+  /* K: Die Zeile ordnet nur an — Ausrichtung an der ERSTEN Zeile der
+     Beschriftung, nicht mittig zum Textblock. Gestaltung des Bedienelements
+     liegt ausschliesslich in .m1-schalter. */
   .m1-schalterzeile {
     display: flex !important;
-    align-items: center !important;
+    align-items: flex-start !important;
     justify-content: space-between !important;
     gap: var(--space-3);
   }
+
+  /* Bibliotheks-Schalter (ui/switch) in der Schalterzeile: Zielgeometrie
+     44×24, sichtbare Begrenzung auch im Aus-Zustand, Knopf 18px. Nimmt den
+     Schalter von der 44px-Buttonregel (Muster F) aus — die Tippfläche
+     liefert die ganze Zeile (das Label schaltet mit). */
+  .m1-schalter {
+    width: 44px !important;
+    height: 24px !important;
+    min-height: 24px !important;
+    flex-shrink: 0;
+    border: var(--border-thin) solid var(--border-default) !important;
+    /* auf Höhe der ersten Beschriftungszeile (12px · lh 1.3 ≈ 16px) */
+    margin-top: -4px;
+  }
+  .m1-schalter[data-state="unchecked"] { background: var(--bg-tertiary) !important; }
+  .m1-schalter[data-state="checked"] {
+    background: var(--brand-primary) !important;
+    border-color: var(--brand-primary) !important;
+  }
+  .m1-schalter [data-slot="switch-thumb"] {
+    width: 18px !important;
+    height: 18px !important;
+    background: var(--bg-elevated) !important;
+  }
+  .m1-schalter[data-state="unchecked"] [data-slot="switch-thumb"] { transform: translateX(2px) !important; }
+  .m1-schalter[data-state="checked"] [data-slot="switch-thumb"] { transform: translateX(22px) !important; }
   /* J auf den Dokumentkarten der Vertragsunterzeichnung: die Aktionsgruppe
      rückt unter den Inhalt (Lauf 1b <640, per Muster J neu bis 1023). */
   .m1-dok-karte { flex-wrap: wrap; }

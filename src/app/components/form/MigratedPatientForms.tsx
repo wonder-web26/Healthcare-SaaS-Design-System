@@ -167,7 +167,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
               Wohnsitz bleibt für die Restkosten massgebend
             </div>
           </div>
-          <Switch id="pflegeort-schalter" checked={data.pflegeortAbweichend} onCheckedChange={c => onUpdateMehrere?.({ pflegeortAbweichend: c })} />
+          <Switch id="pflegeort-schalter" className="m1-schalter" checked={data.pflegeortAbweichend} onCheckedChange={c => onUpdateMehrere?.({ pflegeortAbweichend: c })} />
         </div>
       </div>
       {data.pflegeortAbweichend && (
