@@ -15,6 +15,8 @@ import { getDiplomierte } from "../../lib/betreuung/diplomierte";
 import { patientenSeed } from "./patientData";
 import { angehoerigeSeed } from "./angehoerigeData";
 import { useCurrentRole } from "../auth";
+import { AnsichtsUmschalter } from "./pendenzen/AnsichtsUmschalter";
+import { LISTENANSICHTEN, STANDARD_ANSICHT, ALLE_ANSICHT, findeAnsicht, ansichtFiltern, filterZusammenfassung } from "../../lib/pendenzen/listenansichten";
 import { AnnaPendenzVorschlag } from "../anna/AnnaPendenzVorschlag";
 import { AnnaDemoMockModal } from "../anna/AnnaDemoMockModal";
 import { toast } from "sonner";
@@ -89,18 +91,14 @@ const PRIO_CFG: Record<string, { label: string; color: string }> = {
    FACHLOGIK — Segment, Status-Chips, Kennzeichen, Filter, Sortierung
    ══════════════════════════════════════════ */
 
-/* ── Zugehörigkeit: nur "Mir zugewiesen" und "Alle". Vorauswahl "mir". ── */
-type Segment = "mir" | "alle";
-const SEGMENTE: [Segment, string][] = [["mir", "Mir zugewiesen"], ["alle", "Alle"]];
+/* ── Zugehörigkeit ist keine eigene Steuerung mehr: „Mir zugewiesen" und „Alle
+   Pendenzen" sind Systemansichten des Ansichtsumschalters (lib/pendenzen/
+   listenansichten). Der frühere Segmentumschalter entfällt ersatzlos. ── */
 
 function istNichtZugewiesen(e: UnifiedEntry): boolean {
   const n = e.verantwortlich?.name?.trim();
   const i = e.verantwortlich?.initialen?.trim();
   return !n || n === "Nicht zugewiesen" || !i;
-}
-
-function imSegment(e: UnifiedEntry, segment: Segment): boolean {
-  return segment === "alle" || e.verantwortlich.initialen === CURRENT_USER;
 }
 
 /* ── Status-Chips: kombinierbar (UND). Erledigte sind standardmässig ausgeblendet
@@ -127,19 +125,25 @@ function ableitenKennzeichen(e: UnifiedEntry): { typ: KennzeichenTyp; grund: str
   return { typ: null, grund: "" };
 }
 
-/* ── Filterzustand: eine Struktur an einem Ort ── */
+/* ── Ad-hoc-Filterzustand: eine Struktur an einem Ort. Er läuft NACH dem
+   Ansichtsfilter und kann die Menge nur weiter einschränken — es gibt keinen
+   Weg, über die Steuerleiste Einträge zurückzuholen, die die Ansicht
+   ausgeschlossen hat. ── */
 interface FilterZustand {
-  segment: Segment;
   statusChips: Set<StatusChipId>;
   arten: Set<PendenzTyp>;
   zustaendige: Set<string>;
   suche: string;
 }
-const LEERER_FILTER: FilterZustand = { segment: "mir", statusChips: new Set(), arten: new Set(), zustaendige: new Set(), suche: "" };
+const LEERER_FILTER: FilterZustand = { statusChips: new Set(), arten: new Set(), zustaendige: new Set(), suche: "" };
+
+/** Ob überhaupt ein Ad-hoc-Filter gesetzt ist (steuert Marke und Rückweg). */
+function istGefiltert(f: FilterZustand): boolean {
+  return f.statusChips.size > 0 || f.arten.size > 0 || f.zustaendige.size > 0 || f.suche.trim().length > 0;
+}
 
 function filterEntries(list: UnifiedEntry[], f: FilterZustand): UnifiedEntry[] {
   return list.filter(e => {
-    if (!imSegment(e, f.segment)) return false;
     // Erledigte nur zeigen, wenn der "Abgeschlossen"-Chip aktiv ist.
     if (!f.statusChips.has("abgeschlossen") && e.status === "erledigt") return false;
     for (const chip of STATUS_CHIPS) if (f.statusChips.has(chip.id) && !chip.praedikat(e)) return false;
@@ -243,7 +247,6 @@ export function ServiceDeskPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get("id") || null;
 
-  const [filter, setFilter] = useState<FilterZustand>(LEERER_FILTER);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "faellig", dir: "asc" });
   const [localEdits, setLocalEdits] = useState<Record<string, Partial<UnifiedEntry>>>({});
   const [verlauf, setVerlauf] = useState<Record<string, VerlaufEintrag[]>>({});
@@ -251,22 +254,71 @@ export function ServiceDeskPage() {
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const prevRole = useRef(role);
 
-  function setParam(updates: Record<string, string | null>) {
+  /** `push` legt einen Verlaufseintrag an — nötig, damit „zurück" aus dem Detail
+   *  wieder auf der Liste MIT Ansicht und Filtern landet. */
+  function setParam(updates: Record<string, string | null>, opts?: { push?: boolean }) {
     const next = new URLSearchParams(searchParams);
     for (const [k, v] of Object.entries(updates)) {
       if (v === null || v === "") next.delete(k);
       else next.set(k, v);
     }
-    setSearchParams(next, { replace: true });
+    setSearchParams(next, { replace: !opts?.push });
   }
+
+  /* ── Ansicht und Ad-hoc-Filter stehen in der URL, nicht im Zustand. Nur so
+     überstehen sie ein Neuladen und den Rückweg aus dem Detail — und da
+     Nutzerinnen keine eigenen Ansichten speichern können, ist der erhaltene
+     Ad-hoc-Filter ihr einziger Ersatz dafür. ── */
+  const ansichtId = searchParams.get("ansicht") || STANDARD_ANSICHT;
+  const ansicht = findeAnsicht(ansichtId);
+
+  const filter = useMemo<FilterZustand>(() => {
+    const liste = (k: string) => (searchParams.get(k) || "").split(",").filter(Boolean);
+    return {
+      statusChips: new Set(liste("chips") as StatusChipId[]),
+      arten: new Set(liste("art") as PendenzTyp[]),
+      zustaendige: new Set(liste("zust").map(decodeURIComponent)),
+      suche: searchParams.get("q") || "",
+    };
+  }, [searchParams]);
+
+  const hatAdhocFilter = istGefiltert(filter);
+
+  /** Ein Wert in einer Mengen-Kennung umschalten (Chips, Kategorie, Zuständig). */
+  const toggleParam = (k: string, wert: string) => {
+    const next = new Set((searchParams.get(k) || "").split(",").filter(Boolean));
+    if (next.has(wert)) next.delete(wert); else next.add(wert);
+    setParam({ [k]: [...next].join(",") || null });
+  };
+
+  /* ── Scrollposition der Liste. Sie gehört zum wiederhergestellten Zustand:
+     wer aus einer langen gefilterten Liste in ein Detail springt, will danach
+     wieder an derselben Stelle stehen. Ablage in der Sitzung, damit sie auch
+     ein Neuladen übersteht. ── */
+  const listeRef = useRef<HTMLDivElement>(null);
+  const SCROLL_SCHLUESSEL = "pendenzen-scroll";
+  const merkeScroll = () => {
+    if (listeRef.current) sessionStorage.setItem(SCROLL_SCHLUESSEL, String(listeRef.current.scrollTop));
+  };
+  useEffect(() => {
+    if (selectedId) return; // erst beim Zurückkehren auf die Liste
+    const wert = sessionStorage.getItem(SCROLL_SCHLUESSEL);
+    if (wert && listeRef.current) listeRef.current.scrollTop = Number(wert) || 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  /** Zurück zur Ansicht: alle Ad-hoc-Filter fallen, die Ansicht bleibt. */
+  const zurueckZurAnsicht = () => setParam({ chips: null, art: null, zust: null, q: null });
+
+  /** Ansicht wechseln: die Ad-hoc-Filter der vorigen Ansicht gelten nicht weiter. */
+  const waehleAnsicht = (id: string) => setParam({ ansicht: id, chips: null, art: null, zust: null, q: null, id: null });
 
   // Rollenwechsel: Auswahl, Bulk und Filter zurücksetzen
   useEffect(() => {
     if (prevRole.current !== role) {
       prevRole.current = role;
-      setParam({ id: null });
+      setParam({ id: null, chips: null, art: null, zust: null, q: null });
       setBulkSelected(new Set());
-      setFilter(LEERER_FILTER);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
@@ -287,14 +339,28 @@ export function ServiceDeskPage() {
     [allEntries, localEdits],
   );
 
-  const segmentBasis = useMemo(() => entries.filter(e => imSegment(e, filter.segment)), [entries, filter.segment]);
+  /* ── Filterkette: getUnifiedEntries() → Ansichtsfilter → Ad-hoc-Filter →
+     Sortierung. Der Ansichtsfilter steht zuerst und ist die einzige Stelle, an
+     der die Ansicht wirkt; alles Weitere kann nur noch einschränken. Eine
+     unbekannte Ansicht liefert nichts — sie ist gesperrt, nicht „alles". ── */
+  const ansichtBasis = useMemo(
+    () => (ansicht ? ansichtFiltern(entries, ansicht.filter) : []),
+    [entries, ansicht],
+  );
   const chipCounts = useMemo(() => {
     const r = {} as Record<StatusChipId, number>;
-    for (const chip of STATUS_CHIPS) r[chip.id] = segmentBasis.filter(chip.praedikat).length;
+    for (const chip of STATUS_CHIPS) r[chip.id] = ansichtBasis.filter(chip.praedikat).length;
     return r;
-  }, [segmentBasis]);
+  }, [ansichtBasis]);
 
-  const gefiltert = useMemo(() => filterEntries(entries, filter), [entries, filter]);
+  /** Trefferzahl je Ansicht für das Menü — nur der Ansichtsfilter, ohne Ad-hoc. */
+  const ansichtZaehler = useMemo(() => {
+    const r: Record<string, number> = {};
+    for (const a of LISTENANSICHTEN) r[a.id] = ansichtFiltern(entries, a.filter).length;
+    return r;
+  }, [entries]);
+
+  const gefiltert = useMemo(() => filterEntries(ansichtBasis, filter), [ansichtBasis, filter]);
   // Die geöffnete Pendenz bleibt sichtbar, auch wenn sie durch eine Bearbeitung aus
   // dem aktiven Filter fällt — bis der Detailbereich geschlossen wird.
   const filtered = useMemo(() => {
@@ -304,13 +370,15 @@ export function ServiceDeskPage() {
   }, [gefiltert, selectedId, entries]);
   const sorted = useMemo(() => sortEntries(filtered, sort.key, sort.dir), [filtered, sort]);
 
+  // Auswahlfelder bieten nur, was die Ansicht überhaupt enthält — sonst liesse
+  // sich dort etwas wählen, das der Ansichtsfilter ohnehin ausschliesst.
   const alleArten = useMemo(() => {
-    const vorhanden = new Set(entries.map(e => e.pendenzTyp));
+    const vorhanden = new Set(ansichtBasis.map(e => e.pendenzTyp));
     return (Object.keys(pendenzTypen) as PendenzTyp[]).filter(t => vorhanden.has(t));
-  }, [entries]);
+  }, [ansichtBasis]);
   const alleZustaendige = useMemo(
-    () => [...new Set(entries.map(e => e.verantwortlich.name))].filter(n => n && n !== "Nicht zugewiesen").sort((a, b) => a.localeCompare(b, "de")),
-    [entries],
+    () => [...new Set(ansichtBasis.map(e => e.verantwortlich.name))].filter(n => n && n !== "Nicht zugewiesen").sort((a, b) => a.localeCompare(b, "de")),
+    [ansichtBasis],
   );
 
   const selected = useMemo(() => {
@@ -318,12 +386,10 @@ export function ServiceDeskPage() {
     return entries.find(e => e.id === selectedId) || null;
   }, [selectedId, entries]);
 
-  const setSegment = (segment: Segment) => setFilter(f => ({ ...f, segment }));
-  const setSuche = (suche: string) => setFilter(f => ({ ...f, suche }));
-  const toggleChip = (id: StatusChipId) => setFilter(f => { const s = new Set(f.statusChips); if (s.has(id)) s.delete(id); else s.add(id); return { ...f, statusChips: s }; });
-  const toggleArt = (t: PendenzTyp) => setFilter(f => { const s = new Set(f.arten); if (s.has(t)) s.delete(t); else s.add(t); return { ...f, arten: s }; });
-  const toggleZustaendig = (n: string) => setFilter(f => { const s = new Set(f.zustaendige); if (s.has(n)) s.delete(n); else s.add(n); return { ...f, zustaendige: s }; });
-  const resetFilter = () => setFilter(f => ({ ...LEERER_FILTER, suche: f.suche }));
+  const setSuche = (suche: string) => setParam({ q: suche || null });
+  const toggleChip = (id: StatusChipId) => toggleParam("chips", id);
+  const toggleArt = (t: PendenzTyp) => toggleParam("art", t);
+  const toggleZustaendig = (n: string) => toggleParam("zust", encodeURIComponent(n));
   const toggleSort = (key: string) => setSort(s => s.key === key ? { key: key as SortKey, dir: s.dir === "asc" ? "desc" : "asc" } : { key: key as SortKey, dir: "asc" });
 
   const filterTags = useMemo(() => {
@@ -404,13 +470,21 @@ export function ServiceDeskPage() {
   // Ungespeicherte Änderungen im Bearbeitungszustand: vor jedem Wechsel Rückfrage.
   const [entwurfDirty, setEntwurfDirty] = useState(false);
   const wechselErlaubt = () => !entwurfDirty || window.confirm("Es liegen ungespeicherte Änderungen vor. Verwerfen?");
-  const waehle = (id: string | null) => { if (!wechselErlaubt()) return; setEntwurfDirty(false); setParam({ id }); };
+  /* Das Öffnen einer Pendenz legt einen Verlaufseintrag an, das Schliessen nicht.
+     Nur so landet „zurück" wieder auf der Liste — mit Ansicht und Filtern, die
+     in der URL stehen. Vor dem Sprung wird die Scrollposition gemerkt. */
+  const waehle = (id: string | null) => {
+    if (!wechselErlaubt()) return;
+    setEntwurfDirty(false);
+    if (id) merkeScroll();
+    setParam({ id }, { push: !!id });
+  };
 
   const handleCardClick = (id: string) => {
     if (!wechselErlaubt()) return;
     setEntwurfDirty(false);
     if (id === selectedId) setParam({ id: null });
-    else setParam({ id });
+    else { merkeScroll(); setParam({ id }, { push: true }); }
   };
 
   /* ── Zell-Renderer ── */
@@ -597,18 +671,14 @@ export function ServiceDeskPage() {
                 {filter.suche && <button onClick={() => setSuche("")} className="cursor-pointer shrink-0" style={{ background: "transparent", border: "none" }}><X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} /></button>}
               </div>
             );
-            const segmentSchalter = (
-              <div className="inline-flex shrink-0" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
-                {SEGMENTE.map(([seg, lbl]) => {
-                  const aktiv = filter.segment === seg;
-                  return (
-                    <button key={seg} type="button" onClick={() => setSegment(seg)} className="ui-fokusring cursor-pointer transition-colors"
-                      style={{ padding: "5px 14px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--bg-elevated)" : "transparent", border: aktiv ? "var(--border-thin) solid var(--border-default)" : "var(--border-thin) solid transparent", fontSize: "var(--text-small)", fontWeight: aktiv ? "var(--weight-medium)" : "var(--weight-regular)", color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-                      {lbl}
-                    </button>
-                  );
-                })}
-              </div>
+            const ansichtsSchalter = (
+              <AnsichtsUmschalter
+                ansichten={LISTENANSICHTEN}
+                aktivId={ansichtId}
+                zaehler={ansichtZaehler}
+                gefiltert={hatAdhocFilter}
+                onWaehle={waehleAnsicht}
+              />
             );
             const auswahlFelder = (
               <>
@@ -638,7 +708,7 @@ export function ServiceDeskPage() {
                 <div className="flex items-center" style={{ gap: 8, marginBottom: "var(--space-2)" }}>{suchfeld}</div>
                 <div className="relative">
                   <div ref={chipScrollRef} onScroll={pruefeChipVerlauf} className="flex items-center m1-leiste-scroll" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
-                    {segmentSchalter}
+                    {ansichtsSchalter}
                     {auswahlFelder}
                     {chipListe}
                   </div>
@@ -651,7 +721,7 @@ export function ServiceDeskPage() {
               <>
                 <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
                   {suchfeld}
-                  {segmentSchalter}
+                  {ansichtsSchalter}
                   {auswahlFelder}
                 </div>
                 <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
@@ -661,11 +731,23 @@ export function ServiceDeskPage() {
             );
           })()}
 
-          {/* Aktivzeile */}
+          {/* Aktivzeile — zwei Zustände.
+              Unverändert: stille Metazeile mit Freigabe und Filterzusammenfassung.
+              Die Ansichtsfilter erscheinen NICHT als entfernbare Chips; solange
+              nichts abweicht, trägt der Name die Bedeutung.
+              Gefiltert: die Ad-hoc-Filter als entfernbare Chips und genau eine
+              Schaltfläche zurück. Es gibt hier keinen Weg, eine Linse abzulegen —
+              das ist Sache der Administration. */}
           <div className="flex items-center flex-wrap" style={{ gap: 6, minHeight: 24, marginBottom: "var(--space-2)" }}>
-            {filterTags.length === 0 ? (
+            {!hatAdhocFilter ? (
               <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-                {SEGMENTE.find(([s]) => s === filter.segment)![1]} · sortiert nach {SORT_LABEL[sort.key]}
+                {ansicht ? (
+                  [
+                    ansicht.art === "freigegeben" && ansicht.freigabe?.length ? `freigegeben · ${ansicht.freigabe.length} Personen` : null,
+                    filterZusammenfassung(ansicht.filter) || null,
+                    `sortiert nach ${SORT_LABEL[sort.key]}`,
+                  ].filter(Boolean).join(" · ")
+                ) : ""}
               </span>
             ) : (
               <>
@@ -675,7 +757,8 @@ export function ServiceDeskPage() {
                     {t.label} <X style={{ width: 10, height: 10 }} />
                   </button>
                 ))}
-                <button type="button" onClick={resetFilter} className="cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", padding: "3px 6px", fontFamily: "inherit" }}>Filter zurücksetzen</button>
+                <button type="button" onClick={zurueckZurAnsicht} className="ui-fokusring cursor-pointer" style={{ background: "transparent", border: "none", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", padding: "3px 6px", fontFamily: "inherit" }}>Zurück zur Ansicht</button>
+                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Deine Filter gelten nur für Dich und nur in dieser Sitzung</span>
               </>
             )}
           </div>
@@ -686,7 +769,7 @@ export function ServiceDeskPage() {
       <div className="flex-1 flex min-h-0 overflow-hidden" style={{ padding: "0 var(--mobile-page-padding) var(--space-4)" }}>
         <style>{`@media (min-width: 640px) { .pendenzen-list-area { padding-left: var(--space-6) !important; padding-right: var(--space-6) !important; } }`}</style>
         {/* ── LIST ── */}
-        <div className="pendenzen-list-area flex-1 min-w-0 overflow-y-auto" style={{ paddingRight: selected ? "var(--space-4)" : 0 }}>
+        <div ref={listeRef} onScroll={merkeScroll} className="pendenzen-list-area flex-1 min-w-0 overflow-y-auto" style={{ paddingRight: selected ? "var(--space-4)" : 0 }}>
           {/* Bulk-Aktionsleiste */}
           {bulkSelected.size > 0 && (
             <div className="sticky top-0 z-10 flex items-center justify-between" style={{ padding: "12px 16px", marginBottom: 12, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
@@ -721,14 +804,37 @@ export function ServiceDeskPage() {
             </div>
           )}
 
-          {keineTreffer ? (
+          {/* Drei getrennte Zustände, nicht ein gemeinsamer: die Ansicht ist
+              gesperrt, die Ansicht liefert nichts, oder die Ad-hoc-Filter tun es. */}
+          {!ansicht ? (
+            /* Gesperrt: nur die Kennung. Kein Name, kein Zähler, keine
+               Filterbeschreibung — sonst verriete der Leerzustand, was in einer
+               nicht freigegebenen Ansicht steht. */
             <div style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", padding: "3rem 1.5rem", textAlign: "center" }}>
-              <p style={{ fontSize: "var(--text-body)", color: "var(--text-secondary)", marginBottom: 14 }}>
-                {filter.suche.trim() ? <>Keine Pendenzen für &bdquo;{filter.suche.trim()}&ldquo;.</> : "Keine Pendenzen mit diesen Filtern."}
+              <p style={{ fontSize: "var(--text-body)", color: "var(--text-secondary)", marginBottom: 6 }}>Diese Ansicht ist Dir nicht freigegeben</p>
+              <p style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginBottom: 14, fontVariantNumeric: "tabular-nums" }}>{ansichtId}</p>
+              <div className="inline-flex items-center flex-wrap justify-center" style={{ gap: 8 }}>
+                <button type="button" onClick={() => waehleAnsicht(STANDARD_ANSICHT)} style={suchButton}>Zu &bdquo;Mir zugewiesen&ldquo;</button>
+              </div>
+            </div>
+          ) : keineTreffer && hatAdhocFilter ? (
+            /* Ad-hoc-Filter liefert nichts — die Chips bleiben oben sichtbar. */
+            <div style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", padding: "3rem 1.5rem", textAlign: "center" }}>
+              <p style={{ fontSize: "var(--text-body)", color: "var(--text-secondary)", marginBottom: 14 }}>Keine Pendenz entspricht Deinen Filtern</p>
+              <div className="inline-flex items-center flex-wrap justify-center" style={{ gap: 8 }}>
+                <button type="button" onClick={zurueckZurAnsicht} style={suchButton}>Zurück zur Ansicht</button>
+              </div>
+            </div>
+          ) : keineTreffer ? (
+            /* Die Ansicht selbst liefert nichts — Ursache benennen. */
+            <div style={{ background: "var(--bg-elevated)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", padding: "3rem 1.5rem", textAlign: "center" }}>
+              <p style={{ fontSize: "var(--text-body)", color: "var(--text-secondary)", marginBottom: 6 }}>Keine Pendenz entspricht dieser Ansicht</p>
+              <p style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginBottom: 14 }}>
+                {filterZusammenfassung(ansicht.filter) || "Diese Ansicht schränkt nichts ein."}
               </p>
               <div className="inline-flex items-center flex-wrap justify-center" style={{ gap: 8 }}>
-                {filter.suche.trim() && <button type="button" onClick={() => setSuche("")} style={suchButton}>Suche löschen</button>}
-                {filterTags.length > 0 && <button type="button" onClick={resetFilter} style={suchButton}>Filter zurücksetzen</button>}
+                {!filter.statusChips.has("abgeschlossen") && <button type="button" onClick={() => toggleChip("abgeschlossen")} style={suchButton}>Abgeschlossene einblenden</button>}
+                {ansichtId !== ALLE_ANSICHT && <button type="button" onClick={() => waehleAnsicht(ALLE_ANSICHT)} style={suchButton}>Zu &bdquo;Alle Pendenzen&ldquo;</button>}
               </div>
             </div>
           ) : (
@@ -783,9 +889,10 @@ export function ServiceDeskPage() {
           setDatenVersion(v => v + 1);
           setZuletztNeuId(e.id);
           setNeueOffen(false);
-          // Die neue Pendenz muss sofort sichtbar sein: fällt sie nicht ins
-          // Segment «Mir zugewiesen», wird auf «Alle» gewechselt.
-          if (!imSegment(e, filter.segment)) setSegment("alle");
+          // Die neue Pendenz muss sofort sichtbar sein: fällt sie nicht in die
+          // aktive Ansicht, wird auf «Alle Pendenzen» gewechselt. Das ist ein
+          // Ansichtswechsel, kein Aufweiten des Ad-hoc-Filters.
+          if (!ansicht || ansichtFiltern([e], ansicht.filter).length === 0) waehleAnsicht(ALLE_ANSICHT);
           toast("Pendenz angelegt");
         }}
       />
