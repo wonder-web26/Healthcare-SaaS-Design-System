@@ -168,6 +168,37 @@ export function OnboardingListPage() {
     </>
   );
 
+  // Karte (Telefon, Lauf 1b Änderung 7): Titel — aktueller Schritt — eine Zeile
+  // mit den Zahlen (Pendenzen, Pflichtdok., geplanter Start) — Verantwortliche
+  // als letzte Zeile. Keine Versalienbeschriftungen, kein Raster.
+  const onboardingKarteKoerper = (c: OnboardingCase) => {
+    const t = tageBisStart(c.validFrom, BEZUGSDATUM);
+    const ueber = t < 0 && !istVertragUnterzeichnet(c.currentStep);
+    const resp = c.responsibleUserId ? RESPONSIBLE[c.responsibleUserId] : null;
+    return (
+      <div className="flex flex-col" style={{ gap: 6 }}>
+        <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
+          <span style={{ fontFamily: "monospace", color: "var(--text-tertiary)", marginRight: 6 }}>{c.currentStep}/{ANZAHL_SCHRITTE}</span>
+          {schrittLabel(c.currentStep)}
+        </div>
+        <div className="flex items-center flex-wrap" style={{ gap: "4px 12px", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+          <span>
+            {c.pendenzenOffen === 0 ? "Keine Pendenzen" : `${c.pendenzenOffen} Pendenz${c.pendenzenOffen === 1 ? "" : "en"}`}
+            {c.pendenzenUeberfaellig > 0 && <span style={{ color: "var(--status-warning-text)", fontWeight: 500 }}> · {c.pendenzenUeberfaellig} überfällig</span>}
+          </span>
+          <span>{c.pflichtdokErledigt}/{c.pflichtdokGefordert} Pflichtdok.</span>
+          <span style={{ whiteSpace: "nowrap" }}>
+            Start {isoZuAnzeige(c.validFrom)}
+            {ueber && <span style={{ color: "var(--status-danger)", fontWeight: 500 }}> +{Math.abs(t)} {Math.abs(t) === 1 ? "Tag" : "Tage"}</span>}
+          </span>
+        </div>
+        <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+          {resp ? resp.kurz : "Nicht zugewiesen"}
+        </div>
+      </div>
+    );
+  };
+
   const onboardingSpalten: SpalteDef<OnboardingCase>[] = [
     { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", sortierbar: true, ausKarte: true, render: kennzeichenIcon },
     { id: "patient", label: "Patient", anteil: 20, minCh: 22, align: "left", sortierbar: true, ausKarte: true,
@@ -259,6 +290,11 @@ export function OnboardingListPage() {
             </>}
             chips={STATUS_CHIPS.map(chip => ({
               id: chip.id, label: chip.label, anzahl: chipCounts[chip.id],
+              // Lauf 1b: gekürzte Beschriftung auf schmalen Fenstern; volle bleibt als title
+              kurzLabel: chip.id === "start_ueberschritten" ? "Startdatum"
+                : chip.id === "pendenz_ueberfaellig" ? "Überfällig"
+                : chip.id === "pflichtdok_offen" ? "Pflichtdok."
+                : "Nicht zugew.",
               aktiv: filter.statusChips.has(chip.id), onToggle: () => toggleChip(chip.id),
             }))}
             sichtText={`${filter.segment === "meine" ? "Meine offenen Mandate" : "Alle offenen Mandate"} · sortiert nach ${SORT_LABEL[sort.key]}`}
@@ -296,6 +332,7 @@ export function OnboardingListPage() {
               sort={sort}
               onSort={k => toggleSort(k as SortKey)}
               karteTitel={onboardingKarteTitel}
+              karteKoerper={onboardingKarteKoerper}
               fusszeile={<><span>{filtered.length} von {cases.length} offenen Mandaten</span><span>Stand: {isoZuAnzeige("2026-07-31")}</span></>}
               leerText="Keine Mandate mit diesen Filtern."
             />

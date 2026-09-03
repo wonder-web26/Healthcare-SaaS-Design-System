@@ -78,7 +78,8 @@ export function VertragsStep({ angehoerigerName, stundenlohn, eintrittsdatum, on
 
       {/* Hard-gate banner */}
       {!arbeitsvertragSigned && (
-        <div className="flex items-center" style={{ gap: "var(--space-3)", padding: "var(--space-4) var(--space-5)", background: "var(--status-warning-bg)", borderRadius: "var(--radius-card)", marginBottom: "var(--space-6)" }}>
+        // m1-vertrag-banner: unter 640px rückt die Aktion unter den Text (Lauf 1b)
+        <div className="flex items-center m1-vertrag-banner" style={{ gap: "var(--space-3)", padding: "var(--space-4) var(--space-5)", background: "var(--status-warning-bg)", borderRadius: "var(--radius-card)", marginBottom: "var(--space-6)" }}>
           <AlertTriangle style={{ width: 20, height: 20, color: "var(--status-warning-text)", flexShrink: 0 }} />
           <div className="flex-1">
             <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--status-warning-text)" }}>
@@ -108,7 +109,8 @@ export function VertragsStep({ angehoerigerName, stundenlohn, eintrittsdatum, on
           const isSigned = sig.signed;
           const statusLabel = isSigned ? "Unterschrieben" : "Nicht unterschrieben";
           return (
-            <div key={doc.key} className="flex items-center" style={{ gap: "var(--space-4)", padding: "var(--space-4) var(--space-5)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+            // m1-dok-karte: unter 640px rückt die Aktionsgruppe unter den Text (Lauf 1b)
+            <div key={doc.key} className="flex items-center m1-dok-karte" style={{ gap: "var(--space-4)", padding: "var(--space-4) var(--space-5)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
               {/* Icon */}
               <div className="shrink-0 flex items-center justify-center" style={{ width: 36, height: 36, borderRadius: "var(--radius-card)", background: "var(--bg-secondary)" }}>
                 <FileText style={{ width: 18, height: 18, color: "var(--text-secondary)" }} />
@@ -131,7 +133,7 @@ export function VertragsStep({ angehoerigerName, stundenlohn, eintrittsdatum, on
               </div>
 
               {/* Status + Action */}
-              <div className="flex items-center shrink-0" style={{ gap: "var(--space-2)" }}>
+              <div className="flex items-center shrink-0 m1-dok-aktion" style={{ gap: "var(--space-2)" }}>
                 <span className="inline-flex items-center" style={{
                   gap: 4, padding: "4px 12px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
                   background: isSigned ? "var(--status-success-bg)" : "var(--bg-secondary)",

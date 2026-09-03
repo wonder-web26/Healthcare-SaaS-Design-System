@@ -737,12 +737,14 @@ export function OnboardingPage() {
           <ArrowLeft style={{ width: 14, height: 14 }} /><span>{returnLabel}</span>
         </button>
 
-        {/* Zeile 2 — unterhalb des Desktop-Breakpoints stapelt die Zeile:
-            Name oben, Marken darunter (m1-kopf-stapel, siehe theme.css). */}
-        <div className="flex items-start justify-between m1-kopf-stapel" style={{ gap: 12 }}>
-          {/* Links: Patientenname (Titel) · bedienbare Statusmarke · Angehörige (Kontext) */}
-          <div className="min-w-0 flex items-center flex-wrap" style={{ gap: 8, rowGap: 4, minHeight: 26 }}>
-            <span style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere", minWidth: 0 }}>
+        {/* Zeile 2 — unterhalb des Desktop-Breakpoints bleiben nur Name,
+            Statuswahl und die zwei Schaltflächen; Kontextzeile und Marken
+            entfallen (Lauf 1b, Änderung 1 — Zähler wandern an ihre Orte). */}
+        <div className="flex items-start justify-between" style={{ gap: 12 }}>
+          {/* Links: Patientenname (Titel) · bedienbare Statusmarke · Angehörige (Kontext).
+              Unter 640px eine Zeile: langer Name mit Ellipse, Volltext im title (Lauf 1b). */}
+          <div className="min-w-0 flex items-center flex-wrap m1-kopf-links" style={{ gap: 8, rowGap: 4, minHeight: 26 }}>
+            <span className="m1-kopf-name" title={caseInfo.patient ?? undefined} style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere", minWidth: 0 }}>
               {/* Titel = Patientenname aus der Fallquelle (Schreibweise der Liste: Nachname, Vorname),
                   zur Anzeigezeit aufgelöst; zeigt immer den Patienten (auch im Angehörigen-Schritt).
                   Ohne Fall — Neuanlage oder unbekannte Kennung — die Neuanlage-Beschriftung. */}
@@ -778,8 +780,9 @@ export function OnboardingPage() {
             ) : (
               <StatusMarke label={statusDarstellung.label} variante="neutral" />
             )}
+            {/* Unter 1024px entfällt die Kontextzeile — der Name steht im Reiter "Angehöriger" */}
             {caseInfo.angehoeriger && (
-              <span className="inline-flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)" }}>
+              <span className="hidden lg:inline-flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)" }}>
                 <span style={{ color: "var(--text-tertiary)" }}>Angehörige</span>
                 <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{caseInfo.angehoeriger}</span>
               </span>
@@ -789,24 +792,38 @@ export function OnboardingPage() {
             )}
           </div>
 
-          {/* Rechts: überfällig (nur wenn vorhanden) · Schrittzähler · Dokumente · Überlaufmenü */}
-          <div className="flex items-center shrink-0 flex-wrap justify-end m1-kopf-pills" style={{ gap: 6 }}>
-            {ueberfaelligAnzahl > 0 && <StatusMarke label={`${ueberfaelligAnzahl} überfällig`} variante="warnung" />}
-            <StatusMarke label={`${completedCount} von ${nonBlockedSteps.length} Schritten`} variante="neutral" />
+          {/* Rechts: überfällig (nur wenn vorhanden) · Schrittzähler · Dokumente · Überlaufmenü.
+              Die drei Marken sind Desktop-only (Lauf 1b): der Überfällig-Zähler sitzt
+              unterhalb 1024px an der Seitenspalten-Schaltfläche, der Dokumente-Zähler
+              an den Dokumente-Reitern; der Schrittzähler entfällt (die Schrittleiste
+              zeigt denselben Stand über die Zustandssymbole je Schritt). */}
+          <div className="flex items-center shrink-0 flex-wrap justify-end" style={{ gap: 6 }}>
+            {ueberfaelligAnzahl > 0 && <span className="hidden lg:inline-flex"><StatusMarke label={`${ueberfaelligAnzahl} überfällig`} variante="warnung" /></span>}
+            <span className="hidden lg:inline-flex"><StatusMarke label={`${completedCount} von ${nonBlockedSteps.length} Schritten`} variante="neutral" /></span>
             {fehlendeDocs > 0 && (
-              docsAreLastBlocker
-                ? <StatusMarke label={`${fehlendeDocs} Pflichtdok. fehlen`} variante="warnung" />
-                : <StatusMarke label={`${fehlendeDocs} Dokumente offen`} variante="neutral" />
+              <span className="hidden lg:inline-flex">
+                {docsAreLastBlocker
+                  ? <StatusMarke label={`${fehlendeDocs} Pflichtdok. fehlen`} variante="warnung" />
+                  : <StatusMarke label={`${fehlendeDocs} Dokumente offen`} variante="neutral" />}
+              </span>
             )}
-            {/* Muster D: Zugang zur Zustandsspalte, nur unterhalb des Desktop-Breakpoints */}
+            {/* Muster D: Zugang zur Zustandsspalte, nur unterhalb des Desktop-Breakpoints.
+                Trägt den Überfällig-Zähler aus dem Kopfbereich (Lauf 1b, Änderung 1). */}
             <button
               type="button"
-              aria-label="Bezugsperson, Workflow und Notizen anzeigen"
+              aria-label={ueberfaelligAnzahl > 0
+                ? `Bezugsperson, Workflow und Notizen anzeigen, ${ueberfaelligAnzahl} überfällig`
+                : "Bezugsperson, Workflow und Notizen anzeigen"}
               onClick={() => setSeitenspalteOffen(true)}
-              className="ui-fokusring lg:hidden flex items-center justify-center shrink-0 cursor-pointer"
+              className="ui-fokusring lg:hidden relative flex items-center justify-center shrink-0 cursor-pointer"
               style={{ width: "var(--marke-height-interaktiv)", height: "var(--marke-height-interaktiv)", borderRadius: "var(--control-radius)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", color: "var(--text-secondary)" }}
             >
               <PanelRight style={{ width: 16, height: 16 }} />
+              {ueberfaelligAnzahl > 0 && (
+                <span aria-hidden="true" className="absolute flex items-center justify-center" style={{ top: -5, right: -5, minWidth: 16, height: 16, padding: "0 4px", borderRadius: "var(--radius-pill)", background: "var(--status-danger)", color: "var(--text-on-dark)", fontSize: 11, fontWeight: "var(--weight-medium)", lineHeight: 1 }}>
+                  {ueberfaelligAnzahl}
+                </span>
+              )}
             </button>
             {hatKennung && (
               <DropdownMenu>
@@ -823,6 +840,12 @@ export function OnboardingPage() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {/* Lauf 1b: "Gespräch" verlässt unter 1024px die Reiterzeile und lebt hier */}
+                  {!isRecording && (
+                    <DropdownMenuItem className="lg:hidden" onSelect={startGespraech} style={{ gap: 8 }}>
+                      <Mic style={{ width: 14, height: 14 }} /> Gespräch starten
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onSelect={() => setAbbruchOffen(true)} style={{ gap: 8, color: "var(--status-danger)" }}>
                     <Ban style={{ width: 14, height: 14 }} /> Fall abbrechen
                   </DropdownMenuItem>
@@ -1105,6 +1128,7 @@ export function OnboardingPage() {
                   reiterAktion={gespraechReiter}
                   arbeitsortKanton={patientData.kanton}
                   arbeitsortOrt={patientData.pflegeortAbweichend ? patientData.pflegeortOrt : patientData.adresseOrt}
+                  dokumenteZaehler={abschlussPruefung.fehlendAng.length}
                 />
               )}
               {activeStepData.key === "spezialbewilligung" && (
@@ -1119,6 +1143,7 @@ export function OnboardingPage() {
                   requestedTab={requestedPatientTab}
                   onTabSwitched={() => setRequestedPatientTab(null)}
                   reiterAktion={gespraechReiter}
+                  dokumenteZaehler={abschlussPruefung.fehlendPatient.length}
                 />
               )}
               {activeStepData.key === "vertrag" && (
@@ -1132,9 +1157,11 @@ export function OnboardingPage() {
               )}
             </div>
 
-            {/* ── FOOTER NAVIGATION (innerhalb des Containers, keine eigene Karte) ── */}
-            <div className="shrink-0" style={{ padding: "var(--space-4) var(--space-5)", background: "transparent", borderTop: "var(--border-thin) solid var(--border-default)" }}>
-              <div className="flex items-center justify-between">
+            {/* ── FOOTER NAVIGATION (innerhalb des Containers, keine eigene Karte).
+                   Unter 640px: Hauptaktion volle Breite, Zurück/Speichern darunter
+                   je zur Hälfte, mit Geräte-Sicherheitsabstand (m1-fuss, Lauf 1b). ── */}
+            <div className="shrink-0 m1-fuss-rahmen" style={{ padding: "var(--space-4) var(--space-5)", background: "transparent", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+              <div className="flex items-center justify-between m1-fuss">
                 {/* Left: Back (Wizard-Schritt zurück) — Sekundär */}
                 <AppButton variant="sekundaer" icon={ChevronLeft} onClick={goPrev} disabled={currentStep === 1}>Zurück</AppButton>
 
@@ -1143,7 +1170,7 @@ export function OnboardingPage() {
                 <span aria-hidden="true" />
 
                 {/* Right: Save + Next/Finish — genau ein Primär (Weiter ODER Abschliessen) */}
-                <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
+                <div className="flex items-center m1-fuss-rechts" style={{ gap: "var(--space-2)" }}>
                   <AppButton variant="sekundaer" icon={isSaving ? Loader2 : Save} iconClassName={isSaving ? "animate-spin" : undefined} onClick={handleSave} disabled={isSaving}>Speichern</AppButton>
 
                   {currentStep < wizardSteps.length ? (

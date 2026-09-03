@@ -89,6 +89,10 @@ export interface DataTableProps<T> {
   fusszeile?: React.ReactNode;
   /** Kartenkopf (z. B. Name + Kennzeichen); die übrigen Spalten werden zu beschrifteten Wertepaaren. */
   karteTitel: (row: T) => React.ReactNode;
+  /** Freier Kartenkörper (Lauf 1b): ersetzt das beschriftete Wertepaar-Raster der
+   *  Karte vollständig — die Liste bestimmt Zeilen und Reihenfolge selbst.
+   *  Fehlt er, gilt das bisherige Raster; bestehende Listen bleiben unberührt. */
+  karteKoerper?: (row: T) => React.ReactNode;
   /** Optionale Überschriften über zusammengehörenden Spalten. */
   gruppen?: SpaltenGruppe[];
   leerText?: string;
@@ -114,8 +118,9 @@ export interface DataTableProps<T> {
   tabletQuerscroll?: boolean;
 }
 
-/** Fensterbreite, reaktiv. SSR-sicher: startet gross, damit initial alle Spalten erscheinen. */
-function useFensterBreite(): number {
+/** Fensterbreite, reaktiv. SSR-sicher: startet gross, damit initial alle Spalten erscheinen.
+ *  Exportiert, damit Seiten dieselbe Messung nutzen (z. B. Filterzeilen-Anordnung, Lauf 1b). */
+export function useFensterBreite(): number {
   const [breite, setBreite] = React.useState<number>(
     typeof window !== "undefined" ? window.innerWidth : 1920,
   );
@@ -191,7 +196,7 @@ function Kontrollkaestchen({ gewaehlt, onToggle, label }: { gewaehlt: boolean; o
 
 export function DataTable<T>({
   spalten, zeilen, zeilenKey, onZeileKlick, zeilenHintergrund, zeilenAkzent,
-  sort, onSort, fusszeile, karteTitel, leerText = "Keine Ergebnisse.",
+  sort, onSort, fusszeile, karteTitel, karteKoerper, leerText = "Keine Ergebnisse.",
   auswahl, containerHaltepunkte = false, karteAbPx, gruppen, tabletQuerscroll = false,
 }: DataTableProps<T>) {
   const rahmenRef = React.useRef<HTMLDivElement>(null);
@@ -347,14 +352,18 @@ export function DataTable<T>({
                   </div>
                 ) : karteTitel(row)}
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.5rem 1rem" }}>
-                {koerper.map(s => (
-                  <div key={s.id} style={{ minWidth: 0 }}>
-                    <div className="m1-mindestschrift" style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)", fontWeight: "var(--weight-medium)" }}>{s.label}</div>
-                    <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{s.render(row)}</div>
-                  </div>
-                ))}
-              </div>
+              {karteKoerper ? (
+                karteKoerper(row)
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.5rem 1rem" }}>
+                  {koerper.map(s => (
+                    <div key={s.id} style={{ minWidth: 0 }}>
+                      <div className="m1-mindestschrift" style={{ fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)", fontWeight: "var(--weight-medium)" }}>{s.label}</div>
+                      <div style={{ fontSize: "0.8125rem", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{s.render(row)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             );
           })}

@@ -420,14 +420,10 @@ html {
      innere Liste nicht umbrechen — sie wächst und der Rahmen scrollt. */
   .m1-leiste-scroll > [role="tablist"] { flex-wrap: nowrap !important; }
 
-  /* ── Kopfbereich: Titelzeile stapelt, Pills rücken unter den Namen ── */
-  .m1-kopf-stapel {
-    flex-direction: column !important;
-    align-items: stretch !important;
-  }
-  .m1-kopf-stapel > .m1-kopf-pills {
-    justify-content: flex-start !important;
-  }
+  /* ── Kopfbereich (Lauf 1b): Marken und Kontextzeile entfallen unter dem
+     Desktop-Breakpoint — die Zähler wandern an Reiter, Schritte und die
+     Seitenspalten-Schaltfläche. Nur Name, Statuswahl und Schaltflächen bleiben. */
+  .m1-nur-desktop { display: none !important; }
 
   /* ── Muster E: Dialog wird Blatt ──
      m1-dialog-wrap liegt auf dem Overlay (fixed inset-0, flex),
@@ -484,4 +480,43 @@ html {
     min-height: 44px;
   }
   a { min-height: 44px; display: inline-flex; align-items: center; }
+}
+
+/* ═══ Lauf 1b: Telefon-Feinheiten (nur unter 640px) ═══ */
+@media (max-width: 639px) {
+  /* ── Kopfbereich Onboarding-Detail: Zeile 2 bleibt EINE Zeile —
+     langer Name wird mit Ellipse gekürzt (Volltext im title),
+     Statuswahl und Schaltflächen bleiben daneben (P13 ≤ 130px). ── */
+  .m1-kopf-links { flex-wrap: nowrap !important; }
+  .m1-kopf-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  /* ── Fusszeile: Hauptaktion volle Breite, Zurück und Speichern darunter
+     je zur Hälfte. Die rechte Gruppe wird per display:contents aufgelöst,
+     damit ihre Kinder eigene Rasterzellen belegen. ── */
+  .m1-fuss-rahmen {
+    padding-bottom: calc(var(--space-4) + var(--safe-area-bottom, 0px)) !important;
+  }
+  .m1-fuss {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .m1-fuss > span[aria-hidden] { display: none; }
+  .m1-fuss > button { grid-row: 2; grid-column: 1; width: 100%; justify-content: center; }
+  .m1-fuss-rechts { display: contents !important; }
+  .m1-fuss-rechts > :first-child { grid-row: 2; grid-column: 2; width: 100%; justify-content: center; }
+  .m1-fuss-rechts > :last-child { grid-row: 1; grid-column: 1 / -1; width: 100%; }
+  .m1-fuss-rechts > :last-child button { width: 100%; justify-content: center; }
+
+  /* ── Vertragsunterzeichnung: Banner-Aktion und Karten-Aktionen rücken
+     unter den Text statt daneben — nichts wird abgeschnitten. ── */
+  .m1-vertrag-banner { flex-wrap: wrap; }
+  .m1-vertrag-banner > button { flex: 1 1 100%; justify-content: center; }
+  .m1-dok-karte { flex-wrap: wrap; }
+  .m1-dok-karte > .m1-dok-aktion { flex: 1 1 100%; justify-content: flex-end; }
 }

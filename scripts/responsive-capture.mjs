@@ -58,6 +58,19 @@ export const VIEWS = [
       await page.waitForTimeout(500);
     },
   },
+  {
+    // Lauf 1b: Vertragsunterzeichnung (P15 — keine abgeschnittenen Beschriftungen).
+    // keinP1: erst nach Lauf 1 aufgenommen, es gibt kein Vorher-Referenzbild.
+    name: "onboarding-vertrag",
+    path: "/onboarding/OB-2026-102",
+    keinP1: true,
+    actions: async (page) => {
+      await page
+        .locator('[role="tablist"][aria-label="Phasen"] button', { hasText: "Vertragsunterzeichnung" })
+        .click();
+      await page.waitForTimeout(500);
+    },
+  },
 ];
 
 async function main() {

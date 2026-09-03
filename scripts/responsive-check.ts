@@ -131,6 +131,87 @@ async function messungen(page: Page): Promise<Befund[]> {
       }
     }
 
+    /* P13 — Kopfhöhe (Lauf 1b): der Kopfbereich des Onboarding-Details misst bei
+       390px höchstens 130px von der Unterkante der Topbar bis zur Phasenzeile. */
+    if (W < 640) {
+      const phasen = document.querySelector('[role="tablist"][aria-label="Phasen"]');
+      const topbar = document.querySelector("header");
+      if (phasen && topbar) {
+        const hoehe = Math.round(phasen.getBoundingClientRect().top - topbar.getBoundingClientRect().bottom);
+        if (hoehe > 130) {
+          befunde.push({ pruefung: "P13", element: "Kopfbereich Onboarding-Detail", detail: `${hoehe}px bis zur Phasenzeile (Grenze 130px)` });
+        } else {
+          // Messwert wird berichtet, zählt aber nicht als Befund (INFO).
+          befunde.push({ pruefung: "P13-INFO", element: "Kopfbereich Onboarding-Detail", detail: `${hoehe}px bis zur Phasenzeile (Grenze 130px)` });
+        }
+      }
+    }
+
+    /* P14 — Filter in einer Zeile (Lauf 1b): die scrollende Filterzeile der Listen
+       belegt genau eine Zeile — alle Kinder auf derselben Höhe, kein Umbruch. */
+    for (const zeile of Array.from(document.querySelectorAll(".m1-leiste-scroll"))) {
+      if (!sichtbar(zeile)) continue;
+      const kinder = Array.from(zeile.children).filter(sichtbar);
+      if (kinder.length < 2) continue;
+      const tops = kinder.map(k => Math.round(k.getBoundingClientRect().top));
+      const minTop = Math.min(...tops), maxTop = Math.max(...tops);
+      if (maxTop - minTop > 6) {
+        befunde.push({ pruefung: "P14", element: beschreibe(zeile), detail: `Kinder auf ${maxTop - minTop}px Höhenversatz — umbrochen statt gescrollt` });
+      }
+    }
+
+    /* P15 — keine abgeschnittenen Beschriftungen an Knöpfen und Reitern.
+       Ausnahme: Daten-Trunkierung mit hinterlegtem Volltext (title/aria-label,
+       etabliertes Muster z. B. für Personen-Links in Tabellenzellen — auch auf
+       Desktop so dargestellt). Aktions-Beschriftungen ohne Volltext fallen durch. */
+    for (const el of Array.from(document.querySelectorAll('button, [role="tab"]'))) {
+      if (!sichtbar(el)) continue;
+      if (el.getAttribute("title") || el.getAttribute("aria-label")) continue;
+      const kandidaten = [el, ...Array.from(el.querySelectorAll("*"))];
+      for (const k of kandidaten) {
+        if (k.scrollWidth <= k.clientWidth + 1) continue;
+        if (k.getAttribute("title") || k.getAttribute("aria-label")) continue;
+        const cs = getComputedStyle(k);
+        const clippt = cs.overflow === "hidden" || cs.overflowX === "hidden" || cs.textOverflow === "ellipsis";
+        const hatText = (k.textContent || "").trim().length > 0;
+        if (clippt && hatText) {
+          befunde.push({ pruefung: "P15", element: beschreibe(el), detail: `Beschriftung gekürzt (${k.scrollWidth}px in ${k.clientWidth}px)` });
+          break;
+        }
+      }
+    }
+
+    /* P16 — nichts überdeckt Aktionen: kein schwebendes (fixed) Element, das nicht
+       selbst ein flächiges Overlay ist, liegt über einem Knopf, Eingabefeld oder
+       einer Fusszeile. */
+    {
+      const ziele = Array.from(document.querySelectorAll("button, a[href], input, select, textarea")).filter(el => {
+        if (!sichtbar(el)) return false;
+        const r = el.getBoundingClientRect();
+        return r.top >= 0 && r.bottom <= window.innerHeight && r.left >= 0 && r.right <= W;
+      });
+      const istFlaechigesOverlay = (el: Element): boolean => {
+        const r = el.getBoundingClientRect();
+        return r.width >= W * 0.9 || r.height >= window.innerHeight * 0.9;
+      };
+      for (const ziel of ziele) {
+        const r = ziel.getBoundingClientRect();
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (!top || ziel.contains(top) || top.contains(ziel)) continue;
+        // Liegt der oberste Treffer in einem fixed-Teilbaum, der das Ziel nicht enthält?
+        let p: Element | null = top;
+        while (p && p !== document.body) {
+          if (getComputedStyle(p).position === "fixed") {
+            if (!p.contains(ziel) && !istFlaechigesOverlay(p)) {
+              befunde.push({ pruefung: "P16", element: `${beschreibe(ziel)} unter ${beschreibe(p)}`, detail: "schwebendes Element überdeckt Aktion" });
+            }
+            break;
+          }
+          p = p.parentElement;
+        }
+      }
+    }
+
     /* P7 — Überdeckungen interaktiver Elemente (Heuristik: >40% Fläche überlappt,
        kein Vorfahr/Nachfahr-Verhältnis, beide sichtbar und bedienbar).
        Elemente, die unter einem Overlay liegen (Dialog, Blatt, Detail-Overlay),
@@ -176,15 +257,18 @@ async function laufP2bisP7() {
         await page.addStyleTag({ content: FREEZE_CSS });
         await page.waitForTimeout(500);
         if (view.actions) await view.actions(page);
-        const befunde = await messungen(page);
+        const alleBefunde = await messungen(page);
+        const infos = alleBefunde.filter(b => b.pruefung.endsWith("-INFO"));
+        const befunde = alleBefunde.filter(b => !b.pruefung.endsWith("-INFO"));
         bericht[view.name] = bericht[view.name] || {};
-        bericht[view.name][groesse.name] = befunde;
+        bericht[view.name][groesse.name] = alleBefunde;
         gesamt += befunde.length;
         const zusammenfassung = befunde.length === 0
           ? "OK"
           : Object.entries(befunde.reduce<Record<string, number>>((m, b) => ((m[b.pruefung] = (m[b.pruefung] || 0) + 1), m), {}))
               .map(([p, c]) => `${p}:${c}`).join(" ");
-        console.log(`${view.name} @ ${groesse.name} — ${zusammenfassung}`);
+        const infoText = infos.map(i => ` · ${i.pruefung.replace("-INFO", "")} ${i.detail}`).join("");
+        console.log(`${view.name} @ ${groesse.name} — ${zusammenfassung}${infoText}`);
       } catch (err) {
         gesamt += 1;
         console.log(`${view.name} @ ${groesse.name} — FEHLER: ${(err as Error).message.split("\n")[0]}`);
@@ -211,7 +295,8 @@ async function laufP1() {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce", deviceScaleFactor: 1 });
   let gesamt = 0;
 
-  for (const view of VIEWS as { name: string; path: string; actions?: (p: Page) => Promise<void> }[]) {
+  for (const view of VIEWS as { name: string; path: string; keinP1?: boolean; actions?: (p: Page) => Promise<void> }[]) {
+    if (view.keinP1) continue; // Ansicht ohne Vorher-Referenz (nach Lauf 1 ergänzt)
     const page = await context.newPage();
     try {
       await page.goto(BASE + view.path, { waitUntil: "networkidle" });

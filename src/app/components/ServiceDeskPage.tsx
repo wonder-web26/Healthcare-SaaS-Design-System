@@ -5,7 +5,7 @@ import { getUnifiedEntries, entryBetreff, entryPersonName, CURRENT_USER, type Un
 import { personLink, personArtLabel, type PersonenBezug } from "../../lib/mocks/personen-aufloesung";
 import { type Person } from "../../lib/mocks/workflow-tasks";
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
-import { DataTable, type SpalteDef } from "./ui/DataTable";
+import { DataTable, useFensterBreite, type SpalteDef } from "./ui/DataTable";
 import { isoZuAnzeige, formatTagMonat, isoZuDate } from "../../lib/datum";
 import { PersonenAuswahl, type PersonOption } from "./ui/PersonenAuswahl";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
@@ -468,15 +468,25 @@ export function ServiceDeskPage() {
     <span title={e.verantwortlich.name} style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>{e.verantwortlich.initialen}</span>
   );
 
-  // Einzeilige Tabelle in allen Master-Detail-Breiten (Karten erst < 500 px, siehe
-  // karteAbPx). Kartenkopf nur für den seltenen Kartenfall: Kennzeichen + Betreff + Fälligkeit.
+  // Karte (Telefon, Lauf 1b Änderung 6): Titel — darunter die Person als Link —
+  // darunter eine Zeile mit Statuspunkt, Fälligkeit und Warnzeichen bei
+  // Überfälligkeit (Form + Text, nicht allein Farbe). Kein Raster in der Karte.
   const karteTitel = (e: UnifiedEntry) => (
-    <div className="flex items-center" style={{ gap: 8, width: "100%", minWidth: 0 }}>
-      {kennzeichenIcon(e)}
-      <span className="truncate" style={{ flex: 1, minWidth: 0, fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{e.betreff}</span>
-      {e.faellig && faelligZelle(e)}
-    </div>
+    <span className="truncate" style={{ display: "block", minWidth: 0, fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{e.betreff}</span>
   );
+  const karteKoerper = (e: UnifiedEntry) => {
+    const ueberfaellig = e.status !== "erledigt" && e.faellig != null && daysFromToday(e.faellig)! < 0;
+    return (
+      <div className="flex flex-col" style={{ gap: 6 }}>
+        <div style={{ fontSize: "var(--text-small)" }}>{personZelle(e)}</div>
+        <div className="flex items-center flex-wrap" style={{ gap: 10 }}>
+          {statusZelle(e)}
+          {faelligZelle(e)}
+          {ueberfaellig && <AlertTriangle role="img" aria-label="überfällig" style={{ width: 14, height: 14, color: "var(--status-danger)", flexShrink: 0 }} />}
+        </div>
+      </div>
+    );
+  };
 
   // Je Spalte Mindestbreite und Obergrenze in ch — der Browser verteilt via minmax().
   // Keine eigene Pixelrechnung, keine gesteuerte Verteilungsreihenfolge.
@@ -512,6 +522,10 @@ export function ServiceDeskPage() {
 
   const keineTreffer = sorted.length === 0;
   const suchButton = { background: "transparent", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-pill)", padding: "5px 12px", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", fontFamily: "inherit", cursor: "pointer" } as const;
+
+  // Lauf 1b: unter 1024px stehen alle Filter in EINER scrollenden Zeile;
+  // die Bausteine werden je Breite nur anders angeordnet, nie doppelt gebaut.
+  const istSchmal = useFensterBreite() < 1024;
 
   // Muster C: Verlauf am rechten Rand der Filterleiste, solange waagrecht
   // scrollbar (nicht am Ende) — gleiche Mechanik wie die Reiterleisten
@@ -551,55 +565,82 @@ export function ServiceDeskPage() {
             </button>
           </div>
 
-          {/* Steuerleiste: Suche, Zugehörigkeit, Auswahlfelder */}
-          <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
-            <div className="flex items-center" style={{ flex: "1 1 220px", maxWidth: 300, gap: "var(--space-2)", padding: "7px 14px", borderRadius: 8, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
-              <Search style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
-              <input value={filter.suche} onChange={e => setSuche(e.target.value)} placeholder="Pendenzen suchen…" className="flex-1 bg-transparent outline-none" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", minWidth: 0 }} />
-              {filter.suche && <button onClick={() => setSuche("")} className="cursor-pointer shrink-0" style={{ background: "transparent", border: "none" }}><X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} /></button>}
-            </div>
-
-            <div className="inline-flex shrink-0" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
-              {SEGMENTE.map(([seg, lbl]) => {
-                const aktiv = filter.segment === seg;
-                return (
-                  <button key={seg} type="button" onClick={() => setSegment(seg)} className="ui-fokusring cursor-pointer transition-colors"
-                    style={{ padding: "5px 14px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--bg-elevated)" : "transparent", border: aktiv ? "var(--border-thin) solid var(--border-default)" : "var(--border-thin) solid transparent", fontSize: "var(--text-small)", fontWeight: aktiv ? "var(--weight-medium)" : "var(--weight-regular)", color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-                    {lbl}
-                  </button>
-                );
-              })}
-            </div>
-
-            <AuswahlDropdown label="Kategorie" optionen={alleArten.map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))} ausgewaehlt={filter.arten as Set<string>} onToggle={v => toggleArt(v as PendenzTyp)} />
-            <AuswahlDropdown label="Zuständig" optionen={alleZustaendige.map(n => ({ value: n, label: n }))} ausgewaehlt={filter.zustaendige} onToggle={toggleZustaendig} />
-          </div>
-
-          {/* Status-Chips — kombinierbar (UND), Zahl aus denselben Daten.
-              Unter dem Desktop-Breakpoint scrollt die Leiste waagrecht (Muster C),
-              mit Verlauf am rechten Rand, solange mehr folgt. */}
-          <div className="relative">
-          <div ref={chipScrollRef} onScroll={pruefeChipVerlauf} className="flex items-center flex-wrap m1-leiste-scroll" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
-            {STATUS_CHIPS.map(chip => {
+          {/* Steuerleiste + Status-Chips.
+              Desktop: Suche/Umschalter/Auswahlfelder in Zeile 1, Chips in Zeile 2 —
+              unverändert. Unter 1024px (Lauf 1b): Suche allein in Zeile 1, alle
+              Filter in EINER waagrecht scrollenden Zeile mit Verlauf (Muster C).
+              Die Bausteine existieren nur einmal und werden angeordnet. */}
+          {(() => {
+            const suchfeld = (
+              <div className="flex items-center" style={{ flex: "1 1 220px", maxWidth: 300, gap: "var(--space-2)", padding: "7px 14px", borderRadius: 8, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
+                <Search style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
+                <input value={filter.suche} onChange={e => setSuche(e.target.value)} placeholder="Pendenzen suchen…" className="flex-1 bg-transparent outline-none" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", minWidth: 0 }} />
+                {filter.suche && <button onClick={() => setSuche("")} className="cursor-pointer shrink-0" style={{ background: "transparent", border: "none" }}><X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} /></button>}
+              </div>
+            );
+            const segmentSchalter = (
+              <div className="inline-flex shrink-0" style={{ padding: 2, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)" }}>
+                {SEGMENTE.map(([seg, lbl]) => {
+                  const aktiv = filter.segment === seg;
+                  return (
+                    <button key={seg} type="button" onClick={() => setSegment(seg)} className="ui-fokusring cursor-pointer transition-colors"
+                      style={{ padding: "5px 14px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--bg-elevated)" : "transparent", border: aktiv ? "var(--border-thin) solid var(--border-default)" : "var(--border-thin) solid transparent", fontSize: "var(--text-small)", fontWeight: aktiv ? "var(--weight-medium)" : "var(--weight-regular)", color: aktiv ? "var(--text-primary)" : "var(--text-secondary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                      {lbl}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+            const auswahlFelder = (
+              <>
+                <AuswahlDropdown label="Kategorie" optionen={alleArten.map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))} ausgewaehlt={filter.arten as Set<string>} onToggle={v => toggleArt(v as PendenzTyp)} />
+                <AuswahlDropdown label="Zuständig" optionen={alleZustaendige.map(n => ({ value: n, label: n }))} ausgewaehlt={filter.zustaendige} onToggle={toggleZustaendig} />
+              </>
+            );
+            const chipListe = STATUS_CHIPS.map(chip => {
               const aktiv = filter.statusChips.has(chip.id);
               const n = chipCounts[chip.id];
+              // Lauf 1b: gekürzte Beschriftung auf schmalen Fenstern; die volle
+              // Bezeichnung bleibt als title/aria-label erhalten.
+              const kurz = chip.id === "diese_woche" ? "Diese Woche" : chip.label;
               return (
-                <button key={chip.id} type="button" onClick={() => toggleChip(chip.id)} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
+                <button key={chip.id} type="button" onClick={() => toggleChip(chip.id)} title={chip.label} aria-label={`${chip.label} ${n}`} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
                   style={{ gap: 7, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: aktiv ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: aktiv ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: aktiv ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
                   <span className="inline-flex items-center justify-center shrink-0" style={{ width: 15, height: 15, borderRadius: 4, border: aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: aktiv ? "var(--brand-primary)" : "transparent" }}>
                     {aktiv && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}
                   </span>
-                  {chip.label}
+                  {istSchmal ? kurz : chip.label}
                   <span style={{ fontVariantNumeric: "tabular-nums", color: aktiv ? "var(--brand-primary)" : "var(--text-tertiary)" }}>{n}</span>
                 </button>
               );
-            })}
-          </div>
-          {/* Muster C: Verlauf von Flächenfarbe zu durchsichtig am rechten Rand, nur wenn scrollbar */}
-          {chipVerlauf && (
-            <div aria-hidden="true" style={{ position: "absolute", top: 0, bottom: "var(--space-2)", right: 0, width: 28, pointerEvents: "none", background: "linear-gradient(to right, transparent, var(--bg-primary))" }} />
-          )}
-          </div>
+            });
+            return istSchmal ? (
+              <>
+                <div className="flex items-center" style={{ gap: 8, marginBottom: "var(--space-2)" }}>{suchfeld}</div>
+                <div className="relative">
+                  <div ref={chipScrollRef} onScroll={pruefeChipVerlauf} className="flex items-center m1-leiste-scroll" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
+                    {segmentSchalter}
+                    {auswahlFelder}
+                    {chipListe}
+                  </div>
+                  {chipVerlauf && (
+                    <div aria-hidden="true" style={{ position: "absolute", top: 0, bottom: "var(--space-2)", right: 0, width: 28, pointerEvents: "none", background: "linear-gradient(to right, transparent, var(--bg-primary))" }} />
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
+                  {suchfeld}
+                  {segmentSchalter}
+                  {auswahlFelder}
+                </div>
+                <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
+                  {chipListe}
+                </div>
+              </>
+            );
+          })()}
 
           {/* Aktivzeile */}
           <div className="flex items-center flex-wrap" style={{ gap: 6, minHeight: 24, marginBottom: "var(--space-2)" }}>
@@ -682,6 +723,7 @@ export function ServiceDeskPage() {
               sort={sort}
               onSort={toggleSort}
               karteTitel={karteTitel}
+              karteKoerper={karteKoerper}
               containerHaltepunkte
               karteAbPx={500}
               tabletQuerscroll

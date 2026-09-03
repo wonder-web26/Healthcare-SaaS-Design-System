@@ -20,13 +20,16 @@
  * je Liste (Onboarding kennt einen eigenen Leerzustand, der Service Desk eine
  * Detailspalte) und gehören nicht in ein gemeinsames Gerüst.
  */
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Search, X, Check } from "lucide-react";
+import { useFensterBreite } from "./DataTable";
 
 /** Ein Chip: Beschriftung, Zahl, Zustand — die Bedingung dahinter kennt die Liste. */
 export interface ListenChip {
   id: string;
   label: string;
+  /** Gekürzte Beschriftung für schmale Fenster (Lauf 1b); die volle bleibt als title. */
+  kurzLabel?: string;
   anzahl: number;
   aktiv: boolean;
   onToggle: () => void;
@@ -69,6 +72,44 @@ export function ListenGeruest({
   titel, zeitraum, aktion, suche, onSuche, suchePlatzhalter, segment, auswahlfelder,
   chips, sichtText, filterMarken, onFilterZuruecksetzen, children,
 }: ListenGeruestProps) {
+  // Lauf 1b: unter 1024px stehen Umschalter, Auswahlfelder und Chips in EINER
+  // waagrecht scrollenden Zeile (Muster C, mit Verlauf); die Suche steht allein
+  // darüber. Auf Desktop bleibt das bisherige Markup unverändert.
+  const istSchmal = useFensterBreite() < 1024;
+  const filterScrollRef = useRef<HTMLDivElement>(null);
+  const [zeigtVerlauf, setZeigtVerlauf] = useState(false);
+  const pruefeVerlauf = useCallback(() => {
+    const el = filterScrollRef.current;
+    if (el) setZeigtVerlauf(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+  useEffect(() => {
+    pruefeVerlauf();
+    const el = filterScrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(pruefeVerlauf);
+    ro.observe(el);
+    window.addEventListener("resize", pruefeVerlauf);
+    return () => { ro.disconnect(); window.removeEventListener("resize", pruefeVerlauf); };
+  }, [pruefeVerlauf, istSchmal]);
+
+  const suchfeld = (
+    <div className="flex items-center" style={{ flex: "1 1 220px", maxWidth: 300, gap: "var(--space-2)", padding: "7px 14px", borderRadius: 8, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
+      <Search style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
+      <input value={suche} onChange={e => onSuche(e.target.value)} placeholder={suchePlatzhalter} className="flex-1 bg-transparent outline-none" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", minWidth: 0 }} />
+      {suche && <button onClick={() => onSuche("")} className="cursor-pointer shrink-0" style={{ background: "transparent", border: "none" }}><X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} /></button>}
+    </div>
+  );
+  const chipKnoepfe = chips.map(chip => (
+    <button key={chip.id} type="button" onClick={chip.onToggle} title={chip.label} aria-label={`${chip.label} ${chip.anzahl}`} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
+      style={{ gap: 7, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: chip.aktiv ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: chip.aktiv ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: chip.aktiv ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+      <span className="inline-flex items-center justify-center shrink-0" style={{ width: 15, height: 15, borderRadius: 4, border: chip.aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: chip.aktiv ? "var(--brand-primary)" : "transparent" }}>
+        {chip.aktiv && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}
+      </span>
+      {istSchmal ? (chip.kurzLabel ?? chip.label) : chip.label}
+      <span style={{ fontVariantNumeric: "tabular-nums", color: chip.aktiv ? "var(--brand-primary)" : "var(--text-tertiary)" }}>{chip.anzahl}</span>
+    </button>
+  ));
+
   return (
     <>
       {/* 1) Titel + Primäraktion auf einer Höhe */}
@@ -83,33 +124,42 @@ export function ListenGeruest({
         {aktion}
       </div>
 
-      {/* 2) Steuerleiste: Suche, Zugehörigkeit, Auswahlfelder */}
-      {/* Mindesthöhe wie bei der Kopfzeile: der Segmentumschalter misst 38px,
-          das Suchfeld allein 36px. Eine Liste ohne Umschalter soll gleich hoch
-          beginnen wie die übrigen. */}
-      <div className="flex items-center flex-wrap" style={{ gap: 8, minHeight: 38, marginBottom: "var(--space-2)" }}>
-        <div className="flex items-center" style={{ flex: "1 1 220px", maxWidth: 300, gap: "var(--space-2)", padding: "7px 14px", borderRadius: 8, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)" }}>
-          <Search style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0 }} />
-          <input value={suche} onChange={e => onSuche(e.target.value)} placeholder={suchePlatzhalter} className="flex-1 bg-transparent outline-none" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", minWidth: 0 }} />
-          {suche && <button onClick={() => onSuche("")} className="cursor-pointer shrink-0" style={{ background: "transparent", border: "none" }}><X style={{ width: 12, height: 12, color: "var(--text-secondary)" }} /></button>}
-        </div>
-        {segment}
-        {auswahlfelder}
-      </div>
+      {istSchmal ? (
+        <>
+          {/* 2) Suche allein, 3) alle Filter in einer scrollenden Zeile (Lauf 1b) */}
+          <div className="flex items-center" style={{ gap: 8, minHeight: 38, marginBottom: "var(--space-2)" }}>
+            {suchfeld}
+          </div>
+          <div className="relative">
+            <div ref={filterScrollRef} onScroll={pruefeVerlauf} className="flex items-center m1-leiste-scroll" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
+              {segment}
+              {auswahlfelder}
+              {chipKnoepfe}
+            </div>
+            {/* Muster C: Verlauf am rechten Rand, solange mehr folgt */}
+            {zeigtVerlauf && (
+              <div aria-hidden="true" style={{ position: "absolute", top: 0, bottom: "var(--space-2)", right: 0, width: 28, pointerEvents: "none", background: "linear-gradient(to right, transparent, var(--bg-primary))" }} />
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* 2) Steuerleiste: Suche, Zugehörigkeit, Auswahlfelder */}
+          {/* Mindesthöhe wie bei der Kopfzeile: der Segmentumschalter misst 38px,
+              das Suchfeld allein 36px. Eine Liste ohne Umschalter soll gleich hoch
+              beginnen wie die übrigen. */}
+          <div className="flex items-center flex-wrap" style={{ gap: 8, minHeight: 38, marginBottom: "var(--space-2)" }}>
+            {suchfeld}
+            {segment}
+            {auswahlfelder}
+          </div>
 
-      {/* 3) Chips — kombinierbar (UND), Zahl aus denselben Daten wie die Tabelle */}
-      <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
-        {chips.map(chip => (
-          <button key={chip.id} type="button" onClick={chip.onToggle} className="ui-fokusring inline-flex items-center cursor-pointer transition-colors"
-            style={{ gap: 7, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: chip.aktiv ? "var(--brand-primary-light)" : "var(--bg-elevated)", border: chip.aktiv ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: chip.aktiv ? "var(--brand-primary)" : "var(--text-primary)", fontFamily: "inherit", whiteSpace: "nowrap" }}>
-            <span className="inline-flex items-center justify-center shrink-0" style={{ width: 15, height: 15, borderRadius: 4, border: chip.aktiv ? "none" : "var(--border-thin) solid var(--border-default)", background: chip.aktiv ? "var(--brand-primary)" : "transparent" }}>
-              {chip.aktiv && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}
-            </span>
-            {chip.label}
-            <span style={{ fontVariantNumeric: "tabular-nums", color: chip.aktiv ? "var(--brand-primary)" : "var(--text-tertiary)" }}>{chip.anzahl}</span>
-          </button>
-        ))}
-      </div>
+          {/* 3) Chips — kombinierbar (UND), Zahl aus denselben Daten wie die Tabelle */}
+          <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: "var(--space-2)" }}>
+            {chipKnoepfe}
+          </div>
+        </>
+      )}
 
       {/* 4) Aktivzeile — immer sichtbar */}
       <div className="flex items-center flex-wrap" style={{ gap: 6, minHeight: 24, marginBottom: "var(--space-2)" }}>

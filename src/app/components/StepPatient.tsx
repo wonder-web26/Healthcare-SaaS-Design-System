@@ -500,12 +500,15 @@ interface StepPatientProps {
   onTabSwitched?: () => void;
   /** Aktion am rechten Ende der Reiterzeile (z. B. "Gespräch"), bleibt fixiert sichtbar. */
   reiterAktion?: React.ReactNode;
+  /** Zahl offener Pflichtdokumente; erscheint unterhalb des Desktop-Breakpoints
+   *  als Zähler am Reiter "Dokumente" (Lauf 1b — ersetzt die Kopfbereich-Marke). */
+  dokumenteZaehler?: number;
 }
 
 /* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
-export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion }: StepPatientProps) {
+export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion, dokumenteZaehler = 0 }: StepPatientProps) {
   const [activeTab, setActiveTab] = useState<PatientReiter>("personalien");
   const benutzer = useCurrentUser();
 
@@ -670,6 +673,12 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
                 }}
               >
                 {tab.label}
+                {/* Lauf 1b: Dokumente-Zähler aus dem Kopfbereich, nur unterhalb Desktop */}
+                {tab.key === "dokumente" && dokumenteZaehler > 0 && (
+                  <span className="lg:hidden inline-flex items-center justify-center" aria-label={`${dokumenteZaehler} Dokumente offen`} style={{ marginLeft: 5, minWidth: 16, height: 16, padding: "0 4px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)", color: "var(--text-secondary)", fontSize: 11, fontWeight: "var(--weight-medium)", lineHeight: 1 }}>
+                    {dokumenteZaehler}
+                  </span>
+                )}
                 {isActive && (
                   <span className="absolute" style={{ bottom: 0, left: 0, right: 0, height: 1.5, background: "var(--text-primary)", borderRadius: 1 }} />
                 )}
@@ -683,8 +692,10 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           <div aria-hidden="true" style={{ position: "absolute", top: 0, bottom: 0, right: 0, width: 28, pointerEvents: "none", background: "linear-gradient(to right, transparent, var(--bg-elevated))" }} />
         )}
         </div>
+        {/* Lauf 1b: unter 1024px trägt die Reiterzeile ausschliesslich Reiter —
+            die Aktion lebt dort im Kopfbereich-Menü. */}
         {reiterAktion && (
-          <div className="flex items-center shrink-0" style={{ paddingLeft: 12 }}>{reiterAktion}</div>
+          <div className="hidden lg:flex items-center shrink-0" style={{ paddingLeft: 12 }}>{reiterAktion}</div>
         )}
       </div>
 

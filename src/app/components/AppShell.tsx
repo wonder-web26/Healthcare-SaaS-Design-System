@@ -8,6 +8,18 @@ import { Toaster } from "sonner";
 import { GlobalRecordingBar } from "../recording/GlobalRecordingBar";
 import { RecordingProvider } from "../recording/RecordingContext";
 
+/** Lauf 1b: Brücke für den Topbar-Menüeintrag "Anna öffnen" (unter 1024px).
+ *  Die Topbar kennt den Anna-Zustand nicht; sie sendet ein Ereignis, das hier
+ *  in setAnnaOpen übersetzt wird. */
+function AnnaOeffnenBruecke({ onOeffnen }: { onOeffnen: () => void }) {
+  useEffect(() => {
+    const handler = () => onOeffnen();
+    window.addEventListener("anna:oeffnen", handler);
+    return () => window.removeEventListener("anna:oeffnen", handler);
+  }, [onOeffnen]);
+  return null;
+}
+
 export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -94,12 +106,14 @@ export function AppShell() {
         </div>
       </div>
 
-      {/* Anna floating button — only on non-dashboard pages, when sidebar is closed */}
+      {/* Anna floating button — only on non-dashboard pages, when sidebar is closed.
+          Lauf 1b: unter 1024px verlässt er die schwebende Position (er überdeckte
+          Aktionen) und lebt als Eintrag im Topbar-Menü; auf Desktop unverändert. */}
       {!isDashboard && !annaOpen && (
         <button
           onClick={() => setAnnaOpen(true)}
           title="Anna öffnen (⌘J)"
-          className="fixed z-40 flex items-center justify-center cursor-pointer transition-all"
+          className="fixed z-40 hidden lg:flex items-center justify-center cursor-pointer transition-all"
           style={{
             bottom: 88,
             right: 24,
@@ -118,6 +132,7 @@ export function AppShell() {
 
       {/* Anna sidebar — only on non-dashboard pages */}
       {!isDashboard && <AnnaSidebar open={annaOpen} onClose={() => setAnnaOpen(false)} />}
+      <AnnaOeffnenBruecke onOeffnen={() => setAnnaOpen(true)} />
 
       <Toaster position="bottom-right" richColors />
     </div>
