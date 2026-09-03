@@ -544,6 +544,14 @@ html {
   .m1-dok-karte { flex-wrap: wrap; }
   .m1-dok-karte > .m1-dok-aktion { flex: 1 1 100%; justify-content: flex-end; }
 
+  /* ── Fusszeile (Lauf 2a): EINE Zeile, Anordnung lebt im JSX; hier der
+     verdichtete Rahmen (12px statt 16px) plus Geräte-Sicherheitsabstand —
+     hält den Seitenrahmen unter der 260px-Grenze (P23). ── */
+  .m1-fuss-rahmen {
+    padding-top: 12px !important;
+    padding-bottom: calc(12px + var(--safe-area-bottom, 0px)) !important;
+  }
+
   /* ── Muster F: Touchflächen mindestens 44px hoch ──
      Breitenbasiert (nicht nur pointer:coarse), damit es auf allen
      kleinen Fenstern gilt. Breite bleibt dem Layout überlassen;
@@ -575,20 +583,6 @@ html {
   /* ── Fusszeile: Hauptaktion volle Breite, Zurück und Speichern darunter
      je zur Hälfte. Die rechte Gruppe wird per display:contents aufgelöst,
      damit ihre Kinder eigene Rasterzellen belegen. ── */
-  .m1-fuss-rahmen {
-    padding-bottom: calc(var(--space-4) + var(--safe-area-bottom, 0px)) !important;
-  }
-  .m1-fuss {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .m1-fuss > span[aria-hidden] { display: none; }
-  .m1-fuss > button { grid-row: 2; grid-column: 1; width: 100%; justify-content: center; }
-  .m1-fuss-rechts { display: contents !important; }
-  .m1-fuss-rechts > :first-child { grid-row: 2; grid-column: 2; width: 100%; justify-content: center; }
-  .m1-fuss-rechts > :last-child { grid-row: 1; grid-column: 1 / -1; width: 100%; }
-  .m1-fuss-rechts > :last-child button { width: 100%; justify-content: center; }
 
   /* ── Statuswechsel-Bestätigung (Pendenzen): unter 640px zweizeilig,
      Speichern über die volle Breite. ── */

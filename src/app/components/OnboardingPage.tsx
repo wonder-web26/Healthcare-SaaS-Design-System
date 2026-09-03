@@ -48,6 +48,7 @@ import { ArztAnfrageProvider, useArztAnfrage } from "./ArztAnfrageContext";
 import { BezugspersonAuswahl } from "./BezugspersonAuswahl";
 import { fallById, patientRef, angehoerigerRef, patientAnzeigeName, angehoerigerAnzeigeName } from "../../lib/onboarding/faelle";
 import { NotizSpur } from "./notizen/NotizSpur";
+import { useFensterBreite } from "./ui/DataTable";
 import { type NotizReferenz } from "../../lib/notizen/notizen";
 import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient } from "./demoSteinerFall";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
@@ -586,6 +587,9 @@ export function OnboardingPage() {
   // (Bezugsperson, Workflow, Notizen) über eine Kopfbereich-Schaltfläche
   // als überlagerndes Feld erreichbar.
   const [seitenspalteOffen, setSeitenspalteOffen] = useState(false);
+  // Lauf 2a: unter 1024px eine einzeilige Fusszeile (Symbolknopf zurück,
+  // Speichern sichtbar, Weiter betont) — gleiche Handler, andere Anordnung.
+  const istSchmal = useFensterBreite() < 1024;
 
   // Muster C: Verlauf am rechten Rand der Phasenleiste, solange waagrecht
   // scrollbar (nicht am Ende) — gleiche Mechanik wie die Abschnittszeile
@@ -726,10 +730,11 @@ export function OnboardingPage() {
       {/* ── Kopfleiste (§B): keine Karte, kein Avatar. Der Patient ist Subjekt des Falls
              (Titel); die Angehörige ist Kontext. Zeile 1 Rückweg, Zeile 2 Titel + Marken. ── */}
       <div className="shrink-0" style={{ padding: "var(--space-3) var(--space-6) 0" }}>
-        {/* Zeile 1: Rückweg als Textlink — Teil der Leiste, keine eigene Bildschirmzeile */}
+        {/* Zeile 1: Rückweg als Textlink — nur Desktop; unter 1024px steht der
+            Rückpfeil links neben dem Namen (Lauf 2a, Änderung 1). */}
         <button
           onClick={() => navigate(returnTo)}
-          className="ui-fokusring inline-flex items-center cursor-pointer"
+          className="ui-fokusring hidden lg:inline-flex items-center cursor-pointer"
           style={{ gap: 5, padding: 0, background: "none", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}
           onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
           onMouseLeave={e => (e.currentTarget.style.color = "var(--text-secondary)")}
@@ -744,6 +749,16 @@ export function OnboardingPage() {
           {/* Links: Patientenname (Titel) · bedienbare Statusmarke · Angehörige (Kontext).
               Unter 640px eine Zeile: langer Name mit Ellipse, Volltext im title (Lauf 1b). */}
           <div className="min-w-0 flex items-center flex-wrap m1-kopf-links" style={{ gap: 8, rowGap: 4, minHeight: 26 }}>
+            {/* Rückpfeil in der Namenszeile — nur unter 1024px */}
+            <button
+              type="button"
+              aria-label={`Zurück zu ${returnLabel}`}
+              onClick={() => navigate(returnTo)}
+              className="ui-fokusring lg:hidden inline-flex items-center justify-center shrink-0 cursor-pointer"
+              style={{ width: 44, height: 44, marginLeft: -12, marginTop: -9, marginBottom: -9, borderRadius: "var(--control-radius)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
+            >
+              <ArrowLeft style={{ width: 18, height: 18 }} />
+            </button>
             <span className="m1-kopf-name" title={caseInfo.patient ?? undefined} style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere", minWidth: 0 }}>
               {/* Titel = Patientenname aus der Fallquelle (Schreibweise der Liste: Nachname, Vorname),
                   zur Anzeigezeit aufgelöst; zeigt immer den Patienten (auch im Angehörigen-Schritt).
@@ -853,6 +868,55 @@ export function OnboardingPage() {
               </DropdownMenu>
             )}
           </div>
+        </div>
+
+        {/* Schrittzeile (Lauf 2a, Änderung 2): unter 1024px ersetzt sie die
+            Reiterleiste der Schritte. Die Schritte sind anklickbar (V2), also
+            ist die Zeile ein Auswahlmenü mit denselben Zielen; Zustände je
+            Schritt bleiben über die Symbole erhalten, eine offene Pflicht ist
+            zusätzlich als Warnzeichen in der Zeile sichtbar (nicht Farbe allein). */}
+        <div className="lg:hidden" style={{ marginTop: 2 }}>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="ui-fokusring inline-flex items-center cursor-pointer"
+                style={{ gap: 6, padding: "2px 0", background: "transparent", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)", minHeight: 44, marginTop: -6, marginBottom: -6 }}
+              >
+                <span>
+                  Schritt {Math.max(1, wizardSteps.findIndex(s => s.id === currentStep) + 1)} von {wizardSteps.length} · {activeStepData.label}
+                </span>
+                {wizardSteps.some(s => s.danger || s.blocked) && (
+                  <AlertTriangle role="img" aria-label="Ein Schritt trägt eine offene Pflicht" style={{ width: 13, height: 13, color: "var(--status-danger)", flexShrink: 0 }} />
+                )}
+                <ChevronDown style={{ width: 12, height: 12, opacity: 0.7 }} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {wizardSteps.map(step => {
+                const z = phasenZustand({
+                  isCompleted: completedSteps.has(step.id),
+                  isInProgress: visitedSteps.has(step.id) && step.id === currentStep,
+                  isBlocked: !!step.blocked,
+                  isDanger: !!step.danger,
+                  isVisitedButIncomplete: visitedSteps.has(step.id) && !completedSteps.has(step.id) && step.id !== currentStep,
+                });
+                const ZIcon = z.icon;
+                return (
+                  <DropdownMenuItem
+                    key={step.key}
+                    disabled={!!step.blocked}
+                    onSelect={() => { if (!step.blocked) goToStep(step.id); }}
+                    style={{ gap: 8 }}
+                  >
+                    <ZIcon style={{ width: 14, height: 14, color: z.color, flexShrink: 0 }} role="img" aria-label={z.label} />
+                    <span style={{ flex: 1 }}>{step.label}</span>
+                    <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{z.label}</span>
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -1053,7 +1117,9 @@ export function OnboardingPage() {
             {/* ── ERSTE Reiterebene: Phasen (§B). Höhe 52, Zustandssymbol 16 links, Schrift 13,
                  aktiver Eintrag mittlerer Schnitt + 2px-Unterstreichung an der Unterkante,
                  Abstand 20. Containerfläche ohne Tönung, Haarlinie unten trennt die Ebenen. ── */}
-            <div className="shrink-0 relative">
+            {/* Lauf 2a, Änderung 2: unter 1024px entfällt die Reiterleiste der
+                Schritte — die Schrittzeile im Kopf übernimmt (Auswahlmenü). */}
+            <div className="hidden lg:block shrink-0 relative">
             <div
               ref={phasenScrollRef}
               onScroll={pruefePhasenVerlauf}
@@ -1158,10 +1224,46 @@ export function OnboardingPage() {
             </div>
 
             {/* ── FOOTER NAVIGATION (innerhalb des Containers, keine eigene Karte).
-                   Unter 640px: Hauptaktion volle Breite, Zurück/Speichern darunter
-                   je zur Hälfte, mit Geräte-Sicherheitsabstand (m1-fuss, Lauf 1b). ── */}
+                   Unter 1024px EINE Zeile (Lauf 2a, Änderung 3): Rückwärts als
+                   Symbolknopf links, Speichern sichtbar in der Mitte, Weiter
+                   rechts betont — mit Geräte-Sicherheitsabstand. ── */}
             <div className="shrink-0 m1-fuss-rahmen" style={{ padding: "var(--space-4) var(--space-5)", background: "transparent", borderTop: "var(--border-thin) solid var(--border-default)" }}>
-              <div className="flex items-center justify-between m1-fuss">
+              {istSchmal ? (
+                <div>
+                  <div className="flex items-center justify-between" style={{ gap: "var(--space-2)" }}>
+                    <button
+                      type="button"
+                      aria-label="Zurück"
+                      onClick={goPrev}
+                      disabled={currentStep === 1}
+                      className="ui-fokusring inline-flex items-center justify-center shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ width: 44, height: 44, borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", color: "var(--text-primary)" }}
+                    >
+                      <ChevronLeft style={{ width: 18, height: 18 }} />
+                    </button>
+                    <AppButton variant="sekundaer" icon={isSaving ? Loader2 : Save} iconClassName={isSaving ? "animate-spin" : undefined} onClick={handleSave} disabled={isSaving}>Speichern</AppButton>
+                    {currentStep < wizardSteps.length ? (
+                      <AppButton variant="primaer" iconRight={ChevronRight} onClick={goNext}>Weiter</AppButton>
+                    ) : (
+                      <AppButton variant="primaer" icon={Check}
+                        onClick={() => {
+                          if (!abschlussPruefung.arbeitsvertragOk) return;
+                          setOverrideBegrundung("");
+                          setShowAbschlussDialog(true);
+                        }}
+                        disabled={isSaving || !abschlussPruefung.arbeitsvertragOk}>
+                        Abschliessen
+                      </AppButton>
+                    )}
+                  </div>
+                  {currentStep >= wizardSteps.length && !abschlussPruefung.arbeitsvertragOk && (
+                    <div style={{ marginTop: 8, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+                      Arbeitsvertrag muss zuerst im Schritt «Vertragsunterzeichnung» unterschrieben werden.
+                    </div>
+                  )}
+                </div>
+              ) : (
+              <div className="flex items-center justify-between">
                 {/* Left: Back (Wizard-Schritt zurück) — Sekundär */}
                 <AppButton variant="sekundaer" icon={ChevronLeft} onClick={goPrev} disabled={currentStep === 1}>Zurück</AppButton>
 
@@ -1170,7 +1272,7 @@ export function OnboardingPage() {
                 <span aria-hidden="true" />
 
                 {/* Right: Save + Next/Finish — genau ein Primär (Weiter ODER Abschliessen) */}
-                <div className="flex items-center m1-fuss-rechts" style={{ gap: "var(--space-2)" }}>
+                <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
                   <AppButton variant="sekundaer" icon={isSaving ? Loader2 : Save} iconClassName={isSaving ? "animate-spin" : undefined} onClick={handleSave} disabled={isSaving}>Speichern</AppButton>
 
                   {currentStep < wizardSteps.length ? (
@@ -1199,6 +1301,7 @@ export function OnboardingPage() {
                   )}
                 </div>
               </div>
+              )}
             </div>
           </div>
         </div>

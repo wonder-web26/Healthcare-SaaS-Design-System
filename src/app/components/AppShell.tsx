@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
-import { AppSidebar } from "./AppSidebar";
+import { AppSidebar, navItems } from "./AppSidebar";
+import { Drawer, DrawerContent } from "./ui/drawer";
+import { useFensterBreite } from "./ui/DataTable";
 import { AppTopbar } from "./AppTopbar";
 import { AnnaSidebar } from "../anna/AnnaSidebar";
 import { Sparkles } from "lucide-react";
@@ -25,6 +27,9 @@ export function AppShell() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [annaOpen, setAnnaOpen] = useState(false);
+  // Lauf 2a: unter 768px öffnet der Menüknopf die beschriftete Schublade,
+  // zwischen 768 und 1023px die bisherige Symbolleiste.
+  const istUnterTablet = useFensterBreite() < 768;
 
   const isDashboard = location.pathname === "/" || location.pathname === "/dashboard";
 
@@ -88,14 +93,68 @@ export function AppShell() {
         <AppSidebar activeItem={getActiveNav()} onItemChange={handleNavChange} />
       </div>
 
-      {/* Mobile/Tablet drawer */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0" style={{ background: "rgba(19,19,20,0.2)", backdropFilter: "blur(2px)" }} onClick={() => setSidebarOpen(false)} />
-          <div className="relative z-10 h-full w-[56px]">
-            <AppSidebar activeItem={getActiveNav()} onItemChange={handleNavChange} />
+      {/* Hauptnavigation unter 1024px (Lauf 2a, Änderung 4):
+          unter 768px eine Schublade von links mit der vollständigen,
+          beschrifteten Objektnavigation (Bibliothek: vaul-Drawer — schliesst
+          durch Auswahl, Tippen daneben und Wischen nach links);
+          zwischen 768 und 1023px bleibt die heutige Symbolleiste. */}
+      {istUnterTablet ? (
+        <Drawer direction="left" open={sidebarOpen} onOpenChange={setSidebarOpen}>
+          <DrawerContent
+            aria-label="Hauptnavigation"
+            style={{ width: 280, background: "var(--bg-elevated)", borderRadius: 0 }}
+          >
+            <div className="flex flex-col h-full" style={{ padding: "var(--space-4) var(--space-2)" }}>
+              <div className="flex items-center" style={{ gap: 10, padding: "0 var(--space-3) var(--space-3)" }}>
+                <div className="flex items-center justify-center shrink-0" style={{ width: 28, height: 28, borderRadius: "var(--radius-card)", background: "var(--brand-primary)" }}>
+                  <span style={{ color: "var(--text-on-dark)", fontSize: 12, fontWeight: "var(--weight-medium)" }}>S</span>
+                </div>
+                <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Spitex Cockpit</span>
+              </div>
+              <nav className="flex-1 overflow-y-auto" aria-label="Objektnavigation">
+                {navItems.map(item => {
+                  const aktiv = getActiveNav() === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleNavChange(item.id)}
+                      aria-current={aktiv ? "page" : undefined}
+                      className="ui-fokusring w-full flex items-center cursor-pointer"
+                      style={{
+                        gap: 12, padding: "10px var(--space-3)", borderRadius: "var(--radius-card)",
+                        background: aktiv ? "var(--bg-secondary)" : "transparent",
+                        border: "none", fontFamily: "inherit", textAlign: "left",
+                        fontSize: "var(--text-small)",
+                        fontWeight: aktiv ? "var(--weight-medium)" : "var(--weight-regular)",
+                        color: "var(--text-primary)",
+                        /* aktives Ziel auch ohne Farbe erkennbar: Balken + Schnitt */
+                        boxShadow: aktiv ? "inset 3px 0 0 var(--brand-primary)" : undefined,
+                      }}
+                    >
+                      <item.icon style={{ width: 18, height: 18, color: aktiv ? "var(--brand-primary)" : "var(--text-secondary)", flexShrink: 0 }} />
+                      <span style={{ flex: 1 }}>{item.label}</span>
+                      {item.badge != null && item.badge > 0 && (
+                        <span style={{ minWidth: 18, height: 18, padding: "0 5px", borderRadius: "var(--radius-pill)", background: "var(--status-danger)", color: "var(--text-on-dark)", fontSize: 11, fontWeight: "var(--weight-medium)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+          </DrawerContent>
+        </Drawer>
+      ) : (
+        sidebarOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <div className="absolute inset-0" style={{ background: "rgba(19,19,20,0.2)", backdropFilter: "blur(2px)" }} onClick={() => setSidebarOpen(false)} />
+            <div className="relative z-10 h-full w-[56px]">
+              <AppSidebar activeItem={getActiveNav()} onItemChange={handleNavChange} />
+            </div>
           </div>
-        </div>
+        )
       )}
 
       <div className="flex-1 flex flex-col lg:ml-[56px] min-h-0 min-w-0">

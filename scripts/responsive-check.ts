@@ -92,6 +92,10 @@ async function messungen(page: Page): Promise<Befund[]> {
     ));
     for (const el of klickbar) {
       if (!sichtbar(el)) continue;
+      /* Benannte Ausnahme (Nacharbeit 1c): ein Schalter (role="switch") mit
+         beschriftendem Label gilt als erfüllt — die Tippfläche liefert die
+         beschriftete Zeile, das Label schaltet mit. */
+      if (el.getAttribute("role") === "switch" && el.id && document.querySelector(`label[for="${el.id}"]`)) continue;
       const r = el.getBoundingClientRect();
       if (r.height < 43.5) {
         befunde.push({ pruefung: "P4", element: beschreibe(el), detail: `Höhe ${Math.round(r.height)}px` });
@@ -134,7 +138,12 @@ async function messungen(page: Page): Promise<Befund[]> {
     /* P13 — Kopfhöhe (Lauf 1b): der Kopfbereich des Onboarding-Details misst bei
        390px höchstens 130px von der Unterkante der Topbar bis zur Phasenzeile. */
     if (W < 640) {
-      const phasen = document.querySelector('[role="tablist"][aria-label="Phasen"]');
+      /* Seit Lauf 2a ist die Phasenleiste unter 1024px versteckt (Schrittzeile
+         im Kopf) — die Messreferenz ist dann die Abschnitts-Reiterleiste. */
+      const phasenKandidat = document.querySelector('[role="tablist"][aria-label="Phasen"]');
+      const phasen = phasenKandidat && phasenKandidat.getBoundingClientRect().height > 0
+        ? phasenKandidat
+        : document.querySelector('[role="tablist"][aria-label="Abschnitte"]');
       const topbar = document.querySelector("header");
       if (phasen && topbar) {
         const hoehe = Math.round(phasen.getBoundingClientRect().top - topbar.getBoundingClientRect().bottom);

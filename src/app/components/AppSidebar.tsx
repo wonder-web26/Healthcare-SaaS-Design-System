@@ -17,7 +17,9 @@ import { unifiedEntries, CURRENT_USER } from "../../lib/mocks/service-desk-unifi
 
 const myOpenCount = unifiedEntries.filter(e => e.verantwortlich.initialen === CURRENT_USER && e.status !== "erledigt").length;
 
-const navItems = [
+/* Exportiert für die Schublade der Hauptnavigation unter 768px (Lauf 2a):
+   dieselben Ziele in derselben Reihenfolge, eine Quelle. */
+export const navItems = [
   { id: "dashboard", label: "Startseite", icon: Sparkles },
   { id: "kennzahlen", label: "Dashboard", icon: LayoutDashboard },
   { id: "interrai", label: "Bedarfsabklärung", icon: ClipboardList },

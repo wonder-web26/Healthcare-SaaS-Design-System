@@ -91,9 +91,15 @@ export const VIEWS = [
     path: "/onboarding/OB-2026-102",
     keinP1: true,
     actions: async (page) => {
-      await page
-        .locator('[role="tablist"][aria-label="Phasen"] button', { hasText: "Vertragsunterzeichnung" })
-        .click();
+      // Desktop: Phasenleiste; unter 1024px (Lauf 2a): Schrittzeile als Menü.
+      const phasenKnopf = page.locator('[role="tablist"][aria-label="Phasen"] button', { hasText: "Vertragsunterzeichnung" });
+      if (await phasenKnopf.isVisible().catch(() => false)) {
+        await phasenKnopf.click();
+      } else {
+        await page.locator("button", { hasText: "Schritt " }).first().click();
+        await page.waitForTimeout(300);
+        await page.getByRole("menuitem", { name: /Vertragsunterzeichnung/ }).click();
+      }
       await page.waitForTimeout(500);
     },
   },
