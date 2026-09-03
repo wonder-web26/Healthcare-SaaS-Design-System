@@ -526,7 +526,17 @@ html {
     width: 18px !important;
     height: 18px !important;
     background: var(--bg-elevated) !important;
+    /* Knopf deckend mit eigener Haarlinie; box-sizing hält die 18px inkl. Linie */
+    border: var(--border-thin) solid var(--border-default) !important;
+    box-sizing: border-box;
+    /* Die Bibliotheksklasse setzt die separate CSS-Eigenschaft `translate`
+       (Tailwind 4) — sie würde sich mit dem transform ADDIEREN und den Knopf
+       im Ein-Zustand 13px über die Schiene hinausschieben. Neutralisieren;
+       die Position kommt allein aus den transforms darunter. */
+    translate: none !important;
   }
+  /* Innenabstand 3px zu allen Seiten (Rand 1px + Weg 2px bzw. 22px):
+     aus links 3, ein rechts 3 — der Knopf berührt den Rand nie. */
   .m1-schalter[data-state="unchecked"] [data-slot="switch-thumb"] { transform: translateX(2px) !important; }
   .m1-schalter[data-state="checked"] [data-slot="switch-thumb"] { transform: translateX(22px) !important; }
   /* J auf den Dokumentkarten der Vertragsunterzeichnung: die Aktionsgruppe
