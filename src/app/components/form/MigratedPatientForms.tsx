@@ -263,12 +263,11 @@ export function TabSteuerV2({ data, touched, onUpdate, onUpdateMehrere, onBlur, 
       <SectionHeader icon={IdCard} label="IV & Sozialversicherung" first />
       <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
         <SegmentedControl label="IV-Bezug?" required value={data.ivBezug} onChange={v => onUpdate("ivBezug", v)} options={JA_NEIN} />
-      </div>
-      {data.ivBezug === "ja" && (
-        <div style={{ marginTop: "var(--space-4)", marginLeft: "var(--space-4)" }}>
+        {/* Nachbarzelle derselben Rasterzeile — auf gleicher Höhe wie die Frage */}
+        {data.ivBezug === "ja" && (
           <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="IV-Bezug" required value={data.ivBezugProzent} onChange={v => onUpdate("ivBezugProzent", v)} suffix="%" placeholder="z.B. 100" /></div>
-        </div>
-      )}
+        )}
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
         {/* Löschregel: verlässt die Frage «ja», wird der Grad geleert —
             ein Grad ohne Bezug wäre eine stille Falschangabe. */}
