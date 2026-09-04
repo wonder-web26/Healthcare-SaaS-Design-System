@@ -142,6 +142,9 @@ function Zeile({ b, name, zugehoerigkeit, menuOffen, onMenu, onBearbeiten, onEnt
       <Chip>{rolleLabel(b.rolle)}</Chip>
       {b.notfallkontakt && <Chip ton="warnung">Notfallkontakt</Chip>}
       {b.auskunftsberechtigt && <Chip ton="info">Auskunftsberechtigt</Chip>}
+      {/* Beschriftung bewusst ungekürzt: die Herkunft — Willenserklärung der
+          Klientin, nicht behördliche Anordnung — ist der Punkt. */}
+      {b.inPatientenverfuegungBezeichnet && <Chip ton="info">In Patientenverfügung bezeichnet</Chip>}
       {!aktiv && <Chip>beendet</Chip>}
     </>
   );
@@ -231,6 +234,7 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
   const [beistandschaft, setBeistandschaft] = useState<Beistandschaft>(eintrag?.beistandschaft ?? leereBeistandschaft());
   const [notfall, setNotfall] = useState(eintrag?.notfallkontakt ?? false);
   const [auskunft, setAuskunft] = useState(eintrag?.auskunftsberechtigt ?? false);
+  const [inPv, setInPv] = useState(eintrag?.inPatientenverfuegungBezeichnet ?? false);
   const [fehler, setFehler] = useState("");
 
   /* §9 Behebung: beim Bearbeiten einer Fachperson die GLN des bestehenden
@@ -305,7 +309,7 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
       // Beginn und Telefon werden im Dialog nicht mehr erfasst; Seed-Werte bleiben.
       beginn: eintrag?.beginn ?? "", ende: eintrag?.ende ?? "",
       telefon: eintrag?.telefon ?? "",
-      notfallkontakt: notfall, auskunftsberechtigt: auskunft,
+      notfallkontakt: notfall, auskunftsberechtigt: auskunft, inPatientenverfuegungBezeichnet: inPv,
       bemerkung: eintrag?.bemerkung ?? "",
     });
     // §3: höchstens ein offener Hausarzt — der bisherige wird auf den Vortag beendet.
@@ -462,6 +466,7 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   <Umschalter an={notfall} onToggle={() => setNotfall(!notfall)} text="Notfallkontakt" />
                   <Umschalter an={auskunft} onToggle={() => setAuskunft(!auskunft)} text="Auskunftsberechtigt" />
+                  <Umschalter an={inPv} onToggle={() => setInPv(!inPv)} text="In Patientenverfügung bezeichnet" />
                 </div>
               </Feld>
 

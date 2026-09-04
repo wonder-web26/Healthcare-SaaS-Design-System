@@ -50,3 +50,17 @@ Volle Bezeichnung bleibt als `title`/`aria-label` erhalten.
 | Onboarding | Pflichtdokument offen | Pflichtdok. |
 | Onboarding | Nicht zugewiesen | Nicht zugew. |
 | Pendenzen | Diese Woche fällig | Diese Woche |
+
+## Patientenverfügung und Vorsorgeauftrag (Lauf «Vorsorge»)
+
+- **Zwei getrennte Instrumente** im Abschnitt Vorsorge (Reiter Soziales): Patientenverfügung
+  (Art. 370 ff. ZGB) und Vorsorgeauftrag (Art. 360 ff. ZGB), je dreiwertig
+  ja/nein/unbekannt mit Vorgabe **unbekannt** («nein» = es gibt keine; «unbekannt» = niemand hat gefragt).
+- **O2-Ableitung offen:** interRAI O2 wird künftig abgeleitet — `1. Ja`, wenn eines der beiden
+  Instrumente «ja» ist; sonst `0`. **Nicht gebaut**, weil der Bereich O im interRAI-Renderer
+  nicht existiert (geprüft: 0 Treffer im Renderer).
+- **Chipbeschriftung ungekürzt:** «In Patientenverfügung bezeichnet» bleibt voll ausgeschrieben —
+  jede Kürzung verlöre die Herkunft, und die ist der Punkt: Die Person entscheidet kraft
+  Willenserklärung der Klientin, nicht kraft behördlicher Anordnung.
+- Unit-Test zu V11 (Wertehaltung beim Umschalten) entfällt mangels Test-Runner im Repo —
+  als Browser-Prüfung durchgeführt.

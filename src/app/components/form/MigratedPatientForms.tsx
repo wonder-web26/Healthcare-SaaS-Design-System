@@ -16,6 +16,10 @@ import { AdressBlock } from "../ui/AdressBlock";
 import { FormField } from "./FormField";
 import { DateField } from "./DateField";
 import type { PatientFormData } from "../StepPatient";
+import { getBeziehungen } from "../../../lib/beziehungen/store";
+import { personName as beziehungsPersonName } from "../../../lib/beziehungen/beziehungen";
+import { getAngehoerige } from "../../../lib/angehoerige/store";
+import { DokumentScanUpload } from "./DokumentScanUpload";
 import { toast } from "sonner";
 import { leseVorgemapptesFeld, schreibeVorgemapptesFeld } from "../../../lib/interrai/vormapping";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
@@ -244,7 +248,15 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
 /* ══════════════════════════════════════════
    TAB 2: STEUER & SOZIALVERSICHERUNGEN (migrated)
    ══════════════════════════════════════════ */
-export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
+export function TabSteuerV2({ data, touched, onUpdate, onBlur, onboardingId, onNavigate }: TabProps & { onboardingId?: string; onNavigate?: (reiter: string) => void }) {
+  // Bezeichnete Person aus dem Bezugsteam (Merkmal an der Beziehung) — nur lesend.
+  const vorsorgePatientId = onboardingId ? patientFuerOnboarding(onboardingId)?.id : undefined;
+  const bezeichnete = vorsorgePatientId
+    ? getBeziehungen(vorsorgePatientId).filter(b => b.inPatientenverfuegungBezeichnet)
+    : [];
+  const angehoerigeListe = getAngehoerige();
+  const bezeichneteNamen = bezeichnete.map(b =>
+    beziehungsPersonName(b, k => { const a = angehoerigeListe.find(x => x.id === k); return a ? `${a.vorname} ${a.nachname}` : k; }, k => k));
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={IdCard} label="IV & Sozialversicherung" first />
@@ -275,6 +287,53 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur }: TabProps) {
       <div style={{ marginTop: "var(--space-4)" }}>
         <TextareaInput label="Quellensteuer-Hinweise" value={data.quellensteuerHinweise} onChange={v => onUpdate("quellensteuerHinweise", v)} placeholder="Optionale Hinweise zur Quellensteuer-Situation" hint="Wird nur an die Lohnbuchhaltung weitergeleitet" />
       </div>
+
+      {/* ── Vorsorge: zwei getrennte Instrumente nach ZGB — keine Zusammenlegung.
+             Vorgabe je "unbekannt": "nein" heisst, es gibt keine; "unbekannt"
+             heisst, niemand hat gefragt (für interRAI O2 beides 0). ── */}
+      <SectionHeader icon={FileText} label="Vorsorge" />
+      <div style={{ maxWidth: FELD_MAX.mittel }}>
+        <SegmentedControl label="Patientenverfügung vorhanden" value={data.patientenverfuegungVorhanden || "unbekannt"} onChange={v => onUpdate("patientenverfuegungVorhanden", v)} options={[{ value: "ja", label: "Ja" }, { value: "nein", label: "Nein" }, { value: "unbekannt", label: "Unbekannt" }]} />
+      </div>
+      {data.patientenverfuegungVorhanden === "ja" && (
+        <>
+          <div style={{ marginTop: "var(--space-3)", maxWidth: FELD_MAX.schmal }}>
+            <DateField label="Datum der Verfügung" wertFormat="display" bereich="past" value={data.patientenverfuegungDatum || null} onChange={v => onUpdate("patientenverfuegungDatum", (v as string) ?? "")} hint="Steht im Dokument." />
+          </div>
+          <div style={{ marginTop: "var(--space-3)" }}>
+            <TextareaInput label="Bemerkung" required value={data.patientenverfuegungBemerkung} onChange={v => onUpdate("patientenverfuegungBemerkung", v)} placeholder="z.B. Notfallmappe im Küchenschrank, Kopie bei Tochter Vera, Original beim Hausarzt" error={touched.has("patientenverfuegungBemerkung") && !data.patientenverfuegungBemerkung.trim() ? "Pflichtfeld — wo liegt die Verfügung?" : undefined} onBlur={() => onBlur("patientenverfuegungBemerkung")} />
+          </div>
+          <div style={{ marginTop: "var(--space-3)" }}>
+            <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", marginBottom: 6 }}>Dokument (optional)</div>
+            <div className="flex items-center" style={{ gap: 8 }}>
+              <DokumentScanUpload scanKey="patientenverfuegung" docLabel="Patientenverfügung" onFile={() => {}} />
+            </div>
+          </div>
+          {/* Verweis — kein Hinweisstreifen, keine Warnung: eine Verfügung muss keine Person bezeichnen. */}
+          <div style={{ marginTop: "var(--space-3)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+            {bezeichneteNamen.length > 0
+              ? <>Bezeichnete Person: <span style={{ color: "var(--text-primary)", fontWeight: "var(--weight-medium)" }}>{bezeichneteNamen.join(", ")}</span>{" "}</>
+              : <>Keine bezeichnete Person erfasst. Sie wird im Bezugs- und Pflegeteam gesetzt.{" "}</>}
+            <button type="button" onClick={() => onNavigate?.("personalien")} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>
+              Zum Bezugs- und Pflegeteam
+            </button>
+          </div>
+        </>
+      )}
+
+      <div style={{ marginTop: "var(--space-4)", maxWidth: FELD_MAX.mittel }}>
+        <SegmentedControl label="Vorsorgeauftrag vorhanden" value={data.vorsorgeauftragVorhanden || "unbekannt"} onChange={v => onUpdate("vorsorgeauftragVorhanden", v)} options={[{ value: "ja", label: "Ja" }, { value: "nein", label: "Nein" }, { value: "unbekannt", label: "Unbekannt" }]} />
+      </div>
+      {data.vorsorgeauftragVorhanden === "ja" && (
+        <>
+          <div style={{ marginTop: "var(--space-3)", maxWidth: FELD_MAX.mittel }}>
+            <SegmentedControl label="Durch die KESB validiert" value={data.vorsorgeauftragValidiert || "unbekannt"} onChange={v => onUpdate("vorsorgeauftragValidiert", v)} options={[{ value: "ja", label: "Ja" }, { value: "nein", label: "Nein" }, { value: "unbekannt", label: "Unbekannt" }]} hint="Ein Vorsorgeauftrag entfaltet erst Wirkung, wenn ihn die KESB validiert hat." />
+          </div>
+          <div style={{ marginTop: "var(--space-3)" }}>
+            <TextareaInput label="Bemerkung" required value={data.vorsorgeauftragBemerkung} onChange={v => onUpdate("vorsorgeauftragBemerkung", v)} placeholder="z.B. öffentlich beurkundet bei Notariat Müller, Kopie im Dossier" error={touched.has("vorsorgeauftragBemerkung") && !data.vorsorgeauftragBemerkung.trim() ? "Pflichtfeld — wo liegt der Auftrag?" : undefined} onBlur={() => onBlur("vorsorgeauftragBemerkung")} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

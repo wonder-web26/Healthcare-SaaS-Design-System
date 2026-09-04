@@ -177,6 +177,15 @@ export interface PatientFormData {
   sozialamtInvolviert: string;
   /** Ja/Nein-Indikator; vertretende Person und Art der Vertretung stehen im Bezugsteam. */
   gesetzlicheVertretung: string;
+  /* Vorsorge (Reiter Soziales): zwei getrennte Instrumente nach ZGB.
+     Drei Werte "ja" | "nein" | "unbekannt" — Vorgabe "unbekannt":
+     "nein" heisst, es gibt keine; "unbekannt" heisst, niemand hat gefragt. */
+  patientenverfuegungVorhanden: string;
+  patientenverfuegungDatum: string;
+  patientenverfuegungBemerkung: string;
+  vorsorgeauftragVorhanden: string;
+  vorsorgeauftragValidiert: string;
+  vorsorgeauftragBemerkung: string;
   konfession: string;
   quellensteuerHinweise: string;
 
@@ -287,6 +296,12 @@ export const emptyPatientForm: PatientFormData = {
   assistenzbeitrag: "nein",
   sozialamtInvolviert: "nein",
   gesetzlicheVertretung: "nein",
+  patientenverfuegungVorhanden: "unbekannt",
+  patientenverfuegungDatum: "",
+  patientenverfuegungBemerkung: "",
+  vorsorgeauftragVorhanden: "unbekannt",
+  vorsorgeauftragValidiert: "unbekannt",
+  vorsorgeauftragBemerkung: "",
   konfession: "",
   quellensteuerHinweise: "",
 
@@ -397,6 +412,10 @@ function getTabCompletion(tabKey: string, data: PatientFormData, patientId?: str
         filled(data.hilflosenentschaedigung),
         filled(data.sozialamtInvolviert),
         filled(data.gesetzlicheVertretung),
+        // Vorsorge: bei "ja" ist die Bemerkung Pflicht — wer angibt, dass ein
+        // Dokument existiert, ohne zu sagen wo, hat nichts erfasst.
+        data.patientenverfuegungVorhanden !== "ja" || filled(data.patientenverfuegungBemerkung),
+        data.vorsorgeauftragVorhanden !== "ja" || filled(data.vorsorgeauftragBemerkung),
         filled(data.konfession),
       ];
       if (data.ivBezug === "ja") checks.push(filled(data.ivBezugProzent));
@@ -719,7 +738,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
             <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onUpdateMehrere={updateFields} onBlur={markTouched} onboardingId={onboardingId} />
           )}
           {activeTab === "steuer" && (
-            <TabSteuerV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
+            <TabSteuerV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} onboardingId={onboardingId} onNavigate={r => setActiveTab(r as PatientReiter)} />
           )}
           {activeTab === "wohnen" && (
             <TabWohnenUmfeldV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />

@@ -238,6 +238,10 @@ export interface Beziehung {
   ende: string;
   notfallkontakt: boolean;
   auskunftsberechtigt: boolean;
+  /** Kraft Willenserklärung der Klientin in der Patientenverfügung bezeichnet
+   *  (Art. 370 ff. ZGB) — nicht kraft behördlicher Anordnung. Optional, damit
+   *  bestehende Datensätze unberührt bleiben; fehlend = false. */
+  inPatientenverfuegungBezeichnet?: boolean;
   telefon: string;
   /* Die Zugehörigkeit — Fachgebiet, Stelle, Behörde — steht seit der
      Einführung des Kontaktobjekts am Kontakt. Sie beschreibt die Person,
