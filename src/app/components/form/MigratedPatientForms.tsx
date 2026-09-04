@@ -276,8 +276,9 @@ export function TabSteuerV2({ data, touched, onUpdate, onUpdateMehrere, onBlur, 
           if (v !== "ja" && onUpdateMehrere) onUpdateMehrere({ hilflosenentschaedigung: v, hilflosenentschaedigungGrad: "" });
           else onUpdate("hilflosenentschaedigung", v);
         }} options={JA_NEIN} />
+        {/* Nachbarzelle derselben Rasterzeile — auf gleicher Höhe wie die Frage */}
         {data.hilflosenentschaedigung === "ja" && (
-          <div style={{ marginTop: "var(--space-3)", maxWidth: FELD_MAX.mittel }}>
+          <div style={{ maxWidth: FELD_MAX.mittel }}>
             <FormSelect label="Grad" required value={data.hilflosenentschaedigungGrad || null} onChange={v => onUpdate("hilflosenentschaedigungGrad", v || "")} options={HILFLOSENENTSCHAEDIGUNG_GRAD_OPTIONS} placeholder="Grad wählen" />
           </div>
         )}
