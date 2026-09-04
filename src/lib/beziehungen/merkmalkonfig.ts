@@ -77,16 +77,11 @@ export const MERKMAL_GRUPPEN: MerkmalGruppe[] = [
       { code: "imVorsorgeauftragBeauftragt", label: "Im Vorsorgeauftrag beauftragt", rollen: A_B_W, nurPrivat: true },
       { code: "beistandschaftAdministrativ", label: "Beistandschaft administrativ", rollen: A_B },
       { code: "beistandschaftGesundheit", label: "Beistandschaft Gesundheit", rollen: A_B },
-      /* ERFASST, nicht abgeleitet (Nachtrag 3). Sichtbar bei Ehe ODER
-       * eingetragener Partnerschaft — `lebenspartner` ist bewusst NICHT dabei:
-       * Art. 374 Abs. 1 ZGB nennt nur Ehegatten und eingetragene Partner,
-       * faktische Lebensgemeinschaften haben kein gesetzliches Vertretungsrecht.
-       * Waehlbar erst mit gemeinsamem Haushalt ODER unbezahlter Betreuung
-       * (Alternativen nach Art. 374 Abs. 1 ZGB — ODER, nicht UND). */
-      { code: "vertretungVonGesetzesWegen", label: "Vertretung von Gesetzes wegen", rollen: ANG, nurPrivat: true,
-        nurBeziehung: ["ehepartner", "eingetragene_partnerschaft"],
-        setztVorausEines: ["gemeinsamerHaushalt", "unbezahlteBetreuung"],
-        voraussetzungHinweis: "Setzt gemeinsamen Haushalt oder regelmässige persönliche Betreuung voraus." },
+      /* ERFASST, frei waehlbar — die frueheren Bedingungen (Beziehungsart
+       * Ehe/eingetragene Partnerschaft, gemeinsamer Haushalt ODER unbezahlte
+       * Betreuung) wurden bewusst entfernt; die fachliche Pruefung liegt bei
+       * der erfassenden Person. Juristischer Vorbehalt bleibt bestehen. */
+      { code: "vertretungVonGesetzesWegen", label: "Vertretung von Gesetzes wegen", rollen: ANG, nurPrivat: true },
     ],
   },
   {

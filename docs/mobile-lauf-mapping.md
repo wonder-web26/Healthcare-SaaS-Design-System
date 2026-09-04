@@ -79,16 +79,17 @@ Volle Bezeichnung bleibt als `title`/`aria-label` erhalten.
   Validierungsstand des Klienten; der lebt nur im Formularzustand
   (PatientFormData), nicht in einem Store. Kein Umbau des Datenflusses dafür —
   Hinweis entfällt, bis das Vorsorge-Instrument in einen Store wandert.
-- **Vertretung von Gesetzes wegen (Nachtrag 3):** wird ERFASST, nicht
-  abgeleitet — neues Feld `vertretungVonGesetzesWegen` an der Beziehung.
-  Sichtbar bei Beziehungsart `ehepartner` ODER `eingetragene_partnerschaft`;
-  `lebenspartner` bewusst nicht — Art. 374 Abs. 1 ZGB nennt nur Ehegatten und
-  eingetragene Partner, faktische Lebensgemeinschaften haben kein gesetzliches
-  Vertretungsrecht. Wählbar erst mit gemeinsamem Haushalt ODER unbezahlter
-  Betreuung (Alternativen nach Art. 374 Abs. 1 ZGB — ODER, nicht UND); sonst
-  deaktiviert mit Begründung im title. Fällt eine Voraussetzung weg, wird der
-  Wert zurückgesetzt. Die Rangfolge gegenüber Beistandschaft Gesundheit und
-  Vorsorgeauftrag ist bewusst NICHT abgebildet (braucht juristische Abnahme).
+- **Vertretung von Gesetzes wegen (Nachtrag 3, danach gelockert):** wird
+  ERFASST — Feld `vertretungVonGesetzesWegen` an der Beziehung. Die mit
+  Nachtrag 3 eingeführten Vorbedingungen (Beziehungsart Ehe/eingetragene
+  Partnerschaft; gemeinsamer Haushalt ODER unbezahlte Betreuung) wurden auf
+  Anweisung wieder entfernt: der Chip ist bei Angehörigen und pflegenden
+  Angehörigen (Privatpersonen) frei wählbar, die fachliche Prüfung liegt bei
+  der erfassenden Person. Der generische Mechanismus `setztVorausEines`
+  (ODER-Voraussetzung mit deaktiviertem Chip und title-Begründung) bleibt in
+  der Konfiguration erhalten, wird aktuell aber von keinem Merkmal genutzt.
+  Die Rangfolge gegenüber Beistandschaft Gesundheit und Vorsorgeauftrag ist
+  bewusst NICHT abgebildet (braucht juristische Abnahme).
 - **Beistandschaft entkoppelt:** administrativ/gesundheit sind bei Angehörigen
   UND Beistand führbar (nicht mehr an die Rolle gebunden). Nachweis (Ernennung
   vom, Beleg vorhanden) hängt an der Beistandschaft und wandert später an ein

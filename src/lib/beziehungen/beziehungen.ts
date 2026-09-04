@@ -256,9 +256,9 @@ export interface Beziehung {
    *  unter juristischem Vorbehalt. Das Instrument selbst (Existenz, KESB-
    *  Validierung, Bemerkung) fuehrt der Patient im Abschnitt Vorsorge. */
   imVorsorgeauftragBeauftragt?: boolean;
-  /** Vertretung von Gesetzes wegen (Art. 374 Abs. 1 ZGB) — ERFASST, nicht
-   *  abgeleitet. Waehlbar nur bei Ehe oder eingetragener Partnerschaft UND
-   *  (gemeinsamer Haushalt ODER unbezahlte Betreuung).
+  /** Vertretung von Gesetzes wegen (Art. 374 Abs. 1 ZGB) — ERFASST, frei
+   *  waehlbar ohne Vorbedingungen; die fachliche Pruefung (Ehe/eingetragene
+   *  Partnerschaft, Haushalt oder Betreuung) liegt bei der erfassenden Person.
    *  ACHTUNG, VORLAEUFIGE SETZUNG — ob dieses Merkmal das schweizerische
    *  Erwachsenenschutzrecht richtig schneidet, ist nicht belegt; Arbeitsannahme
    *  unter juristischem Vorbehalt. Die Rangfolge gegenueber Beistandschaft
