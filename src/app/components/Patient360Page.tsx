@@ -3105,6 +3105,7 @@ function AnsichtStammdaten({ patient }: { patient: Patient }) {
       { k: "ivBezug", label: "IV-Bezug" },
       { k: "ivBezugProzent", label: "IV-Grad" },
       { k: "hilflosenentschaedigung", label: "Hilflosenentschädigung" },
+      { k: "hilflosenentschaedigungGrad", label: "Grad" },
       { k: "assistenzbeitrag", label: "Assistenzbeitrag" },
       { k: "quellensteuerHinweise", label: "Hinweise zur Quellensteuer" },
     ],

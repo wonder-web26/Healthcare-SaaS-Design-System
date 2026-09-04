@@ -37,6 +37,7 @@ import { SDA_EROEFFNUNGSGRUND_OPTIONS } from "../../../lib/stammdaten/sda-eroeff
 import { SDA_ANMELDENDE_INSTITUTION_OPTIONS, INSTITUTION_ANDERE } from "../../../lib/stammdaten/sda-anmeldende-institution";
 import { SDA_ZUSAMMENLEBEN_OPTIONS } from "../../../lib/stammdaten/sda-zusammenleben";
 import { SDA_JA_NEIN_OPTIONS } from "../../../lib/stammdaten/sda-ja-nein";
+import { HILFLOSENENTSCHAEDIGUNG_GRAD_OPTIONS } from "../../../lib/stammdaten/hilflosenentschaedigung";
 import { Switch } from "../ui/switch";
 import { SDA_SPRACHE_OPTIONS, SPRACHE_ANDERE } from "../../../lib/stammdaten/sda-sprache";
 import { AppButton } from "../ui/AppButton";
@@ -248,7 +249,7 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
 /* ══════════════════════════════════════════
    TAB 2: STEUER & SOZIALVERSICHERUNGEN (migrated)
    ══════════════════════════════════════════ */
-export function TabSteuerV2({ data, touched, onUpdate, onBlur, onboardingId, onNavigate }: TabProps & { onboardingId?: string; onNavigate?: (reiter: string) => void }) {
+export function TabSteuerV2({ data, touched, onUpdate, onUpdateMehrere, onBlur, onboardingId, onNavigate }: TabProps & { onboardingId?: string; onNavigate?: (reiter: string) => void }) {
   // Bezeichnete Person aus dem Bezugsteam (Merkmal an der Beziehung) — nur lesend.
   const vorsorgePatientId = onboardingId ? patientFuerOnboarding(onboardingId)?.id : undefined;
   const bezeichnete = vorsorgePatientId
@@ -269,7 +270,17 @@ export function TabSteuerV2({ data, touched, onUpdate, onBlur, onboardingId, onN
         </div>
       )}
       <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <SegmentedControl label="Hilflosenentschädigung?" required value={data.hilflosenentschaedigung} onChange={v => onUpdate("hilflosenentschaedigung", v)} options={JA_NEIN} />
+        {/* Löschregel: verlässt die Frage «ja», wird der Grad geleert —
+            ein Grad ohne Bezug wäre eine stille Falschangabe. */}
+        <SegmentedControl label="Hilflosenentschädigung?" required value={data.hilflosenentschaedigung} onChange={v => {
+          if (v !== "ja" && onUpdateMehrere) onUpdateMehrere({ hilflosenentschaedigung: v, hilflosenentschaedigungGrad: "" });
+          else onUpdate("hilflosenentschaedigung", v);
+        }} options={JA_NEIN} />
+        {data.hilflosenentschaedigung === "ja" && (
+          <div style={{ marginTop: "var(--space-3)", maxWidth: FELD_MAX.mittel }}>
+            <FormSelect label="Grad" required value={data.hilflosenentschaedigungGrad || null} onChange={v => onUpdate("hilflosenentschaedigungGrad", v || "")} options={HILFLOSENENTSCHAEDIGUNG_GRAD_OPTIONS} placeholder="Grad wählen" />
+          </div>
+        )}
         <SegmentedControl label="Bezieht der Patient einen IV-Assistenzbeitrag?" required value={data.assistenzbeitrag} onChange={v => onUpdate("assistenzbeitrag", v)} options={JA_NEIN} />
       </div>
 

@@ -64,3 +64,16 @@ Volle Bezeichnung bleibt als `title`/`aria-label` erhalten.
   Willenserklärung der Klientin, nicht kraft behördlicher Anordnung.
 - Unit-Test zu V11 (Wertehaltung beim Umschalten) entfällt mangels Test-Runner im Repo —
   als Browser-Prüfung durchgeführt.
+
+## Hilflosenentschädigung: Grad (Lauf «HE-Grad»)
+
+Neues Feld `hilflosenentschaedigungGrad` (leicht/mittel/schwer, Werteliste in
+`lib/stammdaten/hilflosenentschaedigung.ts`), nur sichtbar und Pflicht bei
+Ja-Nein = «ja»; beim Verlassen von «ja» wird der Wert gelöscht. Besprochen und
+bewusst zurückgestellt:
+- Status (`nicht geprüft`, `beantragt`, `zugesprochen`, `abgelehnt`)
+- Träger: IV, AHV, UVG, MVG
+- Verfügungsdatum, Verfügungsnummer, Gültigkeit
+- Abgrenzung zum Assistenzbeitrag: setzt HE-Bezug voraus und verlangt, dass die
+  versicherte Person selbst Arbeitgeberin ist — mögliche Kollision mit dem
+  Anstellungsmodell ist anwaltlich zu klären.

@@ -176,6 +176,7 @@ export interface PatientStammdatenEingabe {
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
+  hilflosenentschaedigungGrad?: string;
   assistenzbeitrag: string;
   quellensteuerHinweise: string;
 }
@@ -220,7 +221,7 @@ function stammdatenAbbilden(
   "pflegeortGemeinde" | "pflegeortBfsNummer" | "pflegeortKanton" | "pflegeortLand" |
   "sprache" |
   "angehoeriger" | "angehoerigerTelefon" |
-  "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "mobil" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "assistenzbeitrag" | "quellensteuerHinweise"> {
+  "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "mobil" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "hilflosenentschaedigungGrad" | "assistenzbeitrag" | "quellensteuerHinweise"> {
   return {
     vorname: eingabe.vorname,
     nachname: eingabe.name,
@@ -270,6 +271,7 @@ function stammdatenAbbilden(
     ivBezug: eingabe.ivBezug,
     ivBezugProzent: eingabe.ivBezugProzent,
     hilflosenentschaedigung: eingabe.hilflosenentschaedigung,
+    hilflosenentschaedigungGrad: eingabe.hilflosenentschaedigungGrad ?? "",
     assistenzbeitrag: eingabe.assistenzbeitrag,
     quellensteuerHinweise: eingabe.quellensteuerHinweise,
     angehoeriger: angehoerigerAnzeige(angehoeriger),

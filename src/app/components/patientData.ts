@@ -118,6 +118,8 @@ export interface Patient {
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
+  /** Grad — optional; leer bei Bestandsdaten. */
+  hilflosenentschaedigungGrad?: string;
   /** PA-01 — IV-Assistenzbeitrag. */
   assistenzbeitrag: string;
   quellensteuerHinweise: string;

@@ -171,6 +171,8 @@ export interface PatientFormData {
   ivBezug: string;
   ivBezugProzent: string;
   hilflosenentschaedigung: string;
+  /** Grad (leicht/mittel/schwer) — nur mit Bedeutung, wenn die Ja-Nein-Frage «ja» ist. */
+  hilflosenentschaedigungGrad?: string;
   /** PA-01: IV-Assistenzbeitrag */
   assistenzbeitrag: string;
   /** Ja/Nein-Indikator; die Kontaktperson des Sozialdiensts steht im Bezugsteam. */
@@ -293,6 +295,7 @@ export const emptyPatientForm: PatientFormData = {
   ivBezug: "nein",
   ivBezugProzent: "",
   hilflosenentschaedigung: "nein",
+  hilflosenentschaedigungGrad: "",
   assistenzbeitrag: "nein",
   sozialamtInvolviert: "nein",
   gesetzlicheVertretung: "nein",
@@ -410,6 +413,8 @@ function getTabCompletion(tabKey: string, data: PatientFormData, patientId?: str
       const checks = [
         filled(data.ivBezug),
         filled(data.hilflosenentschaedigung),
+        // Grad ist Pflicht, sobald die Ja-Nein-Frage auf «ja» steht.
+        data.hilflosenentschaedigung !== "ja" || filled(data.hilflosenentschaedigungGrad),
         filled(data.sozialamtInvolviert),
         filled(data.gesetzlicheVertretung),
         // Vorsorge: bei "ja" ist die Bemerkung Pflicht — wer angibt, dass ein
@@ -738,7 +743,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
             <TabPersonalienV2 data={data} touched={touched} onUpdate={updateField} onUpdateMehrere={updateFields} onBlur={markTouched} onboardingId={onboardingId} />
           )}
           {activeTab === "steuer" && (
-            <TabSteuerV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} onboardingId={onboardingId} onNavigate={r => setActiveTab(r as PatientReiter)} />
+            <TabSteuerV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} onUpdateMehrere={updateFields} onboardingId={onboardingId} onNavigate={r => setActiveTab(r as PatientReiter)} />
           )}
           {activeTab === "wohnen" && (
             <TabWohnenUmfeldV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
