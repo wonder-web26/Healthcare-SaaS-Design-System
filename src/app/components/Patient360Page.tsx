@@ -94,7 +94,8 @@ import {
   Search,
 } from "lucide-react";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
-import { AllergienAbschnitt } from "./allergien/AllergienAbschnitt";
+import { AllergienAbschnitt, KRIT_LABEL, KRIT_ZEICHEN } from "./allergien/AllergienAbschnitt";
+import { useAllergien, useAllergieErhebungen, getAllergieErhebung, type AllergieKritikalitaet } from "../../lib/allergien/store";
 import {
   statusConfig,
   schweregradConfig,
@@ -1431,11 +1432,11 @@ function WorkflowSection({
    TAB: ANAMNESE
    ══════════════════════════════════════════ */
 
-interface AllergieEntry { id: string; stoff: string; reaktion: string; schwere: "Schwer" | "Mittel" | "Leicht" }
 interface HilfsmittelEntry { id: string; label: string; detail: string }
 interface AnamneseEntry { id: string; text: string; datum: string; autor: string }
 
 function TabAnamnese({ patient }: { patient: Patient }) {
+  const navigate = useNavigate();
   /* ── Karte 1 — Biometrie (editable) ── */
   const [groesse, setGroesse] = useState(172);
   const [gewicht, setGewicht] = useState(84);
@@ -1446,17 +1447,25 @@ function TabAnamnese({ patient }: { patient: Patient }) {
   const bmiColor = bmi < 18.5 ? "text-warning" : bmi < 25 ? "text-success" : bmi < 30 ? "text-warning" : "text-error";
 
   /* ── Karte 2 — Allergien & Hilfsmittel ── */
-  const [allergien, setAllergien] = useState<AllergieEntry[]>([
-    { id: "a1", stoff: "Penicillin", reaktion: "Anaphylaxie", schwere: "Schwer" },
-    { id: "a2", stoff: "Latex", reaktion: "Hautausschlag", schwere: "Mittel" },
-  ]);
+  // Allergieteil aus dem Store (Lauf B) — eine Wahrheit für alle drei Stellen.
+  // Die Karte fasst zusammen; erfasst wird in der Liste (Medikation) oder im
+  // Onboarding. Der Hilfsmittelteil bleibt komponentenlokal wie bisher.
+  const alleAllergien = useAllergien();
+  const allergieErhebungen = useAllergieErhebungen();
+  const kritRang: Record<AllergieKritikalitaet, number> = { high: 0, low: 1, "unable-to-assess": 2 };
+  const kartenAllergien = alleAllergien
+    .filter(a => a.patientId === patient.id && a.verifikationsstatus !== "refuted" && a.verifikationsstatus !== "entered-in-error")
+    .sort((a, b) => (kritRang[a.kritikalitaet] - kritRang[b.kritikalitaet])
+      || b.erstelltAm.localeCompare(a.erstelltAm) || b.id.localeCompare(a.id));
+  const allergieErhebung = (allergieErhebungen.find(e => e.patientId === patient.id)
+    ?? getAllergieErhebung(patient.id)).allergieErhebung;
   const [hilfsmittel, setHilfsmittel] = useState<HilfsmittelEntry[]>([
     { id: "h1", label: "Brille", detail: "Lesen & Fernsicht" },
     { id: "h2", label: "Hörgerät rechts", detail: "Seit 2021" },
     { id: "h3", label: "Rollator", detail: "Innenbereich" },
   ]);
   const [editK2, setEditK2] = useState(false);
-  const [k2Snap, setK2Snap] = useState<{ a: AllergieEntry[]; h: HilfsmittelEntry[] } | null>(null);
+  const [k2Snap, setK2Snap] = useState<{ h: HilfsmittelEntry[] } | null>(null);
 
 
   /* ── Bereich B — Anamnese-Einträge ── */
@@ -1584,12 +1593,12 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
             <AlertTriangle className="w-4 h-4 text-error" />
             <h5 className="text-foreground flex-1">Allergien & Hilfsmittel</h5>
             {!editK2 ? (
-              <button onClick={() => { setK2Snap({ a: allergien.map(x => ({...x})), h: hilfsmittel.map(x => ({...x})) }); setEditK2(true); }} className={_editBtn} style={{ fontWeight: 450 }}>
+              <button onClick={() => { setK2Snap({ h: hilfsmittel.map(x => ({...x})) }); setEditK2(true); }} className={_editBtn} style={{ fontWeight: 450 }}>
                 <Pencil className="w-3 h-3" /> Bearbeiten
               </button>
             ) : (
               <div className="flex items-center gap-1.5">
-                <button onClick={() => { if (k2Snap) { setAllergien(k2Snap.a); setHilfsmittel(k2Snap.h); } setEditK2(false); }} className={_cancelBtn} style={{ fontWeight: 450 }}>
+                <button onClick={() => { if (k2Snap) { setHilfsmittel(k2Snap.h); } setEditK2(false); }} className={_cancelBtn} style={{ fontWeight: 450 }}>
                   <X className="w-3 h-3" /> Abbrechen
                 </button>
                 <button onClick={() => setEditK2(false)} className={_saveBtn} style={{ fontWeight: 500 }}>
@@ -1599,42 +1608,48 @@ Pflegerelevant: Kompressionsstrümpfe müssen täglich morgens angelegt werden (
             )}
           </div>
           <div className="p-5 space-y-3">
-            {/* Allergien warning box */}
-            <div className="rounded-xl bg-error/[0.06] border border-error/15 p-3.5">
-              <div className="flex items-center gap-1.5 mb-2.5">
-                <AlertTriangle className="w-3.5 h-3.5 text-error" />
-                <span className="text-[11px] text-error uppercase tracking-wider" style={{ fontWeight: 600 }}>Bekannte Allergien</span>
+            {/* Allergien — aus dem Store; nur zusammenfassend, erfasst wird in
+                der Liste. «Keine bekannt» und «nicht erhoben» sind verschiedene
+                Aussagen und sehen bewusst verschieden aus: eine Karte, die bei
+                fehlender Erhebung nichts zeigte, würde als «keine» gelesen. */}
+            {kartenAllergien.length === 0 && allergieErhebung === "keine_bekannt" ? (
+              <div className="rounded-xl bg-muted/40 border border-border-light p-3.5">
+                <span className="text-[12px] text-muted-foreground" style={{ fontWeight: 500 }}>Keine bekannten Allergien</span>
               </div>
-              <div className="space-y-2">
-                {allergien.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between gap-2">
-                    {editK2 ? (
-                      <>
-                        <input value={a.stoff} onChange={e => setAllergien(prev => prev.map(x => x.id === a.id ? {...x, stoff: e.target.value} : x))} className={`${_input} flex-1`} placeholder="Allergen" />
-                        <input value={a.reaktion} onChange={e => setAllergien(prev => prev.map(x => x.id === a.id ? {...x, reaktion: e.target.value} : x))} className={`${_input} flex-1`} placeholder="Reaktion" />
-                        <select value={a.schwere} onChange={e => setAllergien(prev => prev.map(x => x.id === a.id ? {...x, schwere: e.target.value as AllergieEntry["schwere"]} : x))} className={`${_input} w-24 shrink-0`}>
-                          <option value="Leicht">Leicht</option><option value="Mittel">Mittel</option><option value="Schwer">Schwer</option>
-                        </select>
-                        <button onClick={() => setAllergien(prev => prev.filter(x => x.id !== a.id))} className="p-1 rounded-lg text-error/60 hover:text-error hover:bg-error/8 transition-colors shrink-0"><X className="w-3.5 h-3.5" /></button>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <span className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>{a.stoff}</span>
-                          <span className="text-[11px] text-muted-foreground ml-1.5" style={{ fontWeight: 400 }}>— {a.reaktion}</span>
-                        </div>
-                        <span className={`text-[10px] px-1.5 py-[2px] rounded-md shrink-0 ${a.schwere === "Schwer" ? "bg-error-light text-error-foreground" : a.schwere === "Mittel" ? "bg-warning-light text-warning-foreground" : "bg-muted text-muted-foreground"}`} style={{ fontWeight: 500 }}>{a.schwere}</span>
-                      </>
-                    )}
-                  </div>
-                ))}
-                {editK2 && (
-                  <button onClick={() => setAllergien(prev => [...prev, { id: `a${Date.now()}`, stoff: "", reaktion: "", schwere: "Mittel" }])} className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary-hover pt-1 transition-colors cursor-pointer" style={{ fontWeight: 500 }}>
-                    <Plus className="w-3 h-3" /> Allergie hinzufügen
-                  </button>
-                )}
+            ) : kartenAllergien.length === 0 && allergieErhebung !== "abgeschlossen" ? (
+              <div className="rounded-xl bg-warning-light p-3.5 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-warning-foreground shrink-0" />
+                <span className="text-[12px] text-warning-foreground" style={{ fontWeight: 500 }}>Allergien nicht erhoben</span>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-xl bg-error/[0.06] border border-error/15 p-3.5">
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-error" />
+                  <span className="text-[11px] text-error uppercase tracking-wider" style={{ fontWeight: 600 }}>Allergien und Unverträglichkeiten</span>
+                </div>
+                <div className="space-y-1.5">
+                  {kartenAllergien.length === 0 && (
+                    <span className="text-[12px] text-muted-foreground" style={{ fontWeight: 400 }}>Keine aktiven Einträge</span>
+                  )}
+                  {kartenAllergien.slice(0, 3).map(a => (
+                    <div key={a.id} className="flex items-start gap-2">
+                      <span title={`Kritikalität: ${KRIT_LABEL[a.kritikalitaet]}`} aria-label={`Kritikalität: ${KRIT_LABEL[a.kritikalitaet]}`}
+                        className="shrink-0 text-center" style={{ width: 14, fontSize: 11, lineHeight: "18px",
+                          color: a.kritikalitaet === "high" ? "var(--status-warning-text)" : "var(--text-tertiary)" }}>
+                        {KRIT_ZEICHEN[a.kritikalitaet]}
+                      </span>
+                      <span className="text-[13px] text-foreground" style={{ fontWeight: 500, overflowWrap: "anywhere" }}>{a.substanzText}</span>
+                    </div>
+                  ))}
+                  {kartenAllergien.length > 3 && (
+                    <button type="button" onClick={() => navigate(`/patienten/${patient.id}/medikation/unvertraeglichkeiten`)}
+                      className="ui-fokusring flex items-center text-[11px] text-primary hover:text-primary-hover pt-1 transition-colors cursor-pointer bg-transparent border-0 p-0" style={{ fontWeight: 500, fontFamily: "inherit" }}>
+                      + {kartenAllergien.length - 3} weitere
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             {/* Hilfsmittel */}
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2" style={{ fontWeight: 500 }}>Hilfsmittel</div>

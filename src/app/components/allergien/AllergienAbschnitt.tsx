@@ -43,11 +43,12 @@ const KATEGORIE_LABEL: Record<AllergieKategorie, string> = {
   medication: "Arzneimittel", environment: "Umwelt", food: "Nahrungsmittel", biological: "Biologisch",
 };
 const TYP_LABEL: Record<AllergieArt, string> = { allergy: "Allergie", intolerance: "Unverträglichkeit" };
-const KRIT_LABEL: Record<AllergieKritikalitaet, string> = {
+export const KRIT_LABEL: Record<AllergieKritikalitaet, string> = {
   low: "Gering", high: "Hoch", "unable-to-assess": "Nicht beurteilbar",
 };
-/** Zeichen statt Farbe: die Kritikalität ist nie nur über Farbe unterscheidbar. */
-const KRIT_ZEICHEN: Record<AllergieKritikalitaet, string> = { high: "▲", low: "●", "unable-to-assess": "○" };
+/** Zeichen statt Farbe: die Kritikalität ist nie nur über Farbe unterscheidbar.
+ *  Exportiert, damit die Überblick-Karte dieselben Zeichen zeigt wie die Liste. */
+export const KRIT_ZEICHEN: Record<AllergieKritikalitaet, string> = { high: "▲", low: "●", "unable-to-assess": "○" };
 const VERIF_LABEL: Record<AllergieVerifikation, string> = {
   unconfirmed: "Unbestätigt", confirmed: "Bestätigt", refuted: "Widerlegt", "entered-in-error": "Irrtümlich erfasst",
 };
