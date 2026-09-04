@@ -6,13 +6,16 @@
  * Version:    3.4.0
  * Gezogen am: 2026-09-04
  *
- * Auszug von 30 Eintraegen fuer den Prototypen. Der vollstaendige Katalog umfasst
+ * Auszug von 29 Eintraegen fuer den Prototypen. Der vollstaendige Katalog umfasst
  * mehrere hundert Codes und wird nachgezogen, sobald die SNOMED-CT-Lizenzfrage
  * geklaert ist.
  *
  * ACHTUNG — keine Eintraege ergaenzen oder Codes veraendern. Jeder Code stammt
  * eineindeutig aus dem Value Set. Fehlt eine Substanz, wird sie im Dialog als
  * Freitext erfasst (substanzCodiert = false), niemals als erfundener Code.
+ *
+ * Negationscodes ("Keine bekannte Allergie gegen …") gehoeren NICHT in diesen
+ * Katalog. Sie bilden spaeter den Erhebungszustand `keine_bekannt` beim Export ab.
  *
  * `substanz` ist der Anzeigename im Suchergebnis und in der Liste.
  * `de` / `fr` / `it` sind die Katalogbegriffe aus dem Value Set; ueber alle drei
@@ -71,7 +74,6 @@ export const ALLERGIE_KATALOG: readonly AllergieKatalogEintrag[] = [
   { code: '232350006', substanz: 'Hausstaubmilbenprotein', de: 'Allergie gegen Hausstaubmilbenprotein', fr: 'allergie aux acariens', it: 'allergia alle proteine degli acari della polvere', kategorie: 'environment', art: 'allergy' },
   { code: '232349006', substanz: 'Hausstaub', de: 'Allergie gegen Hausstaubmilben', fr: 'allergie à la poussière de maison', it: 'allergia alla polvere', kategorie: 'environment', art: 'allergy' },
   { code: '151201000119107', substanz: 'Insektengift', de: 'Allergie gegen Insektengift', fr: "allergie au venin d'insectes", it: 'allergia al veleno di insetti', kategorie: 'environment', art: 'allergy' },
-  { code: '1003774007', substanz: 'Latex', de: 'Keine bekannte Allergie gegen Hevea brasiliensis-Latex', fr: "pas d'allergie connue au latex d'Hevea brasiliensis", it: 'nessuna allergia nota al lattice di Hevea brasiliensis', kategorie: 'environment', art: 'allergy' },
 
   // --- Nahrungsmittel ---
   { code: '213020009', substanz: 'Eiprotein', de: 'Allergie gegen Eiprotein', fr: "allergie aux protéines de l'œuf", it: "allergia alle proteine dell'uovo", kategorie: 'food', art: 'allergy' },

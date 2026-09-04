@@ -317,7 +317,9 @@ function ErfassungsDialog({ patientId, eintrag, beziehungen, angehoerige, kontak
   const suchfeld = useRef<HTMLInputElement>(null);
 
   const [typ, setTyp] = useState<AllergieArt>(eintrag?.typ ?? "allergy");
-  const [kategorie, setKategorie] = useState<AllergieKategorie>(eintrag?.kategorie ?? "environment");
+  // Bewusst OHNE Vorbelegung: bei Freitext muss die Kategorie gewaehlt werden,
+  // «Sichern» bleibt bis dahin gesperrt. Der Katalogpfad fragt sie nie.
+  const [kategorie, setKategorie] = useState<AllergieKategorie | "">(eintrag?.kategorie ?? "");
   const [krit, setKrit] = useState<AllergieKritikalitaet>(eintrag?.kritikalitaet ?? "unable-to-assess");
   const [herkunftTyp, setHerkunftTyp] = useState<AllergieBehauptetVonTyp>(eintrag?.behauptetVonTyp ?? "klientin");
   const [herkunftId, setHerkunftId] = useState<string>(eintrag?.behauptetVonId ?? eintrag?.behauptetVonDokumentId ?? "");
@@ -346,6 +348,7 @@ function ErfassungsDialog({ patientId, eintrag, beziehungen, angehoerige, kontak
   };
   const waehleFreitext = () => {
     setWahl({ art: "freitext", text: suche.trim() });
+    setKategorie(""); // keine Vorbelegung — auch nicht aus einer vorherigen Katalogwahl
     setListeOffen(false);
     setSuche("");
   };
@@ -361,12 +364,13 @@ function ErfassungsDialog({ patientId, eintrag, beziehungen, angehoerige, kontak
   const sichern = () => {
     if (!wahl) return;
     const istKatalog = wahl.art === "katalog";
+    if (!istKatalog && !kategorie) return; // Freitext ohne Kategorie: gesperrt
     allergieSichern({
       id: eintrag?.id ?? "", patientId,
       substanzCode: istKatalog ? wahl.eintrag.code : null,
       substanzText: istKatalog ? wahl.eintrag.substanz : wahl.text,
       substanzCodiert: istKatalog,
-      kategorie: istKatalog ? wahl.eintrag.kategorie : kategorie,
+      kategorie: istKatalog ? wahl.eintrag.kategorie : (kategorie as AllergieKategorie),
       typ,
       kritikalitaet: krit,
       verifikationsstatus: verifikation,
@@ -469,7 +473,7 @@ function ErfassungsDialog({ patientId, eintrag, beziehungen, angehoerige, kontak
           {/* Kategorie nur bei Freitext — die Katalogwahl bringt sie mit. */}
           {istFreitext && (
             <Feld label="Kategorie">
-              <Segment<AllergieKategorie> optionen={(Object.keys(KATEGORIE_LABEL) as AllergieKategorie[]).map(k => ({ wert: k, label: KATEGORIE_LABEL[k] }))}
+              <Segment<AllergieKategorie | ""> optionen={(Object.keys(KATEGORIE_LABEL) as AllergieKategorie[]).map(k => ({ wert: k, label: KATEGORIE_LABEL[k] }))}
                 wert={kategorie} onWahl={setKategorie} />
             </Feld>
           )}
@@ -543,7 +547,7 @@ function ErfassungsDialog({ patientId, eintrag, beziehungen, angehoerige, kontak
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, padding: "12px 20px", borderTop: "0.5px solid var(--border-default)" }}>
           <button type="button" onClick={onClose} className="ui-fokusring" style={{ ...leiseAktion, color: "var(--text-secondary)" }}>Abbrechen</button>
-          <AppButton variant="primaer" onClick={sichern} disabled={!wahl}>Sichern</AppButton>
+          <AppButton variant="primaer" onClick={sichern} disabled={!wahl || (istFreitext && !kategorie)}>Sichern</AppButton>
         </div>
       </div>
     </div>
