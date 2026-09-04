@@ -94,6 +94,7 @@ import {
   Search,
 } from "lucide-react";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
+import { AllergienAbschnitt } from "./allergien/AllergienAbschnitt";
 import {
   statusConfig,
   schweregradConfig,
@@ -254,7 +255,7 @@ const PATIENT_NAV: GruppeDef[] = [
   ] },
   { schluessel: "medikation", label: "Medikation", ansichten: [
     { schluessel: "plan", label: "Plan" },
-    { schluessel: "unvertraeglichkeiten", label: "Unverträglichkeiten" },
+    { schluessel: "unvertraeglichkeiten", label: "Allergien und Unverträglichkeiten" },
     { schluessel: "richten-und-bezug", label: "Richten und Bezug" },
   ] },
   { schluessel: "leistungen", label: "Leistungen", ansichten: [
@@ -750,7 +751,7 @@ function Patient360Inhalt() {
    ══════════════════════════════════════════ */
 const ANSICHT_HAT_INHALT: Record<string, true> = {
   ueberblick: true, beziehungen: true, mandate: true, "interrai-hc": true, atl: true, anamnese: true,
-  pflegeplan: true, vitalwerte: true, betreuungsrhythmus: true,
+  pflegeplan: true, vitalwerte: true, betreuungsrhythmus: true, unvertraeglichkeiten: true,
   leistungsplanungsblatt: true, "verordnung-und-kostengutsprache": true,
   pflegekontrolle: true, dokumente: true, pendenzen: true, verlauf: true, controlling: true,
   ordnerstruktur: true, pflichtluecken: true,
@@ -764,11 +765,6 @@ const ANSICHT_UMFANG: Record<string, string[]> = {
     "Wirkstoff, Dosierung und Einnahmezeitpunkt je Position",
     "Verordnende Ärztin oder verordnender Arzt",
     "Gültigkeit und Änderungsverlauf",
-  ],
-  unvertraeglichkeiten: [
-    "Wirkstoff-Unverträglichkeiten mit Schweregrad",
-    "Abgleich gegen den Medikationsplan",
-    "Quelle und Erfassungsdatum je Eintrag",
   ],
   "richten-und-bezug": [
     "Richtprotokoll je Woche",
@@ -809,6 +805,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "anamnese": return <TabAnamnese patient={patient} />;
     case "pflegeplan": return <TabPflegeplanung patientId={patient.id} navigate={navigate} />;
     case "vitalwerte": return <VitaldatenTab patientId={patient.id} />;
+    case "unvertraeglichkeiten": return <AllergienAbschnitt patientId={patient.id} />;
     case "betreuungsrhythmus": return <TabWorkflow patient={patient} />;
     case "leistungsplanungsblatt": return <TabKLV patientId={patient.id} />;
     case "verordnung-und-kostengutsprache": return <AnsichtVerordnung patient={patient} />;
