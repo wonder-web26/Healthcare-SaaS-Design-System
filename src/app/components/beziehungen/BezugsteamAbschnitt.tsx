@@ -245,6 +245,7 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
     schluesselbesitz: eintrag?.schluesselbesitz ?? false,
     inPatientenverfuegungBezeichnet: eintrag?.inPatientenverfuegungBezeichnet ?? false,
     imVorsorgeauftragBeauftragt: eintrag?.imVorsorgeauftragBeauftragt ?? false,
+    vertretungVonGesetzesWegen: eintrag?.vertretungVonGesetzesWegen ?? false,
     rechnungsempfaenger: eintrag?.rechnungsempfaenger ?? false,
     unterschriftsberechtigt: eintrag?.unterschriftsberechtigt ?? false,
     gemeinsamerHaushalt: eintrag?.gemeinsamerHaushalt ?? false,
@@ -278,9 +279,20 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
   const merkmalAn = (code: MerkmalCode): boolean =>
     code === "beistandschaftAdministrativ" ? beistandschaft.administrativ
     : code === "beistandschaftGesundheit" ? beistandschaft.gesundheit
-    : code === "vertretungGesetz" ? art === "ehepartner" && !!merkmale.gemeinsamerHaushalt
     : code === "angestelltePflegendeAngehoerige" ? rolle === "pflegende_angehoerige"
     : !!merkmale[code];
+
+  /* Merkmale mit unerfuellter ODER-Voraussetzung (setztVorausEines) werden
+     zurueckgesetzt — konfigurationsgetrieben, kein Feld-spezifisches if. */
+  const voraussetzungenBereinigen = (m: Partial<Record<MerkmalCode, boolean>>) => {
+    const naechste = { ...m };
+    for (const g of MERKMAL_GRUPPEN) for (const def of g.merkmale) {
+      if (def.setztVorausEines && naechste[def.code] && !def.setztVorausEines.some(c => naechste[c])) {
+        naechste[def.code] = false;
+      }
+    }
+    return naechste;
+  };
 
   const merkmalUmschalten = (code: MerkmalCode) => {
     if (code === "beistandschaftAdministrativ" || code === "beistandschaftGesundheit") {
@@ -291,7 +303,7 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
       setBeistandschaft(naechste);
       return;
     }
-    setMerkmale(m => ({ ...m, [code]: !m[code] }));
+    setMerkmale(m => voraussetzungenBereinigen({ ...m, [code]: !m[code] }));
   };
 
   // Aufräumlogik: nach einem Wechsel von Rolle, Personentyp oder Beziehungsart
@@ -314,7 +326,9 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
       for (const code of Object.keys(naechste) as MerkmalCode[]) {
         if (naechste[code] && !sichtbar.has(code)) naechste[code] = false;
       }
-      return naechste;
+      // Auch sichtbare Merkmale verlieren ihren Wert, wenn nach dem Wechsel
+      // keine ihrer ODER-Voraussetzungen mehr gesetzt ist.
+      return voraussetzungenBereinigen(naechste);
     });
     if (!sichtbar.has("beistandschaftAdministrativ")) setBeistandschaft(leereBeistandschaft());
     // matrixTyp/inMatrix sind reine Ableitungen von rolle und beistandTyp.
@@ -384,6 +398,7 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
       auskunftsberechtigt: !!merkmale.auskunftsberechtigt,
       inPatientenverfuegungBezeichnet: !!merkmale.inPatientenverfuegungBezeichnet,
       imVorsorgeauftragBeauftragt: !!merkmale.imVorsorgeauftragBeauftragt,
+      vertretungVonGesetzesWegen: !!merkmale.vertretungVonGesetzesWegen,
       hauptansprechperson: !!merkmale.hauptansprechperson,
       schluesselbesitz: !!merkmale.schluesselbesitz,
       rechnungsempfaenger: !!merkmale.rechnungsempfaenger,
@@ -552,15 +567,13 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                       {sichtbar.map(m => {
                         if (m.abgeleitet) {
-                          const voraussetzungFehlt = !!m.setztVoraus && !merkmalAn(m.setztVoraus);
-                          const grund = m.code === "vertretungGesetz"
-                            ? (voraussetzungFehlt
-                              ? "Gilt kraft Gesetzes (Art. 374 ZGB), sobald zusätzlich der gemeinsame Haushalt erfasst ist."
-                              : "Gilt kraft Gesetzes (Art. 374 ZGB): Ehe und gemeinsamer Haushalt sind erfasst.")
-                            : "Abgeleitet aus der Rolle — die Anstellung wird im Angehörigen-Reiter geführt.";
-                          return <LeseMerkmal key={m.code} an={merkmalAn(m.code)} text={m.label} grund={grund} />;
+                          return <LeseMerkmal key={m.code} an={merkmalAn(m.code)} text={m.label}
+                            grund="Abgeleitet aus der Rolle — die Anstellung wird im Angehörigen-Reiter geführt." />;
                         }
-                        return <Umschalter key={m.code} an={merkmalAn(m.code)} onToggle={() => merkmalUmschalten(m.code)} text={m.label} />;
+                        // ODER-Voraussetzung nicht erfüllt → deaktiviert, title nennt den Grund.
+                        const deaktiviert = !!m.setztVorausEines && !m.setztVorausEines.some(c => merkmalAn(c));
+                        return <Umschalter key={m.code} an={merkmalAn(m.code)} onToggle={() => merkmalUmschalten(m.code)} text={m.label}
+                          deaktiviert={deaktiviert} grund={deaktiviert ? m.voraussetzungHinweis : undefined} />;
                       })}
                     </div>
                     {mitBeistandschaft && (
@@ -626,10 +639,17 @@ function LeseMerkmal({ an, text, grund }: { an: boolean; text: string; grund: st
   );
 }
 
-function Umschalter({ an, onToggle, text }: { an: boolean; onToggle: () => void; text: string }) {
+function Umschalter({ an, onToggle, text, deaktiviert, grund }: {
+  an: boolean; onToggle: () => void; text: string;
+  /** Waehlbar erst bei erfuellter Voraussetzung; `grund` erscheint als title.
+   *  aria-disabled statt disabled: fokussierbar, damit der Grund erreichbar bleibt. */
+  deaktiviert?: boolean; grund?: string;
+}) {
   return (
-    <button type="button" onClick={onToggle} aria-pressed={an} className="ui-fokusring inline-flex items-center"
-      style={{ gap: 6, padding: "5px 12px", borderRadius: 999, fontFamily: "inherit", fontSize: 13, cursor: "pointer",
+    <button type="button" onClick={deaktiviert ? undefined : onToggle} aria-pressed={an} aria-disabled={deaktiviert || undefined}
+      title={grund} className="ui-fokusring inline-flex items-center"
+      style={{ gap: 6, padding: "5px 12px", borderRadius: 999, fontFamily: "inherit", fontSize: 13,
+        cursor: deaktiviert ? "default" : "pointer", opacity: deaktiviert ? 0.55 : 1,
         background: an ? "var(--brand-primary-light)" : "var(--bg-elevated)", color: an ? "var(--brand-primary)" : "var(--text-secondary)",
         border: "0.5px solid " + (an ? "var(--brand-primary)" : "var(--border-default)") }}>
       {an && <Check style={{ width: 12, height: 12 }} />}{text}

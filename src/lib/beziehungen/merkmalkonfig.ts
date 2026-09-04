@@ -17,13 +17,14 @@ import type { Beziehung, BeziehungsrolleCode } from "./beziehungen";
 
 export type Personentyp = "privat" | "organisation";
 
-/** Boolesche Merkmale direkt an der Beziehung. `vertretungGesetz` und
- *  `angestelltePflegendeAngehoerige` sind abgeleitete Lesefelder ohne Speicherfeld. */
+/** Boolesche Merkmale direkt an der Beziehung. Nur
+ *  `angestelltePflegendeAngehoerige` ist ein abgeleitetes Lesefeld ohne
+ *  Speicherfeld; alles Uebrige wird erfasst. */
 export type MerkmalCode =
   | "hauptansprechperson" | "notfallkontakt" | "auskunftsberechtigt" | "schluesselbesitz"
   | "inPatientenverfuegungBezeichnet" | "imVorsorgeauftragBeauftragt"
   | "beistandschaftAdministrativ" | "beistandschaftGesundheit"
-  | "vertretungGesetz"
+  | "vertretungVonGesetzesWegen"
   | "rechnungsempfaenger" | "unterschriftsberechtigt"
   | "gemeinsamerHaushalt" | "unbezahlteBetreuung"
   | "angestelltePflegendeAngehoerige";
@@ -35,13 +36,14 @@ export interface MerkmalDef {
   rollen: BeziehungsrolleCode[];
   /** true → nur bei Personentyp Privatperson. */
   nurPrivat?: boolean;
-  /** Nur bei Beziehung Ehe (vorhandener Code `ehepartner`; ein Code für
-   *  Lebenspartnerschaft existiert nicht — Bedingung greift bewusst nur hier). */
+  /** Nur bei diesen Beziehungsart-Codes sichtbar. */
   nurBeziehung?: string[];
-  /** Deaktiviert, solange dieses Merkmal nicht gesetzt ist (title nennt den Grund). */
-  setztVoraus?: MerkmalCode;
-  /** Abgeleitet, nicht gespeichert: gilt kraft Gesetzes (Art. 374 ZGB), sobald
-   *  die Voraussetzungen erfuellt sind — Lesefeld, kein klickbarer Chip. */
+  /** Waehlbar erst, wenn MINDESTENS EINES dieser Merkmale gesetzt ist
+   *  (ODER-Verknuepfung); sonst deaktiviert, `voraussetzungHinweis` als title. */
+  setztVorausEines?: MerkmalCode[];
+  /** Begruendung fuer den deaktivierten Zustand (title-Attribut). */
+  voraussetzungHinweis?: string;
+  /** Abgeleitet, nicht gespeichert — Lesefeld, kein klickbarer Chip. */
   abgeleitet?: boolean;
 }
 
@@ -75,7 +77,16 @@ export const MERKMAL_GRUPPEN: MerkmalGruppe[] = [
       { code: "imVorsorgeauftragBeauftragt", label: "Im Vorsorgeauftrag beauftragt", rollen: A_B_W, nurPrivat: true },
       { code: "beistandschaftAdministrativ", label: "Beistandschaft administrativ", rollen: A_B },
       { code: "beistandschaftGesundheit", label: "Beistandschaft Gesundheit", rollen: A_B },
-      { code: "vertretungGesetz", label: "Vertretung von Gesetzes wegen", rollen: ANG, nurPrivat: true, nurBeziehung: ["ehepartner"], setztVoraus: "gemeinsamerHaushalt", abgeleitet: true },
+      /* ERFASST, nicht abgeleitet (Nachtrag 3). Sichtbar bei Ehe ODER
+       * eingetragener Partnerschaft — `lebenspartner` ist bewusst NICHT dabei:
+       * Art. 374 Abs. 1 ZGB nennt nur Ehegatten und eingetragene Partner,
+       * faktische Lebensgemeinschaften haben kein gesetzliches Vertretungsrecht.
+       * Waehlbar erst mit gemeinsamem Haushalt ODER unbezahlter Betreuung
+       * (Alternativen nach Art. 374 Abs. 1 ZGB — ODER, nicht UND). */
+      { code: "vertretungVonGesetzesWegen", label: "Vertretung von Gesetzes wegen", rollen: ANG, nurPrivat: true,
+        nurBeziehung: ["ehepartner", "eingetragene_partnerschaft"],
+        setztVorausEines: ["gemeinsamerHaushalt", "unbezahlteBetreuung"],
+        voraussetzungHinweis: "Setzt gemeinsamen Haushalt oder regelmässige persönliche Betreuung voraus." },
     ],
   },
   {
@@ -107,11 +118,10 @@ export function sichtbareMerkmale(g: MerkmalGruppe, rolle: BeziehungsrolleCode, 
 }
 
 /** Merkmalwert aus der Beziehung lesen (Beistandschaft liegt im Objekt;
- *  abgeleitete Merkmale werden aus Beziehungsart bzw. Rolle berechnet). */
+ *  das abgeleitete Merkmal wird aus der Rolle berechnet). */
 export function merkmalWert(b: Pick<Beziehung, "beistandschaft"> & Record<string, unknown>, code: MerkmalCode): boolean {
   if (code === "beistandschaftAdministrativ") return !!b.beistandschaft?.administrativ;
   if (code === "beistandschaftGesundheit") return !!b.beistandschaft?.gesundheit;
-  if (code === "vertretungGesetz") return b["art"] === "ehepartner" && !!b["gemeinsamerHaushalt"];
   if (code === "angestelltePflegendeAngehoerige") return b["rolle"] === "pflegende_angehoerige";
   return !!b[code];
 }

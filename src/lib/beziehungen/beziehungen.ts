@@ -256,6 +256,14 @@ export interface Beziehung {
    *  unter juristischem Vorbehalt. Das Instrument selbst (Existenz, KESB-
    *  Validierung, Bemerkung) fuehrt der Patient im Abschnitt Vorsorge. */
   imVorsorgeauftragBeauftragt?: boolean;
+  /** Vertretung von Gesetzes wegen (Art. 374 Abs. 1 ZGB) — ERFASST, nicht
+   *  abgeleitet. Waehlbar nur bei Ehe oder eingetragener Partnerschaft UND
+   *  (gemeinsamer Haushalt ODER unbezahlte Betreuung).
+   *  ACHTUNG, VORLAEUFIGE SETZUNG — ob dieses Merkmal das schweizerische
+   *  Erwachsenenschutzrecht richtig schneidet, ist nicht belegt; Arbeitsannahme
+   *  unter juristischem Vorbehalt. Die Rangfolge gegenueber Beistandschaft
+   *  Gesundheit und Vorsorgeauftrag ist bewusst NICHT abgebildet. */
+  vertretungVonGesetzesWegen?: boolean;
   /** Neue Merkmale der Gruppen 1/3/4 — Default false (fehlend = false). */
   hauptansprechperson?: boolean;
   schluesselbesitz?: boolean;
