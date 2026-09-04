@@ -35,9 +35,9 @@ for (const [kat, rollen] of Object.entries(ROLLEN_JE_KATEGORIE)) {
 }
 
 // Beistandschaft — Abbildung der vier alten Vertretungsart-Werte (vorläufig, Person B).
-assert.deepStrictEqual(beistandschaftAusVertretungsart("vorsorgeauftrag"), { administrativ: false, gesundheit: false, vorsorgeauftrag: true });
-assert.deepStrictEqual(beistandschaftAusVertretungsart("medizinische_massnahmen"), { administrativ: false, gesundheit: true, vorsorgeauftrag: false });
-assert.deepStrictEqual(beistandschaftAusVertretungsart("beistandschaft"), { administrativ: true, gesundheit: false, vorsorgeauftrag: false });
+assert.deepStrictEqual(beistandschaftAusVertretungsart("vorsorgeauftrag"), { administrativ: false, gesundheit: false });
+assert.deepStrictEqual(beistandschaftAusVertretungsart("medizinische_massnahmen"), { administrativ: false, gesundheit: true });
+assert.deepStrictEqual(beistandschaftAusVertretungsart("beistandschaft"), { administrativ: true, gesundheit: false });
 assert.deepStrictEqual(beistandschaftAusVertretungsart("unbekannt"), leereBeistandschaft());
 assert.deepStrictEqual(beistandschaftAusVertretungsart(""), leereBeistandschaft());
 
@@ -46,8 +46,8 @@ assert.strictEqual(beistandschaftAusVertretungsart("beistandschaft").gesundheit,
 
 // istBeistandschaftErfasst + Labels.
 assert.strictEqual(istBeistandschaftErfasst(leereBeistandschaft()), false);
-assert.strictEqual(istBeistandschaftErfasst({ administrativ: true, gesundheit: false, vorsorgeauftrag: false }), true);
-assert.deepStrictEqual(beistandschaftLabels({ administrativ: true, gesundheit: true, vorsorgeauftrag: false }), ["Administrativ", "Gesundheit"]);
+assert.strictEqual(istBeistandschaftErfasst({ administrativ: true, gesundheit: false }), true);
+assert.deepStrictEqual(beistandschaftLabels({ administrativ: true, gesundheit: true }), ["Administrativ", "Gesundheit"]);
 assert.deepStrictEqual(beistandschaftLabels(leereBeistandschaft()), []);
 
 console.log("beziehungen.test: OK");

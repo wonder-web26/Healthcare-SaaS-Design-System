@@ -65,6 +65,35 @@ Volle Bezeichnung bleibt als `title`/`aria-label` erhalten.
 - Unit-Test zu V11 (Wertehaltung beim Umschalten) entfällt mangels Test-Runner im Repo —
   als Browser-Prüfung durchgeführt.
 
+## Bezugspersonen-Dialog: Merkmalgruppen (Lauf «Bezugspersonen»)
+
+- **Eine Wahrheitsquelle:** Gruppen, Rollenmatrix und Sonderregeln stehen in
+  `lib/beziehungen/merkmalkonfig.ts`; der Dialog rendert ausschliesslich daraus
+  (kein `if (rolle === …)` im Markup). Nicht zutreffende Merkmale sind
+  ausgeblendet, nicht ausgegraut; leere Gruppen entfallen.
+- **Vorsorgeauftrag entflochten:** Das Instrument (Existenz, KESB-Validierung)
+  führt der Klient im Abschnitt Vorsorge; die Beziehung trägt nur noch
+  `imVorsorgeauftragBeauftragt`. `beistandschaft.vorsorgeauftrag` wurde
+  herausgelöst — ein Vorsorgeauftrag ist keine Beistandschaft.
+- **KESB-Hinweis weggelassen:** Der Hinweis «Noch nicht wirksam …» braucht den
+  Validierungsstand des Klienten; der lebt nur im Formularzustand
+  (PatientFormData), nicht in einem Store. Kein Umbau des Datenflusses dafür —
+  Hinweis entfällt, bis das Vorsorge-Instrument in einen Store wandert.
+- **Vertretung von Gesetzes wegen:** abgeleitetes Lesefeld, kein Speicherfeld
+  (Art. 374 ZGB gilt kraft Gesetzes). Bedingung: Beziehung `ehepartner` UND
+  gemeinsamer Haushalt. Nur `ehepartner` — ein Beziehungsart-Code für
+  eingetragene Partnerschaft existiert («eingetragene_partnerschaft»), wurde
+  aber bewusst nicht aufgenommen; juristische Klärung offen (siehe
+  Vorbehalts-Kommentar in merkmalkonfig.ts).
+- **Beistandschaft entkoppelt:** administrativ/gesundheit sind bei Angehörigen
+  UND Beistand führbar (nicht mehr an die Rolle gebunden). Nachweis (Ernennung
+  vom, Beleg vorhanden) hängt an der Beistandschaft und wandert später an ein
+  eigenes Instrument-Objekt; die Zuordnungs-Merkmale Patientenverfügung/
+  Vorsorgeauftrag tragen bewusst keinen Nachweis.
+- **Listen-Chips unverändert:** Die Zeilen zeigen weiterhin Rolle,
+  Notfallkontakt, Auskunftsberechtigt, In Patientenverfügung bezeichnet;
+  Chips für die neuen Merkmale sind bewusst zurückgestellt.
+
 ## Hilflosenentschädigung: Grad (Lauf «HE-Grad»)
 
 Neues Feld `hilflosenentschaedigungGrad` (leicht/mittel/schwer, Werteliste in

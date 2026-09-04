@@ -21,7 +21,7 @@
  * dem Angehörigen-Reiter und ist in der Liste nur einsehbar (Verwandtschaft und
  * Merkmale bleiben editierbar).
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Check, AlertTriangle, MoreVertical, ArrowRight, Stethoscope, Users } from "lucide-react";
 import { useFensterBreite } from "../ui/DataTable";
 import { InlineSelect } from "../ui/InlineSelect";
@@ -36,12 +36,16 @@ import { kontaktName } from "../../../lib/kontakte/kontakte";
 import type { KontaktFeldsatz } from "../ui/KontaktWahl";
 import type { KontakttypCode } from "../../../lib/stammdaten/kontakttypen";
 import {
-  BEZIEHUNGSROLLE, BEZIEHUNGSART, BEISTANDSCHAFT_ARTEN, KATEGORIEN, ROLLEN_JE_KATEGORIE,
+  BEZIEHUNGSROLLE, BEZIEHUNGSART, KATEGORIEN, ROLLEN_JE_KATEGORIE,
   rolleSeite, rolleLabel, artLabel, zugehoerigkeitLabel, personName,
   kategorieFuerRolle, kategorieLabel, personentypFuerRolle, leereBeistandschaft, beistandschaftLabels, istBeistandschaftErfasst,
   istAktiv as beziehungAktiv,
   type Beziehung, type PersonBezug, type PersonKategorie, type BeziehungsrolleCode, type Beistandschaft,
 } from "../../../lib/beziehungen/beziehungen";
+import {
+  MERKMAL_GRUPPEN, sichtbareMerkmale,
+  type MerkmalCode, type Personentyp as MerkmalPersonentyp,
+} from "../../../lib/beziehungen/merkmalkonfig";
 
 /** Vortag der Gegenwart im Anzeigeformat — für das Beenden beim Hausarzt-Wechsel. */
 function vortagGegenwart(): string {
@@ -232,9 +236,20 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
   const [person, setPerson] = useState<PersonBezug | null>(eintrag ? eintrag.person : null);
   const [art, setArt] = useState<string>(eintrag?.art ?? "");
   const [beistandschaft, setBeistandschaft] = useState<Beistandschaft>(eintrag?.beistandschaft ?? leereBeistandschaft());
-  const [notfall, setNotfall] = useState(eintrag?.notfallkontakt ?? false);
-  const [auskunft, setAuskunft] = useState(eintrag?.auskunftsberechtigt ?? false);
-  const [inPv, setInPv] = useState(eintrag?.inPatientenverfuegungBezeichnet ?? false);
+  // Boolesche Merkmale der vier Gruppen — ein Satz, initialisiert aus dem Eintrag.
+  // Beistandschaft (inkl. Nachweis) lebt weiterhin im eigenen Objekt oben.
+  const [merkmale, setMerkmale] = useState<Partial<Record<MerkmalCode, boolean>>>(() => ({
+    hauptansprechperson: eintrag?.hauptansprechperson ?? false,
+    notfallkontakt: eintrag?.notfallkontakt ?? false,
+    auskunftsberechtigt: eintrag?.auskunftsberechtigt ?? false,
+    schluesselbesitz: eintrag?.schluesselbesitz ?? false,
+    inPatientenverfuegungBezeichnet: eintrag?.inPatientenverfuegungBezeichnet ?? false,
+    imVorsorgeauftragBeauftragt: eintrag?.imVorsorgeauftragBeauftragt ?? false,
+    rechnungsempfaenger: eintrag?.rechnungsempfaenger ?? false,
+    unterschriftsberechtigt: eintrag?.unterschriftsberechtigt ?? false,
+    gemeinsamerHaushalt: eintrag?.gemeinsamerHaushalt ?? false,
+    unbezahlteBetreuung: eintrag?.unbezahlteBetreuung ?? false,
+  }));
   const [fehler, setFehler] = useState("");
 
   /* §9 Behebung: beim Bearbeiten einer Fachperson die GLN des bestehenden
@@ -253,6 +268,58 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
   const typ = rolle ? personentypFuerRolle(rolle as BeziehungsrolleCode) : "";
   const orgTyp = typ === "organisation" || (typ === "umschalter" && beistandTyp === "organisation");
   const zeigtAngehoerige = kategorie === "bezugsperson" && !orgTyp;
+
+  // Merkmalmatrix: Personentyp im Sinn der Konfiguration und Rollen-Zugehörigkeit.
+  // Rollen ausserhalb der Matrix (Fachpersonal, Benutzer) behalten den bisherigen
+  // Merkmalsatz — Notfallkontakt und Auskunftsberechtigt.
+  const matrixTyp: MerkmalPersonentyp = orgTyp ? "organisation" : "privat";
+  const inMatrix = !!rolle && MERKMAL_GRUPPEN.some(g => g.merkmale.some(m => m.rollen.includes(rolle as BeziehungsrolleCode)));
+
+  const merkmalAn = (code: MerkmalCode): boolean =>
+    code === "beistandschaftAdministrativ" ? beistandschaft.administrativ
+    : code === "beistandschaftGesundheit" ? beistandschaft.gesundheit
+    : code === "vertretungGesetz" ? art === "ehepartner" && !!merkmale.gemeinsamerHaushalt
+    : code === "angestelltePflegendeAngehoerige" ? rolle === "pflegende_angehoerige"
+    : !!merkmale[code];
+
+  const merkmalUmschalten = (code: MerkmalCode) => {
+    if (code === "beistandschaftAdministrativ" || code === "beistandschaftGesundheit") {
+      const feld = code === "beistandschaftAdministrativ" ? "administrativ" : "gesundheit";
+      const naechste = { ...beistandschaft, [feld]: !beistandschaft[feld] };
+      // Der Nachweis gehört zur Beistandschaft: ohne aktive Art wird er geleert.
+      if (!naechste.administrativ && !naechste.gesundheit) { delete naechste.datum; delete naechste.belegVorhanden; }
+      setBeistandschaft(naechste);
+      return;
+    }
+    setMerkmale(m => ({ ...m, [code]: !m[code] }));
+  };
+
+  // Aufräumlogik: nach einem Wechsel von Rolle, Personentyp oder Beziehungsart
+  // werden Merkmale zurückgesetzt, die nicht mehr zutreffen (ausgeblendet = aus).
+  // Der erste Lauf (Öffnen des Dialogs) wird übersprungen, damit Öffnen+Sichern
+  // ohne Änderung keine Daten verändert.
+  const aufraeumBereit = useRef(false);
+  useEffect(() => {
+    if (!aufraeumBereit.current) { aufraeumBereit.current = true; return; }
+    const sichtbar = new Set<MerkmalCode>();
+    if (rolle) {
+      if (inMatrix) {
+        for (const g of MERKMAL_GRUPPEN) for (const m of sichtbareMerkmale(g, rolle as BeziehungsrolleCode, matrixTyp, art)) sichtbar.add(m.code);
+      } else {
+        sichtbar.add("notfallkontakt"); sichtbar.add("auskunftsberechtigt");
+      }
+    }
+    setMerkmale(m => {
+      const naechste = { ...m };
+      for (const code of Object.keys(naechste) as MerkmalCode[]) {
+        if (naechste[code] && !sichtbar.has(code)) naechste[code] = false;
+      }
+      return naechste;
+    });
+    if (!sichtbar.has("beistandschaftAdministrativ")) setBeistandschaft(leereBeistandschaft());
+    // matrixTyp/inMatrix sind reine Ableitungen von rolle und beistandTyp.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rolle, beistandTyp, art]);
 
   // Feldsatz und Kontakttyp für den Anlege-Block.
   const feldsatz: KontaktFeldsatz = orgTyp ? "organisation" : kategorie === "fachpersonal" ? "fachpersonal" : "privat";
@@ -300,16 +367,29 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
       kontaktSichern({ ...bearbeiteterKontakt, gln: glnEdit.trim() ? glnEdit.trim() : null });
     }
 
+    // Beistandschaft ist laut Matrix bei Angehörigen UND Beistand führbar —
+    // die Bindung an die Rolle beistand ist bewusst aufgehoben.
+    const beistandschaftErlaubt = MERKMAL_GRUPPEN.some(g =>
+      g.merkmale.some(m => m.code === "beistandschaftAdministrativ" && m.rollen.includes(zielRolle)));
+
     const gespeichert = beziehungSichern({
       id: eintragId, patientId, person: zielPerson, rolle: zielRolle,
       // Verwandtschaft nur bei privaten Bezugspersonen (Angehörige/weitere/Beistand privat).
       art: zeigtAngehoerige ? (art as Beziehung["art"]) : "",
-      // Beistandschaft nur bei der Rolle beistand; sonst leer.
-      beistandschaft: zielRolle === "beistand" ? beistandschaft : leereBeistandschaft(),
+      beistandschaft: beistandschaftErlaubt ? beistandschaft : leereBeistandschaft(),
       // Beginn und Telefon werden im Dialog nicht mehr erfasst; Seed-Werte bleiben.
       beginn: eintrag?.beginn ?? "", ende: eintrag?.ende ?? "",
       telefon: eintrag?.telefon ?? "",
-      notfallkontakt: notfall, auskunftsberechtigt: auskunft, inPatientenverfuegungBezeichnet: inPv,
+      notfallkontakt: !!merkmale.notfallkontakt,
+      auskunftsberechtigt: !!merkmale.auskunftsberechtigt,
+      inPatientenverfuegungBezeichnet: !!merkmale.inPatientenverfuegungBezeichnet,
+      imVorsorgeauftragBeauftragt: !!merkmale.imVorsorgeauftragBeauftragt,
+      hauptansprechperson: !!merkmale.hauptansprechperson,
+      schluesselbesitz: !!merkmale.schluesselbesitz,
+      rechnungsempfaenger: !!merkmale.rechnungsempfaenger,
+      unterschriftsberechtigt: !!merkmale.unterschriftsberechtigt,
+      gemeinsamerHaushalt: !!merkmale.gemeinsamerHaushalt,
+      unbezahlteBetreuung: !!merkmale.unbezahlteBetreuung,
       bemerkung: eintrag?.bemerkung ?? "",
     });
     // §3: höchstens ein offener Hausarzt — der bisherige wird auf den Vortag beendet.
@@ -430,22 +510,10 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
                 </div>
               )}
 
-              {/* Verwandtschaft nur bei privaten Bezugspersonen */}
+              {/* Beziehungsart nur bei privaten Bezugspersonen */}
               {zeigtAngehoerige && (
-                <Feld label="Verwandtschaft">
+                <Feld label="Beziehung zur Klientin">
                   <InlineSelect value={art} onChange={setArt} platzhalter="nicht erfasst" options={BEZIEHUNGSART.map(a => ({ value: a.code, label: a.label }))} />
-                </Feld>
-              )}
-              {/* Beistandschaft — drei gleichzeitig setzbare Arten, nur beim Beistand */}
-              {rolle === "beistand" && (
-                <Feld label="Beistandschaft, falls vorhanden">
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {BEISTANDSCHAFT_ARTEN.map(a => (
-                      <Umschalter key={a.code} an={beistandschaft[a.code]} text={a.label}
-                        onToggle={() => setBeistandschaft({ ...beistandschaft, [a.code]: !beistandschaft[a.code] })} />
-                    ))}
-                  </div>
-                  <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-tertiary)" }}>Gesundheit entscheidet, wer einer Behandlung zustimmen darf.</div>
                 </Feld>
               )}
 
@@ -461,14 +529,61 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
                 </Feld>
               )}
 
-              {/* Merkmale */}
-              <Feld label="Merkmale">
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  <Umschalter an={notfall} onToggle={() => setNotfall(!notfall)} text="Notfallkontakt" />
-                  <Umschalter an={auskunft} onToggle={() => setAuskunft(!auskunft)} text="Auskunftsberechtigt" />
-                  <Umschalter an={inPv} onToggle={() => setInPv(!inPv)} text="In Patientenverfügung bezeichnet" />
-                </div>
-              </Feld>
+              {/* Merkmale — vier Gruppen aus der Konfiguration (merkmalkonfig.ts,
+                  eine Wahrheitsquelle). Nicht zutreffende Merkmale sind
+                  AUSGEBLENDET, nicht ausgegraut; leere Gruppen entfallen ganz.
+                  Rollen ausserhalb der Matrix behalten den bisherigen Satz. */}
+              {rolle && !inMatrix && (
+                <Feld label="Merkmale">
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <Umschalter an={!!merkmale.notfallkontakt} onToggle={() => merkmalUmschalten("notfallkontakt")} text="Notfallkontakt" />
+                    <Umschalter an={!!merkmale.auskunftsberechtigt} onToggle={() => merkmalUmschalten("auskunftsberechtigt")} text="Auskunftsberechtigt" />
+                  </div>
+                </Feld>
+              )}
+              {rolle && inMatrix && MERKMAL_GRUPPEN.map(g => {
+                const sichtbar = sichtbareMerkmale(g, rolle as BeziehungsrolleCode, matrixTyp, art);
+                if (!sichtbar.length) return null;
+                const mitBeistandschaft = sichtbar.some(m => m.code === "beistandschaftAdministrativ" || m.code === "beistandschaftGesundheit");
+                const nachweisOffen = mitBeistandschaft && (beistandschaft.administrativ || beistandschaft.gesundheit);
+                return (
+                  <Feld key={g.titel} label={g.titel}>
+                    <div style={{ marginTop: -2, marginBottom: 6, fontSize: 12, color: "var(--text-tertiary)" }}>{g.untertitel}</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {sichtbar.map(m => {
+                        if (m.abgeleitet) {
+                          const voraussetzungFehlt = !!m.setztVoraus && !merkmalAn(m.setztVoraus);
+                          const grund = m.code === "vertretungGesetz"
+                            ? (voraussetzungFehlt
+                              ? "Gilt kraft Gesetzes (Art. 374 ZGB), sobald zusätzlich der gemeinsame Haushalt erfasst ist."
+                              : "Gilt kraft Gesetzes (Art. 374 ZGB): Ehe und gemeinsamer Haushalt sind erfasst.")
+                            : "Abgeleitet aus der Rolle — die Anstellung wird im Angehörigen-Reiter geführt.";
+                          return <LeseMerkmal key={m.code} an={merkmalAn(m.code)} text={m.label} grund={grund} />;
+                        }
+                        return <Umschalter key={m.code} an={merkmalAn(m.code)} onToggle={() => merkmalUmschalten(m.code)} text={m.label} />;
+                      })}
+                    </div>
+                    {mitBeistandschaft && (
+                      <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-tertiary)" }}>Gesundheit entscheidet, wer einer Behandlung zustimmen darf.</div>
+                    )}
+                    {/* Nachweis nur zur Beistandschaft (behördliche Ernennung); die
+                        Zuordnungs-Merkmale Patientenverfügung/Vorsorgeauftrag tragen
+                        bewusst keinen Nachweis — die Instrumente führt der Klient. */}
+                    {nachweisOffen && (
+                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+                          Ernennung vom
+                          <input type="date" value={beistandschaft.datum ?? ""} className="ui-fokusring"
+                            onChange={e => setBeistandschaft({ ...beistandschaft, datum: e.target.value || undefined })}
+                            style={{ ...inputStil, maxWidth: 170, padding: "6px 10px", fontSize: 13 }} />
+                        </label>
+                        <Umschalter an={!!beistandschaft.belegVorhanden} text="Beleg vorhanden"
+                          onToggle={() => setBeistandschaft({ ...beistandschaft, belegVorhanden: !beistandschaft.belegVorhanden })} />
+                      </div>
+                    )}
+                  </Feld>
+                );
+              })}
 
               {/* Kein zweites Telefonfeld: die Nummer lebt an der Person. Fehlt sie,
                   nur ein Hinweis mit Verweis auf die Person. */}
@@ -497,6 +612,18 @@ function PersonDialog({ patientId, eintragId, eigene, angehoerige, kontakte, onC
 
 function personSchluessel(p: PersonBezug): string {
   return p.art === "mitarbeitende" ? `m:${p.name}` : `${p.art}:${p.kennung}`;
+}
+
+/** Abgeleitetes Merkmal — Lesefeld, kein klickbarer Chip. Gestrichelte Kontur
+ *  unterscheidet es vom Umschalter; `title` und Untertext nennen den Grund. */
+function LeseMerkmal({ an, text, grund }: { an: boolean; text: string; grund: string }) {
+  return (
+    <span title={grund} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 999, fontSize: 13, cursor: "default",
+      background: an ? "var(--brand-primary-light)" : "var(--bg-secondary)", color: an ? "var(--brand-primary)" : "var(--text-tertiary)",
+      border: "0.5px dashed " + (an ? "var(--brand-primary)" : "var(--border-default)") }}>
+      {an && <Check style={{ width: 12, height: 12 }} />}{text}
+    </span>
+  );
 }
 
 function Umschalter({ an, onToggle, text }: { an: boolean; onToggle: () => void; text: string }) {

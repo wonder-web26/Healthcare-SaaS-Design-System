@@ -159,17 +159,23 @@ export function artLabel(code: string): string {
 export interface Beistandschaft {
   administrativ: boolean;
   gesundheit: boolean;
-  vorsorgeauftrag: boolean;
+  /* `vorsorgeauftrag` wurde herausgeloest: ein Vorsorgeauftrag ist keine
+     Beistandschaft. Die Personenzuordnung traegt die Beziehung
+     (`imVorsorgeauftragBeauftragt`); das Instrument fuehrt der Patient
+     (Abschnitt Vorsorge). */
+  /** Nachweis zum Instrument Beistandschaft — wandert spaeter an ein
+   *  eigenes Instrument-Objekt, solange lebt die Beistandschaft nur hier. */
+  datum?: string;
+  belegVorhanden?: boolean;
 }
 
 export function leereBeistandschaft(): Beistandschaft {
-  return { administrativ: false, gesundheit: false, vorsorgeauftrag: false };
+  return { administrativ: false, gesundheit: false };
 }
 
-export const BEISTANDSCHAFT_ARTEN: { code: keyof Beistandschaft; label: string; hinweis?: string }[] = [
+export const BEISTANDSCHAFT_ARTEN: { code: "administrativ" | "gesundheit"; label: string; hinweis?: string }[] = [
   { code: "administrativ", label: "Administrativ" },
   { code: "gesundheit", label: "Gesundheit", hinweis: "Gesundheit entscheidet, wer einer Behandlung zustimmen darf." },
-  { code: "vorsorgeauftrag", label: "Vorsorgeauftrag" },
 ];
 
 /** Beschriftungen der gesetzten Merkmale, in fester Reihenfolge. */
@@ -179,7 +185,7 @@ export function beistandschaftLabels(b: Beistandschaft | undefined): string[] {
 }
 
 export function istBeistandschaftErfasst(b: Beistandschaft | undefined): boolean {
-  return !!b && (b.administrativ || b.gesundheit || b.vorsorgeauftrag);
+  return !!b && (b.administrativ || b.gesundheit);
 }
 
 /**
@@ -188,9 +194,11 @@ export function istBeistandschaftErfasst(b: Beistandschaft | undefined): boolean
  */
 export function beistandschaftAusVertretungsart(code: string): Beistandschaft {
   switch (code) {
-    case "vorsorgeauftrag": return { administrativ: false, gesundheit: false, vorsorgeauftrag: true };
-    case "medizinische_massnahmen": return { administrativ: false, gesundheit: true, vorsorgeauftrag: false };
-    case "beistandschaft": return { administrativ: true, gesundheit: false, vorsorgeauftrag: false };
+    // "vorsorgeauftrag" ist keine Beistandschaft mehr — die Zuordnung laeuft
+    // ueber Beziehung.imVorsorgeauftragBeauftragt; hier bleibt der Umfang leer.
+    case "vorsorgeauftrag": return leereBeistandschaft();
+    case "medizinische_massnahmen": return { administrativ: false, gesundheit: true };
+    case "beistandschaft": return { administrativ: true, gesundheit: false };
     default: return leereBeistandschaft(); // "unbekannt" und Leerwert: Umfang nicht erfasst
   }
 }
@@ -242,6 +250,19 @@ export interface Beziehung {
    *  (Art. 370 ff. ZGB) — nicht kraft behördlicher Anordnung. Optional, damit
    *  bestehende Datensätze unberührt bleiben; fehlend = false. */
   inPatientenverfuegungBezeichnet?: boolean;
+  /** Im Vorsorgeauftrag als beauftragte Person bezeichnet (Art. 360 ff. ZGB).
+   *  ACHTUNG, VORLAEUFIGE SETZUNG — ob dieses Merkmal das schweizerische
+   *  Erwachsenenschutzrecht richtig schneidet, ist nicht belegt; Arbeitsannahme
+   *  unter juristischem Vorbehalt. Das Instrument selbst (Existenz, KESB-
+   *  Validierung, Bemerkung) fuehrt der Patient im Abschnitt Vorsorge. */
+  imVorsorgeauftragBeauftragt?: boolean;
+  /** Neue Merkmale der Gruppen 1/3/4 — Default false (fehlend = false). */
+  hauptansprechperson?: boolean;
+  schluesselbesitz?: boolean;
+  rechnungsempfaenger?: boolean;
+  unterschriftsberechtigt?: boolean;
+  gemeinsamerHaushalt?: boolean;
+  unbezahlteBetreuung?: boolean;
   telefon: string;
   /* Die Zugehörigkeit — Fachgebiet, Stelle, Behörde — steht seit der
      Einführung des Kontaktobjekts am Kontakt. Sie beschreibt die Person,
