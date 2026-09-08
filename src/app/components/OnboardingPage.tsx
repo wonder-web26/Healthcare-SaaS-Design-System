@@ -1242,7 +1242,6 @@ export function OnboardingPage() {
                   onValidityChange={setStep1Valid}
                   onOpenSpezialbewilligung={() => setShowSpezialbewilligung(true)}
                   reiterAktion={gespraechReiter}
-                  onboardingId={wirksameFallKennung}
                   arbeitsortKanton={patientData.kanton}
                   arbeitsortOrt={patientData.pflegeortAbweichend ? patientData.pflegeortOrt : patientData.adresseOrt}
                   dokumenteZaehler={abschlussPruefung.fehlendAng.length}
