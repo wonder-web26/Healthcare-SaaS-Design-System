@@ -63,6 +63,8 @@ import { staatsangehoerigkeitsgruppe } from "../../lib/stammdaten/staatsangehoer
 import type { Aufenthaltsgrund } from "../../lib/stammdaten/aufenthaltsgrund";
 import type { Aufenthaltsstatus } from "../../lib/stammdaten/aufenthaltsstatus";
 import { pruefeAuslaenderrecht, type AuslaenderrechtEingabe } from "../../lib/regeln/auslaenderrecht";
+import { PendenzMarker } from "./pendenzen/PendenzMarker";
+import type { OnboardingAbschnitt } from "../../lib/mocks/service-desk-unified";
 
 /* ══════════════════════════════════════════
    TYPES (unchanged export contract)
@@ -611,6 +613,17 @@ function getSubStepStatus(
 /* ══════════════════════════════════════════
    PROPS (unchanged export contract)
    ══════════════════════════════════════════ */
+/** Reiterindex → Formularabschnitt. Eine Stelle, damit Marker und Sprungziel
+ *  dieselbe Zuordnung lesen. */
+const ABSCHNITT_JE_REITER: (OnboardingAbschnitt | null)[] = [
+  "angehoeriger.personalien",
+  "angehoeriger.steuer",
+  "angehoeriger.partner",
+  "angehoeriger.kinder",
+  "angehoeriger.anstellung",
+  "angehoeriger.dokumente",
+];
+
 interface StepAngehoerigerProps {
   data: AngehoerigerFormData;
   onChange: (data: AngehoerigerFormData) => void;
@@ -622,6 +635,8 @@ interface StepAngehoerigerProps {
   /** Zahl offener Pflichtdokumente; erscheint unterhalb des Desktop-Breakpoints
    *  als Zähler am Reiter "Dokumente" (Lauf 1b — ersetzt die Kopfbereich-Marke). */
   dokumenteZaehler?: number;
+  /** Onboarding-Kennung — trägt die Pendenz-Marker der Formularabschnitte. */
+  onboardingId?: string | null;
   /** Kanton (Kürzel) und Ort des Arbeitsorts, aus dem Patientenkontext; für das SEM-Meldeformular. */
   arbeitsortKanton?: string;
   arbeitsortOrt?: string;
@@ -636,6 +651,7 @@ export function StepAngehoeriger({
   onValidityChange,
   onOpenSpezialbewilligung,
   reiterAktion,
+  onboardingId = null,
   arbeitsortKanton,
   arbeitsortOrt,
   dokumenteZaehler = 0,
@@ -793,6 +809,14 @@ export function StepAngehoeriger({
           {activeTab === 3 && <KinderFormV2 data={data} onChange={onChange} />}
           {activeTab === 4 && <AnstellungFormV2 data={data} onChange={onChange} />}
           {activeTab === 5 && <DokumenteFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />}
+          {/* Stummer Marker unter den Feldern des Abschnitts — Anzeige, kein
+              Bedienelement. Erscheint nur, wenn zu diesem Abschnitt eine Pendenz
+              existiert. */}
+          {ABSCHNITT_JE_REITER[activeTab] && (
+            <div style={{ padding: "0 var(--space-6) var(--space-6)" }}>
+              <PendenzMarker onboardingId={onboardingId} abschnitt={ABSCHNITT_JE_REITER[activeTab]!} />
+            </div>
+          )}
         </div>
       </div>
       {/* Hinweistext entfernt (§A): erklärte, wie Reiter funktionieren, war auf Reitern

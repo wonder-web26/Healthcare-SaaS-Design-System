@@ -65,6 +65,8 @@ import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN } from "../../lib/mocks/klinisch
 import { getKlvVerordnungen, getKlvFuerOnboarding } from "../../lib/klv/store";
 import { lpbStatusLabel } from "../../lib/stammdaten/lpb-status";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
+import { entryBetreff, pendenzenFuerOnboarding, abschnittTeile, type OnboardingAbschnitt } from "../../lib/mocks/service-desk-unified";
+import { usePendenzen } from "../../lib/pendenzen/store";
 import { formatFaelligkeit, isoZuDate, formatAnzeige } from "../../lib/datum";
 import { toast } from "sonner";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
@@ -638,20 +640,53 @@ export function OnboardingPage() {
   const [overrideBegrundung, setOverrideBegrundung] = useState("");
 
   // Workflow-Aggregat (aus Rhythmus-Engine). Nur Rhythmus-Tickets, keine WorkflowTasks.
+  // Der Betreuungsrhythmus wird NICHT mehr in der linken Spalte gespiegelt; die
+  // Zahlen bleiben für die Kopfzeile und den Reiter «Betreuung» erhalten.
   aktualisiereUeberfaellige();
   const rhythmusTickets = wirksameFallKennung ? getTicketsFuerSubjekt("patient", wirksameFallKennung) : [];
   const erledigteTickets = rhythmusTickets.filter(t => t.status === "erledigt");
-  // Offene Aufgaben: überfällige zuerst, danach nach Fälligkeit.
-  const offeneTickets = rhythmusTickets
-    .filter(t => t.status !== "erledigt")
-    .sort((a, b) => {
-      const ao = a.status === "ueberfaellig" ? 0 : 1;
-      const bo = b.status === "ueberfaellig" ? 0 : 1;
-      return ao !== bo ? ao - bo : a.faelligAm.localeCompare(b.faelligAm);
-    });
+  const offeneTickets = rhythmusTickets.filter(t => t.status !== "erledigt");
   const offeneAnzahl = offeneTickets.length;
   const ueberfaelligAnzahl = offeneTickets.filter(t => t.status === "ueberfaellig").length;
-  const naechste3 = offeneTickets.slice(0, 3);
+
+  /* ── Pendenzen dieses Onboardings (linke Spalte) ──────────────────────────
+     Quelle ist der Pendenzenbestand, nicht die Rhythmus-Engine. Sortierung und
+     Auswahl liegen in pendenzenFuerOnboarding — sperrende zuerst, dann nach
+     Fälligkeit. */
+  const allePendenzen = usePendenzen();
+  const offenePendenzen = useMemo(
+    () => (wirksameFallKennung ? pendenzenFuerOnboarding(allePendenzen, wirksameFallKennung) : []),
+    [wirksameFallKennung, allePendenzen],
+  );
+
+  /** Höchstzahl der Einträge, bevor «Alle anzeigen» erscheint. */
+  const PENDENZEN_IN_SPALTE = 5;
+
+  /** Klick auf eine Pendenz: Schritt und Reiter wechseln, Abschnitt hervorheben. */
+  const springeZuAbschnitt = (abschnitt: OnboardingAbschnitt) => {
+    const { schritt, reiter } = abschnittTeile(abschnitt);
+    const zielIndex = schritt === "patient" ? (zeigeSpezialschritt ? 3 : 2) : 1;
+    const hervorheben = () => {
+      // Der Abschnitt trägt data-abschnitt; ohne Treffer geschieht nichts.
+      const el = document.querySelector<HTMLElement>(`[data-abschnitt="${abschnitt}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.setAttribute("data-hervorgehoben", "true");
+      window.setTimeout(() => el.removeAttribute("data-hervorgehoben"), 1600);
+    };
+    if (schritt === "patient") {
+      if (activeStepData.key === "patient") { setRequestedPatientTab(reiter as PatientReiter); window.setTimeout(hervorheben, 120); }
+      else { goToStep(zielIndex); window.setTimeout(() => { setRequestedPatientTab(reiter as PatientReiter); window.setTimeout(hervorheben, 120); }, 100); }
+    } else {
+      if (activeStepData.key !== "angehoeriger") goToStep(zielIndex);
+      window.setTimeout(hervorheben, 200);
+    }
+  };
+
+  /** «Alle anzeigen» — Pendenzenliste, gefiltert auf die Person dieses Vorgangs. */
+  const oeffnePendenzenListe = () => {
+    navigate("/servicedesk");
+  };
 
   // "Alle N anzeigen" wechselt in den Patienten-Schritt und öffnet dort den Workflow-Reiter (§A).
 
@@ -1047,48 +1082,63 @@ export function OnboardingPage() {
                 {/* Trennlinie */}
                 <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "var(--space-4) 0" }} />
 
-                {/* ── Abschnitt WORKFLOW (§C/§E/§H): Überschrift IST die Beschriftung; darunter nur Aufgaben ── */}
-                <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase", marginBottom: "var(--space-3)" }}>Workflow</div>
-                {rhythmusTickets.length === 0 ? (
-                  // Leerzustand: nur der Leerzustandstext, KEIN Aufteilungssatz (§H)
-                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-                    Noch keine Aufgaben erzeugt. Sie entstehen im Patienten-Schritt.
-                  </div>
+                {/* ── Abschnitt PENDENZEN ─────────────────────────────────────
+                    Zeigt, was im Onboarding offen ist — verkürzt, ohne Aktion.
+                    Bearbeitet wird eine Pendenz ausschliesslich in der
+                    Pendenzenliste. Der Betreuungsrhythmus steht im Reiter
+                    «Betreuung» und wird hier NICHT gespiegelt. */}
+                <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+                  <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" }}>Pendenzen</div>
+                  {offenePendenzen.length > 0 && (
+                    <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{offenePendenzen.length}</span>
+                  )}
+                </div>
+                {offenePendenzen.length === 0 ? (
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Keine offene Pendenz</div>
                 ) : (
                   <>
-                    {naechste3.length > 0 ? (
-                      <div className="flex flex-col" style={{ gap: "var(--space-2)" }}>
-                        {naechste3.map(t => {
-                          const d = isoZuDate(t.faelligAm);
-                          // §A3: in der Spalte NUR die relative Angabe ("Heute", "in 2 Tagen",
-                          // "12 Tage überfällig"). Das absolute Datum steht im Workflow-Reiter.
-                          const faelligText = d ? formatFaelligkeit(d) : t.faelligAm;
-                          const ov = t.status === "ueberfaellig";
-                          return (
-                            <div key={t.id} className="flex items-start" style={{ gap: 6 }}>
-                              {ov
-                                ? <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
-                                : <Circle style={{ width: 13, height: 13, color: "var(--text-tertiary)", flexShrink: 0, marginTop: 1 }} />}
-                              <div className="min-w-0">
-                                <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{t.label}</div>
-                                <div style={{ fontSize: "var(--text-micro)", fontWeight: ov ? "var(--weight-semibold)" : 400, color: ov ? "var(--status-danger)" : "var(--text-tertiary)" }}>{faelligText}</div>
+                    <div className="flex flex-col" style={{ gap: "var(--space-2)" }}>
+                      {offenePendenzen.slice(0, PENDENZEN_IN_SPALTE).map(p => {
+                        const sperrt = !!p.sperrtVertrag;
+                        const springbar = !!p.abschnitt;
+                        const d = p.faellig ? isoZuDate(p.faellig) : null;
+                        const zweiteZeile = sperrt
+                          ? "Sperrt den Vertragsschritt"
+                          : [d ? formatFaelligkeit(d) : p.faellig, p.verantwortlich?.name].filter(Boolean).join(" · ");
+                        return (
+                          <div
+                            key={p.id}
+                            role={springbar ? "button" : undefined}
+                            tabIndex={springbar ? 0 : undefined}
+                            onClick={springbar ? () => springeZuAbschnitt(p.abschnitt!) : undefined}
+                            onKeyDown={springbar ? e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); springeZuAbschnitt(p.abschnitt!); } } : undefined}
+                            className={springbar ? "ui-fokusring cursor-pointer" : undefined}
+                            style={{
+                              display: "flex", gap: 8, minWidth: 0,
+                              // Farbe ausschliesslich für sperrende Einträge.
+                              borderLeft: sperrt ? "2px solid var(--status-danger)" : "2px solid transparent",
+                              paddingLeft: 8,
+                            }}
+                          >
+                            <div className="min-w-0">
+                              <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{entryBetreff(p)}</div>
+                              <div style={{ fontSize: "var(--text-micro)", color: sperrt ? "var(--status-danger)" : "var(--text-tertiary)", fontWeight: sperrt ? "var(--weight-medium)" : 400 }}>
+                                {zweiteZeile}
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Alle Aufgaben erledigt.</div>
-                    )}
-                    {offeneAnzahl > 0 && (
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {offenePendenzen.length > PENDENZEN_IN_SPALTE && (
                       <button
-                        onClick={oeffneRhythmus}
+                        onClick={oeffnePendenzenListe}
                         className="ui-fokusring inline-flex items-center cursor-pointer"
                         style={{ marginTop: "var(--space-3)", gap: 4, padding: 0, background: "none", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-secondary)" }}
                         onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
                         onMouseLeave={e => (e.currentTarget.style.color = "var(--text-secondary)")}
                       >
-                        Alle {offeneAnzahl} anzeigen <ChevronRight style={{ width: 13, height: 13 }} />
+                        Alle anzeigen <ChevronRight style={{ width: 13, height: 13 }} />
                       </button>
                     )}
                   </>
@@ -1192,6 +1242,7 @@ export function OnboardingPage() {
                   onValidityChange={setStep1Valid}
                   onOpenSpezialbewilligung={() => setShowSpezialbewilligung(true)}
                   reiterAktion={gespraechReiter}
+                  onboardingId={wirksameFallKennung}
                   arbeitsortKanton={patientData.kanton}
                   arbeitsortOrt={patientData.pflegeortAbweichend ? patientData.pflegeortOrt : patientData.adresseOrt}
                   dokumenteZaehler={abschlussPruefung.fehlendAng.length}
