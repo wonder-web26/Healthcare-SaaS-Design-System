@@ -152,6 +152,15 @@ export interface PatientStammdatenEingabe {
   pflegeortBfsNummer: string;
   pflegeortKanton: string;
   pflegeortLand: string;
+  rechnungsadresseAbweichend: boolean;
+  rechnungInstitution: string;
+  rechnungVorname: string;
+  rechnungNachname: string;
+  rechnungStrasse: string;
+  rechnungPlz: string;
+  rechnungOrt: string;
+  rechnungKanton: string;
+  rechnungLand: string;
   /* ── Bisher nicht übergeben ──────────────────────────────────────────────
      28 Angaben, die das Abklärungsgespräch erhebt und die nie beim Patienten
      ankamen. Sie standen im Formular und blieben dort. */
@@ -219,6 +228,8 @@ function stammdatenAbbilden(
   "strasse" | "plz" | "ort" | "gemeinde" | "bfsNummer" | "kanton" | "land" |
   "pflegeortAbweichend" | "pflegeortStrasse" | "pflegeortPlz" | "pflegeortOrt" |
   "pflegeortGemeinde" | "pflegeortBfsNummer" | "pflegeortKanton" | "pflegeortLand" |
+  "rechnungsadresseAbweichend" | "rechnungInstitution" | "rechnungVorname" | "rechnungNachname" |
+  "rechnungStrasse" | "rechnungPlz" | "rechnungOrt" | "rechnungKanton" | "rechnungLand" |
   "sprache" |
   "angehoeriger" | "angehoerigerTelefon" |
   "geschlecht" | "staatsangehoerigkeit" | "heimatort" | "zivilstand" | "aufenthaltsstatus" | "konfession" | "telefon" | "mobil" | "email" | "spracheAndere" | "uebersetzerNotwendig" | "wohnsituation" | "formZusammenleben" | "neuZusammenlebend" | "etage" | "liftVorhanden" | "treppen" | "personenImHaushalt" | "ivBezug" | "ivBezugProzent" | "hilflosenentschaedigung" | "hilflosenentschaedigungGrad" | "assistenzbeitrag" | "quellensteuerHinweise"> {
@@ -250,6 +261,17 @@ function stammdatenAbbilden(
     pflegeortBfsNummer: eingabe.pflegeortAbweichend ? eingabe.pflegeortBfsNummer : "",
     pflegeortKanton: eingabe.pflegeortAbweichend ? eingabe.pflegeortKanton : "",
     pflegeortLand: eingabe.pflegeortAbweichend ? (eingabe.pflegeortLand || "CH") : "",
+    // Rechnungsadresse: wie beim Pflegeort werden die Felder geleert, sobald die
+    // Rechnung wieder an den Wohnsitz geht — sonst bliebe eine tote Anschrift stehen.
+    rechnungsadresseAbweichend: eingabe.rechnungsadresseAbweichend,
+    rechnungInstitution: eingabe.rechnungsadresseAbweichend ? eingabe.rechnungInstitution : "",
+    rechnungVorname: eingabe.rechnungsadresseAbweichend ? eingabe.rechnungVorname : "",
+    rechnungNachname: eingabe.rechnungsadresseAbweichend ? eingabe.rechnungNachname : "",
+    rechnungStrasse: eingabe.rechnungsadresseAbweichend ? eingabe.rechnungStrasse : "",
+    rechnungPlz: eingabe.rechnungsadresseAbweichend ? eingabe.rechnungPlz : "",
+    rechnungOrt: eingabe.rechnungsadresseAbweichend ? eingabe.rechnungOrt : "",
+    rechnungKanton: eingabe.rechnungsadresseAbweichend ? eingabe.rechnungKanton : "",
+    rechnungLand: eingabe.rechnungsadresseAbweichend ? (eingabe.rechnungLand || "CH") : "",
     geschlecht: eingabe.geschlecht,
     staatsangehoerigkeit: eingabe.staatsangehoerigkeit,
     heimatort: eingabe.heimatort,

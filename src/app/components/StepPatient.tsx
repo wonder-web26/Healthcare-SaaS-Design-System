@@ -154,6 +154,18 @@ export interface PatientFormData {
   pflegeortBfsNummer: string;
   pflegeortKanton: string;
   pflegeortLand: string;
+  /** Abweichende Rechnungsadresse (Wohnsitz zahlt nicht selbst — Institution,
+   *  Beistandschaft, Angehoerige). Traegt einen eigenen Empfaenger: entweder
+   *  eine Institution oder eine Person, darum beide Felder. */
+  rechnungsadresseAbweichend: boolean;
+  rechnungInstitution: string;
+  rechnungVorname: string;
+  rechnungNachname: string;
+  rechnungStrasse: string;
+  rechnungPlz: string;
+  rechnungOrt: string;
+  rechnungKanton: string;
+  rechnungLand: string;
   /* Der Notfallkontakt ist eine dritte Person und steht im Kontaktbestand.
      Erfasst wird die Kennung, nie der Name — ändert sich der Name am
      Kontakt, ändert er sich überall mit. Die Verwandtschaft bleibt hier:
@@ -288,6 +300,15 @@ export const emptyPatientForm: PatientFormData = {
   pflegeortBfsNummer: "",
   pflegeortKanton: "",
   pflegeortLand: "CH",
+  rechnungsadresseAbweichend: false,
+  rechnungInstitution: "",
+  rechnungVorname: "",
+  rechnungNachname: "",
+  rechnungStrasse: "",
+  rechnungPlz: "",
+  rechnungOrt: "",
+  rechnungKanton: "",
+  rechnungLand: "CH",
   spracheCode: "",
   spracheAndere: "",
   uebersetzerNotwendig: "",

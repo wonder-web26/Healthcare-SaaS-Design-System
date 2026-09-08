@@ -120,15 +120,16 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
         <div style={{ maxWidth: FELD_MAX.schmal }}><TextInput label="Mobil" value={data.mobil} onChange={v => onUpdate("mobil", v)} placeholder="+41 79 000 00 00" /></div>
       </div>
 
-      <SectionHeader icon={MapPin} label="Adresse" />
-      {/* Voll-Variante: Gemeinde, BFS-Nummer und Kanton gehören zum Patienten und
-          stehen im Block; die Adresssuche löst sie mit auf. */}
+      <SectionHeader icon={MapPin} label="Wohnadresse" />
+      {/* Kanton und Land gehören zum Patienten und stehen im Block. Politische
+          Gemeinde und BFS-Nummer werden im Onboarding NICHT mehr erhoben; die
+          Gemeinde fällt in der Abbildung auf den Ort zurück (patienten/store). */}
       <AdressBlock
         required
-        variante="voll"
+        variante="mitKanton"
         wert={{
           strasse: data.adresseStrasse, plz: data.adressePlz, ort: data.adresseOrt,
-          land: data.land, gemeinde: data.gemeinde, bfsNummer: data.bfsNummer, kanton: data.kanton,
+          land: data.land, kanton: data.kanton,
         }}
         onChange={patch => {
           const p: Partial<PatientFormData> = {};
@@ -136,8 +137,6 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
           if (patch.plz !== undefined) p.adressePlz = patch.plz;
           if (patch.ort !== undefined) p.adresseOrt = patch.ort;
           if (patch.land !== undefined) p.land = patch.land;
-          if (patch.gemeinde !== undefined) p.gemeinde = patch.gemeinde;
-          if (patch.bfsNummer !== undefined) p.bfsNummer = patch.bfsNummer;
           if (patch.kanton !== undefined) p.kanton = patch.kanton;
           if (onUpdateMehrere) onUpdateMehrere(p);
           else Object.entries(p).forEach(([k, v]) => onUpdate(k as keyof PatientFormData, v as string));
@@ -148,6 +147,59 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
           ort: t("adresseOrt") && !filled(data.adresseOrt) ? "Pflichtfeld" : undefined,
         }}
       />
+
+      {/* Rechnungsadresse — Vorgabe: wie der Wohnsitz. Weicht sie ab, trägt sie
+          einen eigenen Empfänger (Institution ODER Person), darum die drei
+          Namensfelder über der Anschrift. */}
+      <div style={{ marginTop: "var(--space-4)" }}>
+        <div className="hidden lg:block">
+          <SegmentedControl label="Rechnungsadresse" value={data.rechnungsadresseAbweichend ? "abweichend" : "gleich"}
+            onChange={v => onUpdateMehrere?.({ rechnungsadresseAbweichend: v === "abweichend" })}
+            options={[
+              { value: "gleich", label: "Rechnungsadresse wie Wohnsitz" },
+              { value: "abweichend", label: "Rechnung geht an eine andere Adresse" },
+            ]} />
+        </div>
+        <div className="lg:hidden m1-schalterzeile">
+          <div style={{ minWidth: 0 }}>
+            <label htmlFor="rechnung-schalter" style={{ display: "block", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", cursor: "pointer", lineHeight: 1.3 }}>
+              Rechnung an eine andere Adresse
+            </label>
+            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2, lineHeight: 1.3 }}>
+              Vorgabe: Rechnungsadresse wie Wohnsitz
+            </div>
+          </div>
+          <Switch id="rechnung-schalter" className="m1-schalter" checked={data.rechnungsadresseAbweichend} onCheckedChange={c => onUpdateMehrere?.({ rechnungsadresseAbweichend: c })} />
+        </div>
+      </div>
+      {data.rechnungsadresseAbweichend && (
+        <div style={{ marginTop: "var(--space-4)" }}>
+          <SectionHeader icon={Receipt} label="Rechnungsadresse" />
+          <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginBottom: "var(--space-3)" }}>
+            <div className="lg:col-span-2">
+              <TextInput label="Institution" value={data.rechnungInstitution} onChange={v => onUpdate("rechnungInstitution", v)} placeholder="z.B. Pro Senectute, KESB Winterthur" hint="Leer lassen, wenn die Rechnung an eine Person geht" />
+            </div>
+            <TextInput label="Vorname" value={data.rechnungVorname} onChange={v => onUpdate("rechnungVorname", v)} placeholder="Vorname" />
+            <TextInput label="Nachname" value={data.rechnungNachname} onChange={v => onUpdate("rechnungNachname", v)} placeholder="Nachname" />
+          </div>
+          <AdressBlock idPrefix="rechnung"
+            variante="mitKanton"
+            wert={{
+              strasse: data.rechnungStrasse, plz: data.rechnungPlz, ort: data.rechnungOrt,
+              land: data.rechnungLand, kanton: data.rechnungKanton,
+            }}
+            onChange={patch => {
+              const p: Partial<PatientFormData> = {};
+              if (patch.strasse !== undefined) p.rechnungStrasse = patch.strasse;
+              if (patch.plz !== undefined) p.rechnungPlz = patch.plz;
+              if (patch.ort !== undefined) p.rechnungOrt = patch.ort;
+              if (patch.land !== undefined) p.rechnungLand = patch.land;
+              if (patch.kanton !== undefined) p.rechnungKanton = patch.kanton;
+              if (onUpdateMehrere) onUpdateMehrere(p);
+              else Object.entries(p).forEach(([k, v]) => onUpdate(k as keyof PatientFormData, v as string));
+            }} />
+        </div>
+      )}
 
       <div style={{ marginTop: "var(--space-4)" }}>
         {/* Muster K (Lauf 1c): unter 1024px eine Zeile — Frage links, Schalter
@@ -178,16 +230,13 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
       {data.pflegeortAbweichend && (
         <div style={{ marginTop: "var(--space-4)" }}>
           <SectionHeader icon={MapPin} label="Pflegeort" />
-          {/* Voll-Variante auch hier: der Einsatz findet an diesem Ort statt, darum
-              Gemeinde, BFS-Nummer und Kanton. Ohne Hinweistext — der Restkosten-Satz
-              gilt am Wohnsitz, nicht hier. */}
+          {/* Kanton und Land auch hier — der Einsatz findet an diesem Ort statt.
+              Politische Gemeinde und BFS-Nummer werden nicht erhoben. */}
           <AdressBlock idPrefix="pflegeort"
-            variante="voll"
-            gemeindeHinweis=""
+            variante="mitKanton"
             wert={{
               strasse: data.pflegeortStrasse, plz: data.pflegeortPlz, ort: data.pflegeortOrt,
-              land: data.pflegeortLand, gemeinde: data.pflegeortGemeinde,
-              bfsNummer: data.pflegeortBfsNummer, kanton: data.pflegeortKanton,
+              land: data.pflegeortLand, kanton: data.pflegeortKanton,
             }}
             onChange={patch => {
               const p: Partial<PatientFormData> = {};
@@ -195,8 +244,6 @@ export function TabPersonalienV2({ data, touched, onUpdate, onUpdateMehrere, onB
               if (patch.plz !== undefined) p.pflegeortPlz = patch.plz;
               if (patch.ort !== undefined) p.pflegeortOrt = patch.ort;
               if (patch.land !== undefined) p.pflegeortLand = patch.land;
-              if (patch.gemeinde !== undefined) p.pflegeortGemeinde = patch.gemeinde;
-              if (patch.bfsNummer !== undefined) p.pflegeortBfsNummer = patch.bfsNummer;
               if (patch.kanton !== undefined) p.pflegeortKanton = patch.kanton;
               if (onUpdateMehrere) onUpdateMehrere(p);
               else Object.entries(p).forEach(([k, v]) => onUpdate(k as keyof PatientFormData, v as string));
