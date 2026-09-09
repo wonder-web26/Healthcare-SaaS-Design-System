@@ -25,7 +25,6 @@ import { leseVorgemapptesFeld, schreibeVorgemapptesFeld } from "../../../lib/int
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { VersicherungenAbschnitt } from "../versicherung/VersicherungenAbschnitt";
 import { BezugsteamAbschnitt } from "../beziehungen/BezugsteamAbschnitt";
-import { AllergienAbschnitt } from "../allergien/AllergienAbschnitt";
 import { patientFuerOnboarding } from "../../../lib/patienten/store";
 import { SDA_WOHNSITUATION_OPTIONS } from "../../../lib/stammdaten/sda-wohnsituation";
 import { SDA_SPITALAUFENTHALT_OPTIONS } from "../../../lib/stammdaten/sda-spitalaufenthalt";
@@ -410,8 +409,6 @@ export function TabWohnenUmfeldV2({ data, touched, onUpdate }: TabProps) {
 export function TabAnamneseV2({ data, touched, onUpdate, onBlur, onboardingId }: TabProps & { onboardingId?: string }) {
   const t = (f: string) => touched.has(f);
   const [, forceAnamnese] = useState(0);
-  // Allergien hängen am Patienten (Store), nicht am Formular — wie Versicherungen.
-  const anamnesePatientId = onboardingId ? patientFuerOnboarding(onboardingId)?.id : undefined;
   // BB11 spitalaufenthalte ist vorgemappt (iA13) → Wert aus dem Registrierungs-
   // formular; Schreiben legt es bei Bedarf an (§2). Ohne Onboarding kein Ziel.
   const spital = onboardingId ? String(leseVorgemapptesFeld(onboardingId, "spitalaufenthalte") ?? "") : "";
@@ -445,15 +442,8 @@ export function TabAnamneseV2({ data, touched, onUpdate, onBlur, onboardingId }:
         <TextareaInput label="Operationen" value={data.operationen} onChange={v => onUpdate("operationen", v)} placeholder="z.B. Hüft-TEP rechts (2024), Knie-TEP links (2022), Appendektomie (2018)" rows={4} />
       </div>
 
-      {/* Strukturierte Erfassung (Lauf B) — DIESELBE Komponente wie in der
-          Patientenansicht, identisch und nicht reduziert. Die frühere
-          Freitext-Textarea `allergien` ist ersetzt; das Feld bleibt im Typ
-          bestehen und wird nicht mehr beschrieben. */}
-      <div style={{ marginTop: "var(--space-4)" }}>
-        {anamnesePatientId
-          ? <AllergienAbschnitt patientId={anamnesePatientId} />
-          : <div style={{ fontSize: 13, color: "var(--text-tertiary)" }}>Allergien und Unverträglichkeiten lassen sich erfassen, sobald die Personalien angelegt sind.</div>}
-      </div>
+      {/* Allergien und Unverträglichkeiten tragen einen eigenen Reiter — sie
+          hängen am Patienten-Store, nicht am Anamnese-Formular. */}
 
       {/* Erweiterte Anamnese (dauerhaft sichtbar) */}
       <SectionHeader icon={HeartPulse} label="Erweiterte Anamnese" />

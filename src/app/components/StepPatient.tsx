@@ -7,6 +7,7 @@ import {
   HeartPulse,
   Home,
   Stethoscope,
+  ShieldAlert,
   Phone,
   Scale,
   Brain,
@@ -86,6 +87,7 @@ import { SectionAction } from "./ui/SectionAction";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
 import { Combobox } from "./form/Combobox";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
+import { AllergienAbschnitt } from "./allergien/AllergienAbschnitt";
 import { getPatient, patientFuerOnboarding } from "../../lib/patienten/store";
 import { aktiverVersichererName, aktiveVersicherung } from "../../lib/versicherung/store";
 import { EROEFFNUNGSGRUND_STANDARD, EROEFFNUNGSGRUND_EINSATZABBRUCH } from "../../lib/stammdaten/sda-eroeffnungsgrund";
@@ -481,6 +483,7 @@ const tabDefs = [
   { key: "wohnen", label: "Wohnen", icon: Home },
   { key: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
   { key: "anamnese", label: "Anamnese", icon: Stethoscope },
+  { key: "allergien", label: "Allergien", icon: ShieldAlert },
   { key: "aktivitaeten", label: "ATL", icon: Activity },
   { key: "interrai", label: "Bedarfsabklärung", icon: ClipboardList },
   { key: "pflegeplanung", label: "Pflegeplan", icon: ClipboardList },
@@ -498,7 +501,7 @@ export const TAB_KEYS: readonly PatientReiter[] = tabDefs.map(t => t.key);
 
 /** Reiter, die reine Formulare sind — ihr Inhalt wird auf FORMULAR_MAX begrenzt. */
 const FORMULARREITER: ReadonlySet<PatientReiter> = new Set<PatientReiter>([
-  "personalien", "steuer", "wohnen", "anamnese", "aktivitaeten", "dokumente", "abschluss",
+  "personalien", "steuer", "wohnen", "anamnese", "allergien", "aktivitaeten", "dokumente", "abschluss",
 ]);
 
 /**
@@ -754,6 +757,13 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {activeTab === "anamnese" && (
             <TabAnamneseV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} onboardingId={onboardingId} />
           )}
+          {/* Allergien: dieselbe Komponente wie in der Patientenansicht, ohne
+              Abwandlung. Der Reiter trägt keine SDA-Felder — die Erfassung folgt
+              dem Patienten-Store und bleibt daher auch nach dem SDA-Abschluss
+              bedienbar, wie in der Patientenansicht. */}
+          {activeTab === "allergien" && (patientOnbId
+            ? <AllergienAbschnitt patientId={patientOnbId} />
+            : <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Allergien und Unverträglichkeiten lassen sich erfassen, sobald die Personalien angelegt sind.</div>)}
           {activeTab === "aktivitaeten" && (
             <TabAktivitaetenV2 data={data} onUpdateATL={updateATL} />
           )}
