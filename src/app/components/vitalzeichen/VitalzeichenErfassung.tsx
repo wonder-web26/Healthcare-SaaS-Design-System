@@ -98,9 +98,9 @@ function Formular({ patientId, onClose }: { patientId: string; onClose: () => vo
   const setFeld = (code: ParameterCode, patch: Partial<FeldZustand>) =>
     setFelder(f => ({ ...f, [code]: { ...f[code], ...patch } }));
 
-  /** «zuletzt 37.1 °C, Ohr, vor 2 Tagen» — je Parameter, aus dem Bestand. */
+  /** Letzter Wert je Parameter — strukturiert für den kompakten Dreizeiler. */
   const letzterHinweis = useMemo(() => {
-    const map: Partial<Record<ParameterCode, string>> = {};
+    const map: Partial<Record<ParameterCode, { wert: string; meta: string }>> = {};
     for (const def of VITAL_PARAMETER) {
       const letzte = gueltigePunkte(eintraegeVon(messungen, def.code)).slice(-1)[0];
       if (!letzte) continue;
@@ -108,7 +108,10 @@ function Formular({ patientId, onClose }: { patientId: string; onClose: () => vo
         ? `${letzte.wert}/${letzte.zweitwert} ${def.einheit}` : `${letzte.wert} ${def.einheit}`;
       const trennend = def.qualifier.find(q => q.trennendImVerlauf);
       const kontext = trennend ? trennend.werte.find(x => x.code === letzte.qualifier[trennend.feld])?.label : undefined;
-      map[def.code] = `zuletzt ${wertText}${kontext ? `, ${kontext}` : ""}, ${relativText(letzte.messZeitpunkt, JETZT_ISO)}`;
+      map[def.code] = {
+        wert: wertText,
+        meta: `${relativText(letzte.messZeitpunkt, JETZT_ISO)}${kontext ? ` · ${kontext}` : ""}`,
+      };
     }
     return map;
   }, [messungen]);
@@ -235,6 +238,8 @@ function Formular({ patientId, onClose }: { patientId: string; onClose: () => vo
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 22px 20px", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
 
         {/* 1 — Messzeitpunkt; der Erfassungszeitpunkt läuft getrennt mit. */}
+        <section aria-label="Messzeitpunkt">
+        <h4 style={abschnittsKopf}>Messzeitpunkt</h4>
         <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", alignItems: "flex-end" }}>
           <DateField label="Gemessen am" required wertFormat="iso" bereich="past"
             value={datum || null} onChange={v => setDatum((v as string) ?? "")} steuerelementMaxBreite="11rem" />
@@ -244,7 +249,7 @@ function Formular({ patientId, onClose }: { patientId: string; onClose: () => vo
           </FormField>
         </div>
         {nachtrag && (
-          <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "10px 12px", borderRadius: "var(--radius-card)", background: "var(--status-warning-bg)" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 8, padding: "10px 12px", borderRadius: "var(--radius-card)", background: "var(--status-warning-bg)" }}>
             <Info style={{ width: 14, height: 14, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 2 }} />
             <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", maxWidth: "62ch" }}>
               Nachtrag: Der Messzeitpunkt liegt vor dem heutigen Erfassungszeitpunkt.
@@ -252,20 +257,19 @@ function Formular({ patientId, onClose }: { patientId: string; onClose: () => vo
             </span>
           </div>
         )}
+        </section>
 
         {/* 2 + 3 — Messwerte, nach Gruppen */}
         {(["vitalzeichen", "ohne_status"] as const).map(gruppe => (
           <section key={gruppe} aria-label={GRUPPE_LABEL[gruppe]}>
-            <h4 style={{ margin: "0 0 4px", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>
-              {GRUPPE_LABEL[gruppe]}
-            </h4>
+            <h4 style={abschnittsKopf}>{GRUPPE_LABEL[gruppe]}</h4>
             {gruppe === "ohne_status" && (
               <p style={{ margin: "0 0 6px", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", maxWidth: "62ch" }}>
-                Kein Vitalzeichen im FHIR-Sinn, fachlich zentral. Beim Blutzucker ist der
-                Messkontext Pflicht — er verändert die Bedeutung des Werts.
+                Diese Werte gehören nicht zum Vitalzeichen-Set, sind aber fachlich zentral.
+                Beim Blutzucker ist der Messkontext Pflicht — er verändert die Bedeutung des Werts.
               </p>
             )}
-            <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
               {VITAL_PARAMETER.filter(p => p.gruppe === gruppe).map(def => (
                 <ParameterFeld key={def.code} def={def} feld={felder[def.code]}
                   hinweis={letzterHinweis[def.code]}
@@ -279,9 +283,7 @@ function Formular({ patientId, onClose }: { patientId: string; onClose: () => vo
 
         {/* 4 — Herkunft */}
         <section aria-label="Herkunft" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-          <h4 style={{ margin: 0, fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>
-            Herkunft
-          </h4>
+          <h4 style={abschnittsKopf}>Herkunft</h4>
           <FormField label="Gemessen durch">
             <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
               {benutzer.vorname} {benutzer.name}
@@ -302,8 +304,11 @@ function Formular({ patientId, onClose }: { patientId: string; onClose: () => vo
         </section>
 
         {/* 5 — Notiz */}
-        <TextareaInput label="Notiz" value={notiz} onChange={setNotiz}
-          placeholder="Freitext zur gesamten Messung" />
+        <section aria-label="Notiz">
+          <h4 style={abschnittsKopf}>Notiz</h4>
+          <TextareaInput label="Freitext zur gesamten Messung" value={notiz} onChange={setNotiz}
+            placeholder="z.B. Klientin wirkt heute müde." />
+        </section>
 
         {fehler.length > 0 && (
           <div role="alert" style={{ padding: "10px 12px", borderRadius: "var(--radius-card)", background: "var(--status-warning-bg)" }}>
@@ -341,11 +346,26 @@ function Formular({ patientId, onClose }: { patientId: string; onClose: () => vo
   );
 }
 
-/** Eine Parameterzeile: leer einzeilig, mit Wert wächst sie um Qualifier und Beurteilung. */
+/** Abschnittsköpfe: Versalien, klein, gedämpft — Trenner, keine Titel. */
+const abschnittsKopf: React.CSSProperties = {
+  margin: "0 0 6px", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)",
+  letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-tertiary)",
+};
+
+/**
+ * Eine Parameterkarte. Der ZUSTAND ist an der Karte ablesbar, nicht nur am
+ * Inhalt: leer = neutraler Rahmen auf Grundfläche, befüllt = Brand-Rahmen mit
+ * leichter Brand-Tönung (das etablierte Auswahl-Muster des Projekts), nicht
+ * erhebbar = neutral gefüllte Fläche mit stillgelegter Eingabe.
+ *
+ * Die Einheit sitzt IM Feld, die Bezeichnung links mit fester Breite, der
+ * letzte Wert als kompakter Dreizeiler rechts — so fluchten die Eingabefelder
+ * über alle Karten und die Mengen lassen sich senkrecht vergleichen.
+ */
 function ParameterFeld({ def, feld, hinweis, darfBeurteilen, bezugsrahmenText, onAendern }: {
   def: VitalParameterDef;
   feld: FeldZustand;
-  hinweis: string | undefined;
+  hinweis: { wert: string; meta: string } | undefined;
   darfBeurteilen: boolean;
   bezugsrahmenText: string;
   onAendern: (patch: Partial<FeldZustand>) => void;
@@ -353,52 +373,116 @@ function ParameterFeld({ def, feld, hinweis, darfBeurteilen, bezugsrahmenText, o
   const hatWert = feld.wert.trim() !== "";
   const offen = hatWert && !feld.nichtErhebbar;
 
+  /* Kartenzustand → Rahmen und Fläche (Tokens des Auswahl-Musters). */
+  const rahmen = feld.nichtErhebbar
+    ? "var(--border-default)"
+    : hatWert ? "var(--brand-primary)" : "var(--border-default)";
+  const flaeche = feld.nichtErhebbar
+    ? "var(--bg-secondary)"
+    : hatWert ? "var(--brand-primary-light)" : "var(--bg-elevated)";
+
+  /* Live-Plausibilität an der Eingabe — technisch, nie blockierend. */
+  const wertZahl = Number(feld.wert.replace(",", "."));
+  const zweitZahl = feld.zweit.trim() ? Number(feld.zweit.replace(",", ".")) : null;
+  const plausiWarnung = offen && Number.isFinite(wertZahl)
+    ? pruefePlausibilitaet(def, wertZahl, Number.isFinite(zweitZahl as number) ? zweitZahl : null)
+    : null;
+
   return (
-    <div style={{ padding: "10px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <span style={{ flex: "0 0 170px", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: feld.nichtErhebbar ? "var(--text-tertiary)" : "var(--text-primary)" }}>
-          {def.label}
-        </span>
-        {feld.nichtErhebbar ? (
-          <span style={{ flex: "1 1 200px", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-            Nicht erhebbar — der Grund wird dokumentiert.
+    <div style={{
+      padding: "10px 14px", borderRadius: "var(--radius-card)",
+      border: "var(--border-thin) solid " + rahmen, background: flaeche,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        {/* Bezeichnung links, feste Breite — alle Felder fluchten. */}
+        <span style={{ flex: "0 0 150px", minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: feld.nichtErhebbar ? "var(--text-tertiary)" : "var(--text-primary)" }}>
+            {def.label}
           </span>
-        ) : (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <input inputMode="decimal" value={feld.wert} onChange={e => onAendern({ wert: e.target.value })}
-              aria-label={def.label} placeholder="–" className="ui-fokusring"
-              style={{ width: 84, padding: "7px 10px", fontSize: "var(--text-small)", borderRadius: "var(--control-radius)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "inherit", fontVariantNumeric: "tabular-nums" }} />
-            {def.zweitwert && (
-              <>
-                <span style={{ color: "var(--text-tertiary)" }}>/</span>
-                <input inputMode="decimal" value={feld.zweit} onChange={e => onAendern({ zweit: e.target.value })}
-                  aria-label={`${def.label} ${def.zweitwert.label}`} placeholder="–" className="ui-fokusring"
-                  style={{ width: 84, padding: "7px 10px", fontSize: "var(--text-small)", borderRadius: "var(--control-radius)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "inherit", fontVariantNumeric: "tabular-nums" }} />
-              </>
-            )}
-            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{def.einheit}</span>
-          </span>
-        )}
-        <span style={{ flex: "1 1 160px", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-          {hinweis ?? "noch nie erfasst"}
+          {def.zweitwert && (
+            <span style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+              systolisch / diastolisch
+            </span>
+          )}
         </span>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", whiteSpace: "nowrap" }}>
-          <Checkbox checked={feld.nichtErhebbar}
-            onCheckedChange={c => onAendern({ nichtErhebbar: c === true, wert: "", zweit: "", beurteilung: null, begruendung: "" })} />
-          <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>nicht erhebbar</span>
-        </label>
+
+        {/* Feld mit Einheit INNEN; Blutdruck als Paar mit Schrägstrich. */}
+        <span aria-disabled={feld.nichtErhebbar || undefined} style={{
+          display: "inline-flex", alignItems: "center", gap: 4,
+          padding: "0 10px", height: "var(--control-height)",
+          borderRadius: "var(--control-radius)",
+          border: "var(--border-thin) solid var(--border-default)",
+          background: "var(--bg-elevated)",
+          opacity: feld.nichtErhebbar ? 0.55 : 1,
+        }}>
+          <input inputMode="decimal" value={feld.wert} onChange={e => onAendern({ wert: e.target.value })}
+            aria-label={def.label} placeholder="–" disabled={feld.nichtErhebbar}
+            className="ui-fokusring font-mono"
+            style={{ width: def.zweitwert ? 46 : 64, border: "none", outline: "none", background: "transparent",
+              fontSize: "var(--text-small)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", textAlign: "right" }} />
+          {def.zweitwert && (
+            <>
+              <span style={{ color: "var(--text-tertiary)" }}>/</span>
+              <input inputMode="decimal" value={feld.zweit} onChange={e => onAendern({ zweit: e.target.value })}
+                aria-label={`${def.label} ${def.zweitwert.label}`} placeholder="–" disabled={feld.nichtErhebbar}
+                className="ui-fokusring font-mono"
+                style={{ width: 46, border: "none", outline: "none", background: "transparent",
+                  fontSize: "var(--text-small)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums", textAlign: "right" }} />
+            </>
+          )}
+          <span aria-hidden="true" style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+            {def.einheit}
+          </span>
+        </span>
+
+        {/* Letzter Wert: kompakter Dreizeiler, rechtsbündig. */}
+        <span style={{ marginLeft: "auto", textAlign: "right", opacity: feld.nichtErhebbar ? 0.55 : 1 }}>
+          {hinweis ? (
+            <>
+              <span style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>zuletzt</span>
+              <span className="font-mono" style={{ display: "block", fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+                {hinweis.wert}
+              </span>
+              <span style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{hinweis.meta}</span>
+            </>
+          ) : (
+            <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>noch nie erfasst</span>
+          )}
+        </span>
       </div>
 
-      {feld.nichtErhebbar && (
-        <div style={{ marginTop: 8, marginLeft: 180 }}>
-          <TextInput label="Grund der Nichterhebung" required value={feld.grund} onChange={v => onAendern({ grund: v })}
-            placeholder="z.B. Pulsoxymeter defekt, Ersatzgerät bestellt." steuerelementMaxBreite="26rem" />
+      {plausiWarnung && (
+        <div style={{ marginTop: 6, fontSize: "var(--text-micro)", color: "var(--status-warning-text)" }}>
+          Wert ausserhalb des erfassbaren Bereichs – bitte prüfen ({def.minPlausibel}–{def.maxPlausibel}{def.zweitwert ? ` bzw. ${def.zweitwert.minPlausibel}–${def.zweitwert.maxPlausibel}` : ""} {def.einheit}).
         </div>
       )}
 
-      {/* Progressive Anzeige: erst mit Wert erscheinen Qualifier und Beurteilung. */}
+      {/* «Nicht erhebbar»: bei allen Parametern an derselben Stelle — unter dem
+          Eingabebereich, als leiser Textknopf. */}
+      <div style={{ marginTop: 6 }}>
+        {feld.nichtErhebbar ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+              Nicht erhebbar — der Grund wird dokumentiert.
+            </span>
+            <TextInput label="Grund der Nichterhebung" required value={feld.grund} onChange={v => onAendern({ grund: v })}
+              placeholder="z.B. Pulsoxymeter defekt, Ersatzgerät bestellt." steuerelementMaxBreite="26rem" />
+            <button type="button" className="ui-fokusring" style={leiserKnopf}
+              onClick={() => onAendern({ nichtErhebbar: false, grund: "" })}>
+              Zurücksetzen — Wert doch erfassen
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="ui-fokusring" style={leiserKnopf}
+            onClick={() => onAendern({ nichtErhebbar: true, wert: "", zweit: "", beurteilung: null, begruendung: "" })}>
+            Nicht erhebbar …
+          </button>
+        )}
+      </div>
+
+      {/* Kontext und Beurteilung: in derselben Karte, unter einer Haarlinie. */}
       {offen && (
-        <div style={{ marginTop: 10, marginLeft: istSchmalRand(), display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "var(--border-thin) solid var(--border-default)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
           {def.qualifier.map(q => (
             <SegmentedControl key={q.feld} label={q.pflicht ? `${q.label} *` : q.label}
               value={feld.qualifier[q.feld] ?? ""}
@@ -407,14 +491,8 @@ function ParameterFeld({ def, feld, hinweis, darfBeurteilen, bezugsrahmenText, o
           ))}
 
           <div>
-            <SegmentedControl label="Beurteilung" disabled={!darfBeurteilen}
-              value={feld.beurteilung ?? ""}
-              onChange={v => onAendern({ beurteilung: (v || null) as Beurteilung | null })}
-              options={[
-                { value: "abnormally_low", label: BEURTEILUNG_LABEL.abnormally_low },
-                { value: "normal", label: BEURTEILUNG_LABEL.normal },
-                { value: "abnormally_high", label: BEURTEILUNG_LABEL.abnormally_high },
-              ]} />
+            <BeurteilungsWahl wert={feld.beurteilung} gesperrt={!darfBeurteilen}
+              onWahl={b => onAendern({ beurteilung: b })} />
             {/* Der Bezugsrahmen wird angezeigt — nie berechnet, nie ausgewertet. */}
             <div style={{ marginTop: 4, fontSize: "var(--text-micro)", color: "var(--text-tertiary)", maxWidth: "62ch" }}>
               {bezugsrahmenText}
@@ -439,7 +517,55 @@ function ParameterFeld({ def, feld, hinweis, darfBeurteilen, bezugsrahmenText, o
   );
 }
 
-/** Einrückung der aufgeklappten Angaben — auf schmalen Fenstern entfällt sie. */
-function istSchmalRand(): number {
-  return typeof window !== "undefined" && window.innerWidth < 700 ? 0 : 180;
+const leiserKnopf: React.CSSProperties = {
+  alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontFamily: "inherit",
+  fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)",
+  color: "var(--text-tertiary)", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 2,
+};
+
+/**
+ * Beurteilung — drei Schaltflächen. VOR der Auswahl trägt keine Farbe; NACH
+ * der Auswahl erscheinen die beiden Abweichungswerte in der Warnfarbe mit
+ * Warnsymbol und stärkerer Schrift, «im erwarteten Bereich» bleibt farblos
+ * gefüllt. Das System belegt nie vor.
+ */
+function BeurteilungsWahl({ wert, gesperrt, onWahl }: {
+  wert: Beurteilung | null;
+  gesperrt: boolean;
+  onWahl: (b: Beurteilung | null) => void;
+}) {
+  const optionen: { code: Beurteilung; abweichung: boolean }[] = [
+    { code: "abnormally_low", abweichung: true },
+    { code: "normal", abweichung: false },
+    { code: "abnormally_high", abweichung: true },
+  ];
+  return (
+    <div>
+      <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: "var(--weight-regular)", marginBottom: 4 }}>Beurteilung</div>
+      <div role="radiogroup" aria-label="Beurteilung" style={{ display: "flex", gap: 6, flexWrap: "wrap", opacity: gesperrt ? 0.55 : 1 }}>
+        {optionen.map(o => {
+          const gewaehlt = wert === o.code;
+          const warn = gewaehlt && o.abweichung;
+          return (
+            <button key={o.code} type="button" role="radio" aria-checked={gewaehlt} disabled={gesperrt}
+              className={gesperrt ? "inline-flex items-center" : "ui-fokusring inline-flex items-center"}
+              onClick={() => onWahl(gewaehlt ? null : o.code)}
+              style={{
+                gap: 5, padding: "5px 12px", borderRadius: "var(--radius-pill)", fontFamily: "inherit",
+                fontSize: "var(--text-meta)",
+                fontWeight: warn ? "var(--weight-medium)" : "var(--weight-regular)",
+                background: warn ? "var(--status-warning-bg)" : gewaehlt ? "var(--bg-secondary)" : "transparent",
+                border: "var(--border-thin) solid " + (warn ? "var(--status-warning-text)" : gewaehlt ? "var(--text-secondary)" : "var(--border-default)"),
+                color: warn ? "var(--status-warning-text)" : "var(--text-primary)",
+                cursor: gesperrt ? "not-allowed" : "pointer",
+              }}>
+              {warn && <AlertTriangle style={{ width: 12, height: 12 }} />}
+              {BEURTEILUNG_LABEL[o.code]}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
+

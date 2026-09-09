@@ -155,7 +155,8 @@ function ParameterZeile({ def, messungen, onOeffnen }: {
       aria-label={`${def.label}: Verlauf öffnen`}>
       <td style={zelle}><ParameterName def={def} /></td>
       <td style={zelle}>
-        <span style={{ fontWeight: "var(--weight-medium)", color: zeigtNichtErhebbar ? "var(--text-secondary)" : "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>
+        <span className={zeigtNichtErhebbar ? undefined : "font-mono"}
+          style={{ fontWeight: "var(--weight-medium)", color: zeigtNichtErhebbar ? "var(--text-secondary)" : "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>
           {wertText}
         </span>
         {auffaellig && letzterWert?.beurteilung && (
@@ -212,7 +213,7 @@ function BmiZeile({ messungen }: { messungen: ReturnType<typeof useVitalMessunge
         <span style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>kg/m² · nicht erfassbar</span>
       </td>
       <td style={zelle}>
-        <span style={{ fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>
+        <span className="font-mono" style={{ fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>
           {bmi !== null ? `${bmi} kg/m²` : "—"}
         </span>
         {bmi === null && (

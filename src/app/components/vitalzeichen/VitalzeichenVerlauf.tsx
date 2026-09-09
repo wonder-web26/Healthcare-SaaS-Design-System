@@ -275,7 +275,7 @@ function EinzelmessungZeile({ e, def }: { e: ParameterEintrag; def: ReturnType<t
       <span style={{ flex: "0 0 118px", fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
         {isoZuAnzeige(e.messZeitpunkt.slice(0, 10))}, {e.messZeitpunkt.slice(11, 16)}
       </span>
-      <span style={{
+      <span className={e.nichtErhebbar ? undefined : "font-mono"} style={{
         flex: "0 0 110px", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)",
         color: e.nichtErhebbar ? "var(--text-secondary)" : "var(--text-primary)",
         fontVariantNumeric: "tabular-nums",
