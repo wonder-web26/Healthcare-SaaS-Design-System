@@ -18,7 +18,9 @@ import {
   type Medikationsposition, type Gruppe, type Pruefstatus,
 } from "../../../lib/medikation/medikation";
 
-const PRUEFSTATUS_MARKE: Record<Pruefstatus, { label: string; variante: "erfolg" | "warnung" | "info"; icon: typeof CheckCircle2 }> = {
+/** Eine Quelle für die Statusdarstellung — Liste und beide Vorschauen zeigen
+ *  denselben Text und dasselbe Symbol, nie nur dieselbe Farbe. */
+export const PRUEFSTATUS_MARKE: Record<Pruefstatus, { label: string; variante: "erfolg" | "warnung" | "info"; icon: typeof CheckCircle2 }> = {
   bestaetigt: { label: "Bestätigt", variante: "erfolg", icon: CheckCircle2 },
   zu_pruefen: { label: "Zu prüfen", variante: "warnung", icon: Clock },
   unbestaetigt: { label: "Unbestätigt", variante: "warnung", icon: AlertTriangle },

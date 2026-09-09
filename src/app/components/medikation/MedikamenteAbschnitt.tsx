@@ -21,8 +21,11 @@ import { QrCode, Camera, Plus, Ban, CheckCircle2, Pill } from "lucide-react";
 import { AppButton } from "../ui/AppButton";
 import { StatusMarke } from "../ui/StatusMarke";
 import { isoZuAnzeige } from "../../../lib/datum";
+import { SegmentedControl } from "../form/SegmentedControl";
 import { MedikationsListe, SPALTEN_ANZAHL } from "./MedikationsListe";
 import { MedikationsEditor } from "./MedikationsEditor";
+import { Tagesvorschau } from "./Tagesvorschau";
+import { Wochenvorschau } from "./Wochenvorschau";
 import { blockierendeAnzahl, type Medikationsposition } from "../../../lib/medikation/medikation";
 import {
   useMedikationspositionen, useMedikationsErhebungen, getMedikationsErhebung,
@@ -30,11 +33,16 @@ import {
   ANGEMELDETE_PFLEGEFACHPERSON,
 } from "../../../lib/medikation/store";
 
+/** Darstellungswahl über denselben Daten — «Liste» ist der Standard. */
+type Ansicht = "liste" | "tag" | "woche";
+
 export function MedikamenteAbschnitt({ patientId }: { patientId: string }) {
   const positionen = useMedikationspositionen().filter(p => p.patientId === patientId);
   const erhebungen = useMedikationsErhebungen();
   const erhebung = erhebungen.find(e => e.patientId === patientId) ?? getMedikationsErhebung(patientId);
   const [editor, setEditor] = useState<{ eintrag: Medikationsposition | null } | null>(null);
+  /* Reine Darstellungswahl — sie liegt lokal und berührt keine Daten. */
+  const [ansicht, setAnsicht] = useState<Ansicht>("liste");
 
   const bestaetigt = !!erhebung.bestaetigtAm;
   const blockierend = blockierendeAnzahl(positionen);
@@ -97,11 +105,31 @@ export function MedikamenteAbschnitt({ patientId }: { patientId: string }) {
         </div>
       )}
 
-      {/* ── Zustand B und C: die Liste ── */}
+      {/* ── Zustand B und C: Umschalter und die gewählte Ansicht ── */}
       {positionen.length > 0 && (
         <>
-          <MedikationsListe positionen={positionen} schreibgeschuetzt={bestaetigt}
-            onZeile={p => setEditor({ eintrag: p })} />
+          {/* Der Umschalter ändert nur die Darstellung, nie die Daten. */}
+          <div style={{ marginBottom: "var(--space-3)" }}>
+            <SegmentedControl label="Ansicht" value={ansicht}
+              onChange={v => setAnsicht(v as Ansicht)}
+              options={[
+                { value: "liste", label: "Liste" },
+                { value: "tag", label: "Tag" },
+                { value: "woche", label: "Woche" },
+              ]} />
+          </div>
+          {ansicht !== "liste" && (
+            <p style={{ margin: "0 0 var(--space-4)", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", maxWidth: "68ch" }}>
+              Vorschau der erfassten Medikation. Die Verabreichung wird nach dem Onboarding dokumentiert.
+            </p>
+          )}
+
+          {ansicht === "liste" && (
+            <MedikationsListe positionen={positionen} schreibgeschuetzt={bestaetigt}
+              onZeile={p => setEditor({ eintrag: p })} />
+          )}
+          {ansicht === "tag" && <Tagesvorschau positionen={positionen} />}
+          {ansicht === "woche" && <Wochenvorschau positionen={positionen} />}
 
           {!bestaetigt && (
             <div style={{

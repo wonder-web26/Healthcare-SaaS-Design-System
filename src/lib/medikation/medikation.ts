@@ -203,6 +203,41 @@ export function dosierungText(p: Posologie): string {
   }
 }
 
+/* ── Ableitung für die Vorschauen (Tag und Woche) ────────────────────────── */
+
+/**
+ * Die vier Verordnungsblöcke des schweizerischen Morgen-Mittag-Abend-Nacht-
+ * Schemas. SIE SIND KEINE UHRZEITEN. Wann eine Gabe tatsächlich erfolgt,
+ * entscheidet die Verabreichung nach dem Onboarding — hier steht nur, was
+ * verordnet ist. Eine Abbildung Block → Uhrzeit gibt es bewusst nicht.
+ */
+export type Block = "morgen" | "mittag" | "abend" | "nacht";
+
+export const BLOECKE: Block[] = ["morgen", "mittag", "abend", "nacht"];
+
+export const BLOCK_LABEL: Record<Block, string> = {
+  morgen: "Morgen", mittag: "Mittag", abend: "Abend", nacht: "Nacht",
+};
+
+/**
+ * Gaben je Block — die eine Ableitung, die beide Vorschauen nutzen.
+ * Rein: kein Zustand, keine Seiteneffekte, kein Datumsbezug.
+ *
+ * `null` heisst «kein tägliches Blockschema» — Reserve und alle nicht-täglichen
+ * Typen. Sie gehören damit in die eigenen Abschnitte der Tagesvorschau, nicht
+ * in einen Block.
+ */
+export function blockGaben(p: Posologie): Record<Block, string> | null {
+  if (p.typ !== "#-#-#-#") return null;
+  return { morgen: p.morgen, mittag: p.mittag, abend: p.abend, nacht: p.nacht };
+}
+
+/** Trägt dieser Blockwert eine Gabe? "0", "" und Unlesbares zählen nicht. */
+export function istGabe(wert: string): boolean {
+  const n = Number(String(wert).replace(",", "."));
+  return Number.isFinite(n) && n > 0;
+}
+
 /** Leere Posologie eines Typs — beim Umschalten im Editor. */
 export function leerePosologie(typ: PosologieTyp): Posologie {
   if (typ === "#-#-#-#") return { typ, morgen: "0", mittag: "0", abend: "0", nacht: "0" };
