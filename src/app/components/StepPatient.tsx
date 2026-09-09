@@ -8,6 +8,7 @@ import {
   Home,
   Stethoscope,
   ShieldAlert,
+  Pill,
   Phone,
   Scale,
   Brain,
@@ -88,6 +89,7 @@ import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
 import { Combobox } from "./form/Combobox";
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import { AllergienAbschnitt } from "./allergien/AllergienAbschnitt";
+import { MedikamenteAbschnitt } from "./medikation/MedikamenteAbschnitt";
 import { getPatient, patientFuerOnboarding } from "../../lib/patienten/store";
 import { aktiverVersichererName, aktiveVersicherung } from "../../lib/versicherung/store";
 import { EROEFFNUNGSGRUND_STANDARD, EROEFFNUNGSGRUND_EINSATZABBRUCH } from "../../lib/stammdaten/sda-eroeffnungsgrund";
@@ -484,6 +486,7 @@ const tabDefs = [
   { key: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
   { key: "anamnese", label: "Anamnese", icon: Stethoscope },
   { key: "allergien", label: "Allergien", icon: ShieldAlert },
+  { key: "medikamente", label: "Medikamente", icon: Pill },
   { key: "aktivitaeten", label: "ATL", icon: Activity },
   { key: "interrai", label: "Bedarfsabklärung", icon: ClipboardList },
   { key: "pflegeplanung", label: "Pflegeplan", icon: ClipboardList },
@@ -764,6 +767,11 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {activeTab === "allergien" && (patientOnbId
             ? <AllergienAbschnitt patientId={patientOnbId} />
             : <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Allergien und Unverträglichkeiten lassen sich erfassen, sobald die Personalien angelegt sind.</div>)}
+          {/* Medikamente: eigener Lebenszyklus im Patienten-Store, darum kein
+              SDA-Reiter — wie Allergien und Vitaldaten. */}
+          {activeTab === "medikamente" && (patientOnbId
+            ? <MedikamenteAbschnitt patientId={patientOnbId} />
+            : <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Medikamente lassen sich erfassen, sobald die Personalien angelegt sind.</div>)}
           {activeTab === "aktivitaeten" && (
             <TabAktivitaetenV2 data={data} onUpdateATL={updateATL} />
           )}
