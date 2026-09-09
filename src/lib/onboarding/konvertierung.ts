@@ -10,7 +10,6 @@
 import type { InterRAIAssessment, Pflegeplanung, KLVVerordnung, WorkflowPlan } from "../../types/klinische-artefakte";
 import { verwalteQuellensteuerPendenz } from "../stammdaten/quellensteuer-automatik";
 import { workflowTasks } from "../mocks/workflow-tasks";
-import { getMessungenFuerPatient } from "../vitaldaten/store";
 import { konvertiereRhythmusSubjekt, generiereRhythmusTickets, getTicketsFuerSubjekt } from "../rhythmus/engine";
 import { protokolliereAufteilung } from "./aufteilung-log";
 import { erstelleNachweis } from "../schulung/nachweis-store";
@@ -111,12 +110,9 @@ export function konvertiereOnboarding(
     }
   }
 
-  // PA-05: Vitalmessungen von onboardingId auf patientId umhängen
-  // (Messungen wurden während Onboarding mit onboardingId als patientId erfasst)
-  const onboardingMessungen = getMessungenFuerPatient(onboardingId);
-  for (const m of onboardingMessungen) {
-    (m as { patientId: string }).patientId = patientId;
-  }
+  // Vitalzeichen brauchen kein Umhängen mehr: der Reiter löst die echte
+  // Patientenkennung schon während des Onboardings auf (patientFuerOnboarding),
+  // wie Allergien und Medikamente — es gibt keinen Onboarding-Bestand.
 
   // WF-02: Der gemeinsame Onboarding-Workflow geht an den PATIENTEN über
   // (subjektId von onboardingId → patientId umgeschrieben; bestehende Logik).

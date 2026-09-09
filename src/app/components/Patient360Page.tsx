@@ -93,7 +93,7 @@ import {
   Landmark,
   Search,
 } from "lucide-react";
-import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
+import { VitalzeichenAbschnitt } from "./vitalzeichen/VitalzeichenAbschnitt";
 import { AllergienAbschnitt, KRIT_LABEL, KRIT_ZEICHEN } from "./allergien/AllergienAbschnitt";
 import { useAllergien, useAllergieErhebungen, getAllergieErhebung, type AllergieKritikalitaet } from "../../lib/allergien/store";
 import {
@@ -250,7 +250,7 @@ const PATIENT_NAV: GruppeDef[] = [
     /* „Pflegebericht" ist, was erfasst wird — zwei Wörter für dieselbe
        Sache erzeugen zwei Vorstellungen davon, was hineingehört. */
     { schluessel: "pflegeberichte", label: "Pflegeberichte" },
-    { schluessel: "vitalwerte", label: "Vitalwerte" },
+    { schluessel: "vitalwerte", label: "Vitalzeichen" },
     { schluessel: "wunddokumentation", label: "Wunddokumentation" },
     { schluessel: "betreuungsrhythmus", label: "Betreuungsrhythmus" },
   ] },
@@ -805,7 +805,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "atl": return <TabATL patient={patient} />;
     case "anamnese": return <TabAnamnese patient={patient} />;
     case "pflegeplan": return <TabPflegeplanung patientId={patient.id} navigate={navigate} />;
-    case "vitalwerte": return <VitaldatenTab patientId={patient.id} />;
+    case "vitalwerte": return <VitalzeichenAbschnitt patientId={patient.id} />;
     case "unvertraeglichkeiten": return <AllergienAbschnitt patientId={patient.id} />;
     case "betreuungsrhythmus": return <TabWorkflow patient={patient} />;
     case "leistungsplanungsblatt": return <TabKLV patientId={patient.id} />;

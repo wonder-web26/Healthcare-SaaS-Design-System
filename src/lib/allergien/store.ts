@@ -83,7 +83,7 @@ export interface AllergieErhebung {
   allergieErhebungVonName: string | null;
 }
 
-/** Angemeldete Benutzerin des Prototyps — wie VitaldatenTab («Sandra Weber»). */
+/** Angemeldete Benutzerin des Prototyps («Sandra Weber»). */
 export const ANGEMELDETE_PFLEGEFACHPERSON = { userId: "U-SWEBER", name: "S. Weber" } as const;
 
 /**

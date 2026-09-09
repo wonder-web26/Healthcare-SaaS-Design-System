@@ -87,7 +87,7 @@ import { useArztAnfrage, ArztAnfrageFlowInline } from "./ArztAnfrageContext";
 import { SectionAction } from "./ui/SectionAction";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
 import { Combobox } from "./form/Combobox";
-import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
+import { VitalzeichenAbschnitt } from "./vitalzeichen/VitalzeichenAbschnitt";
 import { AllergienAbschnitt } from "./allergien/AllergienAbschnitt";
 import { MedikamenteAbschnitt } from "./medikation/MedikamenteAbschnitt";
 import { getPatient, patientFuerOnboarding } from "../../lib/patienten/store";
@@ -483,7 +483,7 @@ const tabDefs = [
   { key: "personalien", label: "Personalien", icon: User },
   { key: "steuer", label: "Soziales", icon: ShieldCheck },
   { key: "wohnen", label: "Wohnen", icon: Home },
-  { key: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
+  { key: "vitaldaten", label: "Vitalzeichen", icon: HeartPulse },
   { key: "anamnese", label: "Anamnese", icon: Stethoscope },
   { key: "allergien", label: "Allergien", icon: ShieldAlert },
   { key: "medikamente", label: "Medikamente", icon: Pill },
@@ -754,8 +754,11 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {activeTab === "wohnen" && (
             <TabWohnenUmfeldV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
-          {activeTab === "vitaldaten" && (onboardingId
-            ? <VitaldatenTab patientId={onboardingId} />
+          {/* Vitalzeichen hängen an der ECHTEN Patientenkennung (Auflösung wie
+              Allergien und Medikamente) — beide Einstiege sehen denselben
+              Bestand, das frühere Umhängen bei der Konvertierung entfällt. */}
+          {activeTab === "vitaldaten" && (patientOnbId
+            ? <VitalzeichenAbschnitt patientId={patientOnbId} />
             : <OhneFallkennung />)}
           {activeTab === "anamnese" && (
             <TabAnamneseV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} onboardingId={onboardingId} />
