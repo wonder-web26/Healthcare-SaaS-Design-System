@@ -16,8 +16,9 @@
  * wie viele Positionen fehlen — eine abgeschaltete Schaltflaeche ohne Grund
  * ist eine Sackgasse.
  */
-import { useState } from "react";
-import { QrCode, Camera, Plus, Ban, CheckCircle2, Pill } from "lucide-react";
+import { useMemo, useState } from "react";
+import { QrCode, Camera, Plus, Ban, CheckCircle2, Pill, AlertTriangle } from "lucide-react";
+import { useCurrentRole, useCurrentUser } from "../../auth";
 import { AppButton } from "../ui/AppButton";
 import { StatusMarke } from "../ui/StatusMarke";
 import { isoZuAnzeige } from "../../../lib/datum";
@@ -26,10 +27,15 @@ import { MedikationsListe, SPALTEN_ANZAHL } from "./MedikationsListe";
 import { MedikationsEditor } from "./MedikationsEditor";
 import { Tagesvorschau } from "./Tagesvorschau";
 import { Wochenvorschau } from "./Wochenvorschau";
+import { Pruefleiste } from "./Pruefleiste";
+import { BefundKarte } from "./BefundKarte";
+import { pruefungAusfuehren } from "../../../lib/medikation/pruefdienst";
+import { useAllergien } from "../../../lib/allergien/store";
 import { blockierendeAnzahl, type Medikationsposition } from "../../../lib/medikation/medikation";
 import {
   useMedikationspositionen, useMedikationsErhebungen, getMedikationsErhebung,
   keineMedikamenteBestaetigen, listeBestaetigen, bestaetigungAufheben,
+  useBefundBearbeitungen, getBefundBearbeitung, befundQuittieren, befundUebersteuern,
   ANGEMELDETE_PFLEGEFACHPERSON,
 } from "../../../lib/medikation/store";
 
@@ -43,6 +49,48 @@ export function MedikamenteAbschnitt({ patientId }: { patientId: string }) {
   const [editor, setEditor] = useState<{ eintrag: Medikationsposition | null } | null>(null);
   /* Reine Darstellungswahl — sie liegt lokal und berührt keine Daten. */
   const [ansicht, setAnsicht] = useState<Ansicht>("liste");
+  const [pruefungOffen, setPruefungOffen] = useState(false);
+  const [hervorgehoben, setHervorgehoben] = useState<string | null>(null);
+
+  /* Medikationsprüfung: Ergebnis des externen Dienstes (hier Mock), getrennt
+     von unserer Reaktion darauf (Bearbeitungszustände im Store). Allergien
+     entscheiden über die Prüfbarkeit — ein von Hand erfasster Eintrag lässt
+     sich nicht maschinell prüfen. */
+  const allergien = useAllergien().filter(a => a.patientId === patientId
+    && a.verifikationsstatus !== "refuted" && a.verifikationsstatus !== "entered-in-error");
+  const freitextAllergien = allergien.filter(a => !a.substanzCodiert).map(a => a.substanzText);
+  const bearbeitungen = useBefundBearbeitungen();
+  const rolle = useCurrentRole();
+  const benutzer = useCurrentUser();
+  /* Über einen Befund entscheidet, wer fachlich qualifiziert ist. Dieselbe
+     Rollenquelle wie im übrigen Produkt (auth.tsx), kein eigenes System. */
+  const darfEntscheiden = rolle === "diplomiert";
+
+  const pruefung = useMemo(
+    () => pruefungAusfuehren(positionen, {
+      allergienMaschinellPruefbar: allergien.length > 0 && freitextAllergien.length === 0,
+      freitextAllergien,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [positionen, allergien.length, freitextAllergien.join("|")],
+  );
+
+  /** Zeilenmarker: welche Position gehört zu welchem Befund. */
+  const befundJePosition = useMemo(() => {
+    const z: Record<string, string> = {};
+    for (const b of pruefung.befunde) for (const id of b.positionIds) z[id] = b.id;
+    return z;
+  }, [pruefung]);
+
+  const offeneBefunde = pruefung.befunde.filter(b => getBefundBearbeitung(b.id).zustand === "offen").length;
+
+  const zeigeBefund = (befundId: string) => {
+    setPruefungOffen(true);
+    setHervorgehoben(befundId);
+    requestAnimationFrame(() => {
+      document.getElementById(`befund-${befundId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  };
 
   const bestaetigt = !!erhebung.bestaetigtAm;
   const blockierend = blockierendeAnzahl(positionen);
@@ -105,9 +153,26 @@ export function MedikamenteAbschnitt({ patientId }: { patientId: string }) {
         </div>
       )}
 
-      {/* ── Zustand B und C: Umschalter und die gewählte Ansicht ── */}
+      {/* ── Zustand B und C: Prüfleiste, Umschalter, gewählte Ansicht ── */}
       {positionen.length > 0 && (
         <>
+          {/* Die Prüfung gilt der ganzen Liste und steht darum über allen
+              Ansichten, nicht nur über der Tabelle. */}
+          <Pruefleiste ergebnis={pruefung} offen={pruefungOffen}
+            onUmschalten={() => setPruefungOffen(o => !o)}
+            kinder={pruefung.befunde.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+                {pruefung.befunde.map(b => (
+                  <BefundKarte key={b.id} befund={b}
+                    bearbeitung={bearbeitungen[b.id] ?? getBefundBearbeitung(b.id)}
+                    positionen={positionen} darfEntscheiden={darfEntscheiden}
+                    hervorgehoben={hervorgehoben === b.id}
+                    onQuittieren={() => befundQuittieren(b.id, `${benutzer.vorname} ${benutzer.name}`)}
+                    onUebersteuern={g => befundUebersteuern(b.id, `${benutzer.vorname} ${benutzer.name}`, g)} />
+                ))}
+              </div>
+            )} />
+
           {/* Der Umschalter ändert nur die Darstellung, nie die Daten. */}
           <div style={{ marginBottom: "var(--space-3)" }}>
             <SegmentedControl label="Ansicht" value={ansicht}
@@ -126,7 +191,8 @@ export function MedikamenteAbschnitt({ patientId }: { patientId: string }) {
 
           {ansicht === "liste" && (
             <MedikationsListe positionen={positionen} schreibgeschuetzt={bestaetigt}
-              onZeile={p => setEditor({ eintrag: p })} />
+              onZeile={p => setEditor({ eintrag: p })}
+              befundJePosition={befundJePosition} onBefund={zeigeBefund} />
           )}
           {ansicht === "tag" && <Tagesvorschau positionen={positionen} />}
           {ansicht === "woche" && <Wochenvorschau positionen={positionen} />}
@@ -144,6 +210,13 @@ export function MedikamenteAbschnitt({ patientId }: { patientId: string }) {
               {blockierend > 0 && (
                 <StatusMarke variante="warnung"
                   label={`${blockierend} ${blockierend === 1 ? "Position ist" : "Positionen sind"} noch nicht geprüft`} />
+              )}
+              {/* Ein offener Befund blockiert NICHT: der Prüfstatus einer
+                  Position und ein Befund des Prüfdienstes sind verschiedene
+                  Achsen. Er steht als eigener Hinweis daneben. */}
+              {offeneBefunde > 0 && (
+                <StatusMarke variante="info" icon={AlertTriangle}
+                  label={`${offeneBefunde} ${offeneBefunde === 1 ? "offener Befund" : "offene Befunde"}`} />
               )}
               <AppButton variant="primaer" disabled={blockierend > 0}
                 onClick={() => listeBestaetigen(patientId, ANGEMELDETE_PFLEGEFACHPERSON.name, ANGEMELDETE_PFLEGEFACHPERSON.qualifikation)}>

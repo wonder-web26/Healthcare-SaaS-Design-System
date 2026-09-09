@@ -12,7 +12,7 @@
  */
 import { useSyncExternalStore } from "react";
 import { GEGENWART_ISO } from "../gegenwart";
-import type { Medikationsposition, MedikationsErhebung } from "./medikation";
+import type { Medikationsposition, MedikationsErhebung, BefundBearbeitung } from "./medikation";
 
 /** Angemeldete Pflegefachperson des Prototyps — wie im Allergien-Store. */
 export const ANGEMELDETE_PFLEGEFACHPERSON = {
@@ -130,11 +130,22 @@ let positionen: Medikationsposition[] = [
 
 let erhebungen: MedikationsErhebung[] = [];
 
+/**
+ * Bearbeitung der Prüfbefunde, je Befundkennung.
+ *
+ * Der Befund selbst kommt vom Prüfdienst und wird nie verändert — was hier
+ * liegt, ist ausschliesslich UNSERE Reaktion darauf: gesehen, oder bewusst
+ * übersteuert mit Begründung. Darum ein eigener Bestand und kein Feld am
+ * Befund.
+ */
+let befundBearbeitungen: Record<string, BefundBearbeitung> = {};
+
 const hoerer = new Set<() => void>();
 function melden(): void { hoerer.forEach(l => l()); }
 function subscribe(l: () => void): () => void { hoerer.add(l); return () => { hoerer.delete(l); }; }
 const pSchnappschuss = () => positionen;
 const eSchnappschuss = () => erhebungen;
+const bSchnappschuss = () => befundBearbeitungen;
 
 export function useMedikationspositionen(): Medikationsposition[] {
   return useSyncExternalStore(subscribe, pSchnappschuss, pSchnappschuss);
@@ -142,6 +153,35 @@ export function useMedikationspositionen(): Medikationsposition[] {
 
 export function useMedikationsErhebungen(): MedikationsErhebung[] {
   return useSyncExternalStore(subscribe, eSchnappschuss, eSchnappschuss);
+}
+
+export function useBefundBearbeitungen(): Record<string, BefundBearbeitung> {
+  return useSyncExternalStore(subscribe, bSchnappschuss, bSchnappschuss);
+}
+
+/** Ohne Eintrag ist ein Befund offen — Nichtstun ist keine Kenntnisnahme. */
+export function getBefundBearbeitung(befundId: string): BefundBearbeitung {
+  return befundBearbeitungen[befundId]
+    ?? { zustand: "offen", vonName: null, am: null, begruendung: null };
+}
+
+/** Befund zur Kenntnis nehmen — Person und Zeitpunkt werden festgehalten. */
+export function befundQuittieren(befundId: string, vonName: string): void {
+  befundBearbeitungen = {
+    ...befundBearbeitungen,
+    [befundId]: { zustand: "zur_kenntnis_genommen", vonName, am: GEGENWART_ISO, begruendung: null },
+  };
+  melden();
+}
+
+/** Befund übersteuern — nur mit Begründung; ohne sie geschieht nichts. */
+export function befundUebersteuern(befundId: string, vonName: string, begruendung: string): void {
+  if (!begruendung.trim()) return;
+  befundBearbeitungen = {
+    ...befundBearbeitungen,
+    [befundId]: { zustand: "uebersteuert", vonName, am: GEGENWART_ISO, begruendung: begruendung.trim() },
+  };
+  melden();
 }
 
 /** Erhebung eines Patienten; ohne Eintrag gilt: nichts erfasst, nichts bestaetigt. */

@@ -36,11 +36,15 @@ export const SPALTEN_ANZAHL = SPALTEN.length;
 
 const GRUPPEN_REIHENFOLGE: Gruppe[] = ["fix", "reserve", "selbst"];
 
-export function MedikationsListe({ positionen, schreibgeschuetzt, onZeile }: {
+export function MedikationsListe({ positionen, schreibgeschuetzt, onZeile, befundJePosition, onBefund }: {
   positionen: Medikationsposition[];
   /** Zustand C: Zeilen sind nicht mehr klickbar. */
   schreibgeschuetzt: boolean;
   onZeile: (p: Medikationsposition) => void;
+  /** Kennung des Befunds je betroffener Position — leer, wenn nicht geprüft. */
+  befundJePosition?: Record<string, string>;
+  /** Führt vom Zeilenmarker zum Befund. */
+  onBefund?: (befundId: string) => void;
 }) {
   const gruppen = GRUPPEN_REIHENFOLGE
     .map(g => ({ gruppe: g, zeilen: positionen.filter(p => gruppeVon(p) === g) }))
@@ -97,6 +101,19 @@ export function MedikationsListe({ positionen, schreibgeschuetzt, onZeile }: {
                     <span style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
                       {[p.darreichungsform, p.staerke].filter(Boolean).join(" ")}
                     </span>
+                    {/* Zeilenmarker: Symbol UND Text, nie nur Farbe. Führt zum
+                        Befund, öffnet aber nicht den Editor der Zeile. */}
+                    {befundJePosition?.[p.id] && (
+                      <button type="button" className="ui-fokusring inline-flex items-center"
+                        onClick={e => { e.stopPropagation(); onBefund?.(befundJePosition[p.id]); }}
+                        aria-label={`Prüfbefund zu ${p.productName} anzeigen`}
+                        style={{ marginTop: 4, gap: 4, padding: "1px 8px", borderRadius: "var(--control-radius)",
+                          background: "var(--status-warning-bg)", color: "var(--status-warning-text)",
+                          border: "none", fontFamily: "inherit", fontSize: "var(--text-micro)",
+                          fontWeight: "var(--weight-medium)", cursor: "pointer" }}>
+                        <AlertTriangle style={{ width: 11, height: 11 }} /> Prüfbefund
+                      </button>
+                    )}
                   </td>
                   <td style={{ ...zelle, fontVariantNumeric: "tabular-nums" }}>{dosierungText(p.posologie)}</td>
                   <td style={zelle}>{p.baseUnit}</td>

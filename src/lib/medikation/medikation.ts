@@ -203,6 +203,111 @@ export function dosierungText(p: Posologie): string {
   }
 }
 
+/* ── Medikationsprüfung ──────────────────────────────────────────────────── */
+
+/**
+ * DIE PRUEFUNG IST NICHT UNSERE AUSSAGE. Sie kommt von einem externen,
+ * CE-zertifizierten Prüfdienst; wir zeigen sein Ergebnis an und entscheiden
+ * nichts. Darum: kein eigener Schweregrad, keine eigene Ampel, keine
+ * Umrechnung fremder Skalen und keine Kürzung des Befundtexts. Was der
+ * Anbieter schreibt, steht da — die Entscheidung trifft die Fachperson.
+ */
+export type Pruefart = "wechselwirkungen" | "doppelmedikation" | "allergien" | "kontraindikationen";
+
+export const PRUEFART_LABEL: Record<Pruefart, string> = {
+  wechselwirkungen: "Wechselwirkungen",
+  doppelmedikation: "Doppelmedikation",
+  allergien: "Allergien",
+  kontraindikationen: "Kontraindikationen",
+};
+
+export type PruefartZustand = "geprueft_ohne_befund" | "geprueft_mit_befund" | "nicht_geprueft";
+
+/**
+ * Ergebnis einer Prüfart — IMMER mit Abdeckung. Ein Ergebnis ohne die Angabe,
+ * wie viele Positionen tatsächlich geprüft wurden, ist wertlos: «kein Befund»
+ * bei null geprüften Positionen liest sich sonst wie Entwarnung.
+ */
+export interface PruefartErgebnis {
+  art: Pruefart;
+  zustand: PruefartZustand;
+  geprueftePositionen: number;
+  gesamtPositionen: number;
+  /** Nur bei `nicht_geprueft`: warum nicht. */
+  grund: string | null;
+  /** Wo der fehlende Wert erfasst würde — null, wenn es dafür keinen Weg gibt. */
+  wegText: string | null;
+}
+
+export type BefundZustand = "offen" | "zur_kenntnis_genommen" | "uebersteuert";
+
+export const BEFUNDZUSTAND_LABEL: Record<BefundZustand, string> = {
+  offen: "Offen",
+  zur_kenntnis_genommen: "Zur Kenntnis genommen",
+  uebersteuert: "Übersteuert",
+};
+
+/** Schweregrad im Format des Anbieters — Wert, Skalenmaximum, seine Bezeichnung. */
+export interface Schweregrad {
+  wert: number;
+  maximum: number;
+  bezeichnung: string;
+  /** Name der Skala des Anbieters, damit die Zahl einordenbar bleibt. */
+  skala: string;
+}
+
+export interface Befund {
+  id: string;
+  art: Pruefart;
+  /** Betroffene Positionen; bei Wechselwirkungen mindestens zwei. */
+  positionIds: string[];
+  schweregrad: Schweregrad;
+  /** Wortlaut des Anbieters — wird unverändert ausgegeben. */
+  text: string;
+  quelle: string;
+  regelstand: string;
+  /** ISO */
+  geprueftAm: string;
+}
+
+/** Bearbeitung eines Befunds — unsere Achse, nicht die des Anbieters. */
+export interface BefundBearbeitung {
+  zustand: BefundZustand;
+  vonName: string | null;
+  /** ISO */
+  am: string | null;
+  /** Pflicht beim Übersteuern. */
+  begruendung: string | null;
+}
+
+export interface Pruefergebnis {
+  /** false = kein Prüfdienst konfiguriert. Dann gibt es kein Ergebnis, kein
+   *  Häkchen und keine Zusammenfassung — nur den Klartext dazu. */
+  anbieterAktiv: boolean;
+  anbieterName: string;
+  /** ISO */
+  geprueftAm: string;
+  arten: PruefartErgebnis[];
+  befunde: Befund[];
+}
+
+/** Gesamtzustand der Prüfleiste — abgeleitet, nie gespeichert. */
+export type PruefGesamtzustand = "nicht_aktiv" | "befunde" | "teilweise_geprueft" | "ohne_befund";
+
+export function pruefGesamtzustand(e: Pruefergebnis): PruefGesamtzustand {
+  if (!e.anbieterAktiv) return "nicht_aktiv";
+  if (e.befunde.length > 0) return "befunde";
+  if (e.arten.some(a => a.zustand === "nicht_geprueft")) return "teilweise_geprueft";
+  return "ohne_befund";
+}
+
+/** Abdeckung einer Prüfart im Klartext — nie eine blosse Zahl. */
+export function abdeckungText(a: PruefartErgebnis): string {
+  if (a.zustand === "nicht_geprueft") return "nicht geprüft";
+  const basis = `${a.geprueftePositionen} von ${a.gesamtPositionen} Positionen geprüft`;
+  return a.zustand === "geprueft_ohne_befund" ? `${basis}, kein Befund` : basis;
+}
+
 /* ── Ableitung für die Vorschauen (Tag und Woche) ────────────────────────── */
 
 /**

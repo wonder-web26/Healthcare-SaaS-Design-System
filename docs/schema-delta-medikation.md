@@ -156,6 +156,44 @@ das Schema `MedicationStatusChange` von `AuditLog` trennt.
 
 ---
 
+## 8. Medikationsprüfung — Ergebnisse und ihre Bearbeitung
+
+Nachgetragen im Lauf «Prüffläche». Das Schema kennt die Medikationsprüfung als **Absicht**,
+aber nicht als Daten: `Medication` hält fest, dass eine Interaktionsprüfung «a deterministic
+lookup against a licensed drug database» ist und eine Beschaffung braucht, und `Allergy`
+notiert, dass ein von Hand erfasster Eintrag «is NOT interaction-checked». Eine Tabelle für
+Prüfergebnisse gibt es nicht.
+
+Zu speichern ist zweierlei, und es darf nicht vermischt werden: **was der Prüfdienst sagt**
+(fremde Aussage, unverändert aufzubewahren) und **wie wir darauf reagiert haben** (unsere
+Aussage, mit Person und Zeitpunkt).
+
+| Feld | Typ | Begründung | Tabelle |
+|---|---|---|---|
+| `providerName` | `varchar not null` | Welcher Prüfdienst geantwortet hat — ohne ihn ist ein Befund nicht einordenbar | `MedicationCheckRun` (neu) |
+| `checkedAt` | `timestamptz not null` | Zeitpunkt des Laufs | dito |
+| `ruleVersion` | `varchar not null` | Regelstand des Anbieters; derselbe Befund kann morgen anders lauten | dito |
+| `checkKind` | `varchar not null` — `interaction \| duplicate \| allergy \| contraindication` | Prüfart | `MedicationCheckCoverage` (neu) |
+| `state` | `varchar not null` — `checked_no_finding \| checked_with_finding \| not_checked` | Zustand je Prüfart | dito |
+| `checkedCount` / `totalCount` | `int not null` | **Abdeckung.** «Kein Befund» ohne die Zahl der geprüften Positionen liest sich wie Entwarnung und ist keine | dito |
+| `notCheckedReason` | `varchar` nullable | Warum eine Prüfart ausfiel — fehlende Laborwerte, nicht codierte Allergie | dito |
+| `medicationIds` | `uuid[]` bzw. Zwischentabelle | Betroffene Positionen; bei Interaktionen mindestens zwei | `MedicationCheckFinding` (neu) |
+| `severityValue` / `severityMax` / `severityLabel` / `severityScale` | `int` / `int` / `varchar` / `varchar` | Schweregrad **im Format des Anbieters**. Keine eigene Skala und keine Umrechnung: die Skala gehört dem zertifizierten Produkt, und eine umgerechnete Zahl wäre unsere Aussage über seine | dito |
+| `findingText` | `Bytes` (verschlüsselt) | Wortlaut des Anbieters, unverändert. Nicht gekürzt, nicht zusammengefasst | dito |
+| `sourceRef` | `varchar` | Quellenangabe des Anbieters | dito |
+| `handlingState` | `varchar not null` — `open \| acknowledged \| overridden` | Unsere Reaktion — eine eigene Achse neben `verificationStatus` der Position | dito |
+| `handledByUserId` | `uuid` nullable | Wer quittiert oder übersteuert hat | dito |
+| `handledAt` | `timestamptz` nullable | Wann | dito |
+| `overrideReason` | `Bytes` nullable | Pflichtbegründung beim Übersteuern — ein Übersteuern ohne Begründung ist keine Entscheidung, sondern ein Wegklicken | dito |
+
+Warum drei Tabellen und nicht Felder an `Medication`: Ein Prüflauf betrifft die Liste als
+Ganzes, ein Befund mehrere Positionen (bei Interaktionen immer), und die Abdeckung hängt an
+der Prüfart, nicht am Präparat. Dieselbe Begründung, mit der das Schema
+`MedicationStatusChange` als eigene Tabelle führt.
+
+**Nicht vorgesehen und bewusst nicht beantragt:** klinische Kontextfelder wie Nierenwerte, die
+eine Kontraindikationsprüfung bräuchte. Der Prototyp benennt nur, dass sie fehlen.
+
 ## Was NICHT fehlt
 
 - **Posologie-Typ.** `scheduleType` deckt alles ab und trägt die Erweiterbarkeit bereits:
