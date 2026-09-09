@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { Plus, X, AlertTriangle, Check, ArrowLeft, Send, Sparkles, Search, ChevronDown, ExternalLink, Pencil } from "lucide-react";
-import { getUnifiedEntries, entryBetreff, entryPersonName, CURRENT_USER, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
+import { usePendenzen, aenderePendenz, pendenzenNeuLesen, ergaenzeVerlauf } from "../../lib/pendenzen/store";
+import { type VerlaufEintrag, type VerlaufTyp, getUnifiedEntries, entryBetreff, entryPersonName, CURRENT_USER, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
 import { personLink, personArtLabel, type PersonenBezug } from "../../lib/mocks/personen-aufloesung";
 import { type Person } from "../../lib/mocks/workflow-tasks";
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
@@ -75,13 +76,8 @@ const STATUS_ZELL_CFG: Record<string, { dot: string; color: string; weight: stri
 const PRIO_REGELFALL = "mittel";
 
 /* ── Verlauf: ein Strang (Erstellung, Statuswechsel, Kommentare). ── */
-type VerlaufTyp = "erstellt" | "status" | "zuweisung" | "kommentar" | "feld";
-interface VerlaufEintrag {
-  typ: VerlaufTyp; by: string; at: string;
-  text?: string;                     // erstellt / kommentar
-  feld?: string; feldLabel?: string; // Feldänderung — Koaleszenz-Schlüssel (feld + by)
-  alt?: string; neu?: string; freitext?: boolean;
-}
+/* VerlaufTyp und VerlaufEintrag leben in der Datenschicht (service-desk-unified),
+   weil der Verlauf zum Datensatz gehört und nicht zu dieser Ansicht. */
 /** Eine Feldänderung, wie DetailPanel sie meldet (Rohwert im patch, Anzeige in alt/neu). */
 interface Aenderung { feld: string; feldLabel: string; patch: Partial<UnifiedEntry>; alt: string; neu: string; freitext?: boolean; typ?: VerlaufTyp; }
 
@@ -256,8 +252,6 @@ export function ServiceDeskPage() {
   const selectedId = searchParams.get("id") || null;
 
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "faellig", dir: "asc" });
-  const [localEdits, setLocalEdits] = useState<Record<string, Partial<UnifiedEntry>>>({});
-  const [verlauf, setVerlauf] = useState<Record<string, VerlaufEintrag[]>>({});
   const [draftComment, setDraftComment] = useState("");
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const prevRole = useRef(role);
@@ -347,14 +341,11 @@ export function ServiceDeskPage() {
   const [datenVersion, setDatenVersion] = useState(0);
   const [neueOffen, setNeueOffen] = useState(false);
   const [zuletztNeuId, setZuletztNeuId] = useState<string | null>(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const allEntries = useMemo(() => getUnifiedEntries(), [datenVersion]);
-  // Bearbeitete Felder liegen als lokale Overlays je Pendenz über den Quelldaten
-  // (derselbe Weg wie bisher der Status — nur jetzt für alle bearbeitbaren Felder).
-  const entries = useMemo(
-    () => allEntries.map(e => ({ ...e, ...(localEdits[e.id] || {}) })),
-    [allEntries, localEdits],
-  );
+  // Der Bestand liegt im Modul (lib/pendenzen/store), nicht mehr in dieser
+  // Komponente: eine Änderung hier wirkt auch in der linken Spalte des
+  // Onboardings und im Marker des Formularabschnitts.
+  const entries = usePendenzen();
+  const allEntries = entries;
 
   /* ── Filterkette: getUnifiedEntries() → Ansichtsfilter → Ad-hoc-Filter →
      Sortierung. Der Ansichtsfilter steht zuerst und ist die einzige Stelle, an
@@ -458,15 +449,16 @@ export function ServiceDeskPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
-  const pushVerlauf = (id: string, eintrag: VerlaufEintrag) =>
-    setVerlauf(prev => ({ ...prev, [id]: [...(prev[id] || []), eintrag] }));
+  // Schreibt in den Datensatz, nicht in den Ansichtszustand. Aufrufe erfolgen
+  // ausschliesslich bei einer tatsaechlichen Aenderung.
+  const pushVerlauf = (id: string, eintrag: VerlaufEintrag) => ergaenzeVerlauf(id, eintrag);
 
   // Ein Schreibpfad für jede Feldänderung: Overlay setzen + genau einen Verlaufseintrag.
   // Keine Koaleszenz mehr — Modusfelder werden gesammelt gesichert (je Feld ein Eintrag),
   // Status/Zuständigkeit sind Einzelhandlungen (je Wechsel ein Eintrag).
   const aendereFeld = (id: string, a: Aenderung, by = BEARBEITER) => {
     if (a.alt === a.neu) return;
-    setLocalEdits(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...a.patch } }));
+    aenderePendenz(id, a.patch);
     pushVerlauf(id, { typ: a.typ ?? "feld", by, at: BEARBEITET_AM, feld: a.feld, feldLabel: a.feldLabel, alt: a.alt, neu: a.neu, freitext: a.freitext });
   };
 
@@ -942,7 +934,7 @@ export function ServiceDeskPage() {
             <DetailPanel
               key={selected.id}
               entry={selected}
-              verlauf={verlauf[selected.id] || []}
+              verlauf={selected.verlauf || []}
               draftComment={draftComment}
               onDraftChange={setDraftComment}
               onAddComment={() => handleAddComment(selected.id)}
@@ -987,6 +979,9 @@ export function ServiceDeskPage() {
         onClose={() => setNeueOffen(false)}
         onErstellt={e => {
           setDatenVersion(v => v + 1);
+          // Die neue Pendenz liegt in den Quelldaten — der Bestand liest neu,
+          // damit sie in allen Ansichten erscheint.
+          pendenzenNeuLesen();
           setZuletztNeuId(e.id);
           setNeueOffen(false);
           // Die neue Pendenz muss sofort sichtbar sein: fällt sie nicht in die
@@ -1010,7 +1005,7 @@ export function ServiceDeskPage() {
             <DetailPanel
               key={selected.id}
               entry={selected}
-              verlauf={verlauf[selected.id] || []}
+              verlauf={selected.verlauf || []}
               draftComment={draftComment}
               onDraftChange={setDraftComment}
               onAddComment={() => handleAddComment(selected.id)}

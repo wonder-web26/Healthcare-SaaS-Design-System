@@ -63,6 +63,7 @@ import { staatsangehoerigkeitsgruppe } from "../../lib/stammdaten/staatsangehoer
 import type { Aufenthaltsgrund } from "../../lib/stammdaten/aufenthaltsgrund";
 import type { Aufenthaltsstatus } from "../../lib/stammdaten/aufenthaltsstatus";
 import { pruefeAuslaenderrecht, type AuslaenderrechtEingabe } from "../../lib/regeln/auslaenderrecht";
+import type { OnboardingAbschnitt } from "../../lib/mocks/service-desk-unified";
 
 /* ══════════════════════════════════════════
    TYPES (unchanged export contract)
@@ -611,6 +612,17 @@ function getSubStepStatus(
 /* ══════════════════════════════════════════
    PROPS (unchanged export contract)
    ══════════════════════════════════════════ */
+/** Reiterindex → Formularabschnitt. Eine Stelle, damit Marker und Sprungziel
+ *  dieselbe Zuordnung lesen. */
+const ABSCHNITT_JE_REITER: (OnboardingAbschnitt | null)[] = [
+  "angehoeriger.personalien",
+  "angehoeriger.steuer",
+  "angehoeriger.partner",
+  "angehoeriger.kinder",
+  "angehoeriger.anstellung",
+  "angehoeriger.dokumente",
+];
+
 interface StepAngehoerigerProps {
   data: AngehoerigerFormData;
   onChange: (data: AngehoerigerFormData) => void;
@@ -640,9 +652,9 @@ export function StepAngehoeriger({
   arbeitsortOrt,
   dokumenteZaehler = 0,
 }: StepAngehoerigerProps) {
+  /* Der Reiterwechsel fragt bewusst nicht nach — siehe StepPatient. Gefragt
+     wird erst beim Schrittwechsel (OnboardingPage.goToStep). */
   const [activeTab, setActiveTab] = useState(0);
-  const [isSaving, setIsSaving] = useState(false);
-  const [showSaved, setShowSaved] = useState(false);
 
   // §D: Verlauf am rechten Rand der Abschnittszeile, solange waagrecht scrollbar (nicht am Ende).
   const abschnittScrollRef = useRef<HTMLDivElement>(null);
@@ -684,15 +696,9 @@ export function StepAngehoeriger({
     onValidityChange?.(allComplete);
   }, [allComplete, onValidityChange]);
 
-  /* ── Save simulation ───────────────────── */
-  const handleSave = useCallback(() => {
-    setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-      setShowSaved(true);
-      setTimeout(() => setShowSaved(false), 2500);
-    }, 900);
-  }, []);
+  /* Die frühere «Save simulation» stand hier ohne Knopf und ohne Leser: ein
+     Spinner mit erfundener Wartezeit, den niemand je sah. Gespeichert wird auf
+     der Onboarding-Seite, an einer Stelle. */
 
   const statusLabel = allComplete
     ? "Vollständig"
@@ -793,6 +799,11 @@ export function StepAngehoeriger({
           {activeTab === 3 && <KinderFormV2 data={data} onChange={onChange} />}
           {activeTab === 4 && <AnstellungFormV2 data={data} onChange={onChange} />}
           {activeTab === 5 && <DokumenteFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />}
+          {/* Sprungziel der Pendenzen-Gruppe. Kein Marker: die Regelpruefung
+              zeigt ihren Hinweis bereits live am betroffenen Feld — ein zweiter,
+              statischer Hinweis am Reiterende waere dieselbe Aussage, schlechter
+              platziert. */}
+          {ABSCHNITT_JE_REITER[activeTab] && <div data-abschnitt={ABSCHNITT_JE_REITER[activeTab]!} aria-hidden="true" />}
         </div>
       </div>
       {/* Hinweistext entfernt (§A): erklärte, wie Reiter funktionieren, war auf Reitern

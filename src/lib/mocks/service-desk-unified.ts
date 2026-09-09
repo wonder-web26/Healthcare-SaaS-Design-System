@@ -28,6 +28,86 @@ export interface UnifiedEntry {
   verantwortlich: Person;
   prioritaet: Prioritaet;
   beschreibung: string;
+  /* ── Herkunft im Onboarding ───────────────────────────────────────────────
+     Drei optionale Felder. Optional, weil der Bestand sie nicht trägt: eine
+     Pendenz ohne diese Angaben verhält sich exakt wie bisher. */
+  /** Der Vorgang, aus dem die Pendenz entstanden ist. Trägt die Onboarding-
+   *  Kennung und ist der einzige Weg, Pendenzen eines Onboardings zu finden —
+   *  `personBezug` zeigt auf die Person, nicht auf den Vorgang. */
+  ursprung?: UrsprungBezug;
+  /** Sprungziel im Formular, Muster `<schritt>.<reiter>` (siehe ABSCHNITTE).
+   *  Fehlt es, ist der Eintrag in der linken Spalte nicht klickbar. */
+  abschnitt?: OnboardingAbschnitt;
+  /** Diese Pendenz sperrt den Vertragsschritt. Ersetzt die Laufzeitprüfung
+   *  (`vertragFreigabe`) nicht, hält aber fest, WELCHE Pendenz sperrt. */
+  sperrtVertrag?: boolean;
+  /** Abschlusstext einer erledigten Pendenz — Datum und handelnde Person.
+   *  Trägt den zweiten Zustand des Markers. */
+  abschlussText?: string;
+  /** Wie die Pendenz geschlossen wurde. Der Unterschied ist festgehalten, nicht
+   *  nur im Verlaufstext lesbar. */
+  abschlussGrund?: "erledigt" | "gegenstandslos";
+  /** Verlauf der Pendenz. Liegt am Datensatz, nicht in einer Ansicht — sonst
+   *  wäre er beim Verlassen der Seite weg. Chronologisch aufsteigend. */
+  verlauf?: VerlaufEintrag[];
+}
+
+/* ── Verlauf ───────────────────────────────────────────────────────────────
+   Unverändert aus ServiceDeskPage hierher gezogen: der Verlauf gehört zum
+   Datensatz, nicht zu einer Ansicht. */
+export type VerlaufTyp = "erstellt" | "status" | "zuweisung" | "kommentar" | "feld";
+
+export interface VerlaufEintrag {
+  typ: VerlaufTyp; by: string; at: string;
+  text?: string;                     // erstellt / kommentar
+  feld?: string; feldLabel?: string; // Feldänderung
+  alt?: string; neu?: string; freitext?: boolean;
+}
+
+/** Vorgang, aus dem eine Pendenz stammt. Heute nur das Onboarding. */
+export type UrsprungBezug = { art: "onboarding"; kennung: string };
+
+/**
+ * Formularabschnitte des Onboardings — geschlossene Liste, Muster
+ * `<schritt>.<reiter>`. Die Werte entsprechen den bestehenden Schritt- und
+ * Reiterschlüsseln; es kommt kein neuer Reiter dazu.
+ */
+export const ONBOARDING_ABSCHNITTE = [
+  "angehoeriger.personalien",
+  "angehoeriger.steuer",
+  "angehoeriger.partner",
+  "angehoeriger.kinder",
+  "angehoeriger.anstellung",
+  "angehoeriger.dokumente",
+  "patient.personalien",
+  "patient.steuer",
+  "patient.wohnen",
+  "patient.anamnese",
+  "patient.dokumente",
+] as const;
+
+export type OnboardingAbschnitt = typeof ONBOARDING_ABSCHNITTE[number];
+
+/** Schritt und Reiter eines Abschnitts — eine Stelle, kein Aufteilen beim Aufrufer. */
+export function abschnittTeile(a: OnboardingAbschnitt): { schritt: string; reiter: string } {
+  const [schritt, reiter] = a.split(".");
+  return { schritt, reiter };
+}
+
+/** Offene Pendenzen eines Onboardings — sperrende zuerst, dann nach Fälligkeit. */
+export function pendenzenFuerOnboarding(alle: UnifiedEntry[], kennung: string): UnifiedEntry[] {
+  return alle
+    .filter(e => e.status !== "erledigt" && e.ursprung?.art === "onboarding" && e.ursprung.kennung === kennung)
+    .sort((a, b) => {
+      const as = a.sperrtVertrag ? 0 : 1;
+      const bs = b.sperrtVertrag ? 0 : 1;
+      if (as !== bs) return as - bs;
+      // Ohne Termin ans Ende, unabhängig von der Richtung.
+      if (!a.faellig && !b.faellig) return 0;
+      if (!a.faellig) return 1;
+      if (!b.faellig) return -1;
+      return a.faellig.localeCompare(b.faellig);
+    });
 }
 
 /** Maps legacy WorkflowTyp to typed PendenzTyp */
@@ -74,6 +154,22 @@ const PERSONEN_BEZUG: Record<string, PersonenBezug> = {
   "W-0147": { art: "patient", kennung: "P-2026-0045" },
   "W-0148": { art: "patient", kennung: "P-2026-0047" },
   "W-0156": { art: "patient", kennung: "P-2026-0048" },
+  /* Aufgaben mit Onboarding-Herkunft (Fall OB-2026-101) — betroffen ist die
+     angehörige Person Vera Steiner. Ohne Eintrag hier bliebe personBezug
+     undefined und die Beschreibungserzeugung bräche ab. */
+  "W-0160": { art: "angehoeriger", kennung: "A-2026-0101" },
+  "W-0161": { art: "angehoeriger", kennung: "A-2026-0101" },
+  "W-0162": { art: "angehoeriger", kennung: "A-2026-0101" },
+  "W-0163": { art: "angehoeriger", kennung: "A-2026-0101" },
+  "W-0164": { art: "angehoeriger", kennung: "A-2026-0102" },
+  "W-0165": { art: "angehoeriger", kennung: "A-2026-0103" },
+  "W-0166": { art: "angehoeriger", kennung: "A-2026-0103" },
+  "W-0167": { art: "angehoeriger", kennung: "A-2026-0104" },
+  "W-0168": { art: "angehoeriger", kennung: "A-2026-0104" },
+  "W-0169": { art: "angehoeriger", kennung: "A-2026-0105" },
+  "W-0170": { art: "angehoeriger", kennung: "A-2026-0106" },
+  "W-0171": { art: "angehoeriger", kennung: "A-2026-0106" },
+  "W-0172": { art: "angehoeriger", kennung: "A-2026-0108" },
   // Tickets — Angehörige
   "T-0088": { art: "angehoeriger", kennung: "A-2026-0109" }, // Schlüssel (Einsatzadresse)
   "T-0091": { art: "angehoeriger", kennung: "A-2026-0110" }, // Dokumente (Arbeitsvertrag)
@@ -136,6 +232,11 @@ function toUnifiedWorkflow(t: WorkflowTask): UnifiedEntry {
     verantwortlich: t.verantwortlich,
     prioritaet: t.prioritaet,
     beschreibung: "",
+    // Herkunft im Onboarding — unveraendert durchgereicht, nichts abgeleitet.
+    ursprung: t.ursprungOnboarding ? { art: "onboarding", kennung: t.ursprungOnboarding } : undefined,
+    abschnitt: t.abschnitt as OnboardingAbschnitt | undefined,
+    sperrtVertrag: t.sperrtVertrag,
+    abschlussText: t.abschlussText,
   };
   entry.beschreibung = generateWorkflowBeschreibung(entry);
   return entry;
