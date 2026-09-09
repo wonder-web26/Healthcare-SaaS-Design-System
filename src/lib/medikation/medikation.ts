@@ -221,7 +221,41 @@ export const PRUEFART_LABEL: Record<Pruefart, string> = {
   kontraindikationen: "Kontraindikationen",
 };
 
+/** Etikett eines einzelnen Befunds — Einzahl, im Gegensatz zur Reiterbeschriftung. */
+export const PRUEFART_ETIKETT: Record<Pruefart, string> = {
+  wechselwirkungen: "Wechselwirkung",
+  doppelmedikation: "Doppelmedikation",
+  allergien: "Allergie",
+  kontraindikationen: "Kontraindikation",
+};
+
 export type PruefartZustand = "geprueft_ohne_befund" | "geprueft_mit_befund" | "nicht_geprueft";
+
+/**
+ * Wirkstoffe mit Menge — ABGELEITET, nicht gespeichert.
+ *
+ * Der Katalog führt heute den Wirkstoff als Text («Valsartan,
+ * Hydrochlorothiazid») und die Stärke als Text («80/12.5 mg»). Beide gehören
+ * zusammen, sind aber getrennt erfasst; hier werden sie gepaart, damit eine
+ * Doppelung sichtbar wird, ohne einen Befund zu öffnen.
+ *
+ * Gepaart wird NUR, wenn die Zahl der Stärkenteile zur Zahl der Wirkstoffe
+ * passt. «25 mcg/h» ist eine Rate und kein Paar — dort bliebe eine Aufteilung
+ * falsch, also unterbleibt sie und die Stärke steht als Ganzes.
+ *
+ * Die Documedis-Stammdaten liefern das später strukturiert; dann ersetzt ein
+ * Feld diese Ableitung. Bis dahin wird der Katalog dafür NICHT umgebaut.
+ */
+export function wirkstoffeMitMenge(wirkstoff: string, staerke: string): string[] {
+  const stoffe = wirkstoff.split(",").map(s => s.trim()).filter(Boolean);
+  if (stoffe.length === 0) return [];
+  const teile = staerke.split("/").map(s => s.trim()).filter(Boolean);
+  if (stoffe.length > 1 && teile.length === stoffe.length) {
+    // Die Einheit steht nur am letzten Teil («500 mg/800 IE» → beide behalten ihre).
+    return stoffe.map((s, i) => `${s} ${teile[i]}`.trim());
+  }
+  return stoffe.map(s => `${s} ${staerke}`.trim());
+}
 
 /**
  * Ergebnis einer Prüfart — IMMER mit Abdeckung. Ein Ergebnis ohne die Angabe,
@@ -237,6 +271,9 @@ export interface PruefartErgebnis {
   grund: string | null;
   /** Wo der fehlende Wert erfasst würde — null, wenn es dafür keinen Weg gibt. */
   wegText: string | null;
+  /** Was geprüft wurde und wogegen — steht auf Reitern ohne Befund, damit dort
+   *  keine leere Fläche entsteht. Der Anbieter weiss das, nicht die Oberfläche. */
+  umfangText: string;
 }
 
 export type BefundZustand = "offen" | "zur_kenntnis_genommen" | "uebersteuert";

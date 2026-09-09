@@ -74,6 +74,27 @@ const MOCK_REGELN: MockRegel[] = [
       + "Kombination beabsichtigt ist, und die Tageshöchstmenge der Reserve prüfen.",
     quelle: "Beispieldatensatz des Prototyps",
   },
+  {
+    /* Bewusst langer Wortlaut: die Karte kürzt ihn optisch auf drei Zeilen und
+       öffnet ihn auf Verlangen — der Text selbst bleibt unangetastet. */
+    art: "wechselwirkungen",
+    paar: ["AM-0004", "AM-0008"], // TORASEMID + NOVALGIN
+    schweregrad: { wert: 3, maximum: 4, bezeichnung: "schwer" },
+    text: "Die gleichzeitige Anwendung kann die harntreibende und blutdrucksenkende "
+      + "Wirkung des Schleifendiuretikums abschwächen, weil die Prostaglandinsynthese "
+      + "in der Niere gehemmt wird. Klinisch zeigt sich das als ausbleibende "
+      + "Gewichtsabnahme, zunehmende Knöchelödeme oder ein wieder ansteigender "
+      + "Blutdruck, häufig erst nach mehreren Tagen regelmässiger Einnahme. "
+      + "Bei eingeschränkter Nierenfunktion, bei Herzinsuffizienz und unter "
+      + "gleichzeitiger Gabe von ACE-Hemmern oder Sartanen steigt zusätzlich das "
+      + "Risiko einer akuten Verschlechterung der Nierenfunktion. Empfohlen wird, "
+      + "Gewicht und Blutdruck in den ersten zwei Wochen täglich zu erfassen, die "
+      + "Reservegabe auf die kürzest mögliche Dauer zu begrenzen und die "
+      + "Nierenwerte nach spätestens einer Woche kontrollieren zu lassen. Ist eine "
+      + "längere analgetische Behandlung nötig, sollte die verordnende Ärztin über "
+      + "eine Alternative ohne diesen Effekt entscheiden.",
+    quelle: "Beispieldatensatz des Prototyps",
+  },
 ];
 
 /**
@@ -114,6 +135,15 @@ export function pruefungAusfuehren(
     }));
 
   const mitBefund = (art: Pruefart) => befunde.some(b => b.art === art);
+  /** Was geprüft wurde und wogegen — für Reiter ohne Befund. */
+  const umfang: Record<Pruefart, string> = {
+    wechselwirkungen: `Alle ${codiert.length} codierten Positionen wurden paarweise gegeneinander geprüft.`,
+    doppelmedikation: `Alle ${codiert.length} codierten Positionen wurden auf mehrfach vorkommende Wirkstoffe und Wirkklassen geprüft.`,
+    allergien: optionen.freitextAllergien.length === 0 && optionen.allergienMaschinellPruefbar
+      ? `Alle ${codiert.length} codierten Positionen wurden gegen die erfassten Allergien geprüft.`
+      : "Für eine maschinelle Prüfung fehlen codierte Allergieangaben.",
+    kontraindikationen: "Für eine maschinelle Prüfung fehlen die klinischen Kontextwerte.",
+  };
   const geprueft = (art: Pruefart): PruefartErgebnis => ({
     art,
     zustand: mitBefund(art) ? "geprueft_mit_befund" : "geprueft_ohne_befund",
@@ -121,6 +151,7 @@ export function pruefungAusfuehren(
     gesamtPositionen: gesamt,
     grund: null,
     wegText: null,
+    umfangText: umfang[art],
   });
 
   const arten: PruefartErgebnis[] = [
@@ -137,6 +168,7 @@ export function pruefungAusfuehren(
             ? `Nicht codierte Allergieeinträge lassen sich nicht maschinell prüfen: ${optionen.freitextAllergien.join(", ")}.`
             : "Es liegen keine codierten Allergieangaben vor.",
           wegText: "Im Reiter «Allergien» als codierten Eintrag erfassen.",
+          umfangText: umfang.allergien,
         },
     {
       /* Kontraindikationen brauchen klinischen Kontext, den das Onboarding
@@ -146,7 +178,8 @@ export function pruefungAusfuehren(
       geprueftePositionen: 0,
       gesamtPositionen: gesamt,
       grund: "Es sind keine Laborwerte erfasst; ohne Nierenfunktion ist die Prüfung nicht möglich.",
-      wegText: null,
+      wegText: "Laborwerte werden heute im Onboarding nicht erfasst — der Wert fehlt, er wird nicht angenommen.",
+      umfangText: umfang.kontraindikationen,
     },
   ];
 

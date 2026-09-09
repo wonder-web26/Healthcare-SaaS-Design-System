@@ -186,6 +186,8 @@ Aussage, mit Person und Zeitpunkt).
 | `handledAt` | `timestamptz` nullable | Wann | dito |
 | `overrideReason` | `Bytes` nullable | Pflichtbegründung beim Übersteuern — ein Übersteuern ohne Begründung ist keine Entscheidung, sondern ein Wegklicken | dito |
 
+| `coverageNote` | `varchar` nullable | Was geprüft wurde und wogegen — steht auf Reitern ohne Befund, damit dort keine leere Fläche entsteht. Der Anbieter weiss das, nicht die Oberfläche | `MedicationCheckCoverage` |
+
 Warum drei Tabellen und nicht Felder an `Medication`: Ein Prüflauf betrifft die Liste als
 Ganzes, ein Befund mehrere Positionen (bei Interaktionen immer), und die Abdeckung hängt an
 der Prüfart, nicht am Präparat. Dieselbe Begründung, mit der das Schema
@@ -193,6 +195,19 @@ der Prüfart, nicht am Präparat. Dieselbe Begründung, mit der das Schema
 
 **Nicht vorgesehen und bewusst nicht beantragt:** klinische Kontextfelder wie Nierenwerte, die
 eine Kontraindikationsprüfung bräuchte. Der Prototyp benennt nur, dass sie fehlen.
+
+### 8b. Wirkstoffe mit Menge — noch keine Feldforderung
+
+Die Liste zeigt je Position die Wirkstoffe mit ihrer Menge, damit eine Doppelung auffällt,
+ohne dass jemand einen Befund öffnet. Der Prototyp **leitet das ab**: Der Katalog führt
+`wirkstoff` als Text («Valsartan, Hydrochlorothiazid») und `staerke` als Text («80/12.5 mg»);
+gepaart wird nur, wenn die Zahl der Stärkenteile zur Zahl der Wirkstoffe passt — «25 mcg/h»
+ist eine Rate und wird darum nicht zerlegt.
+
+Das ist eine Übergangslösung und **kein Antrag auf ein Schemafeld**: Die Documedis-Stammdaten
+liefern Wirkstoff und Menge strukturiert, sobald sie angebunden sind. Erst dann entscheidet
+sich, ob die Zuordnung am Produkt oder an der Position hängt. Bis dahin wird der Katalog
+dafür nicht umgebaut.
 
 ## Was NICHT fehlt
 

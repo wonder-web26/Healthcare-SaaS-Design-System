@@ -27,11 +27,11 @@ import { MedikationsListe, SPALTEN_ANZAHL } from "./MedikationsListe";
 import { MedikationsEditor } from "./MedikationsEditor";
 import { Tagesvorschau } from "./Tagesvorschau";
 import { Wochenvorschau } from "./Wochenvorschau";
-import { Pruefleiste } from "./Pruefleiste";
-import { BefundKarte } from "./BefundKarte";
+import { Legendenleiste } from "./Legendenleiste";
+import { BefundPanel } from "./BefundPanel";
 import { pruefungAusfuehren } from "../../../lib/medikation/pruefdienst";
 import { useAllergien } from "../../../lib/allergien/store";
-import { blockierendeAnzahl, type Medikationsposition } from "../../../lib/medikation/medikation";
+import { blockierendeAnzahl, type Medikationsposition, type Pruefart } from "../../../lib/medikation/medikation";
 import {
   useMedikationspositionen, useMedikationsErhebungen, getMedikationsErhebung,
   keineMedikamenteBestaetigen, listeBestaetigen, bestaetigungAufheben,
@@ -49,8 +49,8 @@ export function MedikamenteAbschnitt({ patientId }: { patientId: string }) {
   const [editor, setEditor] = useState<{ eintrag: Medikationsposition | null } | null>(null);
   /* Reine Darstellungswahl — sie liegt lokal und berührt keine Daten. */
   const [ansicht, setAnsicht] = useState<Ansicht>("liste");
-  const [pruefungOffen, setPruefungOffen] = useState(false);
-  const [hervorgehoben, setHervorgehoben] = useState<string | null>(null);
+  /** Offener Reiter des Befund-Panels; null = Panel zu. */
+  const [panelReiter, setPanelReiter] = useState<Pruefart | null>(null);
 
   /* Medikationsprüfung: Ergebnis des externen Dienstes (hier Mock), getrennt
      von unserer Reaktion darauf (Bearbeitungszustände im Store). Allergien
@@ -75,22 +75,20 @@ export function MedikamenteAbschnitt({ patientId }: { patientId: string }) {
     [positionen, allergien.length, freitextAllergien.join("|")],
   );
 
-  /** Zeilenmarker: welche Position gehört zu welchem Befund. */
-  const befundJePosition = useMemo(() => {
-    const z: Record<string, string> = {};
-    for (const b of pruefung.befunde) for (const id of b.positionIds) z[id] = b.id;
+  /** Zeilenmarker: an welchen Prüfarten ist eine Position beteiligt.
+   *  Mehrere je Zeile möglich; gleiche Art nur einmal. */
+  const artenJePosition = useMemo(() => {
+    const z: Record<string, Pruefart[]> = {};
+    for (const b of pruefung.befunde) {
+      for (const id of b.positionIds) {
+        if (!z[id]) z[id] = [];
+        if (!z[id].includes(b.art)) z[id].push(b.art);
+      }
+    }
     return z;
   }, [pruefung]);
 
   const offeneBefunde = pruefung.befunde.filter(b => getBefundBearbeitung(b.id).zustand === "offen").length;
-
-  const zeigeBefund = (befundId: string) => {
-    setPruefungOffen(true);
-    setHervorgehoben(befundId);
-    requestAnimationFrame(() => {
-      document.getElementById(`befund-${befundId}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
-    });
-  };
 
   const bestaetigt = !!erhebung.bestaetigtAm;
   const blockierend = blockierendeAnzahl(positionen);
@@ -153,25 +151,12 @@ export function MedikamenteAbschnitt({ patientId }: { patientId: string }) {
         </div>
       )}
 
-      {/* ── Zustand B und C: Prüfleiste, Umschalter, gewählte Ansicht ── */}
+      {/* ── Zustand B und C: Legende, Umschalter, gewählte Ansicht ── */}
       {positionen.length > 0 && (
         <>
           {/* Die Prüfung gilt der ganzen Liste und steht darum über allen
               Ansichten, nicht nur über der Tabelle. */}
-          <Pruefleiste ergebnis={pruefung} offen={pruefungOffen}
-            onUmschalten={() => setPruefungOffen(o => !o)}
-            kinder={pruefung.befunde.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-                {pruefung.befunde.map(b => (
-                  <BefundKarte key={b.id} befund={b}
-                    bearbeitung={bearbeitungen[b.id] ?? getBefundBearbeitung(b.id)}
-                    positionen={positionen} darfEntscheiden={darfEntscheiden}
-                    hervorgehoben={hervorgehoben === b.id}
-                    onQuittieren={() => befundQuittieren(b.id, `${benutzer.vorname} ${benutzer.name}`)}
-                    onUebersteuern={g => befundUebersteuern(b.id, `${benutzer.vorname} ${benutzer.name}`, g)} />
-                ))}
-              </div>
-            )} />
+          <Legendenleiste ergebnis={pruefung} onOeffnen={setPanelReiter} />
 
           {/* Der Umschalter ändert nur die Darstellung, nie die Daten. */}
           <div style={{ marginBottom: "var(--space-3)" }}>
@@ -192,7 +177,7 @@ export function MedikamenteAbschnitt({ patientId }: { patientId: string }) {
           {ansicht === "liste" && (
             <MedikationsListe positionen={positionen} schreibgeschuetzt={bestaetigt}
               onZeile={p => setEditor({ eintrag: p })}
-              befundJePosition={befundJePosition} onBefund={zeigeBefund} />
+              artenJePosition={artenJePosition} onPruefart={setPanelReiter} />
           )}
           {ansicht === "tag" && <Tagesvorschau positionen={positionen} />}
           {ansicht === "woche" && <Wochenvorschau positionen={positionen} />}
@@ -229,6 +214,13 @@ export function MedikamenteAbschnitt({ patientId }: { patientId: string }) {
 
       {editor && (
         <MedikationsEditor patientId={patientId} eintrag={editor.eintrag} onClose={() => setEditor(null)} />
+      )}
+      {panelReiter && (
+        <BefundPanel ergebnis={pruefung} aktiverReiter={panelReiter} positionen={positionen}
+          bearbeitungen={bearbeitungen} darfEntscheiden={darfEntscheiden}
+          onReiter={setPanelReiter} onSchliessen={() => setPanelReiter(null)}
+          onQuittieren={id => befundQuittieren(id, `${benutzer.vorname} ${benutzer.name}`)}
+          onUebersteuern={(id, g) => befundUebersteuern(id, `${benutzer.vorname} ${benutzer.name}`, g)} />
       )}
     </div>
   );

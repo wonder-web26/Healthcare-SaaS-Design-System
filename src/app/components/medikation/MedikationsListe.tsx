@@ -13,10 +13,18 @@
 import { CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { StatusMarke } from "../ui/StatusMarke";
 import { isoZuAnzeige } from "../../../lib/datum";
+import { Pruefzeichen } from "./Pruefzeichen";
+import { arzneimittelNachId } from "../../../lib/medikation/arzneimittel";
 import {
-  gruppeVon, dosierungText, GRUPPE_LABEL, QUELLE_LABEL,
-  type Medikationsposition, type Gruppe, type Pruefstatus,
+  gruppeVon, dosierungText, GRUPPE_LABEL, QUELLE_LABEL, PRUEFART_LABEL, wirkstoffeMitMenge,
+  type Medikationsposition, type Gruppe, type Pruefstatus, type Pruefart,
 } from "../../../lib/medikation/medikation";
+
+/** Wirkstoffe mit Menge einer Position — aus dem Katalog abgeleitet. */
+function wirkstoffe(p: Medikationsposition): string[] {
+  const k = p.productCode ? arzneimittelNachId(p.productCode) : undefined;
+  return k ? wirkstoffeMitMenge(k.wirkstoff, k.staerke) : [];
+}
 
 /** Eine Quelle für die Statusdarstellung — Liste und beide Vorschauen zeigen
  *  denselben Text und dasselbe Symbol, nie nur dieselbe Farbe. */
@@ -26,9 +34,9 @@ export const PRUEFSTATUS_MARKE: Record<Pruefstatus, { label: string; variante: "
   unbestaetigt: { label: "Unbestätigt", variante: "warnung", icon: AlertTriangle },
 };
 
-/** Neun Spalten, Reihenfolge verbindlich. */
+/** Zehn Spalten: die schmale Markerspalte der Prüfung kommt vor dem Präparat. */
 const SPALTEN = [
-  "Präparat", "Dosierung", "Einheit", "von", "bis und mit",
+  "Prüfung", "Präparat", "Dosierung", "Einheit", "von", "bis und mit",
   "Applikationsart", "Grund / Anweisung", "Quelle", "Status",
 ] as const;
 
@@ -36,15 +44,15 @@ export const SPALTEN_ANZAHL = SPALTEN.length;
 
 const GRUPPEN_REIHENFOLGE: Gruppe[] = ["fix", "reserve", "selbst"];
 
-export function MedikationsListe({ positionen, schreibgeschuetzt, onZeile, befundJePosition, onBefund }: {
+export function MedikationsListe({ positionen, schreibgeschuetzt, onZeile, artenJePosition, onPruefart }: {
   positionen: Medikationsposition[];
   /** Zustand C: Zeilen sind nicht mehr klickbar. */
   schreibgeschuetzt: boolean;
   onZeile: (p: Medikationsposition) => void;
-  /** Kennung des Befunds je betroffener Position — leer, wenn nicht geprüft. */
-  befundJePosition?: Record<string, string>;
-  /** Führt vom Zeilenmarker zum Befund. */
-  onBefund?: (befundId: string) => void;
+  /** Prüfarten je betroffener Position — mehrere Zeichen je Zeile möglich. */
+  artenJePosition?: Record<string, Pruefart[]>;
+  /** Klick auf einen Zeilenmarker öffnet das Panel auf dieser Prüfart. */
+  onPruefart?: (art: Pruefart) => void;
 }) {
   const gruppen = GRUPPEN_REIHENFOLGE
     .map(g => ({ gruppe: g, zeilen: positionen.filter(p => gruppeVon(p) === g) }))
@@ -57,13 +65,15 @@ export function MedikationsListe({ positionen, schreibgeschuetzt, onZeile, befun
           ist die Spalte, wegen der jemand hinschaut. */}
       <table style={{ width: "100%", minWidth: 1000, tableLayout: "fixed", borderCollapse: "collapse", fontSize: "var(--text-small)" }}>
         <colgroup>
-          {["17%", "14%", "6%", "9%", "9%", "9%", "13%", "10%", "13%"].map((w, i) => <col key={i} style={{ width: w }} />)}
+          {["6%", "17%", "11%", "5%", "8%", "8%", "11%", "13%", "9%", "12%"].map((w, i) => <col key={i} style={{ width: w }} />)}
         </colgroup>
         <thead>
           <tr>
             {SPALTEN.map(s => (
               <th key={s} scope="col" style={{
-                textAlign: "left", padding: "6px 10px 8px", whiteSpace: "nowrap",
+                /* Kopfzeilen dürfen umbrechen — mit nowrap schöben sich
+                   «Applikationsart» und «Grund / Anweisung» ineinander. */
+                textAlign: "left", padding: "6px 10px 8px",
                 fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
                 color: "var(--text-tertiary)", borderBottom: "var(--border-thin) solid var(--border-default)",
               }}>{s}</th>
@@ -96,23 +106,31 @@ export function MedikationsListe({ positionen, schreibgeschuetzt, onZeile, befun
                     borderBottom: "var(--border-thin) solid var(--border-default)",
                     cursor: schreibgeschuetzt ? "default" : "pointer",
                   }}>
+                  {/* Markerspalte: die Zeichen aller Prüfarten, an denen diese
+                      Position beteiligt ist — mehrere nebeneinander möglich. */}
+                  <td style={{ ...zelle, textAlign: "center" }}>
+                    <span style={{ display: "inline-flex", gap: 3, flexWrap: "wrap", justifyContent: "center" }}>
+                      {(artenJePosition?.[p.id] ?? []).map(art => (
+                        <button key={art} type="button" className="ui-fokusring"
+                          onClick={e => { e.stopPropagation(); onPruefart?.(art); }}
+                          aria-label={`${PRUEFART_LABEL[art]} zu ${p.productName} anzeigen`}
+                          style={{ background: "none", border: "none", padding: 0, lineHeight: 0, cursor: "pointer" }}>
+                          <Pruefzeichen art={art} status="mit_befund" groesse={17} />
+                        </button>
+                      ))}
+                    </span>
+                  </td>
                   <td style={zelle}>
                     <span style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{p.productName}</span>
                     <span style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
                       {[p.darreichungsform, p.staerke].filter(Boolean).join(" ")}
                     </span>
-                    {/* Zeilenmarker: Symbol UND Text, nie nur Farbe. Führt zum
-                        Befund, öffnet aber nicht den Editor der Zeile. */}
-                    {befundJePosition?.[p.id] && (
-                      <button type="button" className="ui-fokusring inline-flex items-center"
-                        onClick={e => { e.stopPropagation(); onBefund?.(befundJePosition[p.id]); }}
-                        aria-label={`Prüfbefund zu ${p.productName} anzeigen`}
-                        style={{ marginTop: 4, gap: 4, padding: "1px 8px", borderRadius: "var(--control-radius)",
-                          background: "var(--status-warning-bg)", color: "var(--status-warning-text)",
-                          border: "none", fontFamily: "inherit", fontSize: "var(--text-micro)",
-                          fontWeight: "var(--weight-medium)", cursor: "pointer" }}>
-                        <AlertTriangle style={{ width: 11, height: 11 }} /> Prüfbefund
-                      </button>
+                    {/* Wirkstoffe mit Menge: damit eine Doppelung auffällt, ohne
+                        dass jemand einen Befund öffnen muss. */}
+                    {wirkstoffe(p).length > 0 && (
+                      <span style={{ display: "block", marginTop: 2, fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+                        {wirkstoffe(p).join(" · ")}
+                      </span>
                     )}
                   </td>
                   <td style={{ ...zelle, fontVariantNumeric: "tabular-nums" }}>{dosierungText(p.posologie)}</td>
