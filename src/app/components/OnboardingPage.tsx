@@ -8,7 +8,6 @@ import {
   X,
   Save,
   Clock,
-  Loader2,
   ArrowLeft,
   FileText,
   AlertTriangle,
@@ -56,6 +55,7 @@ import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
 import { qualifikationAusFunktion } from "../../lib/stammdaten/funktionen";
 import { sdaVerlangtInterrai } from "../../lib/stammdaten/sda-einschaetzung-situation";
 import { naechsteFallKennung } from "../../lib/onboarding/faelle";
+import { getEntwurf, sichereEntwurf, type OnboardingEntwurf } from "../../lib/onboarding/entwurf";
 import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
 import { erfassePatientImOnboarding, patientFuerOnboarding } from "../../lib/patienten/store";
 import { erfasseAngehoerigenImOnboarding, angehoerigerFuerOnboarding, type AngehoerigenEingabe } from "../../lib/angehoerige/store";
@@ -224,6 +224,16 @@ function NochKeineKennung({ text }: { text: string }) {
 }
 
 /**
+ * Vergleichsschlüssel des Formularstands. Beide Formulare sind flache Objekte
+ * aus Zeichenketten und Wahrheitswerten, deshalb genügt die Serialisierung —
+ * sie ist zugleich der Nachweis, dass wirklich Feldwerte verglichen werden und
+ * nicht Objektidentitäten.
+ */
+function standSchluessel(patient: PatientFormData, angehoeriger: AngehoerigerFormData): string {
+  return JSON.stringify({ patient, angehoeriger });
+}
+
+/**
  * Formular → Bestand. Nur die Erhebungsfelder des Katalogs; alles Übrige
  * (Zustand, Abrechenbarkeit, Stempeltage, Monatsschritt) entsteht im Betrieb.
  * Die Qualifikationsstufe steht nicht dabei — der Bestand leitet sie ab.
@@ -279,16 +289,36 @@ export function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [visitedSteps, setVisitedSteps] = useState<Set<number>>(new Set([1]));
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
-  const [isSaving, setIsSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState<string | null>(null);
-  const [showSaveToast, setShowSaveToast] = useState(false);
+  /* ── Anfangsstand: gespeicherter Entwurf vor Demo-Vorbelegung vor Leerformular.
+     Der Demo-Fall bleibt vorbelegt, ist aber nicht mehr der einzige Weg zu
+     ausgefüllten Feldern — jeder Fall, für den einmal gespeichert wurde, kommt
+     mit seinen Werten zurück. ── */
+  const [anfangsstand] = useState<OnboardingEntwurf>(() => {
+    const gespeichert = caseId ? getEntwurf(caseId) : undefined;
+    if (gespeichert) return gespeichert;
+    return caseId === DEMO_FALL_ID
+      ? { patient: demoSteinerPatient, angehoeriger: demoSteinerAngehoeriger }
+      : { patient: emptyPatientForm, angehoeriger: emptyAngehoerigerForm };
+  });
 
   /* ── Angehöriger form state (lifted) ───── */
-  const [angehoerigerData, setAngehoerigerData] = useState<AngehoerigerFormData>(() => caseId === DEMO_FALL_ID ? demoSteinerAngehoeriger : emptyAngehoerigerForm);
+  const [angehoerigerData, setAngehoerigerData] = useState<AngehoerigerFormData>(anfangsstand.angehoeriger);
   const [step1Valid, setStep1Valid] = useState(false);
 
   /* ── Patient form state (lifted) ───── */
-  const [patientData, setPatientData] = useState<PatientFormData>(() => caseId === DEMO_FALL_ID ? demoSteinerPatient : emptyPatientForm);
+  const [patientData, setPatientData] = useState<PatientFormData>(anfangsstand.patient);
+
+  /* ── Speicherzustand ────────────────────────────────────────────────────────
+     Drei Zustände, alle drei wahr: «unverändert» heisst, der Bestand kennt
+     genau diese Werte; «geändert» heisst, er kennt sie nicht; «gespeichert»
+     ist die kurze Bestätigung danach. Verglichen wird gegen den zuletzt
+     geschriebenen Stand, nicht gegen ein Berührt-Merkmal — wer eine Änderung
+     von Hand zurücknimmt, hat nichts zu speichern. ── */
+  const [gespeicherterStand, setGespeicherterStand] = useState<string>(() => standSchluessel(anfangsstand.patient, anfangsstand.angehoeriger));
+  const [ebenGespeichert, setEbenGespeichert] = useState(false);
+  const hatAenderungen = standSchluessel(patientData, angehoerigerData) !== gespeicherterStand;
+  const speicherZustand: "unveraendert" | "geaendert" | "gespeichert" =
+    hatAenderungen ? "geaendert" : ebenGespeichert ? "gespeichert" : "unveraendert";
 
   // Demo-Fall: Rhythmus-/Workflow-Aufgaben vorbelegen (idempotent), ohne Umweg
   // über den Patienten-Schritt.
@@ -414,8 +444,26 @@ export function OnboardingPage() {
     ? Math.round((completedSteps.size / nonBlockedSteps.length) * 100)
     : 0;
 
-  /* ── Navigation ────────────────────────── */
-  const goToStep = useCallback(
+  /* ── Navigation ──────────────────────────────────────────────────────────────
+     Muster aus dem Servicedesk (`ServiceDeskPage.wechselErlaubt`): eine
+     Rückfrage vor dem Wechsel, sonst nichts.
+
+     Gefragt wird beim Schrittwechsel und beim Verlassen der Seite. Der
+     Reiterwechsel innerhalb eines Schritts fragt NICHT — er unterbräche das
+     Ausfüllen, ohne etwas zu schützen.
+
+     Zwei Formulierungen, weil zwei verschiedene Dinge geschehen. Der
+     Schrittwechsel bleibt innerhalb dieses Bildschirms: die Eingaben stehen
+     danach unverändert da, nur eben weiterhin ungespeichert. Das Verlassen der
+     Seite hängt das Formular ab; was nicht im Bestand steht, ist dann fort.
+     «Verwerfen?» darf deshalb nur im zweiten Fall stehen. ── */
+  const wechselErlaubt = () =>
+    !hatAenderungen || window.confirm("Es liegen ungespeicherte Änderungen vor. Trotzdem wechseln? Die Eingaben bleiben erhalten, bis Sie die Seite verlassen.");
+  const verlassenErlaubt = () =>
+    !hatAenderungen || window.confirm("Es liegen ungespeicherte Änderungen vor. Verwerfen?");
+
+  /** Schrittwechsel ohne Rückfrage — für Wege, die bereits gefragt haben. */
+  const wechsleZuSchritt = useCallback(
     (step: number) => {
       if (step >= 1 && step <= wizardSteps.length) {
         setCurrentStep(step);
@@ -423,6 +471,16 @@ export function OnboardingPage() {
       }
     },
     [wizardSteps.length]
+  );
+
+  /** Der übliche Weg: fragt nach, wenn Ungespeichertes offen ist. */
+  const goToStep = useCallback(
+    (step: number) => {
+      if (step < 1 || step > wizardSteps.length) return;
+      if (!wechselErlaubt()) return;
+      wechsleZuSchritt(step);
+    },
+    [wizardSteps.length, wechsleZuSchritt, hatAenderungen]
   );
 
   const goNext = () => {
@@ -437,11 +495,98 @@ export function OnboardingPage() {
     if (currentStep > 1) goToStep(currentStep - 1);
   };
 
-  /* ── Save simulation ───────────────────── */
+  /* ── Speichern ──────────────────────────────────────────────────────────────
+     Die EINZIGE Stelle, an der dieser Bildschirm in den Bestand schreibt.
+     Vorher taten das zwei useEffect-Hooks bei jedem Tastendruck; der Knopf
+     zeigte bloss einen Hinweis. Jetzt ist die Reihenfolge umgekehrt: das
+     Formular hält die Änderungen, der Knopf trägt sie ein.
+
+     Geschrieben wird in vier Bestände — Entwurf (Formularwerte für das
+     Zurückladen), angehörige Person, Patient, Beziehung. Die Bedingungen für
+     Patient und Beziehung sind unverändert: nur ein neu begonnener Fall legt
+     einen Patientendatensatz an. Die acht Altbestands-Mandate kommen mit
+     `caseId` und bleiben ohne — wie bisher. ── */
   const handleSave = useCallback(() => {
-    // Prototyp: keine Persistenz. Hinweis statt Scheinspeicherung.
-    toast("Prototyp — Daten werden innerhalb der Sitzung gehalten, aber nicht dauerhaft gespeichert.");
-  }, []);
+    if (!hatAenderungen) return;
+
+    // Ein Fall ohne Kennung kann nicht abgelegt werden. Normalerweise vergibt
+    // sie der Schritt-Effekt unten; wer im Vertragsschritt zuerst speichert,
+    // erhält sie hier.
+    const kennung = wirksameFallKennung ?? naechsteFallKennung();
+    if (kennung !== wirksameFallKennung) setNeueFallKennung(kennung);
+
+    sichereEntwurf(kennung, { patient: patientData, angehoeriger: angehoerigerData });
+    erfasseAngehoerigenImOnboarding(kennung, angehoerigenEingabe(angehoerigerData));
+
+    if (!caseId) {
+      erfassePatientImOnboarding(kennung, patientData, {
+        vorname: angehoerigerData.vorname,
+        name: angehoerigerData.name,
+        telefon: angehoerigerData.telefon,
+      });
+      // §5: Die Beziehung `pflegende_angehoerige` entsteht, sobald Patient und
+      // angehörige Person existieren; ändert sich die Person, folgt sie.
+      const pat = patientFuerOnboarding(kennung);
+      const ang = angehoerigerFuerOnboarding(kennung);
+      if (pat && ang) sichereGepflegteAngehoerige(pat.id, ang.id, formatAnzeige(GEGENWART));
+    }
+
+    setGespeicherterStand(standSchluessel(patientData, angehoerigerData));
+    setEbenGespeichert(true);
+  }, [hatAenderungen, wirksameFallKennung, caseId, patientData, angehoerigerData]);
+
+  /* Die Bestätigung ist kurz und verschwindet von selbst; danach steht der
+     Knopf wieder auf «unverändert». */
+  useEffect(() => {
+    if (!ebenGespeichert) return;
+    const t = window.setTimeout(() => setEbenGespeichert(false), 2500);
+    return () => window.clearTimeout(t);
+  }, [ebenGespeichert]);
+
+  /* Eine neue Änderung beendet die Bestätigung sofort — sonst stünde
+     «Gespeichert» neben einem Feld, das gerade wieder abweicht. */
+  useEffect(() => {
+    if (hatAenderungen) setEbenGespeichert(false);
+  }, [hatAenderungen]);
+
+  /* Neu laden oder Fenster schliessen: der Browser stellt seine eigene
+     Rückfrage, wir liefern nur den Anlass. */
+  useEffect(() => {
+    if (!hatAenderungen) return;
+    const warnen = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warnen);
+    return () => window.removeEventListener("beforeunload", warnen);
+  }, [hatAenderungen]);
+
+  /* ── Der Speichern-Knopf ─────────────────────────────────────────────────────
+     Einmal gebaut, zweimal gestellt (schmale und breite Fusszeile) — die drei
+     Zustände sollen nicht an zwei Stellen gepflegt werden.
+
+     Betont wird mit Rahmenstärke und Rahmenfarbe, nicht mit einer Vollfläche:
+     der Primärknopf des Abschnitts ist «Weiter» und bleibt es (Styleguide,
+     höchstens einer je Abschnitt). Der Hinweis daneben sagt, was der Zustand
+     bedeutet — Farbe allein trüge die Information sonst nicht. ── */
+  const speichernKnopf = (
+    <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
+      <AppButton
+        variant="sekundaer"
+        icon={speicherZustand === "gespeichert" ? Check : Save}
+        onClick={handleSave}
+        disabled={speicherZustand !== "geaendert"}
+        aria-live="polite"
+        style={speicherZustand === "geaendert"
+          ? { border: "var(--border-thick) solid var(--border-strong)", fontWeight: "var(--weight-medium)" }
+          : undefined}
+      >
+        {speicherZustand === "gespeichert" ? "Gespeichert" : "Speichern"}
+      </AppButton>
+      {speicherZustand === "geaendert" && (
+        <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+          Nicht gespeichert
+        </span>
+      )}
+    </div>
+  );
 
   useEffect(() => {
     if (currentStep > wizardSteps.length) {
@@ -460,32 +605,10 @@ export function OnboardingPage() {
     setNeueFallKennung(k => k ?? naechsteFallKennung());
   }, [caseId, activeStepData.key]);
 
-  /* ── Die angehörige Person entsteht mit dem Schritt "Angehöriger" und trägt
-     ab da dieselbe Kennung. Fortschreiben, nicht neu anlegen; der Abschluss
-     wechselt nur den Zustand. Bis dahin erscheint sie nicht in der Liste. ── */
-  useEffect(() => {
-    if (!wirksameFallKennung) return;
-    erfasseAngehoerigenImOnboarding(wirksameFallKennung, angehoerigenEingabe(angehoerigerData));
-  }, [wirksameFallKennung, angehoerigerData]);
-
-  // Erfasste Felder fortschreiben — dieselbe Kennung, kein zweiter Patient.
-  useEffect(() => {
-    if (!neueFallKennung) return;
-    erfassePatientImOnboarding(neueFallKennung, patientData, {
-      vorname: angehoerigerData.vorname,
-      name: angehoerigerData.name,
-      telefon: angehoerigerData.telefon,
-    });
-  }, [neueFallKennung, patientData, angehoerigerData.vorname, angehoerigerData.name, angehoerigerData.telefon]);
-
-  // §5: Die Beziehung `pflegende_angehoerige` entsteht aus dem Angehörigen-Reiter,
-  // sobald Patient und angehörige Person existieren; ändert sich die Person, folgt sie.
-  useEffect(() => {
-    if (!neueFallKennung) return;
-    const pat = patientFuerOnboarding(neueFallKennung);
-    const ang = angehoerigerFuerOnboarding(neueFallKennung);
-    if (pat && ang) sichereGepflegteAngehoerige(pat.id, ang.id, formatAnzeige(GEGENWART));
-  }, [neueFallKennung, patientData, angehoerigerData.vorname, angehoerigerData.name]);
+  /* Die angehörige Person, der Patient und die Beziehung entstehen und wachsen
+     jetzt in `handleSave`, nicht mehr bei jedem Tastendruck. Die Kennung bleibt
+     dieselbe: fortschreiben, nicht neu anlegen; der Abschluss wechselt nur den
+     Zustand. */
 
   /* ── Notizspur: Person des aktiven Schritts.
      Eine Notiz hängt an einer PERSON, nicht am Fall — sie braucht deshalb eine
@@ -666,6 +789,14 @@ export function OnboardingPage() {
   const springeZuAbschnitt = (abschnitt: OnboardingAbschnitt) => {
     const { schritt, reiter } = abschnittTeile(abschnitt);
     const zielIndex = schritt === "patient" ? (zeigeSpezialschritt ? 3 : 2) : 1;
+    /* Nur ein echter Schrittwechsel fragt nach. Zeigt die Pendenz auf einen
+       Abschnitt im Schritt, der ohnehin offen ist, bleibt es ein Reiterwechsel
+       — und der läuft ohne Rückfrage. Gefragt wird hier und nicht in
+       `goToStep`, damit der Sprung höchstens einmal fragt. */
+    const bleibtImSchritt = schritt === "patient"
+      ? activeStepData.key === "patient"
+      : activeStepData.key === "angehoeriger";
+    if (!bleibtImSchritt && !wechselErlaubt()) return;
     const hervorheben = () => {
       // Der Abschnitt trägt data-abschnitt; ohne Treffer geschieht nichts.
       const el = document.querySelector<HTMLElement>(`[data-abschnitt="${abschnitt}"]`);
@@ -676,15 +807,16 @@ export function OnboardingPage() {
     };
     if (schritt === "patient") {
       if (activeStepData.key === "patient") { setRequestedPatientTab(reiter as PatientReiter); window.setTimeout(hervorheben, 120); }
-      else { goToStep(zielIndex); window.setTimeout(() => { setRequestedPatientTab(reiter as PatientReiter); window.setTimeout(hervorheben, 120); }, 100); }
+      else { wechsleZuSchritt(zielIndex); window.setTimeout(() => { setRequestedPatientTab(reiter as PatientReiter); window.setTimeout(hervorheben, 120); }, 100); }
     } else {
-      if (activeStepData.key !== "angehoeriger") goToStep(zielIndex);
+      if (activeStepData.key !== "angehoeriger") wechsleZuSchritt(zielIndex);
       window.setTimeout(hervorheben, 200);
     }
   };
 
   /** «Alle anzeigen» — Pendenzenliste, gefiltert auf die Person dieses Vorgangs. */
   const oeffnePendenzenListe = () => {
+    if (!verlassenErlaubt()) return;
     navigate("/servicedesk");
   };
 
@@ -702,8 +834,11 @@ export function OnboardingPage() {
 
   // "Öffnen" (Workflow-Aufgabe) → Reiter Workflow im Patienten-Schritt.
   const oeffneRhythmus = () => {
-    if (activeStepData.key === "patient") { setRequestedPatientTab("workflow"); }
-    else { goToStep(zeigeSpezialschritt ? 3 : 2); setTimeout(() => setRequestedPatientTab("workflow"), 100); }
+    // Im Patienten-Schritt ist das ein Reiterwechsel — keine Rückfrage.
+    if (activeStepData.key === "patient") { setRequestedPatientTab("workflow"); return; }
+    if (!wechselErlaubt()) return;
+    wechsleZuSchritt(zeigeSpezialschritt ? 3 : 2);
+    setTimeout(() => setRequestedPatientTab("workflow"), 100);
   };
 
   // "Gespräch" (§E): startet die Aufzeichnung. Der Erklärsatz erscheint als Hinweis
@@ -746,7 +881,9 @@ export function OnboardingPage() {
     if (searchParams.get("step") !== "patient") return;
     const patientStep = wizardSteps.find((s) => s.key === "patient");
     if (!patientStep) return;
-    goToStep(patientStep.id);
+    // Wiederherstellung beim Betreten, kein Wechsel durch die Nutzerin —
+    // hier ist nichts offen, wonach zu fragen wäre.
+    wechsleZuSchritt(patientStep.id);
     // Der Tiefenlink trägt bereits den Schlüssel — keine Übersetzung mehr nötig.
     const gewuenschterReiter = searchParams.get("tab");
     if (gewuenschterReiter && (TAB_KEYS as readonly string[]).includes(gewuenschterReiter)) {
@@ -768,7 +905,7 @@ export function OnboardingPage() {
         {/* Zeile 1: Rückweg als Textlink — nur Desktop; unter 1024px steht der
             Rückpfeil links neben dem Namen (Lauf 2a, Änderung 1). */}
         <button
-          onClick={() => navigate(returnTo)}
+          onClick={() => { if (verlassenErlaubt()) navigate(returnTo); }}
           className="ui-fokusring hidden lg:inline-flex items-center cursor-pointer"
           style={{ gap: 5, padding: 0, background: "none", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}
           onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
@@ -788,7 +925,7 @@ export function OnboardingPage() {
             <button
               type="button"
               aria-label={`Zurück zu ${returnLabel}`}
-              onClick={() => navigate(returnTo)}
+              onClick={() => { if (verlassenErlaubt()) navigate(returnTo); }}
               className="ui-fokusring lg:hidden inline-flex items-center justify-center shrink-0 cursor-pointer"
               style={{ width: 44, height: 44, marginLeft: -12, marginTop: -9, marginBottom: -9, borderRadius: "var(--control-radius)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
             >
@@ -1291,7 +1428,7 @@ export function OnboardingPage() {
                     >
                       <ChevronLeft style={{ width: 18, height: 18 }} />
                     </button>
-                    <AppButton variant="sekundaer" icon={isSaving ? Loader2 : Save} iconClassName={isSaving ? "animate-spin" : undefined} onClick={handleSave} disabled={isSaving}>Speichern</AppButton>
+                    {speichernKnopf}
                     {currentStep < wizardSteps.length ? (
                       <AppButton variant="primaer" iconRight={ChevronRight} onClick={goNext}>Weiter</AppButton>
                     ) : (
@@ -1301,7 +1438,7 @@ export function OnboardingPage() {
                           setOverrideBegrundung("");
                           setShowAbschlussDialog(true);
                         }}
-                        disabled={isSaving || !abschlussPruefung.arbeitsvertragOk}>
+                        disabled={!abschlussPruefung.arbeitsvertragOk}>
                         Abschliessen
                       </AppButton>
                     )}
@@ -1323,7 +1460,7 @@ export function OnboardingPage() {
 
                 {/* Right: Save + Next/Finish — genau ein Primär (Weiter ODER Abschliessen) */}
                 <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
-                  <AppButton variant="sekundaer" icon={isSaving ? Loader2 : Save} iconClassName={isSaving ? "animate-spin" : undefined} onClick={handleSave} disabled={isSaving}>Speichern</AppButton>
+                  {speichernKnopf}
 
                   {currentStep < wizardSteps.length ? (
                     // Ausweis B sperrt den Fortschritt nicht mehr: der Spezialbewilligungs-
@@ -1339,7 +1476,7 @@ export function OnboardingPage() {
                           setOverrideBegrundung("");
                           setShowAbschlussDialog(true);
                         }}
-                        disabled={isSaving || !abschlussPruefung.arbeitsvertragOk}>
+                        disabled={!abschlussPruefung.arbeitsvertragOk}>
                         Onboarding abschliessen
                       </AppButton>
                       {!abschlussPruefung.arbeitsvertragOk && (
@@ -1463,6 +1600,14 @@ export function OnboardingPage() {
                 disabled={abschlussPruefung.fehlendePflichtdokumente.length > 0 && !overrideBegrundung.trim()}
                 onClick={() => {
                   if (wirksameFallKennung) {
+                    /* Zuerst schreiben, dann abschliessen. `konvertiereOnboarding`
+                       sucht Patient und angehörige Person über die Fallkennung im
+                       Bestand (`schliessePatientOnboardingAb`); was nur im Formular
+                       steht, findet es nicht. Solange die Effekte bei jedem
+                       Tastendruck schrieben, war das garantiert — jetzt garantiert
+                       es diese Zeile. Ohne offene Änderungen tut sie nichts. */
+                    handleSave();
+
                     // Audit-Spur: bei Override dokumentieren und in Sitzungs-State festhalten
                     if (abschlussPruefung.fehlendePflichtdokumente.length > 0 && overrideBegrundung.trim()) {
                       const auditNote = {

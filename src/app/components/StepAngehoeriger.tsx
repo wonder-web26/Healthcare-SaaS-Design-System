@@ -652,9 +652,9 @@ export function StepAngehoeriger({
   arbeitsortOrt,
   dokumenteZaehler = 0,
 }: StepAngehoerigerProps) {
+  /* Der Reiterwechsel fragt bewusst nicht nach — siehe StepPatient. Gefragt
+     wird erst beim Schrittwechsel (OnboardingPage.goToStep). */
   const [activeTab, setActiveTab] = useState(0);
-  const [isSaving, setIsSaving] = useState(false);
-  const [showSaved, setShowSaved] = useState(false);
 
   // §D: Verlauf am rechten Rand der Abschnittszeile, solange waagrecht scrollbar (nicht am Ende).
   const abschnittScrollRef = useRef<HTMLDivElement>(null);
@@ -696,15 +696,9 @@ export function StepAngehoeriger({
     onValidityChange?.(allComplete);
   }, [allComplete, onValidityChange]);
 
-  /* ── Save simulation ───────────────────── */
-  const handleSave = useCallback(() => {
-    setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-      setShowSaved(true);
-      setTimeout(() => setShowSaved(false), 2500);
-    }, 900);
-  }, []);
+  /* Die frühere «Save simulation» stand hier ohne Knopf und ohne Leser: ein
+     Spinner mit erfundener Wartezeit, den niemand je sah. Gespeichert wird auf
+     der Onboarding-Seite, an einer Stelle. */
 
   const statusLabel = allComplete
     ? "Vollständig"

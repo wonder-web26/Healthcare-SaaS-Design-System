@@ -554,6 +554,10 @@ interface StepPatientProps {
    MAIN COMPONENT
    ══════════════════════════════════════════ */
 export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion, dokumenteZaehler = 0 }: StepPatientProps) {
+  /* Der Reiterwechsel fragt bewusst nicht nach. Er bleibt innerhalb des
+     Schritts, die Eingaben stehen danach unverändert da — eine Rückfrage
+     unterbräche das Ausfüllen, ohne etwas zu schützen. Gefragt wird erst beim
+     Schrittwechsel (OnboardingPage.goToStep). */
   const [activeTab, setActiveTab] = useState<PatientReiter>("personalien");
   const benutzer = useCurrentUser();
 
