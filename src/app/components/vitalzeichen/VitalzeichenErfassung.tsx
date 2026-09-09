@@ -353,10 +353,10 @@ const abschnittsKopf: React.CSSProperties = {
 };
 
 /**
- * Eine Parameterkarte. Der ZUSTAND ist an der Karte ablesbar, nicht nur am
- * Inhalt: leer = neutraler Rahmen auf Grundfläche, befüllt = Brand-Rahmen mit
- * leichter Brand-Tönung (das etablierte Auswahl-Muster des Projekts), nicht
- * erhebbar = neutral gefüllte Fläche mit stillgelegter Eingabe.
+ * Eine Parameterkarte. Die Karten trennen sich über Rahmen und Abstand —
+ * eine Zustandstönung für «befüllt» gibt es bewusst nicht (der eingetragene
+ * Wert selbst zeigt die Befüllung). Nur die dokumentierte Nichterhebung
+ * füllt neutral und legt die Eingabe still.
  *
  * Die Einheit sitzt IM Feld, die Bezeichnung links mit fester Breite, der
  * letzte Wert als kompakter Dreizeiler rechts — so fluchten die Eingabefelder
@@ -373,13 +373,11 @@ function ParameterFeld({ def, feld, hinweis, darfBeurteilen, bezugsrahmenText, o
   const hatWert = feld.wert.trim() !== "";
   const offen = hatWert && !feld.nichtErhebbar;
 
-  /* Kartenzustand → Rahmen und Fläche (Tokens des Auswahl-Musters). */
-  const rahmen = feld.nichtErhebbar
-    ? "var(--border-default)"
-    : hatWert ? "var(--brand-primary)" : "var(--border-default)";
-  const flaeche = feld.nichtErhebbar
-    ? "var(--bg-secondary)"
-    : hatWert ? "var(--brand-primary-light)" : "var(--bg-elevated)";
+  /* Kartenfläche: neutral — die Karten trennen sich über Rahmen und Abstand.
+     Nur die dokumentierte Nichterhebung füllt neutral und legt die Eingabe
+     still; eine Brand-Tönung für «befüllt» braucht es nicht. */
+  const rahmen = "var(--border-default)";
+  const flaeche = feld.nichtErhebbar ? "var(--bg-secondary)" : "var(--bg-elevated)";
 
   /* Live-Plausibilität an der Eingabe — technisch, nie blockierend. */
   const wertZahl = Number(feld.wert.replace(",", "."));
