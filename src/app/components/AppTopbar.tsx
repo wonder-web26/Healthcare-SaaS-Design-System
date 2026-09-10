@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Search, Bell, X, Command, Menu, LogOut, ChevronDown, UserCog, Sparkles } from "lucide-react";
+import { Search, Bell, X, Command, Menu, LogOut, ChevronDown, UserCog } from "lucide-react";
 import { useAuth } from "../auth";
 import { ROLE_LABELS, ROLE_DESCRIPTIONS, MOCK_USERS, type UserRole } from "../../types/user";
 
@@ -282,26 +282,8 @@ export function AppTopbar({ onMenuToggle }: AppTopbarProps) {
               <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{user.vorname} {user.name}</div>
               <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>{user.funktion}</div>
             </div>
-            {/* Lauf 1b: "Anna öffnen" ersetzt unter 1024px den schwebenden Anna-Knopf */}
-            <div className="lg:hidden" style={{ borderTop: "var(--border-thin) solid var(--border-default)", paddingTop: "var(--space-2)", marginBottom: "var(--space-2)" }}>
-              <button
-                onClick={() => { setUserMenuOpen(false); window.dispatchEvent(new Event("anna:oeffnen")); }}
-                className="w-full flex items-center gap-2 cursor-pointer transition-colors"
-                style={{
-                  padding: "var(--space-2) var(--space-3)",
-                  borderRadius: "var(--radius-card)",
-                  fontSize: "var(--text-small)",
-                  color: "var(--text-primary)",
-                  fontWeight: "var(--weight-medium)",
-                  background: "transparent",
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-              >
-                <Sparkles style={{ width: 16, height: 16, color: "var(--brand-primary)" }} />
-                Anna öffnen
-              </button>
-            </div>
+            {/* DEMO: Der Eintrag "Anna öffnen" (unter 1024px der Ersatz für den
+                schwebenden Knopf) ist mit Anna entfernt. */}
             <div style={{ borderTop: "var(--border-thin) solid var(--border-default)", paddingTop: "var(--space-2)" }}>
               <button
                 onClick={() => { setUserMenuOpen(false); logout(); }}

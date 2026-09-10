@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   AlertCircle,
   User,
-  HeartPulse,
   Home,
   Stethoscope,
   Phone,
@@ -17,6 +16,7 @@ import {
   Upload,
   Activity,
   ClipboardList,
+  Headphones,
   Info,
   Camera,
   Eye,
@@ -69,7 +69,7 @@ import { TabHeader, HeaderMeta } from "./ui/TabHeader";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
 import { getKontakt } from "../../lib/kontakte/store";
-import { GEGENWART_ISO } from "../../lib/gegenwart";
+import { GEGENWART, GEGENWART_ISO } from "../../lib/gegenwart";
 import { sdaVerlangtInterrai } from "../../lib/stammdaten/sda-einschaetzung-situation";
 import { INTERRAI_SCHRITTE } from "../../lib/rhythmus/vorlage";
 import { SectionAccordion, SektionBadge } from "./ui/SectionAccordion";
@@ -81,11 +81,15 @@ import { pruefeInklusiv } from "../../lib/klv/inklusiv-regeln";
 import { pruefeKassenregeln } from "../../lib/klv/kassenregeln";
 import { erzeugeWZWAuswertung, type WZWErgebnis } from "../../lib/klv/wzw-auswertung";
 import { useEinwilligung } from "./EinwilligungContext";
+import { PersonDokumenteOrdner } from "./dokumente/PersonDokumenteOrdner";
+import { type DokumentReferenz } from "../../lib/dokumente/dokumente";
+import { entryBetreff, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
+import { isoZuDate, formatFaelligkeit, formatAnzeige } from "../../lib/datum";
+import { TabTickets, type Ticket } from "./pendenzen/PendenzenReiter";
 import { useArztAnfrage, ArztAnfrageFlowInline } from "./ArztAnfrageContext";
 import { SectionAction } from "./ui/SectionAction";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
 import { Combobox } from "./form/Combobox";
-import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import { getPatient, patientFuerOnboarding } from "../../lib/patienten/store";
 import { aktiverVersichererName, aktiveVersicherung } from "../../lib/versicherung/store";
 import { EROEFFNUNGSGRUND_STANDARD, EROEFFNUNGSGRUND_EINSATZABBRUCH } from "../../lib/stammdaten/sda-eroeffnungsgrund";
@@ -496,20 +500,35 @@ function isTabComplete(tabKey: string, data: PatientFormData, patientId?: string
  * Schlüssel. Angesteuert wird ausschliesslich über den Schlüssel, nie über die
  * Position: ein eingeschobener Reiter verschöbe sonst stumm jede Nummer.
  */
+/* DEMO: Fünf Reiter sind für die Demoumgebung entfernt — Vitaldaten,
+   Bedarfsabklärung, Pflegeplan, KLV und Abschluss. Die Ansichten selbst stehen
+   unberührt (VitaldatenTab, OnboardingTabBA, OnboardingTabPP, OnboardingTabKLV);
+   entfernt ist nur ihr Eintrag hier. Zum Zurücknehmen genügt es, die fünf Zeilen
+   und die zugehörigen Blöcke im Inhalt wieder einzusetzen. */
 const tabDefs = [
   { key: "personalien", label: "Personalien", icon: User },
   { key: "steuer", label: "Soziales", icon: ShieldCheck },
   { key: "wohnen", label: "Wohnen", icon: Home },
-  { key: "vitaldaten", label: "Vitaldaten", icon: HeartPulse },
   { key: "anamnese", label: "Anamnese", icon: Stethoscope },
   { key: "aktivitaeten", label: "ATL", icon: Activity },
-  { key: "interrai", label: "Bedarfsabklärung", icon: ClipboardList },
-  { key: "pflegeplanung", label: "Pflegeplan", icon: ClipboardList },
-  { key: "klv", label: "KLV", icon: FileText },
   { key: "workflow", label: "Betreuung", icon: ClipboardList },
   { key: "dokumente", label: "Dokumente", icon: FileText },
-  { key: "abschluss", label: "Abschluss", icon: CheckCircle2 },
+  /* Nur im Dossier (kontext === "dossier"), siehe `sichtbareTabs`. Im
+     Onboarding stehen die Pendenzen bereits in der linken Spalte, und ein
+     zweiter Ort für dieselbe Liste wäre eine Dublette. */
+  { key: "pendenzen", label: "Pendenzen", icon: Headphones },
 ] as const;
+
+/**
+ * Wo der Reitersatz steht. Er ist DIESELBE Komponente an beiden Orten; diese
+ * Angabe entscheidet nur, was sich unterscheiden MUSS:
+ *
+ *   onboarding — Dokumente werden erfasst (gescannt, hochgeladen); kein
+ *                Pendenzen-Reiter, weil die linke Spalte sie führt.
+ *   dossier    — Dokumente liegen bereits in der Ablage und werden nur noch
+ *                geblättert; Pendenzen bekommen einen eigenen Reiter.
+ */
+export type StepPatientKontext = "onboarding" | "dossier";
 
 /** Schlüssel eines Reiters — aus tabDefs abgeleitet, damit beide nicht auseinanderlaufen. */
 export type PatientReiter = typeof tabDefs[number]["key"];
@@ -519,7 +538,7 @@ export const TAB_KEYS: readonly PatientReiter[] = tabDefs.map(t => t.key);
 
 /** Reiter, die reine Formulare sind — ihr Inhalt wird auf FORMULAR_MAX begrenzt. */
 const FORMULARREITER: ReadonlySet<PatientReiter> = new Set<PatientReiter>([
-  "personalien", "steuer", "wohnen", "anamnese", "aktivitaeten", "dokumente", "abschluss",
+  "personalien", "steuer", "wohnen", "anamnese", "aktivitaeten", "dokumente",
 ]);
 
 /**
@@ -548,17 +567,32 @@ interface StepPatientProps {
   /** Zahl offener Pflichtdokumente; erscheint unterhalb des Desktop-Breakpoints
    *  als Zähler am Reiter "Dokumente" (Lauf 1b — ersetzt die Kopfbereich-Marke). */
   dokumenteZaehler?: number;
+  /** Wo der Reitersatz steht. Vorgabe «onboarding» — bestehende Aufrufer bleiben unberührt. */
+  kontext?: StepPatientKontext;
+  /** Nur im Dossier: die Ablage-Wurzel der Person (Namenskonvention der SharePoint-Ablage). */
+  dokumenteWurzel?: string;
+  /** Nur im Dossier: die Person, deren Ablage gezeigt wird (Patientenkennung, nicht Fallkennung). */
+  dokumenteReferenz?: DokumentReferenz;
+  /** Nur im Dossier: die Pendenzen dieser Person — dieselbe Liste wie in der linken Spalte. */
+  pendenzen?: UnifiedEntry[];
 }
 
 /* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
-export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion, dokumenteZaehler = 0 }: StepPatientProps) {
+export function StepPatient({ data, onChange, onValidityChange, onboardingId, requestedTab, onTabSwitched, reiterAktion, dokumenteZaehler = 0, kontext = "onboarding", dokumenteWurzel, dokumenteReferenz, pendenzen = [] }: StepPatientProps) {
+  const imDossier = kontext === "dossier";
+  /* Der Pendenzen-Reiter erscheint nur im Dossier. Gefiltert wird die EINE
+     Liste `tabDefs`, damit Beschriftung, Symbol und Schlüssel an genau einer
+     Stelle stehen. */
+  const sichtbareTabs = imDossier ? tabDefs : tabDefs.filter(t => t.key !== "pendenzen");
+
   /* Der Reiterwechsel fragt bewusst nicht nach. Er bleibt innerhalb des
      Schritts, die Eingaben stehen danach unverändert da — eine Rückfrage
      unterbräche das Ausfüllen, ohne etwas zu schützen. Gefragt wird erst beim
      Schrittwechsel (OnboardingPage.goToStep). */
   const [activeTab, setActiveTab] = useState<PatientReiter>("personalien");
+  const navigate = useNavigate();
   const benutzer = useCurrentUser();
 
   // External tab-switch request
@@ -702,7 +736,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
             next?.scrollIntoView({ inline: "nearest", block: "nearest" });
           }}
         >
-          {tabDefs.map((tab) => {
+          {sichtbareTabs.map((tab) => {
             const isActive = activeTab === tab.key;
             const complete = isTabComplete(tab.key, data, patientOnbId);
 
@@ -773,24 +807,12 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           {activeTab === "wohnen" && (
             <TabWohnenUmfeldV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} />
           )}
-          {activeTab === "vitaldaten" && (onboardingId
-            ? <VitaldatenTab patientId={onboardingId} />
-            : <OhneFallkennung />)}
           {activeTab === "anamnese" && (
             <TabAnamneseV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} onboardingId={onboardingId} />
           )}
           {activeTab === "aktivitaeten" && (
             <TabAktivitaetenV2 data={data} onUpdateATL={updateATL} />
           )}
-          {activeTab === "interrai" && (onboardingId
-            ? <OnboardingTabBA onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />
-            : <OhneFallkennung />)}
-          {activeTab === "pflegeplanung" && (onboardingId
-            ? <OnboardingTabPP onboardingId={onboardingId} />
-            : <OhneFallkennung />)}
-          {activeTab === "klv" && (onboardingId
-            ? <OnboardingTabKLV onboardingId={onboardingId} />
-            : <OhneFallkennung />)}
           {activeTab === "workflow" && (onboardingId
             ? (() => {
                 // Patient-Workflow: Tickets ab Aufnahmedatum (= heute im Onboarding-Kontext).
@@ -805,11 +827,31 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
                 return <RhythmusTimeline subjektTyp="patient" subjektId={onboardingId} />;
               })()
             : <OhneFallkennung />)}
-          {activeTab === "dokumente" && <TabDokumente data={data} onChange={onChange} />}
-          {activeTab === "abschluss" && (
-            <div style={{ padding: 32, textAlign: "center", color: "var(--text-secondary)", fontSize: "var(--text-small)" }}>
-              Der Onboarding-Abschluss ist noch nicht umgesetzt.
-            </div>
+          {/* Dokumente: im Onboarding erfassen, im Dossier blättern.
+                 Erfasst wird während des Onboardings — steht die Person erst
+                 einmal im Bestand, liegen ihre Unterlagen bereits in der
+                 Ablage, und ein zweiter Erfassungsweg daneben führte zu zwei
+                 Wahrheiten über dieselbe Unterlage. */}
+          {activeTab === "dokumente" && (imDossier && dokumenteReferenz
+            ? <PersonDokumenteOrdner
+                referenz={dokumenteReferenz}
+                kontext={PATIENT_DOK_KONTEXT}
+                stichtag={GEGENWART}
+                wurzel={dokumenteWurzel ?? "Ablage"}
+              />
+            : <TabDokumente data={data} onChange={onChange} />)}
+
+          {/* Pendenzen: dieselbe Liste, die die linke Spalte führt — sie kommt
+                 als Eigenschaft herein, damit es keine zweite Abfrage gibt, die
+                 anders filtern könnte. */}
+          {activeTab === "pendenzen" && (
+            <TabTickets
+              tickets={pendenzen.map(alsTicket)}
+              navigate={navigate}
+              personBezug={dokumenteReferenz ? { art: "patient", kennung: dokumenteReferenz.kennung } : undefined}
+              titel="Tickets für diesen Patienten"
+              leerText="Für diesen Patienten sind keine Pendenzen erfasst."
+            />
           )}
           </div>
         </div>
@@ -822,6 +864,30 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
 /* ══════════════════════════════════════════
    TAB 5 – DOKUMENTE (PA-07: stammdaten-gesteuert)
    ══════════════════════════════════════════ */
+
+/**
+ * Pendenz → Tabellenzeile des Pendenzen-Reiters.
+ *
+ * Der Reiter ist derselbe wie beim Angehörigen (pendenzen/PendenzenReiter) und
+ * arbeitet auf `Ticket`. Der Patient bringt seine tatsächlichen Pendenzen mit —
+ * `UnifiedEntry` aus dem geteilten Bestand, dieselbe Liste, die auch die linke
+ * Spalte führt. Diese Abbildung liegt dazwischen.
+ *
+ * `faellig` steht in der Spalte «Erstellt», weil der Reiter genau eine
+ * Datumsspalte hat und die Fälligkeit die Angabe ist, nach der gearbeitet wird.
+ */
+function alsTicket(e: UnifiedEntry): Ticket {
+  const d = e.faellig ? isoZuDate(e.faellig) : null;
+  return {
+    id: e.id,
+    subject: entryBetreff(e),
+    status: e.status,
+    priority: e.prioritaet,
+    created: d ? formatAnzeige(d) : "",
+    assignedTo: e.verantwortlich?.name ?? "",
+    category: e.typLabel,
+  };
+}
 
 /**
  * Pflicht-Prüfung über die Dokument-Engine (stammdaten/dokumenttypen.ts).

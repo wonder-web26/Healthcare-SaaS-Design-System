@@ -54,6 +54,27 @@ export function refGleich(a: DokumentReferenz, b: DokumentReferenz): boolean {
   return a.art === b.art && a.kennung === b.kennung;
 }
 
+/**
+ * Name des Personenordners in der Ablage — die Namenskonvention.
+ *
+ * Beim Abschluss eines Onboardings entsteht je Person ein Ordner mit diesem
+ * Namen und darunter die Unterordner aus `ORDNER_REIHENFOLGE`. Beide, Patient
+ * und angehörige Person, folgen derselben Regel; sie steht hier an einer
+ * Stelle, damit die Ablage nicht je Ansicht anders heisst.
+ *
+ * Form: `Nachname_Vorname`, Leerzeichen zu Unterstrichen. Umlaute und
+ * Sonderzeichen bleiben, weil SharePoint sie trägt und der Ordner lesbar sein
+ * soll; `/` und `\` sind entfernt, weil sie Pfadtrenner wären.
+ *
+ * OFFEN: ob die Organisation eine andere Konvention vorgibt (etwa mit
+ * Personenkennung oder Jahr). Die Regel steht bewusst allein hier, damit eine
+ * spätere Vorgabe an einer Stelle einzusetzen ist.
+ */
+export function ablageWurzel(nachname: string, vorname: string): string {
+  const teil = (s: string) => s.trim().replace(/[/\\]/g, "").replace(/\s+/g, "_");
+  return [teil(nachname), teil(vorname)].filter(Boolean).join("_") || "Unbenannt";
+}
+
 /** Der Ordner eines Dokuments — aus dem Typ, nicht am Dokument gespeichert. */
 export function ordnerDes(d: Dokument): string {
   return ordnerVon(d.typCode);

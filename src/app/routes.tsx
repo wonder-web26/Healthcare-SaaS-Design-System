@@ -1,6 +1,5 @@
 import { createBrowserRouter } from "react-router";
 import { AppShell } from "./components/AppShell";
-import { DashboardPage } from "./components/DashboardPage";
 import { StrategicDashboard } from "./components/StrategicDashboard";
 import { PatientenPage } from "./components/PatientenPage";
 import { Patient360Page } from "./components/Patient360Page";
@@ -27,7 +26,11 @@ export const router = createBrowserRouter([
     path: "/",
     Component: AppShell,
     children: [
-      { index: true, Component: DashboardPage },
+      /* DEMO: Die Startseite (DashboardPage, die Anna-Seite) ist für die
+         Demoumgebung entfernt; «/» landet auf der Onboarding-Übersicht. Zum
+         Zurücknehmen: Component wieder auf DashboardPage setzen und den Import
+         oben wieder einsetzen. */
+      { index: true, Component: OnboardingListPage },
       { path: "dashboard", Component: StrategicDashboard },
       { path: "interrai", Component: InterRAIListPage },
       { path: "pflegeplanung/:planungId", Component: PflegeplanungArbeitsbereich },

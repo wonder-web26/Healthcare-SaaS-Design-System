@@ -395,6 +395,23 @@ export function schliessePatientOnboardingAb(onboardingId: string): Patient | un
 }
 
 /**
+ * Zustand eines Patienten setzen — der eine erlaubte Weg von aussen.
+ *
+ * `aktualisierePatient` lässt `status` bewusst nicht zu, und das bleibt so: der
+ * Abrechnungsstatus wird daraus ABGELEITET, ein direkter Patch würde die beiden
+ * auseinanderlaufen lassen. Diese Funktion hält sie zusammen — dieselbe Regel
+ * wie beim Onboarding-Abschluss (`schliessePatientOnboardingAb`).
+ *
+ * Nicht dafür gedacht: der Austritt. Er trägt Datum und Lebensumstände und
+ * läuft über `austrittErfassen`.
+ */
+export function setzePatientStatus(patientId: string, status: PatientStatus): void {
+  setzeBestand(bestand.map(p => (
+    p.id === patientId ? { ...p, status, abrechnungsStatus: abrechnungsStatusZu(status) } : p
+  )));
+}
+
+/**
  * Einzelne Felder eines Patienten fortschreiben (Inline-Bearbeitung im Dossier).
  * Kennung, Zustand und Onboarding-Bezug bleiben ausgenommen — die ändert nur
  * der Vorgang selbst, nie ein Formular.

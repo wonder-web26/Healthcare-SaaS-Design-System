@@ -70,27 +70,19 @@ export function phaseRang(phase: OnboardingPhase): number {
   return { preparation: 0, klv: 1, activation: 2, done: 3 }[phase];
 }
 
-/* ── Kennzeichen-Ableitung ── */
+/* ── Kennzeichen-Ableitung — ENTFERNT ─────────────────────────────────────────
+   Hier stand `ableitenKennzeichen` samt `Kennzeichen`, `KennzeichenTyp`,
+   `KennzeichenSpalte` und `MandatSignal`: Rot bei überschrittenem Start ohne
+   unterzeichneten Vertrag, Gelb bei überfälliger Pendenz oder Start in
+   höchstens drei Tagen, Rot vor Gelb.
 
-export type KennzeichenTyp = "rot" | "gelb" | null;
+   Die Regel ist auf Entscheid des Eigners ersatzlos entfernt — sie wird neu
+   aufgebaut, nicht angepasst. Bis dahin trägt die Onboarding-Liste bewusst
+   KEINE Ampelfarbe; die Zahlen stehen neutral da.
 
-/** Spalte, in der der Klartext-Grund zusätzlich sichtbar wird. */
-export type KennzeichenSpalte = "start" | "pendenzen";
-
-export interface Kennzeichen {
-  typ: KennzeichenTyp;
-  /** Klartext-Grund — dient als barrierefreie Beschriftung UND ist in der Spalte sichtbar. */
-  grund: string;
-  spalte: KennzeichenSpalte;
-}
-
-/** Eingaben, die die Kennzeichen-Ableitung braucht. */
-export interface MandatSignal {
-  currentStep: number;
-  /** Geplanter Start (validFrom) als ISO-Datum. */
-  validFrom: string;
-  pendenzenUeberfaellig: number;
-}
+   Erhalten bleiben `tageBisStart` und `istVertragUnterzeichnet`: das sind
+   Tatsachen über einen Vorgang, keine Bewertung. Die Filterchips der Liste
+   («Startdatum überschritten») rechnen damit weiter. ── */
 
 /** Tage von Bezugsdatum bis geplantem Start. Negativ = überschritten. Rein, ohne new Date(). */
 export function tageBisStart(validFromIso: string, bezugsdatum: Date): number {
@@ -106,36 +98,3 @@ export function istVertragUnterzeichnet(currentStep: number): boolean {
   return currentStep > ANZAHL_SCHRITTE;
 }
 
-/**
- * Kennzeichen ableiten. Rot schlägt Gelb.
- * - Rot: geplanter Start in der Vergangenheit UND Vertrag nicht unterzeichnet.
- * - Gelb: mindestens eine Pendenz überfällig ODER Start in höchstens drei Tagen.
- * - Sonst: kein Kennzeichen.
- */
-export function ableitenKennzeichen(m: MandatSignal, bezugsdatum: Date): Kennzeichen {
-  const tage = tageBisStart(m.validFrom, bezugsdatum);
-  const unterzeichnet = istVertragUnterzeichnet(m.currentStep);
-
-  if (tage < 0 && !unterzeichnet) {
-    return {
-      typ: "rot",
-      grund: `Start überschritten (${Math.abs(tage)} ${Math.abs(tage) === 1 ? "Tag" : "Tage"}), Vertrag nicht unterzeichnet`,
-      spalte: "start",
-    };
-  }
-  if (m.pendenzenUeberfaellig >= 1) {
-    return {
-      typ: "gelb",
-      grund: `${m.pendenzenUeberfaellig} ${m.pendenzenUeberfaellig === 1 ? "Pendenz" : "Pendenzen"} überfällig`,
-      spalte: "pendenzen",
-    };
-  }
-  if (tage >= 0 && tage <= 3) {
-    return {
-      typ: "gelb",
-      grund: tage === 0 ? "Start heute" : `Start in ${tage} ${tage === 1 ? "Tag" : "Tagen"}`,
-      spalte: "start",
-    };
-  }
-  return { typ: null, grund: "", spalte: "start" };
-}

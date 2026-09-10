@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from "react";
+import React, { useState, useCallback, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import { useParams, useNavigate } from "react-router";
 import { InlineSelect } from "./ui/InlineSelect";
 import { FormFeld } from "./ui/FormFeld";
@@ -29,7 +29,12 @@ import {
   useVerordnungen, useKostengutsprachen, aktualisiereVerordnung, aktualisiereKostengutsprache,
 } from "../../lib/mandate/verordnungen-store";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
-import { isoZuAnzeige, anzeigeZuIso, formatAnzeige, formatDatumZeit, jetztAnzeige } from "../../lib/datum";
+import { isoZuAnzeige, anzeigeZuIso, formatAnzeige, formatDatumZeit, jetztAnzeige, isoZuDate, formatFaelligkeit } from "../../lib/datum";
+/* Linke Spalte: dieselben Quellen und dieselbe Komponente wie im Onboarding. */
+import { usePendenzen } from "../../lib/pendenzen/store";
+import { pendenzenFuerPerson, entryBetreff } from "../../lib/mocks/service-desk-unified";
+import { NotizSpur } from "./notizen/NotizSpur";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "./ui/dropdown-menu";
 import {
   ArrowLeft,
   Phone,
@@ -39,6 +44,7 @@ import {
   User,
   Edit3,
   MoreHorizontal,
+  MoreVertical,
   Sparkles,
   ExternalLink,
   CheckCircle2,
@@ -46,6 +52,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  PanelRight,
   Plus,
   Timer,
   Shield,
@@ -96,6 +103,7 @@ import {
 import { VitaldatenTab } from "./vitaldaten/VitaldatenTab";
 import {
   statusConfig,
+  type PatientStatus,
   schweregradConfig,
   abrechnungsStatusConfig,
   patientAdresse,
@@ -104,14 +112,19 @@ import {
   type Patient,
 } from "./patientData";
 import { NeuePendenzDialog } from "./pendenzen/NeuePendenzDialog";
-import { usePatienten, getPatient, aktualisierePatient, pflegeAdresse, tageBisReAssessment,
+import { usePatienten, getPatient, aktualisierePatient, setzePatientStatus, pflegeAdresse, tageBisReAssessment,
   austrittErfassen, AUSTRITT_FEHLERTEXT, type AustrittFehler } from "../../lib/patienten/store";
+/* Die Detailansicht rendert denselben Reitersatz wie das Onboarding — dieselbe
+   Komponente, nicht eine zweite Fassung davon. */
+import { StepPatient, emptyPatientForm, type PatientFormData } from "./StepPatient";
+import { EinwilligungProvider } from "./EinwilligungContext";
+import { ArztAnfrageProvider } from "./ArztAnfrageContext";
+import { anfangsFormular, sicherePatientFormular, patientAusFormular } from "../../lib/patienten/formular";
 import { KANTON_OPTIONS } from "../../lib/stammdaten/kantone";
 import { AdressBlock } from "./ui/AdressBlock";
 import { ENTLASSUNG_NACH, ENTLASSUNG_SONSTIGES, entlassungNachLabel } from "../../lib/stammdaten/entlassung";
 import { austrittVon, austrittText, monatNachAustritt, austrittsMonat } from "../../lib/patienten/austritt";
-import { GEGENWART, gegenwart } from "../../lib/gegenwart";
-import { StatusModal } from "./StatusModal";
+import { GEGENWART, GEGENWART_ISO, gegenwart } from "../../lib/gegenwart";
 import { DetailNavigation } from "./DetailNavigation";
 import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
 import {
@@ -165,7 +178,7 @@ import {
 } from "../../lib/diagnosen/store";
 import {
   dokumenteVon, ordnerStand, ordnerZustand, ordnerDes, pflichtluecken,
-  geprueftePflichttypen, gueltigBisText, istAbgelaufen, HERKUNFT_TEXT,
+  geprueftePflichttypen, gueltigBisText, istAbgelaufen, HERKUNFT_TEXT, ablageWurzel,
   type Dokument, type DokumentReferenz, type OrdnerStand,
 } from "../../lib/dokumente/dokumente";
 import { dokumenttyp, ordnerFuer, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
@@ -194,6 +207,31 @@ import { AppButton } from "./ui/AppButton";
 import { StatusMarke, type StatusMarkeVariante } from "./ui/StatusMarke";
 
 /** Map the existing Tailwind bg class of a status config to a semantic StatusMarke variant. */
+/**
+ * Punktfarbe zur Marken-Variante. Die bedienbare Statusmarke im Kopf trägt —
+ * wie ihr Gegenstück im Onboarding — einen farbigen Punkt neben der
+ * Beschriftung. `statusConfig` hält als `dot` einen Tailwind-Klassennamen
+ * ("bg-success"), hier braucht es aber eine CSS-Farbe.
+ */
+/**
+ * Status, die im Kopf frei gewählt werden dürfen.
+ *
+ * Nicht dabei: `im_onboarding` — er entsteht beim Anlegen und endet mit der
+ * Konvertierung — und `ausgetreten`, der zum Austritt gehört (Austrittsdatum
+ * und Lebensumstände, `austrittErfassen`) und nicht per Menü gesetzt wird.
+ */
+const WAEHLBARE_PATIENT_STATUS: PatientStatus[] = ["aktiv", "nicht_abrechenbar", "gekuendigt"];
+
+function variantePunkt(v: StatusMarkeVariante): string {
+  switch (v) {
+    case "erfolg": return "var(--status-success)";
+    case "warnung": return "var(--status-warning)";
+    case "gefahr": return "var(--status-danger)";
+    case "info": return "var(--status-info)";
+    default: return "var(--text-tertiary)";
+  }
+}
+
 function bgZuVariante(bg: string): StatusMarkeVariante {
   if (bg.includes("success")) return "erfolg";
   if (bg.includes("warning")) return "warnung";
@@ -582,7 +620,6 @@ function Patient360Inhalt() {
   /* Die Adresse ist die einzige Quelle der aktiven Ansicht — kein Zustand,
      kein Suchparameter, kein Zahlenindex. */
   const aktiveAnsicht = ansichtAusAdresse(gruppe, ansicht);
-  const [statusModal, setStatusModal] = useState(false);
 
   /* Der Kopf steht; die Navigation beginnt an seiner Unterkante. Die Höhe wird
      gemessen statt geraten — sie ändert sich mit der Breite (Umbruch). */
@@ -614,6 +651,74 @@ function Patient360Inhalt() {
   const patienten = usePatienten();
   const allPatientIds = patienten.map(p => p.id);
   const patient = patientId ? getPatient(patientId) : undefined;
+
+  /* ── Formularstand und Speicherzustand ──────────────────────────────────────
+     Dasselbe Muster wie im Onboarding (OnboardingPage): der Stand lebt im
+     Komponentenzustand, geschrieben wird ausschliesslich in `handleSave`, und
+     der Knopf trägt drei wahre Zustände. Die Seite ist über `key={patientId}`
+     je Patient neu aufgebaut, deshalb genügt die einmalige Initialisierung.
+
+     `anfangsFormular` kennt die Reihenfolge der Quellen: gespeicherter Stand,
+     sonst Rückabbildung aus dem Datensatz samt Mock-Ergänzungen. ── */
+  /* Zustandsspalte: auf Desktop fest sichtbar, darunter als Feld von rechts
+     (Muster D) — wie im Onboarding. */
+  const [seitenspalteOffen, setSeitenspalteOffen] = useState(false);
+
+  /* Offene Pendenzen dieses Patienten. Quelle ist der geteilte Pendenzenbestand,
+     gefragt wird über `pendenzenFuerPerson` — dieselbe Sortierung wie in der
+     linken Spalte des Onboardings, nur die Frage lautet «diese Person» statt
+     «dieser Vorgang». */
+  const allePendenzen = usePendenzen();
+  const offenePatientPendenzen = useMemo(
+    () => (patient ? pendenzenFuerPerson(allePendenzen, "patient", patient.id) : []),
+    [allePendenzen, patient],
+  );
+  /** Höchstzahl der Einträge, bevor «Alle anzeigen» erscheint — wie im Onboarding. */
+  const PENDENZEN_IN_SPALTE = 5;
+
+  /* Überfällig = Termin vor der Gegenwart. Verglichen werden ISO-Zeichenketten,
+     weil das für `JJJJ-MM-TT` genügt — und weil es im Code schon zwei private
+     `daysFromToday` gibt (ServiceDeskPage, PendenzenManagementUebersicht); eine
+     dritte Kopie wäre die falsche Antwort darauf. */
+  const ueberfaelligAnzahl = offenePatientPendenzen.filter(p => p.faellig && p.faellig < GEGENWART_ISO).length;
+
+  const [formular, setFormular] = useState<PatientFormData>(() => patient ? anfangsFormular(patient) : emptyPatientForm);
+  const [gespeicherterStand, setGespeicherterStand] = useState<string>(() => JSON.stringify(patient ? anfangsFormular(patient) : emptyPatientForm));
+  const [ebenGespeichert, setEbenGespeichert] = useState(false);
+  const hatAenderungen = JSON.stringify(formular) !== gespeicherterStand;
+  const speicherZustand: "unveraendert" | "geaendert" | "gespeichert" =
+    hatAenderungen ? "geaendert" : ebenGespeichert ? "gespeichert" : "unveraendert";
+
+  /* Geschrieben wird in zwei Bestände: den Formularbestand (alle 82 Felder, er
+     trägt auch Anamnese, ATL und Dokumente) und den Patientendatensatz (die 54
+     Felder, die er kennt). Ohne den zweiten Schritt zeigte die Patientenliste
+     nach einer Namensänderung weiter den alten Namen. */
+  const handleSave = useCallback(() => {
+    if (!patient || !hatAenderungen) return;
+    sicherePatientFormular(patient.id, formular);
+    aktualisierePatient(patient.id, patientAusFormular(formular));
+    setGespeicherterStand(JSON.stringify(formular));
+    setEbenGespeichert(true);
+  }, [patient, hatAenderungen, formular]);
+
+  useEffect(() => {
+    if (!ebenGespeichert) return;
+    const t = window.setTimeout(() => setEbenGespeichert(false), 2500);
+    return () => window.clearTimeout(t);
+  }, [ebenGespeichert]);
+
+  useEffect(() => {
+    if (hatAenderungen) setEbenGespeichert(false);
+  }, [hatAenderungen]);
+
+  /* Verlassen der Seite mit Ungespeichertem: der Browser fragt, wir liefern den
+     Anlass — wie im Onboarding. */
+  useEffect(() => {
+    if (!hatAenderungen) return;
+    const warnen = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warnen);
+    return () => window.removeEventListener("beforeunload", warnen);
+  }, [hatAenderungen]);
 
   if (!patient) {
     return (
@@ -668,75 +773,289 @@ function Patient360Inhalt() {
           />
         </div>
         <div className="flex items-start justify-between" style={{ gap: 16 }}>
-          <div className="min-w-0">
-            <div className="flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
-              <h2 style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-                {patient.nachname}, {patient.vorname}
-              </h2>
-              {/* Status/Abrechnung/Schweregrad: Information (nicht bedienbar), je Zustand mit Symbol.
-                  Der Abrechnungsstatus wird aus dem Status abgeleitet und
-                  lautet bei „Nicht abrechenbar" gleich. Zweimal dasselbe Wort
-                  nebeneinander liest sich wie zwei Befunde, ist aber einer —
-                  die abgeleitete Marke entfällt dann. */}
-              <StatusMarke label={st.label} variante={bgZuVariante(st.bg)} />
-              {ast.label !== st.label && <StatusMarke label={ast.label} variante={bgZuVariante(ast.bg)} />}
-              {sg && <StatusMarke label={sg.label} variante={bgZuVariante(sg.bg)} />}
-            </div>
-            <div className="flex items-center flex-wrap" style={{ gap: "var(--space-3)", marginTop: 6, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-              <MaskedAhv ahv={patient.ahvNummer} />
-              <span className="hidden md:inline">·</span>
-              <span>Geb.: {patient.geburtsdatum}</span>
-              <span className="hidden md:inline">·</span>
-              <span>{patientAdresse(patient) || "—"}</span>
-              {patient.pflegeortAbweichend && (
-                <span className="inline-flex items-center" style={{ gap: 4, color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
-                  <AlertTriangle style={{ width: 12, height: 12 }} /> Pflege an: {adresseAnzeige(patient.pflegeortStrasse, patient.pflegeortPlz, patient.pflegeortOrt) || "—"}
-                </span>
-              )}
-              <span className="hidden md:inline">·</span>
+          {/* ── Zeile 2, links: Name · bedienbare Statusmarke · Kontext ──
+                 Aufbau wie im Onboarding-Kopf: EINE Zeile, kein Datenblock
+                 darunter. Die frühere Zeile mit AHV-Nummer, Geburtsdatum,
+                 Adresse, Aufnahme- und Besuchsdatum ist entfallen — dieselben
+                 Angaben stehen im Reiter «Personalien», eine Handbreit tiefer.
+                 Der Kontext neben dem Namen ist hier die Bezugsperson, im
+                 Onboarding die angehörige Person. ── */}
+          <div className="min-w-0 flex items-center flex-wrap" style={{ gap: 8, rowGap: 4, minHeight: 26 }}>
+            <span title={`${patient.nachname}, ${patient.vorname}`} style={{ fontSize: "var(--text-h2)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere", minWidth: 0 }}>
+              {patient.nachname}, {patient.vorname}
+            </span>
+            {/* Bedienbare Statusmarke — dasselbe Auswahlmenü wie im Onboarding,
+                nicht der frühere StatusModal: dessen Knopf «Status speichern»
+                rief bloss `onClose` und schrieb nichts. Hier wird geschrieben. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`Status ändern, aktuell ${st.label}`}
+                  className="ui-fokusring inline-flex items-center shrink-0 cursor-pointer"
+                  style={{ gap: 5, height: "var(--marke-height-interaktiv)", padding: "0 8px 0 10px", borderRadius: "var(--control-radius)", fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--bg-elevated)", color: "var(--text-primary)", border: "var(--border-thin) solid var(--border-default)", fontFamily: "inherit" }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: 999, background: variantePunkt(bgZuVariante(st.bg)) }} />
+                  {st.label}
+                  <ChevronDown style={{ width: 12, height: 12, opacity: 0.7 }} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {WAEHLBARE_PATIENT_STATUS.map(s => {
+                  const cfg = statusConfig[s];
+                  return (
+                    <DropdownMenuItem key={s} onSelect={() => setzePatientStatus(patient.id, s)} style={{ gap: 8 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: 999, background: variantePunkt(bgZuVariante(cfg.bg)) }} />
+                      <span style={{ flex: 1 }}>{cfg.label}</span>
+                      <Check style={{ width: 13, height: 13, opacity: patient.status === s ? 1 : 0 }} />
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Schweregrad bleibt: er ist Befund, nicht Zustand, und hat im
+                Onboarding kein Gegenstück. */}
+            {sg && <StatusMarke label={sg.label} variante={bgZuVariante(sg.bg)} />}
+            {/* Kontextangabe wie «Angehörige Vera Steiner» im Onboarding. */}
+            <span className="hidden lg:inline-flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)" }}>
+              <span style={{ color: "var(--text-tertiary)" }}>Bezugsperson</span>
               {patient.pflegefachkraft !== "—" ? (
-                <BezugspersonFeld person={{ initialen: patient.pflegefachkraftInitialen, name: patient.pflegefachkraft }} />
+                <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{patient.pflegefachkraft}</span>
               ) : (
                 <span className="inline-flex items-center" style={{ gap: 4, color: "var(--status-warning-text)", fontWeight: "var(--weight-medium)" }}>
                   <AlertTriangle style={{ width: 12, height: 12 }} /> Nicht zugewiesen
                 </span>
               )}
-              <span className="hidden md:inline">·</span>
-              <span>Aufnahme: {patient.aufnahmeDatum || "—"}</span>
-              <span className="hidden md:inline">·</span>
-              <span>Letzter Besuch: {patient.letzterBesuch || "—"}</span>
-            </div>
+            </span>
           </div>
 
           {/* Actions — genau ein Primärknopf (Ticket erstellen), Rest Sekundär/Symbol */}
           <div className="flex items-center shrink-0" style={{ gap: "var(--space-2)" }}>
-            <AppButton variant="primaer" icon={Plus} onClick={() => navigate("/servicedesk")}>Ticket erstellen</AppButton>
-            <AppButton variant="sekundaer" icon={Edit3}>Bearbeiten</AppButton>
-            <AppButton variant="symbol" icon={MoreHorizontal} ariaLabel="Weitere Aktionen" />
+            {/* Überfällig-Marke rechts im Kopf — wie im Onboarding, nur auf
+                Desktop; unterhalb 1024px trägt die Zahl die Schaltfläche zur
+                Zustandsspalte. */}
+            {ueberfaelligAnzahl > 0 && (
+              <span className="hidden lg:inline-flex">
+                <StatusMarke label={`${ueberfaelligAnzahl} überfällig`} variante="warnung" />
+              </span>
+            )}
+            {/* Muster D: Zugang zur Zustandsspalte unterhalb des Desktop-
+                Breakpoints, mit dem Überfällig-Zähler als Abzeichen. */}
+            <button
+              type="button"
+              aria-label={ueberfaelligAnzahl > 0
+                ? `Pendenzen und Notizen anzeigen, ${ueberfaelligAnzahl} überfällig`
+                : "Pendenzen und Notizen anzeigen"}
+              onClick={() => setSeitenspalteOffen(true)}
+              className="ui-fokusring lg:hidden relative flex items-center justify-center shrink-0 cursor-pointer"
+              style={{ width: "var(--marke-height-interaktiv)", height: "var(--marke-height-interaktiv)", borderRadius: "var(--control-radius)", background: "transparent", border: "var(--border-thin) solid var(--border-default)", color: "var(--text-secondary)" }}
+            >
+              <PanelRight style={{ width: 16, height: 16 }} />
+              {ueberfaelligAnzahl > 0 && (
+                <span aria-hidden="true" className="absolute flex items-center justify-center" style={{ top: -5, right: -5, minWidth: 16, height: 16, padding: "0 4px", borderRadius: "var(--radius-pill)", background: "var(--status-danger)", color: "var(--text-on-dark)", fontSize: 11, fontWeight: "var(--weight-medium)", lineHeight: 1 }}>
+                  {ueberfaelligAnzahl}
+                </span>
+              )}
+            </button>
+            {/* Speichern bleibt als einziger Knopf im Kopf. Im Onboarding sitzt
+                er in der Fusszeile neben «Zurück» und «Weiter» — die gibt es im
+                Dossier nicht, und ein Formular ohne sichtbaren Weg zum Sichern
+                wäre die schlechtere Abweichung. Drei Zustände wie dort. */}
+            <div className="flex items-center" style={{ gap: "var(--space-2)" }}>
+              {speicherZustand === "geaendert" && (
+                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Nicht gespeichert</span>
+              )}
+              <AppButton
+                variant="sekundaer"
+                icon={speicherZustand === "gespeichert" ? Check : Save}
+                onClick={handleSave}
+                disabled={speicherZustand !== "geaendert"}
+                aria-live="polite"
+                style={speicherZustand === "geaendert"
+                  ? { border: "var(--border-thick) solid var(--border-strong)", fontWeight: "var(--weight-medium)" }
+                  : undefined}
+              >
+                {speicherZustand === "gespeichert" ? "Gespeichert" : "Speichern"}
+              </AppButton>
+            </div>
+            {/* Überlaufmenü wie im Onboarding: senkrechte Punkte, ohne Rahmen.
+                «Ticket erstellen» ist aus dem Kopf hierher gewandert — der
+                Onboarding-Kopf führt keinen Primärknopf, und die Handlung ist
+                selten genug für das Menü. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Weitere Aktionen"
+                  className="ui-fokusring flex items-center justify-center shrink-0 cursor-pointer"
+                  style={{ width: "var(--marke-height-interaktiv)", height: "var(--marke-height-interaktiv)", borderRadius: "var(--control-radius)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                >
+                  <MoreVertical style={{ width: 16, height: 16 }} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => navigate("/servicedesk")} style={{ gap: 8 }}>
+                  <Plus style={{ width: 14, height: 14 }} /> Ticket erstellen
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
 
-      {/* ── Navigation links, Arbeitsfläche rechts ── */}
-      <div className="flex items-start" style={{ gap: "var(--space-5)", padding: "var(--space-4) var(--space-6) 40px" }}>
-        <AnsichtNavigation patientId={patient.id} aktiv={aktiveAnsicht} zustaende={zustaende} obenPx={kopfHoehe} />
-        <div data-arbeitsflaeche className="flex-1 min-w-0">
-          <AnsichtInhalt
-            schluessel={aktiveAnsicht}
-            patient={patient}
-            tickets={tickets}
-            navigate={navigate}
-          />
+      {/* ── Inhalt: derselbe Reitersatz wie der Onboarding-Schritt «Patient» ──
+             Die frühere Gruppennavigation (Überblick, Abklärung, Pflege,
+             Medikation, Leistungen …) und ihre Ansichten sind ersetzt. Grund:
+             wer ein Onboarding abschliesst und auf den Patienten wechselt, soll
+             dieselbe Ansicht vorfinden — gleiche Reiter, gleiche Felder, gleiche
+             Daten. Zwei Oberflächen für denselben Patienten waren der Bruch.
+
+             Es ist DIESELBE Komponente, nicht eine nachgebaute: StepPatient aus
+             ./StepPatient, die auch das Onboarding rendert. Eine Änderung dort
+             wirkt hier mit. ── */}
+      {/* Die beiden Provider gehören zum Reitersatz, nicht zum Onboarding: der
+          Reiter «Dokumente» liest die Einwilligung, der Abklärungsteil die
+          Arzt-Anfrage. Ohne sie bricht «Dokumente» mit «useEinwilligung must be
+          used within EinwilligungProvider». Hier tragen sie die PATIENTEN-
+          Kennung — im Onboarding die Fallkennung, weil dort noch kein Patient
+          steht. */}
+      <div className="flex" style={{ padding: "var(--space-3) var(--space-6) var(--space-4)" }}>
+        {/* EIN Container mit Aussenlinie und Radius 10, zwei Spalten, senkrechte
+            Haarlinie — dieselbe Hülle wie im Onboarding (§B). */}
+        <div className="flex w-full min-h-0" style={{ border: "var(--border-thin) solid var(--border-default)", borderRadius: 10, background: "var(--bg-elevated)", overflow: "hidden" }}>
+
+          {/* Abdunkelung hinter dem Überlagerungsfeld, nur unterhalb Desktop (Muster D) */}
+          {seitenspalteOffen && (
+            <div
+              className="fixed inset-0 z-40 lg:hidden"
+              style={{ background: "color-mix(in srgb, var(--text-primary) 40%, transparent)" }}
+              onClick={() => setSeitenspalteOffen(false)}
+              aria-hidden="true"
+            />
+          )}
+
+          {/* ── Zustandsspalte, 260px fest. Unterhalb des Desktop-Breakpoints
+                 ausgeblendet und über die Kopfbereich-Schaltfläche als Feld von
+                 rechts erreichbar — dieselbe Spalte, kein Parallel-Bau. ── */}
+          <div
+            className={seitenspalteOffen
+              ? "flex flex-col min-h-0 overflow-y-auto fixed inset-y-0 right-0 z-50 shadow-2xl lg:static lg:z-auto lg:shadow-none lg:shrink-0"
+              : "hidden lg:flex shrink-0 flex-col min-h-0 overflow-y-auto"}
+            style={{ width: 260, background: seitenspalteOffen ? "var(--bg-elevated)" : undefined, borderRight: "var(--border-thin) solid var(--border-default)", padding: "var(--space-4)" }}
+            role={seitenspalteOffen ? "dialog" : undefined}
+            aria-label="Pendenzen und Notizen"
+          >
+            {seitenspalteOffen && (
+              <div className="lg:hidden flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" }}>Übersicht</span>
+                <button
+                  type="button"
+                  aria-label="Übersicht schliessen"
+                  onClick={() => setSeitenspalteOffen(false)}
+                  className="ui-fokusring flex items-center justify-center cursor-pointer"
+                  style={{ width: 32, height: 32, borderRadius: "var(--control-radius)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
+                >
+                  <X style={{ width: 16, height: 16 }} />
+                </button>
+              </div>
+            )}
+
+            {/* ── Abschnitt PENDENZEN ──────────────────────────────────────────
+                   Gefragt wird nach der PERSON, nicht nach dem Onboarding: ein
+                   Patient behält seine Kennung, sein Onboarding ist vorbei.
+                   Bearbeitet wird eine Pendenz nur in der Pendenzenliste. ── */}
+            <div className="flex items-center justify-between" style={{ marginBottom: "var(--space-3)" }}>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", letterSpacing: "var(--tracking-wide)", textTransform: "uppercase" }}>Pendenzen</div>
+              {offenePatientPendenzen.length > 0 && (
+                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{offenePatientPendenzen.length}</span>
+              )}
+            </div>
+            {offenePatientPendenzen.length === 0 ? (
+              <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Keine offene Pendenz</div>
+            ) : (
+              <>
+                <div className="flex flex-col" style={{ gap: "var(--space-2)" }}>
+                  {offenePatientPendenzen.slice(0, PENDENZEN_IN_SPALTE).map(p => {
+                    const sperrt = !!p.sperrtVertrag;
+                    const d = p.faellig ? isoZuDate(p.faellig) : null;
+                    const zweiteZeile = sperrt
+                      ? "Sperrt den Vertragsschritt"
+                      : [d ? formatFaelligkeit(d) : p.faellig, p.verantwortlich?.name].filter(Boolean).join(" · ");
+                    return (
+                      <div
+                        key={p.id}
+                        style={{
+                          display: "flex", gap: 8, minWidth: 0,
+                          // Farbe ausschliesslich für sperrende Einträge.
+                          borderLeft: sperrt ? "2px solid var(--status-danger)" : "2px solid transparent",
+                          paddingLeft: 8,
+                        }}
+                      >
+                        <div className="min-w-0">
+                          <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{entryBetreff(p)}</div>
+                          <div style={{ fontSize: "var(--text-micro)", color: sperrt ? "var(--status-danger)" : "var(--text-tertiary)", fontWeight: sperrt ? "var(--weight-medium)" : 400 }}>
+                            {zweiteZeile}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {offenePatientPendenzen.length > PENDENZEN_IN_SPALTE && (
+                  <button
+                    onClick={() => navigate("/servicedesk")}
+                    className="ui-fokusring inline-flex items-center cursor-pointer"
+                    style={{ marginTop: "var(--space-3)", gap: 4, padding: 0, background: "none", border: "none", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-secondary)" }}
+                    onMouseEnter={e => (e.currentTarget.style.color = "var(--text-primary)")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "var(--text-secondary)")}
+                  >
+                    Alle anzeigen <ChevronRight style={{ width: 13, height: 13 }} />
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* ── Abschnitt NOTIZEN: Spur dieses Patienten. Dieselbe Komponente
+                   wie im Onboarding, nur mit der Patienten- statt der
+                   Fallreferenz. ── */}
+            <div style={{ height: "var(--border-thin)", background: "var(--border-default)", margin: "var(--space-4) 0" }} />
+            <NotizSpur
+              referenz={{ art: "patient", kennung: patient.id }}
+              personName={`${patient.nachname}, ${patient.vorname}`}
+            />
+          </div>
+
+          {/* ── Arbeitsfläche: derselbe Reitersatz wie im Onboarding ── */}
+          <div className="flex-1 min-w-0" style={{ padding: "var(--space-4)" }}>
+            <EinwilligungProvider onboardingId={patient.onboardingId} patientId={patient.id}>
+            <ArztAnfrageProvider onboardingId={patient.onboardingId} patientId={patient.id}>
+              {/* `kontext="dossier"` schaltet zwei Dinge um, die sich zwischen
+                  Onboarding und Dossier unterscheiden MÜSSEN: der Reiter
+                  «Dokumente» zeigt die Ablage statt der Erfassung, und
+                  «Pendenzen» kommt als eigener Reiter dazu. Alles Übrige ist
+                  identisch — es ist dieselbe Komponente. */}
+              <StepPatient
+                data={formular}
+                onChange={setFormular}
+                onboardingId={patient.onboardingId ?? undefined}
+                kontext="dossier"
+                dokumenteReferenz={{ art: "patient", kennung: patient.id }}
+                dokumenteWurzel={ablageWurzel(patient.nachname, patient.vorname)}
+                pendenzen={offenePatientPendenzen}
+              />
+            </ArztAnfrageProvider>
+            </EinwilligungProvider>
+          </div>
         </div>
       </div>
 
-      {/* ── Status Modal ────────────────────── */}
-      <StatusModal
-        open={statusModal}
-        onClose={() => setStatusModal(false)}
-        currentStatus={patient.status}
-        patientName={`${patient.nachname}, ${patient.vorname} (${patient.id})`}
-      />
+      {/* Der frühere StatusModal ist hier entfernt. Er war von keiner Stelle
+          aus zu öffnen, und sein Knopf «Status speichern» rief nur `onClose` —
+          er hätte den Status nie geändert. Gesetzt wird jetzt über das Menü an
+          der Statusmarke im Kopf. Die Komponente selbst steht unberührt in
+          ./StatusModal, falls sie später mit echtem Schreibweg zurückkommt. */}
     </>
   );
 }

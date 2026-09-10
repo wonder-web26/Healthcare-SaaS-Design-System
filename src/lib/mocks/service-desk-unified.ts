@@ -110,6 +110,29 @@ export function pendenzenFuerOnboarding(alle: UnifiedEntry[], kennung: string): 
     });
 }
 
+/**
+ * Offene Pendenzen einer PERSON — für die linke Spalte des Patientendossiers.
+ *
+ * Schwesterfunktion zu `pendenzenFuerOnboarding`, mit derselben Sortierung:
+ * sperrende zuerst, dann nach Fälligkeit, ohne Termin ans Ende. Der Unterschied
+ * ist allein die Frage. Das Onboarding fragt nach dem VORGANG (`ursprung`), das
+ * Dossier nach der PERSON (`personBezug`) — ein Patient behält seine Kennung,
+ * sein Onboarding ist irgendwann vorbei.
+ */
+export function pendenzenFuerPerson(alle: UnifiedEntry[], art: string, kennung: string): UnifiedEntry[] {
+  return alle
+    .filter(e => e.status !== "erledigt" && e.personBezug?.art === art && e.personBezug.kennung === kennung)
+    .sort((a, b) => {
+      const as = a.sperrtVertrag ? 0 : 1;
+      const bs = b.sperrtVertrag ? 0 : 1;
+      if (as !== bs) return as - bs;
+      if (!a.faellig && !b.faellig) return 0;
+      if (!a.faellig) return 1;
+      if (!b.faellig) return -1;
+      return a.faellig.localeCompare(b.faellig);
+    });
+}
+
 /** Maps legacy WorkflowTyp to typed PendenzTyp */
 const workflowToPendenzTyp: Record<WorkflowTyp, PendenzTyp> = {
   SRK_ANMELDUNG: "srk-anmeldung",

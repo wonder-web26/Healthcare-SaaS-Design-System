@@ -3,7 +3,6 @@ import { useCurrentRole } from "../auth";
 import { getPatienten } from "../../lib/patienten/store";
 import type { Schweregrad } from "./patientData";
 import {
-  Sparkles,
   AlertTriangle,
   Users,
   UserPlus,
@@ -102,52 +101,9 @@ export function StrategicDashboard() {
         gap: "var(--space-6)",
       }}
     >
-      {/* ═══ Row 1 — Anna Tagesbriefing ═══ */}
-      <div style={cardStyle}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-2)",
-            marginBottom: "var(--space-3)",
-          }}
-        >
-          <Sparkles
-            size={18}
-            style={{ color: "var(--brand-primary)", flexShrink: 0 }}
-            aria-hidden="true"
-          />
-          <span
-            style={{
-              fontSize: "var(--text-small)",
-              fontWeight: 600,
-              color: "var(--brand-primary)",
-            }}
-          >
-            Anna
-          </span>
-          <span
-            style={{
-              fontSize: "var(--text-meta)",
-              color: "var(--text-tertiary)",
-              marginLeft: "var(--space-1)",
-            }}
-          >
-            Tagesbriefing
-          </span>
-        </div>
-        <p
-          style={{
-            fontSize: "var(--text-body)",
-            fontWeight: 400,
-            color: "var(--text-primary)",
-            lineHeight: 1.6,
-            margin: 0,
-          }}
-        >
-          {annaBriefing[role]}
-        </p>
-      </div>
+      {/* DEMO: Zeile 1 trug das Anna-Tagesbriefing und ist mit Anna entfernt.
+          Der Text je Rolle steht weiter in `annaBriefing` oben — zum
+          Zurücknehmen genügt es, diesen Block wieder einzusetzen. */}
 
       {/* ═══ Row 2 — KPI Cards ═══ */}
       <div

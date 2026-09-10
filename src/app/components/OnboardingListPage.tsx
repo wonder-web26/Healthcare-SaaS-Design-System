@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Plus, Search, AlertTriangle, X, ChevronDown, Check } from "lucide-react";
-import { ANZAHL_SCHRITTE, schrittLabel, phaseFuerSchritt, phaseRang, PHASE_LABEL, type OnboardingPhase, ableitenKennzeichen, tageBisStart, istVertragUnterzeichnet } from "../../lib/onboarding/schritte";
+import { Plus, Search, X, ChevronDown, Check } from "lucide-react";
+import { ANZAHL_SCHRITTE, schrittLabel, phaseFuerSchritt, phaseRang, PHASE_LABEL, type OnboardingPhase, tageBisStart, istVertragUnterzeichnet } from "../../lib/onboarding/schritte";
 import { isoZuAnzeige } from "../../lib/datum";
 import { leerZuletzt } from "../../lib/sortierung";
 import { DataTable, TABELLE_LAYOUT, type SpalteDef } from "./ui/DataTable";
@@ -78,19 +78,15 @@ const RESPONSIBLE: Record<string, { initialen: string; kurz: string }> = {
 /* ── Sortierung: jede Spalte; Kennzeichen/Phase nach Rangfolge, Start chronologisch,
    Schritt/Pflichtdok/Pendenzen numerisch, sonst alphabetisch; Leerwerte immer ans
    Ende. Standard bleibt geplanter Start aufsteigend. ── */
-type SortKey = "kennzeichen" | "patient" | "angehoeriger" | "schritt" | "phase" | "pflichtdok" | "pendenzen" | "start" | "verantwortlich";
-const OKENN_RANK: Record<string, number> = { rot: 0, gelb: 1 }; // kein Kennzeichen = 2
-function oKennRang(c: OnboardingCase): number {
-  const t = ableitenKennzeichen({ currentStep: c.currentStep, validFrom: c.validFrom, pendenzenUeberfaellig: c.pendenzenUeberfaellig }, BEZUGSDATUM).typ;
-  return t ? OKENN_RANK[t] : 2;
-}
+/* Die Sortierung nach «kennzeichen» ist mit der Kennzeichen-Regel entfernt
+   (siehe lib/onboarding/schritte.ts). Standard bleibt geplanter Start. */
+type SortKey = "patient" | "angehoeriger" | "schritt" | "phase" | "pflichtdok" | "pendenzen" | "start" | "verantwortlich";
 function pflichtAnteil(c: OnboardingCase): number { return c.pflichtdokGefordert ? c.pflichtdokErledigt / c.pflichtdokGefordert : 1; }
 function sortCases(list: OnboardingCase[], key: SortKey, dir: "asc" | "desc"): OnboardingCase[] {
   const f = dir === "asc" ? 1 : -1;
   const verantw = (c: OnboardingCase) => c.responsibleUserId ? (RESPONSIBLE[c.responsibleUserId]?.kurz ?? "") : "";
   return [...list].sort((a, b) => {
     switch (key) {
-      case "kennzeichen": return f * (oKennRang(a) - oKennRang(b)) || a.validFrom.localeCompare(b.validFrom);
       case "patient": return f * (a.patientNachname.localeCompare(b.patientNachname, "de") || a.patientVorname.localeCompare(b.patientVorname, "de"));
       case "angehoeriger": return f * a.angehoeriger.localeCompare(b.angehoeriger, "de");
       case "schritt": return f * ((a.currentStep - b.currentStep) || a.validFrom.localeCompare(b.validFrom));
@@ -139,33 +135,17 @@ export function OnboardingListPage() {
     return t;
   }, [filter]);
 
-  const SORT_LABEL: Record<SortKey, string> = { kennzeichen: "Kennzeichen", patient: "Patient", angehoeriger: "Angehörige/r", schritt: "aktuellem Schritt", phase: "Phase", pflichtdok: "Pflichtdokumenten", pendenzen: "Pendenzen", start: "geplantem Start", verantwortlich: "Verantwortlicher" };
+  const SORT_LABEL: Record<SortKey, string> = { patient: "Patient", angehoeriger: "Angehörige/r", schritt: "aktuellem Schritt", phase: "Phase", pflichtdok: "Pflichtdokumenten", pendenzen: "Pendenzen", start: "geplantem Start", verantwortlich: "Verantwortlicher" };
 
 
   /* ── Spaltenbeschreibung für die geteilte DataTable (Anteile/Mindestbreiten/
      Ausrichtung an der Aufrufstelle; die Komponente kennt keine Fachspalten). ── */
-  const kz = (c: OnboardingCase) => ableitenKennzeichen({ currentStep: c.currentStep, validFrom: c.validFrom, pendenzenUeberfaellig: c.pendenzenUeberfaellig }, BEZUGSDATUM);
-
-  const onboardingZeilenHintergrund = (c: OnboardingCase): string | undefined => {
-    const t = kz(c).typ;
-    // Korrektur #2: Zeilentönung folgt der Schwere — Rot deutlich kräftiger als Gelb.
-    return t === "rot" ? "color-mix(in srgb, var(--status-danger-bg), transparent 40%)"
-      : t === "gelb" ? "color-mix(in srgb, var(--status-warning-bg), transparent 68%)"
-      : undefined;
-  };
-
-  const kennzeichenIcon = (c: OnboardingCase) => {
-    const k = kz(c);
-    if (!k.typ) return null;
-    // Form-Unterschied unabhängig von Farbe: Rot gefüllt, Gelb offen.
-    return <AlertTriangle role="img" aria-label={k.grund} style={{ width: 15, height: 15, flexShrink: 0, color: k.typ === "rot" ? "var(--status-danger)" : "var(--status-warning)", fill: k.typ === "rot" ? "var(--status-danger)" : "none" }} />;
-  };
+  /* Zeilentönung, Warndreieck und Kennzeichen-Spalte sind mit der Regel
+     entfernt. Die Liste führt vorläufig keine Ampel — weder als Fläche noch als
+     Symbol noch als eingefärbte Zahl. Der Neuaufbau setzt hier an. */
 
   const onboardingKarteTitel = (c: OnboardingCase) => (
-    <>
-      <span style={{ fontSize: "0.9375rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span>
-      {kennzeichenIcon(c)}
-    </>
+    <span style={{ fontSize: "0.9375rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span>
   );
 
   // Karte (Telefon, Lauf 1b Änderung 7): Titel — aktueller Schritt — eine Zeile
@@ -184,12 +164,13 @@ export function OnboardingListPage() {
         <div className="flex items-center flex-wrap" style={{ gap: "4px 12px", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
           <span>
             {c.pendenzenOffen === 0 ? "Keine Pendenzen" : `${c.pendenzenOffen} Pendenz${c.pendenzenOffen === 1 ? "" : "en"}`}
-            {c.pendenzenUeberfaellig > 0 && <span style={{ color: "var(--status-warning-text)", fontWeight: 500 }}> · {c.pendenzenUeberfaellig} überfällig</span>}
+            {/* Die Zahl bleibt, die Warnfarbe ist mit der Kennzeichen-Regel fort. */}
+            {c.pendenzenUeberfaellig > 0 && <span style={{ fontWeight: 500 }}> · {c.pendenzenUeberfaellig} überfällig</span>}
           </span>
           <span>{c.pflichtdokErledigt}/{c.pflichtdokGefordert} Pflichtdok.</span>
           <span style={{ whiteSpace: "nowrap" }}>
             Start {isoZuAnzeige(c.validFrom)}
-            {ueber && <span style={{ color: "var(--status-danger)", fontWeight: 500 }}> +{Math.abs(t)} {Math.abs(t) === 1 ? "Tag" : "Tage"}</span>}
+            {ueber && <span style={{ fontWeight: 500 }}> +{Math.abs(t)} {Math.abs(t) === 1 ? "Tag" : "Tage"}</span>}
           </span>
         </div>
         <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
@@ -200,7 +181,6 @@ export function OnboardingListPage() {
   };
 
   const onboardingSpalten: SpalteDef<OnboardingCase>[] = [
-    { id: "kennzeichen", label: "", festBreitePx: 28, align: "center", sortierbar: true, ausKarte: true, render: kennzeichenIcon },
     { id: "patient", label: "Patient", anteil: 20, minCh: 22, align: "left", sortierbar: true, ausKarte: true,
       render: c => <span style={{ fontSize: "0.8125rem", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", overflowWrap: "anywhere" }}>{c.patientNachname}, {c.patientVorname}</span> },
     { id: "angehoeriger", label: "Angehörige/r", anteil: 17, minCh: 20, align: "left", sortierbar: true, zweitzeileUnter: "patient", ausKarte: true,
@@ -219,14 +199,17 @@ export function OnboardingListPage() {
       // Warnfarbe und drängt die Zahl nie von ihrer Linie. 0 = stiller Leerwert.
       render: c => (
         <span style={{ display: "flex", justifyContent: "flex-end", alignItems: "baseline", gap: 8, whiteSpace: "nowrap" }}>
-          {c.pendenzenUeberfaellig > 0 && <span className="m1-mindestschrift" style={{ color: "var(--status-warning-text)", fontWeight: 500, fontSize: "0.75rem" }}>· {c.pendenzenUeberfaellig} überfällig</span>}
+          {c.pendenzenUeberfaellig > 0 && <span className="m1-mindestschrift" style={{ color: "var(--text-secondary)", fontWeight: 500, fontSize: "0.75rem" }}>· {c.pendenzenUeberfaellig} überfällig</span>}
           <span style={{ fontFamily: "monospace", fontVariantNumeric: "tabular-nums", fontSize: "0.8125rem", color: c.pendenzenOffen === 0 ? "var(--text-tertiary)" : "var(--text-primary)" }}>{c.pendenzenOffen === 0 ? "–" : c.pendenzenOffen}</span>
         </span>
       ) },
     { id: "start", label: "Start geplant", anteil: 11, minCh: 16, align: "left", sortierbar: true,
       // Korrektur C: Abweichungsangabe einzeilig, ohne Umbruch — +N Tage bei Überschreitung,
       // in N Tagen bei bevorstehendem Start. Die Zelle bricht nie (whiteSpace nowrap).
-      render: c => { const t = tageBisStart(c.validFrom, BEZUGSDATUM); const ueber = t < 0 && !istVertragUnterzeichnet(c.currentStep); const bevor = kz(c).typ === "gelb" && kz(c).spalte === "start"; return <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{isoZuAnzeige(c.validFrom)}{ueber && <span className="m1-mindestschrift" style={{ marginLeft: 8, color: "var(--status-danger)", fontWeight: 500, fontSize: "0.75rem" }}>+{Math.abs(t)} {Math.abs(t) === 1 ? "Tag" : "Tage"}</span>}{!ueber && bevor && <span className="m1-mindestschrift" style={{ marginLeft: 8, color: "var(--status-warning-text)", fontWeight: 500, fontSize: "0.75rem" }}>{t === 0 ? "heute" : `in ${t} ${t === 1 ? "Tag" : "Tagen"}`}</span>}</span>; } },
+      // Die Abweichung bleibt als Zahl sichtbar, aber neutral. Der Zusatz
+      // «in N Tagen» ist entfallen: er kam allein aus dem gelben Kennzeichen
+      // und hat ohne die Regel keine Quelle mehr.
+      render: c => { const t = tageBisStart(c.validFrom, BEZUGSDATUM); const ueber = t < 0 && !istVertragUnterzeichnet(c.currentStep); return <span style={{ fontSize: "0.8125rem", color: "var(--text-primary)", whiteSpace: "nowrap" }}>{isoZuAnzeige(c.validFrom)}{ueber && <span className="m1-mindestschrift" style={{ marginLeft: 8, color: "var(--text-secondary)", fontWeight: 500, fontSize: "0.75rem" }}>+{Math.abs(t)} {Math.abs(t) === 1 ? "Tag" : "Tage"}</span>}</span>; } },
     { id: "verantwortlich", label: "Verantw.", anteil: 12, minCh: 12, align: "left", sortierbar: true,
       render: c => { const resp = c.responsibleUserId ? RESPONSIBLE[c.responsibleUserId] : null; return resp
         ? <div className="flex items-center" style={{ gap: 6 }}><span className="shrink-0 flex items-center justify-center" style={{ width: 22, height: 22, borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)" }}><span className="m1-mindestschrift" style={{ fontSize: 8, fontWeight: "var(--weight-semibold)", color: "var(--text-secondary)" }}>{resp.initialen}</span></span><span style={{ fontSize: "0.8125rem", color: "var(--text-primary)" }}>{resp.kurz}</span></div>
@@ -328,7 +311,6 @@ export function OnboardingListPage() {
               zeilen={sorted}
               zeilenKey={c => c.id}
               onZeileKlick={c => navigate(`/onboarding/${c.id}`)}
-              zeilenHintergrund={onboardingZeilenHintergrund}
               sort={sort}
               onSort={k => toggleSort(k as SortKey)}
               karteTitel={onboardingKarteTitel}

@@ -16,7 +16,6 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
-  Shield,
   GraduationCap,
   CalendarDays,
   Headphones,
@@ -60,6 +59,8 @@ import { AdressBlock } from "./ui/AdressBlock";
 import { FORMULAR_MAX } from "./form/feldbreiten";
 import { NotizSpur } from "./notizen/NotizSpur";
 import { NeuePendenzDialog } from "./pendenzen/NeuePendenzDialog";
+/* Reiter «Pendenzen» — geteilt mit dem Patientendossier. */
+import { TabTickets, type Ticket } from "./pendenzen/PendenzenReiter";
 import { toast } from "sonner";
 import { type NotizReferenz } from "../../lib/notizen/notizen";
 import { Popover, PopoverAnchor, PopoverContent } from "./ui/popover";
@@ -69,7 +70,6 @@ import { getDiplomierte, getDiplomierterById, diplomierterAnzeigename } from "..
 import { UserMinus } from "lucide-react";
 import { TabDokumenteGeneric, type DocFolder } from "./TabDokumente";
 import { DetailNavigation } from "./DetailNavigation";
-import { AnnaAngehoerigeSummary } from "../anna/AnnaAngehoerigeSummary";
 import { RhythmusTimeline } from "./rhythmus/RhythmusTimeline";
 import { DateField } from "./form/DateField";
 import { generiereRhythmusTickets } from "../../lib/rhythmus/engine";
@@ -200,33 +200,48 @@ interface AngehoerigerDetail {
 }
 
 const detailLookup: Record<string, AngehoerigerDetail> = {
+  /* Vera Steiner — Ehefrau und pflegende Angehörige von Hans-Rudolf Steiner
+     (P-2026-0041).
+
+     Dieser Satz beschrieb zuvor eine andere Person: "Peter Müller", männlich,
+     Jahrgang 1978, Bahnhofstrasse 42 in Zürich, mit Partnerin Anna Müller und
+     zwei Kindern. Die Reiter Stammdaten, Anstellung und Qualifikation lasen
+     ihn, Überblick und Listen den Seed in angehoerigeData — zwei Personen
+     unter einer Kennung. Alle Werte hier stammen jetzt aus dem Seed; die
+     Schreibweise ist die der Anzeige (Grossschreibung, "—" für leer).
+
+     Eintritt 01.03.2026: daran hängen Betreuungsrhythmus (M1 bis M6) und
+     SRK-Frist (ein Jahr, also 01.03.2027). */
   "A-2026-0101": {
-    geschlecht: "Männlich", geburtsdatum: "14.03.1978", ahvNummer: "756.1234.5678.97",
-    nationalitaet: "Schweiz", heimatort: "Luzern", aufenthaltsstatus: "—",
-    zivilstand: "Verheiratet", zivilstandSeit: "12.06.2005",
-    strasse: "Bahnhofstrasse 42", plz: "8001", ort: "Zürich",
-    email: "peter.mueller@bluewin.ch", telefon: "+41 44 321 65 87", mobil: "",
-    krankenkasseName: "CSS", versicherungsnummer: "KK-834291",
+    geschlecht: "Weiblich", geburtsdatum: "12.09.1974", ahvNummer: "756.3412.8890.44",
+    nationalitaet: "Schweiz", heimatort: "Winterthur ZH", aufenthaltsstatus: "—",
+    zivilstand: "Verheiratet", zivilstandSeit: "22.05.1998",
+    strasse: "Rosenweg 14", plz: "8400", ort: "Winterthur",
+    email: "vera.steiner@bluewin.ch", telefon: "+41 79 412 55 08", mobil: "",
+    krankenkasseName: "Helsana", versicherungsnummer: "80756000112233445",
     quellensteuer: "Nein", konfession: "Evangelisch-reformiert",
-    quellensteuerTarif: "—", steuergemeinde: "Zürich",
+    quellensteuerTarif: "—", steuergemeinde: "Winterthur",
     sozialamtInvolviert: "Nein", sozialamtKontakt: "—", lohnabtretung: "Nein",
-    partnerName: "Anna Müller", partnerGeburtsdatum: "22.08.1980",
-    partnerAhvNummer: "756.9876.5432.10", partnerZemisNummer: "—", partnerAufenthaltsstatus: "Schweizer/in",
-    kinder: [
-      { id: "K-0101-1", nachname: "Müller", vorname: "Luca", geburtsdatum: "15.04.2010", ahvNummer: "756.1111.2222.33", geschlecht: "Männlich", inAusbildung: false, ausbildungBis: null, doppelbezug: "nein" },
-      { id: "K-0101-2", nachname: "Müller", vorname: "Sophie", geburtsdatum: "03.09.2012", ahvNummer: "756.4444.5555.66", geschlecht: "Weiblich", inAusbildung: null, ausbildungBis: null, doppelbezug: "nein" },
-    ],
-    kinderzulagenAktiv: "Ja", kinderzulagenUeberSpitex: "Ja", familienausgleichskasse: "SVA Zürich",
-    lohnsumme: "3'540.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
-    funktion: "Pflegende/r Angehörige/r", eintrittsdatum: "01.01.2026", stundenlohn: "29.50",
-    bankname: "UBS", iban: "CH93 0076 2011 6238 5295 7",
-    srkStatus: "abgeschlossen", srkAngemeldet: true, srkDeadline: "31.12.2026", srkAbgeschlossenAm: "15.01.2026",
+    /* Der Partner IST der gepflegte Patient — die AHV-Nummer ist deshalb seine
+       aus patientData (P-2026-0041), nicht eine zweite erfundene. */
+    partnerName: "Hans-Rudolf Steiner", partnerGeburtsdatum: "15.03.1948",
+    partnerAhvNummer: "756.1234.5678.90", partnerZemisNummer: "—", partnerAufenthaltsstatus: "Schweizer/in",
+    kinder: [],
+    kinderzulagenAktiv: "Nein", kinderzulagenUeberSpitex: "Nein", familienausgleichskasse: "—",
+    /* 18 Stempeltage im laufenden Monat zu 34.50 bei rund 6 Stunden je Tag. */
+    lohnsumme: "3'726.00", fluechtlingsstatus: "Nein", grenzgaenger: "Nein",
+    funktion: "Pflegende/r Angehörige/r", eintrittsdatum: "01.03.2026", stundenlohn: "34.50",
+    bankname: "Zürcher Kantonalbank", iban: "CH21 0070 0110 0033 4455 6",
+    /* SRK vor der Frist abgeschlossen — passt zu qualifikation "srk" und
+       srkZertifikatVorhanden "ja" im Seed. Frist = Eintritt + 1 Jahr. */
+    srkStatus: "abgeschlossen", srkAngemeldet: true, srkDeadline: "01.03.2027", srkAbgeschlossenAm: "12.06.2026",
+    /* Erfasst im Onboarding, also vor dem Eintritt — dieselben vier Unterlagen
+       und Daten wie im Dokumentbestand (lib/dokumente/store, DOK-001 bis 004). */
     dokumente: [
-      { name: "ID / Pass", status: "hochgeladen", datum: "02.01.2026" },
-      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "02.01.2026" },
-      { name: "Bankkarte", status: "hochgeladen", datum: "03.01.2026" },
-      { name: "Familienbüchlein", status: "hochgeladen", datum: "05.01.2026" },
-      { name: "Partner Krankenkassenkarte", status: "hochgeladen", datum: "05.01.2026" },
+      { name: "ID / Pass", status: "hochgeladen", datum: "03.02.2026" },
+      { name: "Krankenkassenkarte", status: "hochgeladen", datum: "03.02.2026" },
+      { name: "Bankkarte", status: "hochgeladen", datum: "04.02.2026" },
+      { name: "SRK-Pflegehelfer-Zertifikat", status: "hochgeladen", datum: "11.02.2026" },
     ],
   },
   "A-2026-0102": {
@@ -415,16 +430,6 @@ function LinkeSpalte({ a }: { a: Angehoeriger }) {
 }
 
 /* ── Tickets mock ────────────────────────── */
-interface Ticket {
-  id: string;
-  subject: string;
-  status: "offen" | "in_bearbeitung" | "erledigt";
-  priority: "hoch" | "mittel" | "niedrig";
-  created: string;
-  assignedTo: string;
-  category: string;
-}
-
 function getTickets(): Ticket[] {
   return [
     { id: "SD-2026-0401", subject: "Bankdaten fehlen — Lohnauszahlung blockiert", status: "offen", priority: "hoch", created: "26.02.2026", assignedTo: "K. Meier", category: "HR" },
@@ -647,7 +652,7 @@ export function Angehoerige360Page() {
               </div>
             )}
             {activeTab === "dokumente" && <TabDokumenteAngehoerige a={a} />}
-            {activeTab === "pendenzen" && <TabTickets tickets={tickets} navigate={navigate} personBezug={{ art: "angehoeriger", kennung: a.id }} />}
+            {activeTab === "pendenzen" && <TabTickets tickets={tickets} navigate={navigate} personBezug={{ art: "angehoeriger", kennung: a.id }} titel="Tickets für diesen Angehörigen" leerText="Für diesen Angehörigen sind keine Pendenzen erfasst." />}
             {activeTab === "historie" && <TabHistorie />}
           </div>
         </div>
@@ -2299,12 +2304,6 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
     return new Date(Number(p[2]), Number(p[1]) - 1, Number(p[0]));
   };
 
-  const formatDe = (d: Date): string => {
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    return `${dd}.${mm}.${d.getFullYear()}`;
-  };
-
   const daysUntil = (dateStr: string): number | null => {
     const d = parseDe(dateStr);
     if (!d) return null;
@@ -2333,33 +2332,12 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
     setTimeout(() => setShowSaved(false), 2500);
   };
 
-  /* ── Compliance calculations ── */
-  const vertragsDate = parseDe(detail.eintrittsdatum);
-  const grenze12 = vertragsDate ? new Date(vertragsDate.getFullYear() + 1, vertragsDate.getMonth(), vertragsDate.getDate()) : null;
-  const grenze12Str = grenze12 ? formatDe(grenze12) : "—";
-  const daysToGrenze = grenze12 ? Math.ceil((grenze12.getTime() - TODAY.getTime()) / (1000 * 60 * 60 * 24)) : null;
-
+  /* Die Gate-Rechnung (12-Monats-Grenze, Leistungspause) ist mit dem Block
+     «Compliance & Konsequenz» entfallen — sie hatte danach keinen Leser mehr.
+     Was bleibt, betrifft allein die erfasste Frist. */
   const deadlineDays = daysUntil(deadline);
   const isOverdue = status === "ueberfaellig";
   const isSoonDeadline = status === "offen" && deadlineDays !== null && deadlineDays <= 30;
-
-  // Gate status
-  let gateStatus: "erlaubt" | "risiko" | "pausiert" = "erlaubt";
-  if (status === "abgeschlossen") {
-    gateStatus = "erlaubt";
-  } else if (grenze12 && TODAY >= grenze12) {
-    gateStatus = "pausiert";
-  } else if (daysToGrenze !== null && daysToGrenze <= 30) {
-    gateStatus = "risiko";
-  } else if (isOverdue || isSoonDeadline) {
-    gateStatus = "risiko";
-  }
-
-  const gateConfig = {
-    erlaubt:  { label: "Leistungen erlaubt",   bg: "bg-success/10", text: "text-success", border: "border-success/15", dot: "bg-success" },
-    risiko:   { label: "Leistungen in Risiko",  bg: "bg-warning/10", text: "text-warning", border: "border-warning/15", dot: "bg-warning" },
-    pausiert: { label: "Leistungen pausiert",   bg: "bg-error/10",   text: "text-error",   border: "border-error/15",   dot: "bg-error" },
-  };
 
   const statusBadgeConfig = {
     abgeschlossen: { label: "SRK erfüllt",     bg: "bg-success/10", text: "text-success", border: "border-success/20", dot: "bg-success" },
@@ -2374,7 +2352,6 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
   };
 
   const sb = statusBadgeConfig[status];
-  const gc = gateConfig[gateStatus];
 
   const inputClass = "w-full text-[13px] text-foreground bg-secondary/50 border border-border rounded-lg px-3 py-2 outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/20 transition-all";
   const selectClass = inputClass + " appearance-none";
@@ -2473,8 +2450,8 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
         )}
       </div>
 
-      {/* ═══ MAIN CONTENT — 2 Columns ═══ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* ═══ MAIN CONTENT — eine Spalte, seit der rechte Block entfallen ist ═══ */}
+      <div className="grid grid-cols-1 gap-4">
 
         {/* ── LEFT: Kursstatus ── */}
         <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
@@ -2596,89 +2573,16 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
           </div>
         </div>
 
-        {/* ── RIGHT: Compliance & Konsequenz ── */}
-        <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-          <div className="px-5 py-3.5 border-b border-border-light flex items-center gap-2">
-            <Shield className="w-4 h-4 text-primary" />
-            <h6 className="text-[13px] text-foreground" style={{ fontWeight: 500 }}>Compliance & Konsequenz</h6>
-          </div>
-          <div className="p-5 space-y-5">
+        {/* Der Block «Compliance & Konsequenz» stand hier: eine Zeitachse
+            Vertragsunterzeichnung → 12-Monats-Grenze → Gate-Status mit dem
+            Erklärsatz zur Leistungspause. Auf Entscheid des Eigners entfernt,
+            weil er sich neben dem Kursstatus wie eine Dublette las.
 
-            {/* Timeline / Gate */}
-            <div className="relative">
-              {/* Vertical line */}
-              <div className="absolute left-[9px] top-3 bottom-3 w-px bg-border" />
-
-              {/* Step 1: Vertragsunterzeichnung */}
-              <div className="relative flex items-start gap-3.5 pb-5">
-                <div className="relative z-10 w-[18px] h-[18px] rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center shrink-0">
-                  <span className="w-[6px] h-[6px] rounded-full bg-primary" />
-                </div>
-                <div className="pt-0.5">
-                  <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Vertragsunterzeichnung</div>
-                  <div className="text-[13px] text-foreground mt-0.5" style={{ fontWeight: 500 }}>{detail.eintrittsdatum}</div>
-                </div>
-              </div>
-
-              {/* Step 2: 12-Monats-Grenze */}
-              <div className="relative flex items-start gap-3.5 pb-5">
-                <div className={`relative z-10 w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 ${
-                  gateStatus === "pausiert"
-                    ? "bg-error/10 border-error"
-                    : gateStatus === "risiko"
-                      ? "bg-warning/10 border-warning"
-                      : "bg-muted border-border"
-                }`}>
-                  <span className={`w-[6px] h-[6px] rounded-full ${
-                    gateStatus === "pausiert" ? "bg-error" : gateStatus === "risiko" ? "bg-warning" : "bg-border"
-                  }`} />
-                </div>
-                <div className="pt-0.5">
-                  <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>12-Monats-Grenze</div>
-                  <div className="text-[13px] text-foreground mt-0.5" style={{ fontWeight: 500 }}>{grenze12Str}</div>
-                  {daysToGrenze !== null && status !== "abgeschlossen" && (
-                    <div className="text-[11px] text-muted-foreground mt-0.5">
-                      {daysToGrenze > 0 ? `Noch ${daysToGrenze} Tage` : `${Math.abs(daysToGrenze)} Tage überschritten`}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Step 3: Gate Status */}
-              <div className="relative flex items-start gap-3.5">
-                <div className={`relative z-10 w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 ${gc.bg} ${gc.border}`}>
-                  {gateStatus === "erlaubt" ? (
-                    <Check className="w-2.5 h-2.5 text-success" />
-                  ) : gateStatus === "pausiert" ? (
-                    <X className="w-2.5 h-2.5 text-error" />
-                  ) : (
-                    <AlertTriangle className="w-2.5 h-2.5 text-warning" />
-                  )}
-                </div>
-                <div className="pt-0.5">
-                  <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500 }}>Gate Status</div>
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] mt-1 ${gc.bg} ${gc.text} border ${gc.border}`} style={{ fontWeight: 600 }}>
-                    <span className={`w-[6px] h-[6px] rounded-full ${gc.dot}`} />
-                    {gc.label}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Contextual explanation */}
-            <div className={`rounded-lg px-3.5 py-2.5 border text-[11px] ${
-              gateStatus === "erlaubt"
-                ? "bg-success/[0.04] border-success/15 text-success"
-                : gateStatus === "risiko"
-                  ? "bg-warning/[0.04] border-warning/15 text-warning"
-                  : "bg-error/[0.04] border-error/15 text-error"
-            }`} style={{ fontWeight: 450, lineHeight: 1.5 }}>
-              {gateStatus === "erlaubt" && "SRK Kurs ist abgeschlossen. Leistungserbringung ist freigegeben."}
-              {gateStatus === "risiko" && "SRK Kurs ist noch nicht abgeschlossen. Leistungs-Pause droht, wenn der Kurs nicht rechtzeitig abgeschlossen wird."}
-              {gateStatus === "pausiert" && "12-Monats-Grenze überschritten ohne SRK-Abschluss. Leistungen sind pausiert — keine Auszahlung bis SRK abgeschlossen."}
-            </div>
-          </div>
-        </div>
+            OFFEN, bewusst so belassen: die SRK-Frist gilt weiter (CLAUDE.md,
+            Kerndomäne — ohne Abschluss binnen eines Jahres nach
+            Vertragsunterzeichnung werden Leistungen pausiert). Im Dossier ist
+            diese Folge jetzt nirgends mehr sichtbar; erfasst wird der
+            Kursstatus, seine Konsequenz steht nicht mehr daneben. */}
       </div>
     </div>
   );
@@ -2688,122 +2592,10 @@ function TableQualifikation({ detail }: { detail: AngehoerigerDetail }) {
    TAB: TICKETS
    ══════════════════════════════════════════ */
 // Zugewiesen: Kürzel aus dem Namen (wie die Initialen-Spalten der vier Listen), voller Name im title.
-function ticketKuerzel(name: string): string {
-  const teile = name.trim().split(/\s+/).filter(Boolean);
-  if (teile.length === 0) return "–";
-  if (teile.length === 1) return teile[0].slice(0, 2).toUpperCase();
-  return (teile[0][0] + teile[teile.length - 1][0]).toUpperCase();
-}
-const TICKET_STATUS_RANK: Record<string, number> = { offen: 0, in_bearbeitung: 1, erledigt: 2 };
-const TICKET_PRIO_RANK: Record<string, number> = { hoch: 0, mittel: 1, niedrig: 2 };
-function sortTickets(list: Ticket[], key: string, dir: "asc" | "desc"): Ticket[] {
-  const f = dir === "asc" ? 1 : -1;
-  return [...list].sort((a, b) => {
-    switch (key) {
-      case "id": return f * a.id.localeCompare(b.id, "de");
-      case "subject": return f * a.subject.localeCompare(b.subject, "de");
-      case "category": return f * a.category.localeCompare(b.category, "de");
-      case "priority": return f * ((TICKET_PRIO_RANK[a.priority] ?? 0) - (TICKET_PRIO_RANK[b.priority] ?? 0));
-      case "status": return f * ((TICKET_STATUS_RANK[a.status] ?? 0) - (TICKET_STATUS_RANK[b.status] ?? 0));
-      case "created": return f * anzeigeZuIso(a.created).localeCompare(anzeigeZuIso(b.created));
-      case "assignedTo": return f * a.assignedTo.localeCompare(b.assignedTo, "de");
-      default: return 0;
-    }
-  });
-}
-
-function TabTickets({ tickets, navigate, personBezug }: { tickets: Ticket[]; navigate: (path: string) => void; personBezug?: { art: "angehoeriger" | "patient"; kennung: string } }) {
-  // Neue Pendenz aus dem Reiter: Person vorbelegt, kein Sprung nach dem Anlegen.
-  const [neuOffen, setNeuOffen] = useState(false);
-  // Nur die Abweichung trägt Farbe/Fläche; Regelzustände sind stiller Text (wie in den vier Listen).
-  const STATUS_CFG: Record<Ticket["status"], { label: string; dot: string; color: string; weight: string }> = {
-    offen: { label: "Offen", dot: "var(--text-tertiary)", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
-    in_bearbeitung: { label: "In Bearbeitung", dot: "var(--status-warning)", color: "var(--status-warning-text)", weight: "var(--weight-medium)" },
-    erledigt: { label: "Erledigt", dot: "var(--status-success)", color: "var(--text-tertiary)", weight: "var(--weight-regular)" },
-  };
-  const PRIO_CFG: Record<Ticket["priority"], { label: string; color: string; weight: string }> = {
-    hoch: { label: "Hoch", color: "var(--status-danger)", weight: "var(--weight-medium)" },
-    mittel: { label: "Mittel", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
-    niedrig: { label: "Niedrig", color: "var(--text-secondary)", weight: "var(--weight-regular)" },
-  };
-  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
-  const toggleSort = (key: string) => setSort(s => s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
-  const sorted = sort ? sortTickets(tickets, sort.key, sort.dir) : tickets;
-
-  // Spalten am längsten realen Wert bemessen (kein Detailbereich → kein Ellipsis, §148).
-  const spalten: SpalteDef<Ticket>[] = [
-    { id: "id", label: "Ticket-ID", minCh: 13, maxSpur: "14ch", align: "left", sortierbar: true, ausKarte: true,
-      render: t => <span className="font-mono" style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>{t.id}</span> },
-    { id: "subject", label: "Betreff", minCh: 24, maxSpur: "48ch", align: "left", sortierbar: true, ausKarte: true,
-      render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)" }}>{t.subject}</span> },
-    { id: "category", label: "Kategorie", minCh: 10, maxSpur: "13ch", align: "left", sortierbar: true, abwerfRang: 1,
-      render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{t.category}</span> },
-    { id: "priority", label: "Priorität", minCh: 11, maxSpur: "11ch", align: "left", sortierbar: true,
-      render: t => { const p = PRIO_CFG[t.priority]; return <span style={{ fontSize: "var(--text-small)", color: p.color, fontWeight: p.weight, whiteSpace: "nowrap" }}>{p.label}</span>; } },
-    { id: "status", label: "Status", minCh: 15, maxSpur: "18ch", align: "left", sortierbar: true,
-      render: t => { const s = STATUS_CFG[t.status]; return <span className="inline-flex items-center" style={{ gap: 6, minWidth: 0 }}><span style={{ width: 6, height: 6, borderRadius: "var(--radius-pill)", background: s.dot, flexShrink: 0 }} /><span style={{ fontSize: "var(--text-small)", color: s.color, fontWeight: s.weight, whiteSpace: "nowrap" }}>{s.label}</span></span>; } },
-    { id: "created", label: "Erstellt", minCh: 12, maxSpur: "12ch", align: "left", sortierbar: true, abwerfRang: 3,
-      render: t => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{isoZuAnzeige(anzeigeZuIso(t.created))}</span> },
-    { id: "assignedTo", label: "Zugewiesen", minCh: 10, maxSpur: "10ch", align: "left", sortierbar: true, abwerfRang: 2,
-      render: t => <span title={t.assignedTo} style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontWeight: "var(--weight-medium)", whiteSpace: "nowrap" }}>{ticketKuerzel(t.assignedTo)}</span> },
-  ];
-  const karteTitel = (t: Ticket) => (
-    <div className="flex items-center" style={{ gap: 8, width: "100%", minWidth: 0 }}>
-      <span className="font-mono" style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)", flexShrink: 0 }}>{t.id}</span>
-      <span className="truncate" style={{ flex: 1, minWidth: 0, fontSize: "var(--text-small)", color: "var(--text-primary)", fontWeight: "var(--weight-medium)" }}>{t.subject}</span>
-    </div>
-  );
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Headphones className="w-4 h-4 text-primary" />
-          <h5 className="text-foreground">Tickets für diesen Angehörigen</h5>
-          <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground" style={{ fontWeight: 500 }}>{tickets.length}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setNeuOffen(true)}
-            className="ui-fokusring inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors"
-            style={{ fontWeight: 500 }}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Neue Pendenz
-          </button>
-          <NeuePendenzDialog
-            offen={neuOffen}
-            onClose={() => setNeuOffen(false)}
-            onErstellt={() => { setNeuOffen(false); toast("Pendenz angelegt — sichtbar in den Pendenzen"); }}
-            vorbelegtePerson={personBezug ?? null}
-          />
-          <button
-            onClick={() => navigate("/servicedesk")}
-            className="inline-flex items-center gap-1.5 px-3 py-[7px] text-[12px] rounded-xl border border-border bg-card hover:bg-secondary/60 transition-colors"
-            style={{ fontWeight: 500 }}
-          >
-            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
-            Pendenzenliste öffnen
-          </button>
-        </div>
-      </div>
-
-      <DataTable<Ticket>
-        spalten={spalten}
-        zeilen={sorted}
-        zeilenKey={t => t.id}
-        onZeileKlick={() => navigate("/servicedesk")}
-        sort={sort ?? undefined}
-        onSort={toggleSort}
-        karteTitel={karteTitel}
-        containerHaltepunkte
-        karteAbPx={640}
-        fusszeile={tickets.length > 0 ? <span>{tickets.length} {tickets.length === 1 ? "Ticket" : "Tickets"}</span> : undefined}
-        leerText="Für diesen Angehörigen sind keine Pendenzen erfasst."
-      />
-    </div>
-  );
-}
+/* Der Reiter «Pendenzen» ist nach ./pendenzen/PendenzenReiter gezogen —
+   dieselbe Ansicht trägt jetzt auch das Patientendossier. Hier stand die
+   Vorlage; sie ist unverändert dorthin gewandert, damit es nicht zwei
+   Fassungen gibt, die einander heute gleichen und morgen nicht mehr. */
 
 /* ══════════════════════════════════════════
    TAB: HISTORIE

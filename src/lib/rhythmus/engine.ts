@@ -93,13 +93,25 @@ const TICKETS: RhythmusTicket[] = [];
    DATUMS-HELFER
    ══════════════════════════════════════════ */
 
+/**
+ * Fälligkeit aus Anker plus Versatz. Rechnet durchgehend in UTC.
+ *
+ * Vorher mischte diese Funktion zwei Zeitzonen: `new Date("2026-03-01")` legt
+ * UTC-Mitternacht an, `setMonth`/`setDate` verschieben in Ortszeit, und
+ * `toISOString` liest wieder UTC. Wo dazwischen die Sommerzeit einsetzt,
+ * verlor das Ergebnis einen Tag — aus dem 1. April wurde der 31. März, aus dem
+ * 1. Mai der 30. April. Sichtbar wurde es an den Betreuungsschritten, die
+ * durchweg einen Tag vor dem Monatsersten fällig waren.
+ *
+ * Mit den UTC-Settern gibt es keine Ortszeit mehr, die dazwischenfahren kann.
+ */
 function addOffset(isoDate: string, monate: number, tage: number): string {
   const d = new Date(isoDate);
   if (tage > 0 && monate === 0) {
-    d.setDate(d.getDate() + tage);
+    d.setUTCDate(d.getUTCDate() + tage);
   } else {
-    d.setMonth(d.getMonth() + monate);
-    if (tage > 0) d.setDate(d.getDate() + tage);
+    d.setUTCMonth(d.getUTCMonth() + monate);
+    if (tage > 0) d.setUTCDate(d.getUTCDate() + tage);
   }
   return d.toISOString().slice(0, 10);
 }
@@ -336,6 +348,37 @@ export function ticketErledigen(
   ticket.protokoll = protokoll?.trim() ?? null;
   ticket.status = "erledigt";
 
+  return { ok: true };
+}
+
+/**
+ * NUR FÜR DEN STARTBESTAND: einen Schritt als erledigt eintragen, mit
+ * ausdrücklichem Datum.
+ *
+ * `ticketErledigen` stempelt `new Date()` — die echte Uhrzeit des Rechners.
+ * Im Betrieb ist das richtig, im Mockbestand nicht: die Geschichte spielt zum
+ * 4. August 2026, und ein Schritt, der laut Vorlage im April fällig war, kann
+ * nicht heute erledigt worden sein. Diese Funktion nimmt das Datum deshalb
+ * entgegen, statt es zu setzen.
+ *
+ * Sie umgeht auch die Protokollpflicht nicht: wer einen protokollpflichtigen
+ * Schritt ohne Text abschliesst, bekommt hier dieselbe Absage wie im Betrieb.
+ */
+export function seedTicketErledigt(
+  ticketId: string,
+  erledigtVon: string,
+  erledigtAmIso: string,
+  protokoll?: string,
+): ErledigenErgebnis {
+  const ticket = TICKETS.find(t => t.id === ticketId);
+  if (!ticket) return { ok: false, fehler: "Ticket nicht gefunden" };
+  if (ticket.protokollPflicht && (!protokoll || protokoll.trim().length === 0)) {
+    return { ok: false, fehler: "Protokoll ist Pflicht für diesen Schritt" };
+  }
+  ticket.erledigtAm = erledigtAmIso;
+  ticket.erledigtVon = erledigtVon;
+  ticket.protokoll = protokoll?.trim() ?? null;
+  ticket.status = "erledigt";
   return { ok: true };
 }
 

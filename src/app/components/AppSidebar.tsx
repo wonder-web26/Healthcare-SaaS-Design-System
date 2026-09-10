@@ -1,16 +1,12 @@
 import React, { useState } from "react";
 import {
-  Sparkles,
-  ClipboardList,
   UserPlus,
   Users,
   GitBranch,
   Headphones,
   Settings,
   HelpCircle,
-  CalendarCheck,
   HeartHandshake,
-  BookUser,
   LayoutDashboard,
 } from "lucide-react";
 import { unifiedEntries, CURRENT_USER } from "../../lib/mocks/service-desk-unified";
@@ -19,21 +15,17 @@ const myOpenCount = unifiedEntries.filter(e => e.verantwortlich.initialen === CU
 
 /* Exportiert für die Schublade der Hauptnavigation unter 768px (Lauf 2a):
    dieselben Ziele in derselben Reihenfolge, eine Quelle. */
+/* DEMO: Fünf Einträge sind für die Demoumgebung entfernt — Startseite,
+   Bedarfsabklärung, Kontakte, KLV und Abschluss. Bei den vier letzten stehen
+   Routen (app/routes.tsx) und Ansichten unberührt; entfernt ist nur der Weg
+   über die Navigation. Die Startseite ist zusätzlich als Landeseite ersetzt:
+   «/» zeigt jetzt die Onboarding-Übersicht. Zum Zurücknehmen die Zeilen hier
+   wieder einsetzen und in routes.tsx die Indexroute zurückstellen. */
 export const navItems = [
-  { id: "dashboard", label: "Startseite", icon: Sparkles },
   { id: "kennzahlen", label: "Dashboard", icon: LayoutDashboard },
-  { id: "interrai", label: "Bedarfsabklärung", icon: ClipboardList },
   { id: "onboarding", label: "Onboarding", icon: UserPlus, badge: 3 },
   { id: "patienten", label: "Patienten", icon: Users },
   { id: "angehoerige", label: "Angehörige", icon: HeartHandshake },
-  /* Dritte Personen — Ärztinnen, Beistände, Sozialdienste. */
-  { id: "kontakte", label: "Kontakte", icon: BookUser },
-  /* Kurzform statt „Leistungsplanungsblatt" — für die Zielgruppe eindeutig.
-     Die Ansicht im Dossier behält den vollen Namen. */
-  { id: "klv", label: "KLV", icon: ClipboardList },
-  /* Die Prüfung der erfassten Einsätze über alle Patienten — der Bildschirm
-     über der Pflegekontrolle im Dossier. */
-  { id: "abschluss", label: "Abschluss", icon: CalendarCheck },
   { id: "zuteilung", label: "Zuteilung", icon: GitBranch },
   { id: "servicedesk", label: "Pendenzen", icon: Headphones, badge: myOpenCount },
 ];
@@ -84,11 +76,9 @@ export function AppSidebar({ activeItem, onItemChange }: AppSidebarProps) {
                 style={{
                   width: 40, height: 40,
                   borderRadius: "var(--radius-card)",
-                  background: isActive
-                    ? item.id === "dashboard"
-                      ? "linear-gradient(135deg, var(--brand-primary), var(--brand-accent))"
-                      : "var(--text-primary)"
-                    : "transparent",
+                  /* Der Anna-Gradient für die Startseite entfällt mit ihr —
+                     kein Eintrag trägt diese Kennung mehr. */
+                  background: isActive ? "var(--text-primary)" : "transparent",
                 }}
                 aria-label={item.label}
               >

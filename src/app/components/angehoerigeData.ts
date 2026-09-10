@@ -330,7 +330,9 @@ export const angehoerigeSeed: Angehoeriger[] = [
     lohnabtretung: "nein",
     partnerVorname: "Hans-Rudolf",
     partnerName: "Steiner",
-    partnerGeburtsdatum: "14.06.1956",
+    /* Der Partner IST der gepflegte Patient P-2026-0041 — Geburtsdatum
+       deshalb aus patientData, nicht daneben gepflegt. */
+    partnerGeburtsdatum: "15.03.1948",
     partnerNationalitaet: "schweiz",
     partnerAufenthaltsstatus: "CH",
     partnerErwerbstaetig: "nein",
@@ -344,7 +346,7 @@ export const angehoerigeSeed: Angehoeriger[] = [
     externerEintritt: "",
     bvgAnbindungGewuenscht: "",
     funktion: "ph_srk",
-    eintrittsdatum: "01.09.2025",
+    eintrittsdatum: "01.03.2026",
     stundenlohn: "34.50",
     ferienanspruchWochen: "5.0",
     bankname: "Zürcher Kantonalbank",
@@ -357,11 +359,17 @@ export const angehoerigeSeed: Angehoeriger[] = [
     letzteMutationUser: "S. Weber",
     pflegefachkraft: "Sandra Weber",
     pflegefachkraftInitialen: "SW",
+    /* Der Monatsschritt spiegelt den Betreuungsrhythmus (lib/rhythmus/vorlage,
+       Vorlage rv-ang-001): fünf Schritte ab Eintritt, M1 bis M4 erledigt, das
+       Reassessment (M6) steht offen. Zuvor stand hier "5 von 7 · Mikroschulung
+       · 06.08.2026" — drei Angaben, von denen keine stimmte: die Vorlage hat
+       fünf Schritte, "Mikroschulung" ist Schritt 2, und die Betreuung zeigte
+       fünf überfällige Termine statt eines künftigen. */
     monatsSchritt: {
       aktuell: 5,
-      total: 7,
-      label: "Mikroschulung",
-      faellig: "06.08.2026",
+      total: 5,
+      label: "Reassessment",
+      faellig: "01.09.2026",
     },
   },
   {

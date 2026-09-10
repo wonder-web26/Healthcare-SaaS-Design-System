@@ -585,9 +585,13 @@ export function TabDokumente({ patient }: { patient: Patient }) {
 export function TabDokumenteGeneric({
   rootLabel,
   folders: foldersProp,
+  nurLesen = false,
 }: {
   rootLabel: string;
   folders: DocFolder[];
+  /** Ablage ohne Erfassung: kein Hochladen-Knopf, keine Ablegeflaeche.
+   *  Im Dossier erfasst niemand mehr — das geschieht im Onboarding. */
+  nurLesen?: boolean;
 }) {
   const folders = foldersProp;
   const totalFiles = countAllFiles(folders);
@@ -633,13 +637,15 @@ export function TabDokumenteGeneric({
             </p>
           </div>
         </div>
-        <button
-          className="inline-flex items-center gap-1.5 px-3.5 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors"
-          style={{ fontWeight: 500 }}
-        >
-          <Upload className="w-3.5 h-3.5" />
-          Dokument hochladen
-        </button>
+        {!nurLesen && (
+          <button
+            className="inline-flex items-center gap-1.5 px-3.5 py-[7px] text-[12px] rounded-xl bg-primary text-primary-foreground hover:bg-primary-hover shadow-sm transition-colors"
+            style={{ fontWeight: 500 }}
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Dokument hochladen
+          </button>
+        )}
       </div>
 
       <div className="flex gap-4 items-start">
@@ -723,7 +729,9 @@ export function TabDokumenteGeneric({
                   <p className="text-[12px] text-muted-foreground mt-1 max-w-[300px] mx-auto">
                     {searchQuery
                       ? "Passen Sie Ihre Suche an oder wählen Sie einen anderen Ordner."
-                      : "Ziehen Sie Dateien hierher oder nutzen Sie den Upload-Button."}
+                      : nurLesen
+                        ? "In diesem Ordner liegt noch nichts. Erfasst wird im Onboarding."
+                        : "Ziehen Sie Dateien hierher oder nutzen Sie den Upload-Button."}
                   </p>
                 </div>
               </div>
@@ -769,7 +777,7 @@ export function TabDokumenteGeneric({
                                 </div>
                               </div>
                             </td>
-                            <td className="px-4 py-3"><span className="text-[12px] text-muted-foreground">v{file.version}</span></td>
+                            <td className="px-4 py-3"><span className="text-[12px] text-muted-foreground">{file.version === "—" ? "—" : `v${file.version}`}</span></td>
                             <td className="px-4 py-3 text-[12px] text-muted-foreground">{file.uploadedAt}</td>
                             <td className="px-4 py-3 text-[12px] text-muted-foreground">{file.uploadedBy}</td>
                             <td className="px-4 py-3">

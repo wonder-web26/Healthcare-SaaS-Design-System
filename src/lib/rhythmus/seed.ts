@@ -20,7 +20,7 @@
 import { patientenSeed } from "../../app/components/patientData";
 import { seedDemoRhythmus } from "../../app/components/demoSteinerFall";
 import { angehoerigeSeed } from "../../app/components/angehoerigeData";
-import { generiereRhythmusTickets } from "./engine";
+import { generiereRhythmusTickets, getTicketsFuerSubjekt, seedTicketErledigt } from "./engine";
 
 /** TT.MM.JJJJ → JJJJ-MM-TT; alles andere unverändert zurück. */
 function alsIso(anzeige: string): string {
@@ -52,3 +52,32 @@ for (const a of angehoerigeSeed) {
    Fallkennung. Er hing an einem useEffect der Onboarding-Seite und entstand
    damit beim Öffnen — derselbe Fehler eine Ebene weiter. */
 seedDemoRhythmus();
+
+/* ── Vera Steiner: ein Rhythmus mit Verlauf ─────────────────────────────────
+   Ohne diesen Abschnitt stünden alle fünf Schritte auf "offen" und wären am
+   Stichtag längst überfällig — während der Überblick einen künftigen Termin
+   zeigt. Genau dieser Widerspruch war der Anlass.
+
+   Erledigt wird, was zum Eintritt 01.03.2026 passt: M1 bis M4 (April bis Juli)
+   sind gelaufen und protokolliert, das Reassessment M6 am 01.09.2026 steht
+   offen. Damit deckt sich `monatsSchritt` im Überblick (5 von 5, Reassessment,
+   01.09.2026) mit dem, was der Reiter "Betreuung" zeigt.
+
+   Die Erledigungsdaten liegen einige Tage nach der Fälligkeit — so arbeitet
+   ein Betrieb, und es zeigt zugleich, dass die Angaben nicht gerechnet,
+   sondern erfasst sind. */
+const VERA_ERLEDIGT: Record<string, { am: string; protokoll: string }> = {
+  rk_m1: { am: "2026-04-03", protokoll: "Initialschulung zu Transfer und Lagerung durchgeführt. Vera Steiner führt die Transfers sicher aus; Rollator ist eingestellt. Regelkontrolle ohne Beanstandung." },
+  rk_m2: { am: "2026-05-05", protokoll: "Mikroschulung Medikamentenmanagement. Wochendispenser wird korrekt geführt, Insulingabe morgens sitzt. Keine Rückfragen offen." },
+  rk_m3: { am: "2026-06-04", protokoll: "Fallbesprechung mit Vera Steiner und Hausarzt Dr. M. Huber. Gangunsicherheit hat zugenommen; Physiotherapie zweimal wöchentlich vereinbart." },
+  rk_m4: { am: "2026-07-02", protokoll: "Arbeitskontrolle bestanden, Dokumentation vollständig. Mikroschulung zur Sturzprophylaxe im Bad; Haltegriffe wurden montiert." },
+};
+
+for (const t of getTicketsFuerSubjekt("angehoeriger", "A-2026-0101")) {
+  const e = VERA_ERLEDIGT[t.schrittCode];
+  if (!e) continue;
+  const r = seedTicketErledigt(t.id, "Sandra Weber", e.am, e.protokoll);
+  // Ein Fehlschlag hiesse, dass Vorlage und Startbestand auseinanderlaufen —
+  // das soll auffallen und nicht stillschweigend zu einem leeren Verlauf führen.
+  if (!r.ok) console.warn(`[Rhythmus-Seed] ${t.schrittCode} nicht erledigt: ${r.fehler}`);
+}

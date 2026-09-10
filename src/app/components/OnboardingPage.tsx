@@ -56,6 +56,7 @@ import { qualifikationAusFunktion } from "../../lib/stammdaten/funktionen";
 import { sdaVerlangtInterrai } from "../../lib/stammdaten/sda-einschaetzung-situation";
 import { naechsteFallKennung } from "../../lib/onboarding/faelle";
 import { getEntwurf, sichereEntwurf, type OnboardingEntwurf } from "../../lib/onboarding/entwurf";
+import { sicherePatientFormular } from "../../lib/patienten/formular";
 import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
 import { erfassePatientImOnboarding, patientFuerOnboarding } from "../../lib/patienten/store";
 import { erfasseAngehoerigenImOnboarding, angehoerigerFuerOnboarding, type AngehoerigenEingabe } from "../../lib/angehoerige/store";
@@ -1646,6 +1647,17 @@ export function OnboardingPage() {
                         verantwortlich: { name: "Kathrin Meier", initialen: "KM" },
                         prioritaet: "hoch",
                       });
+                    }
+
+                    /* Der Formularstand wandert mit. Die Patientendetailansicht
+                       zeigt denselben Reitersatz und liest aus dem Formular-
+                       bestand je PATIENTEN-Kennung; der Onboarding-Entwurf hängt
+                       dagegen an der FALL-Kennung. Ohne diese Übergabe fiele die
+                       Ansicht nach dem Abschluss auf die Rückabbildung zurück —
+                       Anamnese, ATL und Dokumente wären fort, obwohl sie gerade
+                       erfasst wurden. */
+                    if (ergebnis.patientId) {
+                      sicherePatientFormular(ergebnis.patientId, patientData);
                     }
 
                     // Qualifizierte Erfolgsmeldung
