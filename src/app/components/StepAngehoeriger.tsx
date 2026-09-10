@@ -56,6 +56,7 @@ import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
 import { sichtbareDokumenttypen, istDokumentVollstaendig, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { KRANKENKASSEN_OPTIONS, getBagNummer } from "../../lib/stammdaten/krankenkassen";
 import { istVerheiratetOderPartnerschaft } from "../../lib/stammdaten/zivilstand";
+import { partnerErfassungNoetig } from "../../lib/stammdaten/quellensteuer-tarif";
 import { Combobox } from "./form/Combobox";
 import { leiteTarifcodeAb } from "../../lib/stammdaten/quellensteuer-tarif";
 import { alterInJahren, AUSBILDUNGSFRAGE_AB_ALTER } from "../../lib/stammdaten/zulagenart";
@@ -119,6 +120,15 @@ export interface AngehoerigerFormData {
   bagNr: string;
   /* 2. Steuer & Sozialversicherung */
   quellensteuer: string;
+  /* Zur Quellensteuerpflicht gibt es keine Herkunft und keine Begründung mehr:
+     die Regel ist massgebend und lässt sich nicht überstimmen.
+
+     Dieses eine Merkmal bleibt: es hält fest, dass ein MENSCH den Zweifelsfall
+     (Ehe mit CH/C) entschieden hat. Ohne es wäre ein Wert aus einer früheren
+     Ableitung von einer Entscheidung nicht zu unterscheiden — wechselt jemand
+     die Staatsangehörigkeit von "schweiz" auf "deutschland", stünde das alte
+     "nein" noch da und sähe aus wie eine Antwort auf die neue Frage. */
+  quellensteuerZweifelEntschieden: boolean;
   konfession: string;
   /** SP-10: Abgeleiteter oder manuell überschriebener QSt-Tarifcode (z.B. "B2Y") */
   quellensteuerTarif: string;
@@ -294,7 +304,11 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
   krankenkasseName: "",
   kartennummer: "",
   bagNr: "",
-  quellensteuer: "nein",
+  /* Leer statt "nein": die Pflicht wird abgeleitet, sobald Staatsangehörigkeit
+     und Ausweisart erfasst sind. Ein vorbelegtes "nein" wäre eine Behauptung
+     über eine Person, von der noch nichts bekannt ist. */
+  quellensteuer: "",
+  quellensteuerZweifelEntschieden: false,
   konfession: "",
   quellensteuerTarif: "",
   tarifcodeQuelle: "abgeleitet",
@@ -413,6 +427,16 @@ interface SubStepDef {
   description: string;
 }
 
+/* Reihenfolge folgt dem Datenfluss, nicht der Gewohnheit.
+   «Steuer & Sozialvers.» leitet zwei Dinge ab, die Angaben aus anderen Reitern
+   brauchen: die Quellensteuerpflicht (Partnerangaben) und den Tarifcode
+   (Partnererwerb sowie Zahl der Kinder). Beide standen bisher HINTER Steuer —
+   das Formular verlangte also eine Ableitung, bevor ihre Eingaben erfasst
+   waren. Partner und Kinder stehen deshalb jetzt davor; nebenbei liegen die
+   beiden Haushaltsreiter dadurch beieinander.
+
+   Die `id` ist die Anzeigenummer und läuft mit der Reihenfolge. Angesteuert
+   wird ausschliesslich über `key` — siehe REITER_FOLGE weiter unten. */
 const subSteps: SubStepDef[] = [
   {
     id: 1,
@@ -423,24 +447,24 @@ const subSteps: SubStepDef[] = [
   },
   {
     id: 2,
-    key: "steuer",
-    label: "Steuer & Sozialvers.",
-    icon: Receipt,
-    description: "Quellensteuer, BVG, UVG-Angaben",
-  },
-  {
-    id: 3,
     key: "partner",
     label: "Partner",
     icon: Heart,
     description: "Zivilstand, Partnerangaben",
   },
   {
-    id: 4,
+    id: 3,
     key: "kinder",
     label: "Kinder & Zulagen",
     icon: Baby,
     description: "Kinderzulagen, Familienausgleichskasse",
+  },
+  {
+    id: 4,
+    key: "steuer",
+    label: "Steuer & Sozialvers.",
+    icon: Receipt,
+    description: "Quellensteuer, BVG, UVG-Angaben",
   },
   {
     id: 5,
@@ -457,6 +481,11 @@ const subSteps: SubStepDef[] = [
     description: "Pflicht-Scans und Uploads",
   },
 ];
+
+/** Die Reiter dieses Schritts. Angesteuert wird ausschliesslich hierüber —
+ *  Positionen kommen im Zustand nicht mehr vor, weil die Reiterzeile dynamisch
+ *  ist und ein gemerkter Index dann auf den falschen Reiter zeigte. */
+export type AngehoerigerReiter = "personalien" | "partner" | "kinder" | "steuer" | "anstellung" | "dokumente";
 
 /* ── Sub-step completion logic ─────────── */
 function getSubStepStatus(
@@ -530,7 +559,11 @@ function getSubStepStatus(
     case "partner": {
       // SP-06: 3-Zustandslogik
       // SP-06: "eingetragene Partnerschaft" ist der Ehe steuerlich gleichgestellt (DBG Art. 9 Abs. 1bis)
-      const pflichtBedingung = istVerheiratetOderPartnerschaft(data.zivilstand) && data.quellensteuer === "ja";
+      /* Die Regel steht in lib/stammdaten/quellensteuer-tarif — verheiratet und
+         selbst weder Schweizerin noch niedergelassen. Sie hing zuvor an
+         `quellensteuer === "ja"` und bildete damit einen Ringschluss mit der
+         Ableitung der Pflicht. */
+      const pflichtBedingung = partnerErfassungNoetig(data);
       const manuellesToggle = data.partnerManualToggle;
       const partnerSichtbar = pflichtBedingung || manuellesToggle;
       if (!partnerSichtbar) return "complete"; // not applicable → auto-complete
@@ -586,9 +619,7 @@ function getSubStepStatus(
     case "dokumente": {
       // Stammdaten-Engine: gleiche Quelle wie DokumenteFormV2
       const kontext: DokumentKontext = {
-        partnerErforderlich:
-          (istVerheiratetOderPartnerschaft(data.zivilstand) && data.quellensteuer === "ja")
-          || data.partnerManualToggle === true,
+        partnerErforderlich: partnerErfassungNoetig(data) || data.partnerManualToggle === true,
         hatKinder: parseInt(data.anzahlKinder) > 0,
         kinderzulagenUeberSpitex: data.kinderzulagenUeberSpitex === "ja",
         unterhaltspflicht: data.hatUnterhaltspflichtigeKinder === "ja",
@@ -614,14 +645,17 @@ function getSubStepStatus(
    ══════════════════════════════════════════ */
 /** Reiterindex → Formularabschnitt. Eine Stelle, damit Marker und Sprungziel
  *  dieselbe Zuordnung lesen. */
-const ABSCHNITT_JE_REITER: (OnboardingAbschnitt | null)[] = [
-  "angehoeriger.personalien",
-  "angehoeriger.steuer",
-  "angehoeriger.partner",
-  "angehoeriger.kinder",
-  "angehoeriger.anstellung",
-  "angehoeriger.dokumente",
-];
+/* Sprungziel je Reiter. War ein Paralleldatenfeld nach Position — beim
+   Umsortieren der Reiter hätten die Pendenzen stumm auf den falschen
+   gesprungen, ohne dass TypeScript etwas gemerkt hätte. Jetzt nach Schlüssel. */
+const ABSCHNITT_JE_REITER: Record<AngehoerigerReiter, OnboardingAbschnitt> = {
+  personalien: "angehoeriger.personalien",
+  partner: "angehoeriger.partner",
+  kinder: "angehoeriger.kinder",
+  steuer: "angehoeriger.steuer",
+  anstellung: "angehoeriger.anstellung",
+  dokumente: "angehoeriger.dokumente",
+};
 
 interface StepAngehoerigerProps {
   data: AngehoerigerFormData;
@@ -654,7 +688,34 @@ export function StepAngehoeriger({
 }: StepAngehoerigerProps) {
   /* Der Reiterwechsel fragt bewusst nicht nach — siehe StepPatient. Gefragt
      wird erst beim Schrittwechsel (OnboardingPage.goToStep). */
-  const [activeTab, setActiveTab] = useState(0);
+  /* Der offene Reiter wird als SCHLÜSSEL gehalten, nicht als Position. Die
+     Reiterzeile ist dynamisch — verschwindet "Partner", rückt alles dahinter
+     eine Stelle vor, und ein gemerkter Index zeigte danach stumm auf einen
+     anderen Reiter. */
+  const [aktiverReiter, setAktiverReiter] = useState<AngehoerigerReiter>("personalien");
+
+  /* ── Welche Reiter erscheinen ───────────────────────────────────────────────
+     "Partner" nur, wenn die Angaben gebraucht werden: verheiratet und selbst
+     weder Schweizerin noch niedergelassen (partnerErfassungNoetig). Die Regel
+     entscheidet, und sie entscheidet bei jeder Eingabe neu — der Reiter
+     erscheint und verschwindet unmittelbar.
+
+     EINE Ausnahme: wer den Reiter ausdrücklich angefordert hat
+     (partnerManualToggle), behält ihn. Ohne sie wäre der freiwillige Weg, einen
+     Partner zu erfassen, nach dem ersten Schliessen unerreichbar.
+
+     KEINE Ausnahme mehr für bereits erfasste Partnerangaben. Sie hielt den
+     Reiter dauerhaft fest, sobald einmal etwas eingetragen war, und machte das
+     Ein- und Ausblenden praktisch unbeobachtbar. Die Angaben bleiben gespeichert
+     und kehren mit dem Reiter zurück, sobald die Regel ihn wieder verlangt. ── */
+  const partnerReiterSichtbar = partnerErfassungNoetig(data) || data.partnerManualToggle === true;
+  const sichtbareSchritte = subSteps.filter(s => s.key !== "partner" || partnerReiterSichtbar);
+
+  /* Verschwindet der offene Reiter unter den Füssen, springt die Ansicht auf
+     den ersten — sonst zeigte sie nichts. */
+  useEffect(() => {
+    if (!sichtbareSchritte.some(s => s.key === aktiverReiter)) setAktiverReiter("personalien");
+  }, [sichtbareSchritte.length, aktiverReiter]);
 
   // §D: Verlauf am rechten Rand der Abschnittszeile, solange waagrecht scrollbar (nicht am Ende).
   const abschnittScrollRef = useRef<HTMLDivElement>(null);
@@ -680,16 +741,18 @@ export function StepAngehoeriger({
     abschnittScrollRef.current
       ?.querySelector('[aria-selected="true"]')
       ?.scrollIntoView({ inline: "nearest", block: "nearest" });
-  }, [activeTab]);
+  }, [aktiverReiter]);
 
   /* ── Compute statuses ──────────────────── */
-  const statuses = subSteps.map((s) => ({
+  const statuses = sichtbareSchritte.map((s) => ({
     ...s,
     status: getSubStepStatus(s.key, data),
   }));
 
   const completedCount = statuses.filter((s) => s.status === "complete").length;
-  const allComplete = completedCount === subSteps.length;
+  /* Gegen die SICHTBAREN Schritte gezählt: ein ausgeblendeter Reiter darf den
+     Fortschritt weder bremsen noch beschleunigen. */
+  const allComplete = completedCount === sichtbareSchritte.length;
 
   /* ── Sync validity upstream ────────────── */
   useEffect(() => {
@@ -742,8 +805,8 @@ export function StepAngehoeriger({
             next?.scrollIntoView({ inline: "nearest", block: "nearest" });
           }}
         >
-          {subSteps.map((tab, idx) => {
-            const isActive = activeTab === idx;
+          {sichtbareSchritte.map((tab, idx) => {
+            const isActive = aktiverReiter === tab.key;
             const tabStatus = statuses[idx].status;
 
             return (
@@ -751,7 +814,7 @@ export function StepAngehoeriger({
                 key={tab.key}
                 role="tab"
                 aria-selected={isActive}
-                onClick={() => setActiveTab(idx)}
+                onClick={() => setAktiverReiter(tab.key as AngehoerigerReiter)}
                 onFocus={e => e.currentTarget.scrollIntoView({ inline: "nearest", block: "nearest" })}
                 className="ui-fokusring relative flex items-center whitespace-nowrap transition-colors cursor-pointer"
                 style={{
@@ -763,7 +826,7 @@ export function StepAngehoeriger({
               >
                 {tab.label}
                 {/* Lauf 1b: Dokumente-Zähler aus dem Kopfbereich, nur unterhalb Desktop */}
-                {idx === 5 && dokumenteZaehler > 0 && (
+                {tab.key === "dokumente" && dokumenteZaehler > 0 && (
                   <span className="lg:hidden inline-flex items-center justify-center" aria-label={`${dokumenteZaehler} Dokumente offen`} style={{ marginLeft: 5, minWidth: 16, height: 16, padding: "0 4px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", border: "var(--border-thin) solid var(--border-default)", color: "var(--text-secondary)", fontSize: 11, fontWeight: "var(--weight-medium)", lineHeight: 1 }}>
                     {dokumenteZaehler}
                   </span>
@@ -793,17 +856,19 @@ export function StepAngehoeriger({
          ═══════════════════════════════════════ */}
       <div style={{ background: "var(--bg-elevated)" }}>
         <div style={{ padding: "20px 32px 24px", maxWidth: FORMULAR_MAX }}>
-          {activeTab === 0 && <PersonalienFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />}
-          {activeTab === 1 && <SteuerFormV2 data={data} onChange={onChange} onNavigate={setActiveTab} />}
-          {activeTab === 2 && <PartnerFormV2 data={data} onChange={onChange} />}
-          {activeTab === 3 && <KinderFormV2 data={data} onChange={onChange} />}
-          {activeTab === 4 && <AnstellungFormV2 data={data} onChange={onChange} />}
-          {activeTab === 5 && <DokumenteFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />}
+          {/* Angesteuert wird über den Schlüssel, nie über die Position — eine
+              Umsortierung von `subSteps` verschöbe sonst stumm jeden Inhalt. */}
+          {aktiverReiter === "personalien" && <PersonalienFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />}
+          {aktiverReiter === "partner" && <PartnerFormV2 data={data} onChange={onChange} />}
+          {aktiverReiter === "kinder" && <KinderFormV2 data={data} onChange={onChange} />}
+          {aktiverReiter === "steuer" && <SteuerFormV2 data={data} onChange={onChange} onNavigate={setAktiverReiter} />}
+          {aktiverReiter === "anstellung" && <AnstellungFormV2 data={data} onChange={onChange} />}
+          {aktiverReiter === "dokumente" && <DokumenteFormV2 data={data} onChange={onChange} onOpenSpezialbewilligung={onOpenSpezialbewilligung} arbeitsortKanton={arbeitsortKanton} arbeitsortOrt={arbeitsortOrt} />}
           {/* Sprungziel der Pendenzen-Gruppe. Kein Marker: die Regelpruefung
               zeigt ihren Hinweis bereits live am betroffenen Feld — ein zweiter,
               statischer Hinweis am Reiterende waere dieselbe Aussage, schlechter
               platziert. */}
-          {ABSCHNITT_JE_REITER[activeTab] && <div data-abschnitt={ABSCHNITT_JE_REITER[activeTab]!} aria-hidden="true" />}
+          {ABSCHNITT_JE_REITER[aktiverReiter] && <div data-abschnitt={ABSCHNITT_JE_REITER[aktiverReiter]} aria-hidden="true" />}
         </div>
       </div>
       {/* Hinweistext entfernt (§A): erklärte, wie Reiter funktionieren, war auf Reitern

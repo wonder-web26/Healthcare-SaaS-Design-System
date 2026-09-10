@@ -139,11 +139,157 @@ export function leiteTarifcodeAb(params: {
   };
 }
 
+/* ══════════════════════════════════════════
+   QUELLENSTEUERPFLICHT — ABLEITUNG
+   ══════════════════════════════════════════ */
+
+export type Steuerpflicht = "ja" | "nein";
+
+export interface SteuerpflichtErgebnis {
+  /** Der abgeleitete Wert, oder `null`, wenn die Regel ihn nicht bestimmen kann. */
+  wert: Steuerpflicht | null;
+  /** Warum — ein Satz, der im Formular unter dem Feld steht. */
+  begruendung: string;
+  /** Fehlt eine Angabe, die zur Entscheidung nötig wäre? Dann ist `wert` null,
+   *  aber es liegt kein Zweifelsfall vor, sondern nur eine Lücke. */
+  unvollstaendig: boolean;
+}
+
+export interface SteuerpflichtEingabe {
+  nationalitaet: string;
+  aufenthaltsstatus: string;
+  zivilstand: string;
+  partnerNationalitaet: string;
+  partnerAufenthaltsstatus: string;
+}
+
 /**
- * Hinweistext zur Quellensteuerpflicht — bestimmt AUSSCHLIESSLICH den Text, nie
- * den Wert des Umschalters. Die Ausnahme (Ehe mit einer Schweizerin oder einem
- * Niedergelassenen) ist fachlich zu bestätigen; darum setzt sie hier keinen
- * Automatismus, sondern macht nur aufmerksam. Reihenfolge der Bedingungen:
+ * Quellensteuerpflicht aus den erfassten Angaben ableiten.
+ *
+ * Drei Konstellationen, von denen nur zwei entscheidbar sind:
+ *
+ *   1. eigene Schweizer Staatsangehörigkeit oder Ausweis C → NEIN, sicher
+ *   2. ausländisch, nicht mit CH/C verheiratet             → JA, sicher
+ *   3. ausländisch, mit CH/C verheiratet                   → OFFEN
+ *
+ * Der dritte Fall bleibt bewusst ohne Wert. Wer mit einer Schweizerin oder
+ * einem Niedergelassenen verheiratet ist, unterliegt der ordentlichen
+ * Veranlagung — aber ob das hier zutrifft, hängt am Einzelfall und ist vor der
+ * ersten Lohnabrechnung zu klären. Ein gesetzter Wert wäre geraten, und die
+ * Lohnabrechnung hängt daran.
+ *
+ * ZWEI GRENZEN, die diese Ableitung NICHT kennt:
+ *
+ * - Der Ausweis G (Grenzgänger) ist immer quellensteuerpflichtig. Er fällt hier
+ *   unter Regel 2 und kommt damit richtig heraus — aber als Rest, nicht weil
+ *   die Regel ihn kennt. Käme je eine Ausnahme für Grenzgänger dazu, müsste sie
+ *   hier ausdrücklich stehen.
+ * - Die Pflicht endet bei hohem Einkommen (nachträgliche ordentliche
+ *   Veranlagung ab 120'000 Franken Jahreslohn). Das Formular erfasst keinen
+ *   Jahreslohn, also kann die Regel das nicht prüfen. Bei einem Stundenlohn im
+ *   Angehörigenpflege-Rahmen ist die Schwelle ausser Reichweite; sicher ist es
+ *   damit nicht, nur unwahrscheinlich.
+ */
+export function leiteQuellensteuerpflichtAb(e: SteuerpflichtEingabe): SteuerpflichtErgebnis {
+  const { nationalitaet, aufenthaltsstatus, zivilstand, partnerNationalitaet, partnerAufenthaltsstatus } = e;
+
+  /* Ohne Staatsangehörigkeit UND ohne Ausweis lässt sich nichts sagen. Das ist
+     keine Unsicherheit, sondern eine fehlende Eingabe — die Unterscheidung
+     zählt, weil das Formular sie verschieden behandelt. */
+  if (!nationalitaet && !aufenthaltsstatus) {
+    return {
+      wert: null,
+      unvollstaendig: true,
+      begruendung: "Staatsangehörigkeit und Ausweisart erfassen — danach wird die Pflicht abgeleitet.",
+    };
+  }
+
+  if (istSchweiz(nationalitaet)) {
+    return { wert: "nein", unvollstaendig: false, begruendung: "Schweizer Staatsangehörigkeit — keine Quellensteuerpflicht." };
+  }
+  if (aufenthaltsstatus === "C") {
+    return { wert: "nein", unvollstaendig: false, begruendung: "Ausweis C (Niederlassung) — ordentliche Veranlagung, keine Quellensteuer." };
+  }
+
+  const verheiratet = istVerheiratetOderPartnerschaft(zivilstand);
+  const partnerBefreit = istSchweiz(partnerNationalitaet)
+    || partnerAufenthaltsstatus === "CH"
+    || partnerAufenthaltsstatus === "C";
+
+  if (verheiratet && partnerBefreit) {
+    return {
+      wert: null,
+      unvollstaendig: false,
+      begruendung: "Ehe mit einer Schweizerin oder einem Niedergelassenen: dann gilt die ordentliche Veranlagung. Das ist am Einzelfall zu klären und wird deshalb nicht automatisch gesetzt.",
+    };
+  }
+
+  /* Verheiratet, aber die Angaben zur Partnerin fehlen noch — dann steht die
+     Ausnahme möglicherweise erst bevor. Lieber warten als voreilig setzen. */
+  if (verheiratet && !partnerNationalitaet && !partnerAufenthaltsstatus) {
+    return {
+      wert: null,
+      unvollstaendig: true,
+      begruendung: "Angaben zur Ehepartnerin oder zum Ehepartner erfassen — sie können die Pflicht aufheben.",
+    };
+  }
+
+  return {
+    wert: "ja",
+    unvollstaendig: false,
+    begruendung: aufenthaltsstatus === "G"
+      ? "Grenzgängerbewilligung (G) — quellensteuerpflichtig."
+      : "Ausländische Staatsangehörigkeit ohne Niederlassung — quellensteuerpflichtig.",
+  };
+}
+
+/**
+ * Müssen die Partnerangaben erfasst werden?
+ *
+ * Ja, wenn die Person verheiratet oder in eingetragener Partnerschaft lebt UND
+ * selbst weder Schweizerin noch niedergelassen (Ausweis C) ist.
+ *
+ * Der Grund ist die Ausnahme in `leiteQuellensteuerpflichtAb`: bei einer
+ * ausländischen Person ohne Niederlassung entscheidet die Partnerin darüber,
+ * ob überhaupt Quellensteuerpflicht besteht. Genau dann — und nur dann —
+ * braucht die Ableitung die Angaben.
+ *
+ * VORHER HING DIESE FRAGE AN `quellensteuer === "ja"`, und das war ein
+ * Ringschluss: die Partnerangaben wurden erst verlangt, wenn die Pflicht
+ * feststand, während die Pflicht ohne sie nicht festzustellen war. Solange ein
+ * Mensch den Umschalter setzte, fiel das nicht auf; mit der Ableitung wäre das
+ * Formular in diesem Fall nie fertig geworden.
+ *
+ * Wer ledig ist, hat keine Partnerin zu erfassen — die Zivilstands-Bedingung
+ * bleibt deshalb stehen.
+ */
+export function partnerErfassungNoetig(e: {
+  zivilstand: string;
+  nationalitaet: string;
+  aufenthaltsstatus: string;
+}): boolean {
+  if (!istVerheiratetOderPartnerschaft(e.zivilstand)) return false;
+
+  /* Solange weder Staatsangehörigkeit noch Ausweis erfasst sind, ist NICHT
+     bekannt, ob die Person befreit ist — und Unbekanntes ist kein Grund, etwas
+     zu verlangen. Ohne diese Zeile gilt `istSchweiz("")` als "nicht
+     Schweizerin", und der Reiter erschiene für jede verheiratete Person, sobald
+     der Zivilstand gesetzt ist. Genau das war der Fehler.
+
+     Ein Ausweis ohne Staatsangehörigkeit genügt dagegen: wer einen Ausweis
+     trägt, ist nicht Schweizerin. */
+  if (!e.nationalitaet && !e.aufenthaltsstatus) return false;
+
+  const selbstBefreit = istSchweiz(e.nationalitaet) || e.aufenthaltsstatus === "C";
+  return !selbstBefreit;
+}
+
+/**
+ * Hinweistext zur Quellensteuerpflicht — die ältere, rein textliche Form.
+ *
+ * Sie bleibt, weil sie an anderen Stellen gelesen wird; im Angehörigenformular
+ * ist `leiteQuellensteuerpflichtAb` an ihre Stelle getreten, weil dort nicht
+ * nur ein Satz, sondern ein Wert gebraucht wird. Reihenfolge der Bedingungen:
  *   1. eigene Schweizer Staatsangehörigkeit oder Ausweis C  → nicht pflichtig
  *   2. verheiratet und Partner CH/Ausweis C                 → möglicherweise nicht pflichtig
  *   3. sonst                                                → pflichtig, mit Vorbehalt

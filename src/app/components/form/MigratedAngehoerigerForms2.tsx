@@ -25,6 +25,7 @@ import { pruefeAuslaenderrecht } from "../../../lib/regeln/auslaenderrecht";
 import { GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/geschlecht";
 import { STAATSANGEHOERIGKEIT_OPTIONS } from "../../../lib/stammdaten/staatsangehoerigkeit";
 import { istVerheiratetOderPartnerschaft } from "../../../lib/stammdaten/zivilstand";
+import { partnerErfassungNoetig } from "../../../lib/stammdaten/quellensteuer-tarif";
 import { toast } from "sonner";
 
 function filled(v: string | undefined | null): boolean {
@@ -77,8 +78,9 @@ export function PartnerFormV2({ data, onChange }: { data: AngehoerigerFormData; 
   const touch = (f: string) => setTouched(p => ({ ...p, [f]: true }));
   const set = (f: keyof AngehoerigerFormData, v: unknown) => onChange({ ...data, [f]: v });
 
-  // SP-06: Pflicht-Bedingung
-  const pflichtBedingung = istVerheiratetOderPartnerschaft(data.zivilstand) && data.quellensteuer === "ja";
+  /* SP-06: Pflicht-Bedingung. Eine Quelle (lib/stammdaten/quellensteuer-tarif),
+     weil dieselbe Frage an vier Stellen gestellt wurde. */
+  const pflichtBedingung = partnerErfassungNoetig(data);
   const manuellesToggle = data.partnerManualToggle === true;
   const partnerSichtbar = pflichtBedingung || manuellesToggle;
   const istPflicht = pflichtBedingung;
@@ -352,9 +354,7 @@ export function DokumenteFormV2({ data, onChange, onOpenSpezialbewilligung, arbe
 
   // Bedingungen aus LIVE-Formulardaten ableiten (reaktiv bei jeder Änderung)
   const kontext: DokumentKontext = {
-    partnerErforderlich:
-      (istVerheiratetOderPartnerschaft(data.zivilstand) && data.quellensteuer === "ja")
-      || data.partnerManualToggle === true,
+    partnerErforderlich: partnerErfassungNoetig(data) || data.partnerManualToggle === true,
     hatKinder: parseInt(data.anzahlKinder) > 0,
     kinderzulagenUeberSpitex: data.kinderzulagenUeberSpitex === "ja",
     unterhaltspflicht: data.hatUnterhaltspflichtigeKinder === "ja",

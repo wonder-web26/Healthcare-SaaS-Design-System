@@ -1,23 +1,15 @@
 import type { UserRole } from "./user";
+import { PENDENZ_ARTEN, verantwortlichFuerArt, type PendenzArtId } from "../lib/stammdaten/pendenz-katalog";
 
-export type PendenzTyp =
-  | "srk-anmeldung"
-  | "quellensteuer"
-  | "aub-vertretung"
-  | "ausweis-b-migrationsamt"
-  | "problem"
-  | "anfrage"
-  | "klv-verordnung"
-  | "pflegestufen-wechsel"
-  | "beschwerde"
-  | "compliance-audit"
-  | "personaldaten"
-  | "lohn-anpassung"
-  | "schluessel"
-  | "meldung"
-  | "re-assessment"
-  | "kinderzulagen"
-  | "betreuungs-rhythmus";
+/**
+ * Die Art einer Pendenz — die Kennungen des Katalogs
+ * (lib/stammdaten/pendenz-katalog).
+ *
+ * Vorher stand hier eine eigene, flache Liste von 17 Werten. Sie war die
+ * zweite Wahrheit neben dem Katalog; der Typ wird jetzt von dort abgeleitet,
+ * damit eine neue Art an einer Stelle entsteht.
+ */
+export type PendenzTyp = PendenzArtId;
 
 export type AnnaActionType = "open-url" | "copy-data" | "download-file" | "open-mailto" | "internal-action" | "demo-mock";
 
@@ -42,227 +34,80 @@ export interface PendenzTypDefinition {
   label: string;
   description: string;
   responsibleRole: UserRole | UserRole[];
-  annaStage: "A" | "B" | "C";
-  isDemoMock: boolean;
+  bulkAction?: BulkAction;
+  /** Farbe der Kategorie-Pille. Aus der KATEGORIE abgeleitet, nicht je Art
+   *  gepflegt — gleiche Kategorie, gleiche Farbe. */
   pillBg: string;
   pillColor: string;
+  /* ── Anna ──────────────────────────────────────────────────────────────────
+     Anna ist aus der Oberfläche entfernt; diese Felder haben in dieser Fassung
+     keinen Wert und keinen Leser mehr. Sie bleiben optional deklariert, damit
+     die noch vorhandenen (nicht gerenderten) Anna-Komponenten übersetzen. */
+  annaStage?: "A" | "B" | "C";
   annaPromptTemplate?: string;
   annaFallbackText?: string;
   defaultActions?: AnnaAction[];
-  bulkAction?: BulkAction;
 }
 
-export const pendenzTypen: Record<PendenzTyp, PendenzTypDefinition> = {
-  /* ── Top 6: full Anna config ── */
+/**
+ * Farbe je Kategorie. Neutral gehalten: die Pille ordnet ein, sie warnt nicht —
+ * Dringlichkeit steht in Fälligkeit und Status, nicht in der Kategorie.
+ */
+const KATEGORIE_FARBE: Record<string, { bg: string; fg: string }> = {
+  auslaenderrecht:    { bg: "var(--bg-secondary)", fg: "var(--text-secondary)" },
+  steuern:            { bg: "var(--bg-secondary)", fg: "var(--text-secondary)" },
+  sozialversicherung: { bg: "var(--bg-secondary)", fg: "var(--text-secondary)" },
+  ausbildung:         { bg: "var(--bg-secondary)", fg: "var(--text-secondary)" },
+  lohn:               { bg: "var(--bg-secondary)", fg: "var(--text-secondary)" },
+  absenzen:           { bg: "var(--bg-secondary)", fg: "var(--text-secondary)" },
+  anstellung:         { bg: "var(--bg-secondary)", fg: "var(--text-secondary)" },
+  dokumente:          { bg: "var(--bg-secondary)", fg: "var(--text-secondary)" },
+  betreuung:          { bg: "var(--bg-secondary)", fg: "var(--text-secondary)" },
+  sonstiges:          { bg: "var(--bg-secondary)", fg: "var(--text-tertiary)" },
+};
 
-  "srk-anmeldung": {
-    id: "srk-anmeldung",
-    label: "SRK-Anmeldung",
-    description: "Anmeldung zum SRK-Pflegekurs für einen Angehörigen",
-    responsibleRole: "backoffice",
-    annaStage: "B",
+/**
+ * Der Katalog in der Form, die die Pendenzenliste liest.
+ *
+ * Abgeleitet aus `PENDENZ_ARTEN`, nicht daneben gepflegt: Beschriftung,
+ * Beschreibung und Zuständigkeit kommen von dort. Nur die Sammel-Aktionen
+ * stehen hier, weil sie das Verhalten der Liste betreffen und nicht die
+ * Stammdaten der Art.
+ *
+ * WAS HIER NICHT MEHR STEHT: Anna-Konfiguration (annaStage, Prompt-Vorlagen,
+ * defaultActions) und die Pillenfarben. Beides las niemand — Anna ist aus der
+ * Oberfläche entfernt, und die Liste färbt Kategorien nicht ein.
+ */
+const SAMMEL_AKTIONEN: Partial<Record<PendenzTyp, BulkAction>> = {
+  ausbildung_srk_anmeldung: {
+    label: "Personendaten zusammenstellen",
+    description: "Alle Personendaten für die SRK-Anmeldungen vorbereiten",
+    resultDescription: "{N} Datensätze werden zur Übertragung ins SRK-Portal vorbereitet",
     isDemoMock: false,
-    pillBg: "var(--status-info-bg)",
-    pillColor: "var(--status-info)",
-    annaPromptTemplate: "Bei {personName} ist die SRK-Anmeldung fällig. Der Vertrag startete am {vertragsstart}, die 1-Jahres-Frist endet am {srkFrist}. Ich habe alle Personendaten für die Anmeldung zusammengestellt.",
-    annaFallbackText: "SRK-Anmeldung für {personName}. Anmeldefrist beachten.",
-    defaultActions: [
-      { id: "open-srk-portal", label: "SRK-Portal öffnen", variant: "primary", type: "open-url", payload: { url: "https://kursportal.srk.ch" } },
-      { id: "copy-person-data", label: "Personendaten kopieren", variant: "secondary", type: "copy-data" },
-    ],
-    bulkAction: { label: "Personendaten zusammenstellen", description: "Alle Personendaten für die SRK-Anmeldungen vorbereiten", resultDescription: "{N} Datensätze werden zur Übertragung ins SRK-Portal vorbereitet", isDemoMock: false },
   },
-  "quellensteuer": {
-    id: "quellensteuer",
-    label: "Quellensteuer",
-    description: "Anmeldung bei der Quellensteuer-Behörde",
-    responsibleRole: "backoffice",
-    annaStage: "B",
+  steuern_quellensteuer_anmelden: {
+    label: "Formulare vorbereiten",
+    description: "Alle Quellensteuer-Anmeldeformulare mit den jeweiligen Daten generieren",
+    resultDescription: "{N} PDFs werden generiert und zum Download bereitgestellt",
     isDemoMock: false,
-    pillBg: "var(--brand-primary-light)",
-    pillColor: "var(--brand-primary)",
-    annaPromptTemplate: "Quellensteuer-Anmeldung für {personName} beim kantonalen Steueramt Zürich, Tarif A. Ich habe das Anmeldeformular mit allen Daten vorbereitet.",
-    annaFallbackText: "Quellensteuer-Anmeldung für {personName}.",
-    defaultActions: [
-      { id: "download-form", label: "Formular herunterladen", variant: "primary", type: "download-file", payload: { filename: "quellensteuer-anmeldung.pdf" } },
-      { id: "open-mailto", label: "An Steueramt senden", variant: "secondary", type: "open-mailto", payload: { to: "quellensteuer@zh.ch", subject: "Quellensteuer-Anmeldung" } },
-    ],
-    bulkAction: { label: "Formulare vorbereiten", description: "Alle Quellensteuer-Anmeldeformulare mit den jeweiligen Daten generieren", resultDescription: "{N} PDFs werden generiert und zum Download bereitgestellt", isDemoMock: false },
   },
-  "aub-vertretung": {
-    id: "aub-vertretung",
-    label: "AUB / Vertretung",
-    description: "Arbeitsunfähigkeitsbescheinigung eingegangen, Vertretung nötig",
-    responsibleRole: "diplomiert",
-    annaStage: "C",
-    isDemoMock: true,
-    pillBg: "var(--status-danger-bg)",
-    pillColor: "var(--status-danger)",
-    annaPromptTemplate: "{personName} hat einen AUB für die nächsten 5 Arbeitstage. Ich habe 7 Termine geprüft. Drei Vertretungen sind verfügbar. {{warning}}Empfehlung: Karin Müller – sie passt zu allen Terminen und kennt die Patienten.{{/warning}}",
-    annaFallbackText: "AUB von {personName} eingegangen. Vertretung organisieren.",
-    defaultActions: [
-      { id: "set-top-vertretung-demo", label: "Karin als Vertretung einsetzen", variant: "primary", isDemoMock: true, type: "demo-mock", payload: { mockType: "vertretung-einsetzen" } },
-      { id: "choose-vertretung", label: "Andere Vertretung wählen", variant: "secondary", type: "internal-action", payload: { action: "open-vertretung-dialog" } },
-    ],
-  },
-  "ausweis-b-migrationsamt": {
-    id: "ausweis-b-migrationsamt",
-    label: "Ausweis B",
-    description: "Anmeldung beim Migrationsamt für Ausweis B",
-    responsibleRole: "backoffice",
-    annaStage: "B",
+  auslaenderrecht_bewilligung_beantragen: {
+    label: "Anmeldungen vorbereiten",
+    description: "Alle Migrationsamt-Anmeldungen mit den jeweiligen Daten generieren",
+    resultDescription: "{N} Anmeldeformulare werden vorbereitet",
     isDemoMock: false,
-    pillBg: "var(--status-warning-bg)",
-    pillColor: "var(--status-warning-text)",
-    annaPromptTemplate: "Aufenthaltsausweis B für {personName} erteilt. Die Meldefrist beträgt 30 Tage – Anmeldung beim Migrationsamt Zürich ist nötig.",
-    annaFallbackText: "Aufenthaltsausweis B erteilt für {personName}, Anmeldung beim Migrationsamt nötig.",
-    defaultActions: [
-      { id: "prepare-form", label: "Anmeldeformular vorbereiten", variant: "primary", type: "download-file", payload: { filename: "migrationsamt-anmeldung.pdf" } },
-      { id: "open-migrationsamt", label: "Migrationsamt öffnen", variant: "secondary", type: "open-url", payload: { url: "https://www.zh.ch/de/migration-integration.html" } },
-    ],
-    bulkAction: { label: "Anmeldungen vorbereiten", description: "Alle Migrationsamt-Anmeldungen mit den jeweiligen Daten generieren", resultDescription: "{N} Anmeldeformulare werden vorbereitet", isDemoMock: false },
-  },
-  "problem": {
-    id: "problem",
-    label: "Problem",
-    description: "Gemeldetes Problem im Betrieb",
-    responsibleRole: ["diplomiert", "backoffice"],
-    annaStage: "A",
-    isDemoMock: false,
-    pillBg: "var(--status-danger-bg)",
-    pillColor: "var(--status-danger)",
-    annaPromptTemplate: "Ich habe das gemeldete Problem analysiert. {beschreibung}",
-    annaFallbackText: "{beschreibung}",
-    defaultActions: [
-      { id: "take-over", label: "In Bearbeitung nehmen", variant: "primary", type: "internal-action", payload: { action: "set-in-bearbeitung" } },
-    ],
-  },
-  "anfrage": {
-    id: "anfrage",
-    label: "Anfrage",
-    description: "Allgemeine Anfrage",
-    responsibleRole: ["diplomiert", "backoffice"],
-    annaStage: "A",
-    isDemoMock: false,
-    pillBg: "var(--bg-secondary)",
-    pillColor: "var(--text-secondary)",
-    annaPromptTemplate: "{beschreibung}",
-    annaFallbackText: "{beschreibung}",
-    defaultActions: [
-      { id: "take-over", label: "In Bearbeitung nehmen", variant: "primary", type: "internal-action", payload: { action: "set-in-bearbeitung" } },
-    ],
-  },
-
-  /* ── Other types: no specific Anna config yet ── */
-
-  "klv-verordnung": {
-    id: "klv-verordnung",
-    label: "KLV-Verordnung",
-    description: "Verordnung für KLV-Leistungen läuft ab oder muss erneuert werden",
-    responsibleRole: "diplomiert",
-    annaStage: "B",
-    isDemoMock: true,
-    pillBg: "var(--status-warning-bg)",
-    pillColor: "var(--status-warning-text)",
-  },
-  "pflegestufen-wechsel": {
-    id: "pflegestufen-wechsel",
-    label: "Pflegestufe",
-    description: "Pflegestufen-Wechsel nach Reassessment",
-    responsibleRole: "diplomiert",
-    annaStage: "C",
-    isDemoMock: true,
-    pillBg: "var(--brand-accent-light)",
-    pillColor: "var(--status-info)",
-  },
-  "beschwerde": {
-    id: "beschwerde",
-    label: "Beschwerde",
-    description: "Beschwerde von Patient, Angehörigen oder Dritten",
-    responsibleRole: ["diplomiert", "management"],
-    annaStage: "B",
-    isDemoMock: false,
-    pillBg: "var(--status-danger-bg)",
-    pillColor: "var(--status-danger)",
-  },
-  "compliance-audit": {
-    id: "compliance-audit",
-    label: "Compliance",
-    description: "Compliance-Audit oder regulatorische Prüfung",
-    responsibleRole: "management",
-    annaStage: "C",
-    isDemoMock: true,
-    pillBg: "var(--status-warning-bg)",
-    pillColor: "var(--status-warning-text)",
-  },
-  "personaldaten": {
-    id: "personaldaten",
-    label: "Personaldaten",
-    description: "Personaldaten-Aktualisierung bei Angehörigen",
-    responsibleRole: "backoffice",
-    annaStage: "A",
-    isDemoMock: false,
-    pillBg: "var(--bg-secondary)",
-    pillColor: "var(--text-secondary)",
-  },
-  "lohn-anpassung": {
-    id: "lohn-anpassung",
-    label: "Lohnanpassung",
-    description: "Lohnanpassung nach SRK-Kurs oder Bewertung",
-    responsibleRole: "backoffice",
-    annaStage: "B",
-    isDemoMock: false,
-    pillBg: "var(--brand-primary-light)",
-    pillColor: "var(--brand-primary)",
-  },
-  "schluessel": {
-    id: "schluessel",
-    label: "Schlüssel",
-    description: "Schlüsselausgabe oder -rückgabe",
-    responsibleRole: "backoffice",
-    annaStage: "A",
-    isDemoMock: false,
-    pillBg: "var(--bg-secondary)",
-    pillColor: "var(--text-secondary)",
-  },
-  "meldung": {
-    id: "meldung",
-    label: "Meldung",
-    description: "Allgemeine Meldung oder Information",
-    responsibleRole: ["diplomiert", "backoffice"],
-    annaStage: "A",
-    isDemoMock: false,
-    pillBg: "var(--status-info-bg)",
-    pillColor: "var(--status-info)",
-  },
-  "re-assessment": {
-    id: "re-assessment",
-    label: "Re-Assessment",
-    description: "Regelmässiges Re-Assessment eines Patienten",
-    responsibleRole: "diplomiert",
-    annaStage: "B",
-    isDemoMock: false,
-    pillBg: "var(--brand-accent-light)",
-    pillColor: "var(--status-info)",
-  },
-  "kinderzulagen": {
-    id: "kinderzulagen",
-    label: "Kinderzulagen",
-    description: "Kinderzulagen-Antrag bei der Familienausgleichskasse",
-    responsibleRole: "backoffice",
-    annaStage: "A",
-    isDemoMock: false,
-    pillBg: "var(--bg-secondary)",
-    pillColor: "var(--text-secondary)",
-  },
-  "betreuungs-rhythmus": {
-    id: "betreuungs-rhythmus",
-    label: "Betreuungs-Rhythmus",
-    description: "Wiederkehrender Betreuungsschritt aus dem Workflow (Schulung, Kontrolle, Assessment)",
-    responsibleRole: "diplomiert",
-    annaStage: "A",
-    isDemoMock: false,
-    pillBg: "var(--brand-primary-light)",
-    pillColor: "var(--brand-primary)",
   },
 };
+
+export const pendenzTypen: Record<PendenzTyp, PendenzTypDefinition> = Object.fromEntries(
+  PENDENZ_ARTEN.map(a => [a.id, {
+    id: a.id,
+    label: a.label,
+    description: a.hinweis ?? "",
+    responsibleRole: verantwortlichFuerArt(a.id) ?? "backoffice",
+    bulkAction: SAMMEL_AKTIONEN[a.id],
+    pillBg: (KATEGORIE_FARBE[a.kategorieId] ?? KATEGORIE_FARBE.sonstiges).bg,
+    pillColor: (KATEGORIE_FARBE[a.kategorieId] ?? KATEGORIE_FARBE.sonstiges).fg,
+  }]),
+) as Record<PendenzTyp, PendenzTypDefinition>;
+

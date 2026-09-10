@@ -37,7 +37,13 @@ export const demoSteinerAngehoeriger: AngehoerigerFormData = {
   quellensteuer: "nein", konfession: "evangelisch_reformiert", steuergemeinde: "Winterthur",
   bvgVersichert: "ja", uvgVersichert: "ja", sozialamtInvolviert: "nein", lohnabtretung: "nein",
   // Partner = der Patient (Ehemann)
-  partnerManualToggle: true, partnerVorname: "Hans-Rudolf", partnerName: "Steiner",
+  /* Der Reiter "Partner" erscheint jetzt nach Regel (verheiratet und selbst
+     weder Schweizerin noch niedergelassen). Vera ist Schweizerin, also verlangt
+     die Regel ihn nicht. `partnerManualToggle` stand hier auf `true` und hätte
+     ihn dauerhaft erzwungen — damit wäre am Demofall nicht zu sehen, dass der
+     Reiter überhaupt dynamisch ist. Die Partnerangaben bleiben erfasst und
+     erscheinen, sobald der Reiter über den Schalter geöffnet wird. */
+  partnerManualToggle: false, partnerVorname: "Hans-Rudolf", partnerName: "Steiner",
   partnerGeburtsdatum: "14.06.1956", partnerNationalitaet: "schweiz", partnerAufenthaltsstatus: "CH",
   partnerErwerbstaetig: "nein", partnerAhvNummer: "756.9876.5432.10",
   // Ein erwachsenes Kind in Ausbildung → Ausbildungszulage über Spitex

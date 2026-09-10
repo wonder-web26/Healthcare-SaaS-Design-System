@@ -134,22 +134,30 @@ export function pendenzenFuerPerson(alle: UnifiedEntry[], art: string, kennung: 
 }
 
 /** Maps legacy WorkflowTyp to typed PendenzTyp */
+/* Alte Aufgabenart → Art im Pendenzenkatalog (lib/stammdaten/pendenz-katalog).
+   Die Kennungen links stammen aus den Mockdaten und bleiben, was sie sind; die
+   rechte Seite ist die neue, zweistufige Einordnung. Die Kategorie folgt aus
+   der Art und wird nicht danebengeschrieben. */
 const workflowToPendenzTyp: Record<WorkflowTyp, PendenzTyp> = {
-  SRK_ANMELDUNG: "srk-anmeldung",
-  RE_ASSESSMENT: "re-assessment",
-  AUSWEIS_B_ANMELDUNG: "ausweis-b-migrationsamt",
-  QUELLENSTEUER_ANMELDUNG: "quellensteuer",
-  KINDERZULAGEN_ANTRAG: "kinderzulagen",
-  LOHNANPASSUNG_NACH_SRK: "lohn-anpassung",
-  AUSLAENDERRECHT_UNGEKLAERT: "compliance-audit",
+  SRK_ANMELDUNG: "ausbildung_srk_anmeldung",
+  RE_ASSESSMENT: "betreuung_re_assessment",
+  AUSWEIS_B_ANMELDUNG: "auslaenderrecht_bewilligung_beantragen",
+  QUELLENSTEUER_ANMELDUNG: "steuern_quellensteuer_anmelden",
+  KINDERZULAGEN_ANTRAG: "sozialversicherung_familienzulagen_beantragen",
+  LOHNANPASSUNG_NACH_SRK: "lohn_lohnaenderung",
+  /* «Ausländerrechtliches Verfahren ungeklärt» ist genau der Fall, für den der
+     Katalog «Verfahren abklären» führt — vorher lag er unter «Compliance». */
+  AUSLAENDERRECHT_UNGEKLAERT: "auslaenderrecht_verfahren_abklaeren",
 };
 
-/** Maps legacy TicketTyp to typed PendenzTyp */
+/* Alte Ticketart → Art im Katalog. Für Schlüsselübergabe, Anfrage und Problem
+   gibt es keine eigene Art; sie sind das, wofür «Sonstiges» da ist. «Meldung»
+   ist im Bestand durchweg die Stellenantrittsmeldung. */
 const ticketToPendenzTyp: Record<TicketTyp, PendenzTyp> = {
-  SCHLUESSEL: "schluessel",
-  ANFRAGE: "anfrage",
-  PROBLEM: "problem",
-  MELDUNG: "meldung",
+  SCHLUESSEL: "sonstiges_sonstige_pendenz",
+  ANFRAGE: "sonstiges_sonstige_pendenz",
+  PROBLEM: "sonstiges_sonstige_pendenz",
+  MELDUNG: "auslaenderrecht_stellenantritt_melden",
 };
 
 /**
@@ -291,7 +299,9 @@ function toUnifiedRhythmus(t: RhythmusTicket): UnifiedEntry {
     quelle: "rhythmus",
     typ: "RE_ASSESSMENT" as WorkflowTyp, // closest existing type for routing
     typLabel: t.label,
-    pendenzTyp: "betreuungs-rhythmus",
+    /* Rhythmus-Schritte sind patientenseitige Begleitung — die Kategorie
+       "Betreuung" ist genau dafür ergänzt worden. */
+    pendenzTyp: "betreuung_re_assessment",
     personBezug: { art: t.subjektTyp, kennung: t.subjektId },
     betreff: t.label,
     kontext: t.label,

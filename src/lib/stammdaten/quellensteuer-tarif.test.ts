@@ -4,7 +4,7 @@
  *   npx tsx src/lib/stammdaten/quellensteuer-tarif.test.ts
  */
 import assert from "node:assert/strict";
-import { leiteTarifcodeAb, steuerpflichtHinweis } from "./quellensteuer-tarif";
+import { leiteQuellensteuerpflichtAb, partnerErfassungNoetig, leiteTarifcodeAb, steuerpflichtHinweis } from "./quellensteuer-tarif";
 
 // ── Ableitung unverändert: sechs Kombinationen, Code wie zuvor ──
 const faelle: Array<[Parameters<typeof leiteTarifcodeAb>[0], string, string]> = [
@@ -54,5 +54,141 @@ assert.equal(steuerpflichtHinweis({ nationalitaet: "deutschland", aufenthaltssta
 assert.equal(steuerpflichtHinweis({ nationalitaet: "deutschland", aufenthaltsstatus: "B", zivilstand: "verheiratet", partnerNationalitaet: "italien", partnerAufenthaltsstatus: "C" }), MOEGLICH);
 // 3. ledig mit Ausweis B → pflichtig
 assert.equal(steuerpflichtHinweis({ nationalitaet: "deutschland", aufenthaltsstatus: "B", zivilstand: "ledig", partnerNationalitaet: "", partnerAufenthaltsstatus: "" }), PFLICHTIG);
+
+
+/* ══════════════════════════════════════════
+   ABLEITUNG DER QUELLENSTEUERPFLICHT
+
+   Geprüft wird die Dreiteilung: entscheidbar auf "nein", entscheidbar auf
+   "ja", und der Zweifelsfall, der KEINEN Wert liefern darf. Der letzte ist
+   der wichtigste Test — ein Automatismus, der dort etwas setzt, behauptet
+   etwas über die Lohnabrechnung, das er nicht weiss.
+   ══════════════════════════════════════════ */
+
+const ab = (e: Partial<Parameters<typeof leiteQuellensteuerpflichtAb>[0]>) =>
+  leiteQuellensteuerpflichtAb({
+    nationalitaet: "", aufenthaltsstatus: "", zivilstand: "",
+    partnerNationalitaet: "", partnerAufenthaltsstatus: "", ...e,
+  });
+
+// 1a. Schweizerin → nicht pflichtig, sicher.
+{
+  const r = ab({ nationalitaet: "schweiz", zivilstand: "ledig" });
+  assert.equal(r.wert, "nein");
+  assert.equal(r.unvollstaendig, false);
+}
+
+// 1b. Ausweis C schlägt die ausländische Staatsangehörigkeit.
+{
+  const r = ab({ nationalitaet: "deutschland", aufenthaltsstatus: "C", zivilstand: "ledig" });
+  assert.equal(r.wert, "nein");
+}
+
+// 2a. Ausländisch, ledig, Ausweis B → pflichtig.
+{
+  const r = ab({ nationalitaet: "deutschland", aufenthaltsstatus: "B", zivilstand: "ledig" });
+  assert.equal(r.wert, "ja");
+  assert.equal(r.unvollstaendig, false);
+}
+
+// 2b. Grenzgängerin (G) → pflichtig, und die Begründung nennt den Ausweis.
+{
+  const r = ab({ nationalitaet: "deutschland", aufenthaltsstatus: "G", zivilstand: "ledig" });
+  assert.equal(r.wert, "ja");
+  assert.ok(r.begruendung.includes("Grenzgänger"), "Begründung nennt den Grenzgängerfall");
+}
+
+// 2c. Verheiratet mit einer Person, die selbst nicht befreit ist → pflichtig.
+{
+  const r = ab({ nationalitaet: "deutschland", aufenthaltsstatus: "B", zivilstand: "verheiratet",
+                 partnerNationalitaet: "italien", partnerAufenthaltsstatus: "B" });
+  assert.equal(r.wert, "ja");
+}
+
+// 3. DER ZWEIFELSFALL: verheiratet mit CH bzw. C → KEIN Wert.
+{
+  for (const partner of [
+    { partnerNationalitaet: "schweiz", partnerAufenthaltsstatus: "" },
+    { partnerNationalitaet: "italien", partnerAufenthaltsstatus: "C" },
+    { partnerNationalitaet: "italien", partnerAufenthaltsstatus: "CH" },
+  ]) {
+    const r = ab({ nationalitaet: "deutschland", aufenthaltsstatus: "B", zivilstand: "verheiratet", ...partner });
+    assert.equal(r.wert, null, `Zweifelsfall setzt keinen Wert: ${JSON.stringify(partner)}`);
+    assert.equal(r.unvollstaendig, false, "es ist ein Zweifel, keine Lücke");
+    assert.ok(r.begruendung.length > 0);
+  }
+}
+
+// 4a. Nichts erfasst → kein Wert, aber als LÜCKE gekennzeichnet.
+{
+  const r = ab({});
+  assert.equal(r.wert, null);
+  assert.equal(r.unvollstaendig, true);
+}
+
+// 4b. Verheiratet, Partnerangaben fehlen noch → Lücke, nicht Zweifel.
+{
+  const r = ab({ nationalitaet: "deutschland", aufenthaltsstatus: "B", zivilstand: "verheiratet" });
+  assert.equal(r.wert, null);
+  assert.equal(r.unvollstaendig, true);
+}
+
+// Jede Rückgabe trägt eine Begründung — das Formular zeigt sie an.
+{
+  for (const e of [{}, { nationalitaet: "schweiz" }, { nationalitaet: "deutschland", aufenthaltsstatus: "B" }]) {
+    assert.ok(ab(e).begruendung.trim().length > 0, "Begründung ist nie leer");
+  }
+}
+
+
+/* ══════════════════════════════════════════
+   PARTNERANGABEN — WANN SIND SIE NÖTIG?
+
+   Die Regel loest einen Ringschluss auf: vorher hingen die Partnerangaben an
+   `quellensteuer === "ja"`, waehrend die Pflicht ohne sie nicht zu bestimmen
+   war. Jetzt haengen sie an Angaben, die im ERSTEN Reiter stehen.
+   ══════════════════════════════════════════ */
+
+const pn = (zivilstand: string, nationalitaet: string, aufenthaltsstatus = "") =>
+  partnerErfassungNoetig({ zivilstand, nationalitaet, aufenthaltsstatus });
+
+/* DER FEHLER, DER IN DER VORFUEHRUNG AUFFIEL: bei leerer Staatsangehoerigkeit
+   galt `istSchweiz("")` als "nicht Schweizerin", und der Reiter sprang auf,
+   sobald der Zivilstand auf verheiratet stand — also bei praktisch jeder
+   Erfassung. Unbekanntes ist kein Grund, etwas zu verlangen. */
+assert.equal(pn("verheiratet", "", ""), false, "ohne Staatsangehoerigkeit und Ausweis: kein Reiter");
+// Ein Ausweis allein genuegt aber: wer einen traegt, ist nicht Schweizerin.
+assert.equal(pn("verheiratet", "", "B"), true, "Ausweis B ohne Staatsangehoerigkeit: Reiter noetig");
+assert.equal(pn("verheiratet", "", "C"), false, "Ausweis C ohne Staatsangehoerigkeit: befreit");
+
+// Ledig: es gibt keine Partnerin zu erfassen, unabhaengig vom Ausweis.
+assert.equal(pn("ledig", "deutschland", "B"), false);
+assert.equal(pn("ledig", "schweiz"), false);
+
+// Verheiratet und selbst befreit: die Ausnahme kann nicht greifen, also
+// braucht die Ableitung die Angaben nicht.
+assert.equal(pn("verheiratet", "schweiz"), false);
+assert.equal(pn("verheiratet", "deutschland", "C"), false);
+
+// Verheiratet und selbst nicht befreit: genau hier entscheidet die Partnerin.
+assert.equal(pn("verheiratet", "deutschland", "B"), true);
+assert.equal(pn("verheiratet", "italien", "G"), true);
+assert.equal(pn("verheiratet", "kosovo", "L"), true);
+
+// Eingetragene Partnerschaft ist der Ehe gleichgestellt (DBG Art. 9 Abs. 1bis).
+assert.equal(pn("eingetragene_partnerschaft", "deutschland", "B"), true);
+
+/* Der Ringschluss ist wirklich aufgeloest: die Regel liest NUR Felder, die im
+   Reiter "Personalien" stehen — nicht die Steuerpflicht. Waere das anders,
+   koennte das Formular in einen Zustand geraten, aus dem es nicht herausfindet. */
+{
+  const eingabe = { zivilstand: "verheiratet", nationalitaet: "deutschland", aufenthaltsstatus: "B" };
+  assert.equal(partnerErfassungNoetig(eingabe), true);
+  // Und die Ableitung sagt bei fehlenden Partnerangaben "noch nicht bestimmbar",
+  // nicht etwa "nicht pflichtig" — sonst bliebe der Fall unbemerkt liegen.
+  const r = leiteQuellensteuerpflichtAb({ ...eingabe, partnerNationalitaet: "", partnerAufenthaltsstatus: "" });
+  assert.equal(r.wert, null);
+  assert.equal(r.unvollstaendig, true);
+}
 
 console.log("quellensteuer-tarif.test.ts: alle Zusicherungen erfüllt");

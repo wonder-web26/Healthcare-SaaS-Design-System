@@ -80,7 +80,7 @@ import { toast } from "sonner";
 import { pruefeInklusiv } from "../../lib/klv/inklusiv-regeln";
 import { pruefeKassenregeln } from "../../lib/klv/kassenregeln";
 import { erzeugeWZWAuswertung, type WZWErgebnis } from "../../lib/klv/wzw-auswertung";
-import { useEinwilligung } from "./EinwilligungContext";
+import { useEinwilligung, ARZT_EINWILLIGUNG } from "./EinwilligungContext";
 import { PersonDokumenteOrdner } from "./dokumente/PersonDokumenteOrdner";
 import { type DokumentReferenz } from "../../lib/dokumente/dokumente";
 import { entryBetreff, type UnifiedEntry } from "../../lib/mocks/service-desk-unified";
@@ -1282,18 +1282,28 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
   const [mehrfachEintraege, setMehrfachEintraege] = useState<Record<string, { id: string; label: string }[]>>({});
   const [mehrfachNeuesLabel, setMehrfachNeuesLabel] = useState<Record<string, string>>({});
 
-  // Sync: Einwilligung-Status → scans["patient_einwilligung"], damit
-  // getFehlendePflichtdokumente und istDokumentVollstaendig korrekt rechnen.
+  /* Unterschrift-Status → scans[<code>], damit getFehlendePflichtdokumente und
+     istDokumentVollstaendig mitrechnen. Läuft über ALLE Unterschrift-Dokumente:
+     vorher war der Code fest verdrahtet, und ein zweites Dokument hätte im
+     Pflichtzähler dauerhaft als fehlend gestanden, obwohl es unterschrieben ist. */
+  const unterschriftCodes = sichtbareDokumenttypen(PATIENT_DOK_KONTEXT, "patient")
+    .filter(d => d.modus === "unterschrift").map(d => d.code);
+  const signierteCodes = unterschriftCodes.filter(c => einwilligung.statusVon(c).signiert).join(",");
   useEffect(() => {
-    if (einwilligung.status.signiert && (data.scans["patient_einwilligung"] as unknown as string) !== "unterschrieben") {
-      onChange({ ...data, scans: { ...data.scans, patient_einwilligung: "unterschrieben" as unknown as PatientScanFile } });
-    }
-  }, [einwilligung.status.signiert]);
+    const offen = unterschriftCodes.filter(c =>
+      einwilligung.statusVon(c).signiert && (data.scans[c] as unknown as string) !== "unterschrieben");
+    if (offen.length === 0) return;
+    const neueScans = { ...data.scans };
+    for (const c of offen) neueScans[c] = "unterschrieben" as unknown as PatientScanFile;
+    onChange({ ...data, scans: neueScans });
+  }, [signierteCodes]);
 
   const sichtbar = sichtbareDokumenttypen(PATIENT_DOK_KONTEXT, "patient");
   const pflichtDocs = sichtbar.filter(d => d.pflicht && !d.mehrfach);
   const vollstaendig = pflichtDocs.filter(d => {
-    if (d.modus === "unterschrift") return einwilligung.status.signiert;
+    /* Je Dokument gefragt: es gibt jetzt zwei Unterschrift-Dokumente, und der
+       eine Zustand für beide hätte das zweite als erledigt gezeigt. */
+    if (d.modus === "unterschrift") return einwilligung.statusVon(d.code).signiert;
     return istDokumentVollstaendig(d, data.scans);
   }).length;
   const totalPflicht = pflichtDocs.length;
@@ -1334,7 +1344,8 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
         {sichtbar.map(doc => {
           /* modus=unterschrift: Einwilligung */
           if (doc.modus === "unterschrift") {
-            const istSigniert = einwilligung.status.signiert;
+            const dokStatus = einwilligung.statusVon(doc.code);
+            const istSigniert = dokStatus.signiert;
             return (
               <div key={doc.code} style={{ padding: "12px 16px", background: "var(--bg-elevated)", borderRadius: 10, border: "0.5px solid var(--border-default)" }}>
                 <div className="flex items-center justify-between">
@@ -1342,7 +1353,9 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
                     <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>
                       {doc.label} {doc.pflicht && <span style={{ color: "var(--status-danger)" }}>*</span>}
                     </span>
-                    {!istSigniert && (
+                    {/* Der Zusatz gilt nur für die Arzt-Einwilligung; die
+                        Datenschutzerklärung hat mit der Arzt-Anfrage nichts zu tun. */}
+                    {!istSigniert && doc.code === ARZT_EINWILLIGUNG && (
                       <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Erforderlich für die Arzt-Anfrage (Tab Pflegeplanung)</span>
                     )}
                   </div>
@@ -1352,9 +1365,9 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
                     <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Offen</span>
                   )}
                 </div>
-                {istSigniert && einwilligung.status.herkunft && (
+                {istSigniert && dokStatus.herkunft && (
                   <div style={{ marginTop: 6, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-                    {einwilligung.status.herkunft === "digital" ? "Digital signiert" : "Scan hochgeladen"} · {einwilligung.status.datum}
+                    {dokStatus.herkunft === "digital" ? "Digital signiert" : "Scan hochgeladen"} · {dokStatus.datum}
                   </div>
                 )}
                 {!istSigniert && (
@@ -1362,9 +1375,9 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
                     patientName={`${data.vorname || ""} ${data.name || ""}`.trim() || "Patient"}
                     patientGeburtsdatum={data.geburtsdatum || ""}
                     angehoerigerName=""
-                    onSignDigital={(_, datum) => einwilligung.signDigital(datum)}
+                    onSignDigital={(_, datum) => einwilligung.signDigitalFuer(doc.code, datum)}
                     onScanUpload={(file) => {
-                      einwilligung.signScan(new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }));
+                      einwilligung.signScanFuer(doc.code, new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }));
                       handleScanFile(`${doc.code}_scan`, file);
                     }}
                   />

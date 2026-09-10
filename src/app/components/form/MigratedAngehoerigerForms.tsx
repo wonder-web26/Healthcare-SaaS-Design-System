@@ -4,11 +4,12 @@
  * Form logic (state, validation, conditional fields) unchanged.
  */
 import { useState } from "react";
-import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Download, Check, MapPin, Phone, CircleCheck, Bell, Stamp, Ban, HelpCircle } from "lucide-react";
+import { User, Mail, Shield, Receipt, Briefcase, CreditCard, Download, Check, MapPin, Phone, CircleCheck, Bell, Stamp, Ban, HelpCircle, Pencil } from "lucide-react";
 import { AdressBlock } from "../ui/AdressBlock";
 import { SectionHeader } from "./SectionHeader";
 import { GEGENWART_ISO } from "../../../lib/gegenwart";
 import { TextInput } from "./TextInput";
+import { FormField } from "./FormField";
 import { DateField } from "./DateField";
 import { NumberInput } from "./NumberInput";
 import { AHVNummerInput } from "./AHVNummerInput";
@@ -28,7 +29,7 @@ import { STAATSANGEHOERIGKEIT_OPTIONS, istSchweiz, staatsangehoerigkeitsgruppe }
 import { AUFENTHALTSSTATUS_OPTIONS } from "../../../lib/stammdaten/aufenthaltsstatus";
 import { AUFENTHALTSGRUND_OPTIONS, type Aufenthaltsgrund } from "../../../lib/stammdaten/aufenthaltsgrund";
 import { FELD_MAX } from "./feldbreiten";
-import { leiteTarifcodeAb, steuerpflichtHinweis, TARIF_BUCHSTABEN } from "../../../lib/stammdaten/quellensteuer-tarif";
+import { leiteQuellensteuerpflichtAb, leiteTarifcodeAb, TARIF_BUCHSTABEN } from "../../../lib/stammdaten/quellensteuer-tarif";
 import { formDataToSEM, erstelleSEMFormular, ermittleFehlendeFelderSEM, downloadBlob } from "../../../lib/sem/meldeformular";
 import { KANTON_OPTIONS, kantonName } from "../../../lib/stammdaten/kantone";
 import { auslaenderrechtEingabe } from "../StepAngehoeriger";
@@ -272,7 +273,8 @@ export function SteuerFormV2({
   data: AngehoerigerFormData;
   onChange: (d: AngehoerigerFormData) => void;
   /** Sprung in einen anderen Reiter (Index) für die Ändern-Links der Herleitung. */
-  onNavigate?: (tab: number) => void;
+  /** Sprung in einen anderen Reiter, über dessen Schlüssel. */
+  onNavigate?: (reiter: "personalien" | "partner" | "kinder" | "steuer" | "anstellung" | "dokumente") => void;
 }) {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [tarifOverrideOpen, setTarifOverrideOpen] = useState(false);
@@ -287,8 +289,123 @@ export function SteuerFormV2({
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
       <SectionHeader icon={Receipt} label="Quellensteuer" first />
       <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        {/* Der Umschalter bleibt manuell; der Hinweistext ist abgeleitet (bestimmt nur den Text, nie den Wert). */}
-        <SegmentedControl label="Quellensteuerpflichtig?" required value={data.quellensteuer} onChange={v => { if (v === "nein") onChange({ ...data, quellensteuer: v, quellensteuerTarif: "" }); else set("quellensteuer", v); }} options={JA_NEIN} hint={steuerpflichtHinweis({ nationalitaet: data.nationalitaet, aufenthaltsstatus: data.aufenthaltsstatus, zivilstand: data.zivilstand, partnerNationalitaet: data.partnerNationalitaet, partnerAufenthaltsstatus: data.partnerAufenthaltsstatus })} />
+        {/* ── Quellensteuerpflicht ────────────────────────────────────────────
+               Sie wird gelesen, nicht gesetzt. Die Regel ist massgebend und
+               lässt sich NICHT überstimmen: sie folgt dem Gesetz, und ein
+               abweichender Eintrag wäre entweder falsch oder ein Zeichen dafür,
+               dass die Regel zu ändern ist — nicht der Einzelfall.
+
+               EINE Ausnahme, und sie widerspricht dem nicht: bei Ehe mit einer
+               Schweizerin oder einem Niedergelassenen trifft die Regel
+               ausdrücklich KEINE Aussage. Dort entscheidet ein Mensch, was
+               offen ist — er überstimmt nichts. Diese Entscheidung bleibt
+               änderbar, weil die Regel sie nie zurücknehmen kann.
+
+               Sichtbar bleibt das Feld in jeder Lage: der Wert wirkt auf die
+               Lohnabrechnung, und ein unsichtbares "nicht pflichtig" wäre eine
+               Aussage, die niemand nachvollziehen könnte. ── */}
+        {(() => {
+          const abl = leiteQuellensteuerpflichtAb({
+            nationalitaet: data.nationalitaet, aufenthaltsstatus: data.aufenthaltsstatus,
+            zivilstand: data.zivilstand,
+            partnerNationalitaet: data.partnerNationalitaet, partnerAufenthaltsstatus: data.partnerAufenthaltsstatus,
+          });
+
+          /* Nachziehen, sobald die Regel etwas sagt — ohne Vorbehalt, weil es
+             keinen abweichenden Eintrag mehr geben kann. Über setTimeout, damit
+             die Zustandsänderung nicht im Rendern geschieht. */
+          if (abl.wert !== null && (abl.wert !== data.quellensteuer || data.quellensteuerZweifelEntschieden)) {
+            setTimeout(() => onChange({
+              ...data,
+              quellensteuer: abl.wert!,
+              /* Sagt die Regel wieder etwas, ist eine frühere Entscheidung
+                 gegenstandslos — sonst hinge sie an einer Frage, die gar nicht
+                 mehr gestellt wird. */
+              quellensteuerZweifelEntschieden: false,
+              ...(abl.wert === "nein" ? { quellensteuerTarif: "" } : null),
+            }), 0);
+          }
+
+          const entscheide = (v: string) => onChange({
+            ...data, quellensteuer: v, quellensteuerZweifelEntschieden: v !== "",
+            ...(v === "nein" ? { quellensteuerTarif: "" } : null),
+          });
+
+          const istZweifel = abl.wert === null && !abl.unvollstaendig;
+          /* Nur ein ausdrücklich gesetzter Wert zählt als Entscheidung. Ein
+             Wert, der aus einer früheren Ableitung stammt, ist keine. */
+          const zweifelEntschieden = istZweifel && data.quellensteuerZweifelEntschieden;
+
+          /* ── Zweifelsfall, noch offen: zwei Knöpfe auf Feldhöhe ── */
+          if (istZweifel && !zweifelEntschieden) {
+            return (
+              <FormField label="Quellensteuerpflichtig?" required hint={abl.begruendung}>
+                <div className="flex items-center" style={{ gap: 8 }}>
+                  {[{ v: "ja", t: "Pflichtig" }, { v: "nein", t: "Nicht pflichtig" }].map(o => (
+                    <button key={o.v} type="button"
+                      onClick={() => entscheide(o.v)}
+                      className="ui-fokusring cursor-pointer"
+                      style={{
+                        height: "var(--field-height)", padding: "0 16px", borderRadius: "var(--radius-card)",
+                        background: "var(--bg-elevated)", color: "var(--text-primary)",
+                        border: "var(--border-thin) solid var(--status-warning)",
+                        fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)",
+                      }}>
+                      {o.t}
+                    </button>
+                  ))}
+                </div>
+              </FormField>
+            );
+          }
+
+          /* ── Der Wert als ruhiges Feld ───────────────────────────────────────
+                 Der Stift erscheint NUR im entschiedenen Zweifelsfall: dort hat
+                 ein Mensch gesetzt, was die Regel offenliess, und darf es
+                 revidieren. Wo die Regel entschieden hat, gibt es nichts zu
+                 bearbeiten — das Feld ist dann reine Anzeige. */
+          const bestimmt = abl.wert !== null || zweifelEntschieden;
+          const anzeige = !bestimmt
+            ? "Noch nicht bestimmbar"
+            : (abl.wert ?? data.quellensteuer) === "ja" ? "Pflichtig" : "Nicht pflichtig";
+
+          return (
+            <FormField label="Quellensteuerpflichtig?" required hint={abl.begruendung}>
+              <div
+                className="flex items-center justify-between"
+                style={{
+                  height: "var(--field-height)", padding: istZweifel ? "0 8px 0 16px" : "0 16px", gap: 8,
+                  borderRadius: "var(--radius-card)",
+                  border: "var(--border-thin) solid var(--border-default)",
+                  background: "var(--bg-secondary)",
+                  maxWidth: FELD_MAX.mittel,
+                }}
+              >
+                <span style={{
+                  fontSize: "var(--text-small)",
+                  color: bestimmt ? "var(--text-primary)" : "var(--text-tertiary)",
+                  fontWeight: bestimmt ? "var(--weight-medium)" : "var(--weight-regular)",
+                }}>
+                  {anzeige}
+                </span>
+                {istZweifel && (
+                  <button
+                    type="button"
+                    aria-label="Entscheidung zur Quellensteuerpflicht ändern"
+                    title="Entscheidung ändern"
+                    onClick={() => entscheide("")}
+                    className="ui-fokusring inline-flex items-center justify-center shrink-0 cursor-pointer"
+                    style={{ width: 28, height: 28, borderRadius: "var(--control-radius)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <Pencil style={{ width: 14, height: 14 }} />
+                  </button>
+                )}
+              </div>
+            </FormField>
+          );
+        })()}
         <div id="qst-konfession" style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Konfession" required value={data.konfession || null} onChange={v => { set("konfession", v || ""); touch("konfession"); }} options={KONFESSION_OPTIONS} placeholder="Konfession wählen" hint="Relevant für Kirchensteuer" error={touched.konfession && !filled(data.konfession) ? "Pflichtfeld" : undefined} /></div>
       </div>
       {/* SP-10: QSt-Tarifcode — abgeleitet, read-only + kontrollierter Override */}
@@ -311,10 +428,12 @@ export function SteuerFormV2({
         const hatAbweichung = istOverride && data.quellensteuerTarif !== tarifErgebnis.code;
         const ovCode = `${ovBuchstabe}${ovKinder}${ovKirche}`;
 
-        // Ändern-Link je Zeichen: in den Quell-Reiter springen (Konfession steht hier).
+        /* Ändern-Link je Zeichen: in den Quell-Reiter springen (Konfession steht
+           hier). Angesteuert über den Schlüssel — vorher standen hier die
+           Zahlen 0 und 3, die beim Umsortieren der Reiter stumm falsch wurden. */
         const springe = (anker: "zivilstand" | "kinder" | "konfession") => {
-          if (anker === "zivilstand") onNavigate?.(0);
-          else if (anker === "kinder") onNavigate?.(3);
+          if (anker === "zivilstand") onNavigate?.("personalien");
+          else if (anker === "kinder") onNavigate?.("kinder");
           else document.getElementById("qst-konfession")?.scrollIntoView({ behavior: "smooth", block: "center" });
         };
         const oeffneOverride = () => {
@@ -329,7 +448,27 @@ export function SteuerFormV2({
           <div style={{ marginTop: "var(--space-4)" }}>
             <div style={{ padding: "14px 16px", background: "var(--status-info-bg)", borderRadius: 10 }}>
               <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".04em", color: "var(--text-tertiary)", marginBottom: 4 }}>Abgeleiteter QSt-Tarifcode</div>
-              <div style={{ fontSize: 28, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: "var(--text-primary)", lineHeight: 1.1 }}>{angezeigterCode}</div>
+              {/* Der Stift sitzt am Wert, nicht als Textzeile darunter — dieselbe
+                  Geste wie beim Feld "Quellensteuerpflichtig?" weiter oben. Er
+                  entfällt, solange die Abweichung offen ist; dann ist der Weg
+                  hinein schon genommen. */}
+              <div className="flex items-center justify-between" style={{ gap: 12 }}>
+                <div style={{ fontSize: 28, fontWeight: 600, fontVariantNumeric: "tabular-nums", color: "var(--text-primary)", lineHeight: 1.1 }}>{angezeigterCode}</div>
+                {!tarifOverrideOpen && (
+                  <button
+                    type="button"
+                    aria-label="Tarifcode von Hand setzen"
+                    title="Von Hand setzen"
+                    onClick={oeffneOverride}
+                    className="ui-fokusring inline-flex items-center justify-center shrink-0 cursor-pointer"
+                    style={{ width: 28, height: 28, borderRadius: "var(--control-radius)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <Pencil style={{ width: 14, height: 14 }} />
+                  </button>
+                )}
+              </div>
 
               {/* Herleitung: eine Zeile je Zeichen mit Bedeutung, Quelle und Ändern-Link. */}
               <div style={{ marginTop: "var(--space-3)", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -347,11 +486,6 @@ export function SteuerFormV2({
                 Der Tarifsatz richtet sich nach dem Wohnsitzkanton der Angehörigen{data.kanton ? `, hier ${kantonName(data.kanton)}` : ""}.
               </div>
 
-              {!tarifOverrideOpen && (
-                <button type="button" onClick={oeffneOverride} className="ui-fokusring cursor-pointer" style={{ marginTop: 8, background: "none", border: "none", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", padding: 0 }}>
-                  Abweichend festlegen…
-                </button>
-              )}
             </div>
 
             {hatAbweichung && !tarifOverrideOpen && (

@@ -70,6 +70,12 @@ export const DOKUMENT_TYPEN: DokumentTypDefinition[] = [
   { code: "patient_ausweis_id", label: "Ausweis / ID", kategorie: "Identität", beidseitig: true, pflicht: true, sichtbarWenn: "IMMER", modus: "upload", mehrfach: false, entitaet: "patient", gueltigkeitMonate: null },
   { code: "patient_kk_karte", label: "Krankenkassenkarte", kategorie: "Identität", beidseitig: true, pflicht: true, sichtbarWenn: "IMMER", modus: "upload", mehrfach: false, entitaet: "patient", gueltigkeitMonate: null },
   { code: "patient_einwilligung", label: "Einwilligungserklärung", kategorie: "Vertrag", beidseitig: false, pflicht: true, sichtbarWenn: "IMMER", modus: "unterschrift", mehrfach: false, entitaet: "patient", gueltigkeitMonate: null },
+  /* Datenschutz- und Einwilligungserklärung — Pflicht, digital zu unterschreiben
+     ODER als unterschriebener Scan hochzuladen (modus "unterschrift" trägt
+     beide Wege). Nicht zu verwechseln mit "Einwilligungserklärung" darüber:
+     die betrifft ausschliesslich die Weitergabe an die Ärztin und hängt am
+     Arzt-Anfrage-Fluss. Diese hier ist die datenschutzrechtliche Erklärung. */
+  { code: "patient_datenschutz_einwilligung", label: "Datenschutz und Einwilligungserklärung", kategorie: "Vertrag", beidseitig: false, pflicht: true, sichtbarWenn: "IMMER", modus: "unterschrift", mehrfach: false, entitaet: "patient", gueltigkeitMonate: null },
   { code: "patient_sonstige", label: "Sonstige Dokumente", kategorie: "Sonstiges", beidseitig: false, pflicht: false, sichtbarWenn: "IMMER", modus: "upload", mehrfach: true, entitaet: "patient", gueltigkeitMonate: null },
 ];
 

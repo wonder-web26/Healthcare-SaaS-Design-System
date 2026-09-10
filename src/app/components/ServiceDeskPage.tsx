@@ -6,6 +6,7 @@ import { type VerlaufEintrag, type VerlaufTyp, getUnifiedEntries, entryBetreff, 
 import { personLink, personArtLabel, type PersonenBezug } from "../../lib/mocks/personen-aufloesung";
 import { type Person } from "../../lib/mocks/workflow-tasks";
 import { pendenzTypen, type PendenzTyp } from "../../types/pendenz";
+import { artLabel, kategorieLabel, artVollLabel } from "../../lib/stammdaten/pendenz-katalog";
 import { DataTable, useFensterBreite, type SpalteDef } from "./ui/DataTable";
 import { NeuePendenzDialog } from "./pendenzen/NeuePendenzDialog";
 import { isoZuAnzeige, formatTagMonat, isoZuDate } from "../../lib/datum";
@@ -176,11 +177,12 @@ function leerZuletzt(la: boolean, lb: boolean, f: number, cmp: () => number): nu
 }
 function sortEntries(list: UnifiedEntry[], key: SortKey, dir: "asc" | "desc"): UnifiedEntry[] {
   const f = dir === "asc" ? 1 : -1;
-  const artLabel = (e: UnifiedEntry) => pendenzTypen[e.pendenzTyp]?.label || e.typLabel;
   return [...list].sort((a, b) => {
     switch (key) {
       case "kennzeichen": return f * (kennRang(a) - kennRang(b)) || entryBetreff(a).localeCompare(entryBetreff(b), "de");
-      case "art": return f * artLabel(a).localeCompare(artLabel(b), "de");
+      /* Sortiert wird nach Kategorie, dann nach Art — die Spalte zeigt beides,
+         und eine Sortierung nach der Art allein risse die Kategorien auseinander. */
+      case "art": return f * (artVollLabel(a.pendenzTyp).localeCompare(artVollLabel(b.pendenzTyp), "de"));
       case "betreff": return f * entryBetreff(a).localeCompare(entryBetreff(b), "de");
       case "status": return f * ((STATUS_RANK[a.status] ?? 0) - (STATUS_RANK[b.status] ?? 0)) || entryBetreff(a).localeCompare(entryBetreff(b), "de");
       case "person": return f * entryPersonName(a).localeCompare(entryPersonName(b), "de");
@@ -443,7 +445,7 @@ export function ServiceDeskPage() {
   const filterTags = useMemo(() => {
     const t: { key: string; label: string; entfernen: () => void }[] = [];
     STATUS_CHIPS.forEach(chip => { if (filter.statusChips.has(chip.id)) t.push({ key: `s-${chip.id}`, label: chip.label, entfernen: () => toggleChip(chip.id) }); });
-    filter.arten.forEach(art => t.push({ key: `a-${art}`, label: `Kategorie: ${pendenzTypen[art]?.label || art}`, entfernen: () => toggleArt(art) }));
+    filter.arten.forEach(art => t.push({ key: `a-${art}`, label: `Kategorie: ${artVollLabel(art)}`, entfernen: () => toggleArt(art) }));
     filter.zustaendige.forEach(n => t.push({ key: `z-${n}`, label: `Zuständig: ${n}`, entfernen: () => toggleZustaendig(n) }));
     return t;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -543,7 +545,19 @@ export function ServiceDeskPage() {
     return <AlertTriangle role="img" aria-label={k.grund} style={{ width: 15, height: 15, flexShrink: 0, color: k.typ === "rot" ? "var(--status-danger)" : "var(--status-warning)", fill: k.typ === "rot" ? "var(--status-danger)" : "none" }} />;
   };
   // Art: stiller Text, keine Fläche, keine Farbe.
-  const artZelle = (e: UnifiedEntry) => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{pendenzTypen[e.pendenzTyp]?.label || e.typLabel}</span>;
+  /* Zwei Ebenen in einer Zelle: die Kategorie ordnet ein, die Art benennt.
+     Vorher stand hier nur die Art unter der Überschrift «Kategorie» — zwei
+     Wörter für dasselbe, obwohl es zwei verschiedene Dinge sind. */
+  const artZelle = (e: UnifiedEntry) => (
+    <span className="inline-flex flex-col" style={{ minWidth: 0, lineHeight: 1.25 }}>
+      <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "nowrap" }}>
+        {artLabel(e.pendenzTyp) || e.typLabel}
+      </span>
+      <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
+        {kategorieLabel(e.pendenzTyp)}
+      </span>
+    </span>
+  );
 
   // Betreff: die Sache, einzeilig mit Ellipsis; bei laufender Bearbeitung eine
   // stille Kennzeichnung; abgeschlossene zurückgenommen.
@@ -749,7 +763,7 @@ export function ServiceDeskPage() {
             );
             const auswahlFelder = (
               <>
-                <AuswahlDropdown label="Kategorie" optionen={alleArten.map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))} ausgewaehlt={filter.arten as Set<string>} onToggle={v => toggleArt(v as PendenzTyp)} />
+                <AuswahlDropdown label="Kategorie" optionen={alleArten.map(t => ({ value: t, label: artVollLabel(t) }))} ausgewaehlt={filter.arten as Set<string>} onToggle={v => toggleArt(v as PendenzTyp)} />
                 <AuswahlDropdown label="Zuständig" optionen={alleZustaendige.map(n => ({ value: n, label: n }))} ausgewaehlt={filter.zustaendige} onToggle={toggleZustaendig} />
               </>
             );
@@ -955,7 +969,7 @@ export function ServiceDeskPage() {
         <AnsichtErstellenDialog
           offen
           onClose={() => setErstellenOffen(false)}
-          kategorien={alleArtenGesamt.map(t => ({ value: t, label: pendenzTypen[t]?.label || t }))}
+          kategorien={alleArtenGesamt.map(t => ({ value: t, label: artVollLabel(t) }))}
           personen={allePersonen}
           statusOptionen={[
             { value: "offen", label: "Offen" },
