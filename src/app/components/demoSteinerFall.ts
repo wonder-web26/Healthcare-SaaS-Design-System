@@ -88,12 +88,32 @@ export const demoSteinerPatient: PatientFormData = {
   uebersetzerNotwendig: "0",
   ivBezug: "nein", hilflosenentschaedigung: "ja", assistenzbeitrag: "nein",
   konfession: "evangelisch_reformiert",
-  groesse: "174", gewicht: "78", gewichtsverlust: "nein", brille: "ja", hoergeraet: "ja",
-  chronischeErkrankungen: "Arterielle Hypertonie, Diabetes mellitus Typ 2, beginnende Herzinsuffizienz (NYHA II)",
+  /* Anamnese-Reduktion: Brille (ja), Hörgerät (ja), Gewichtsverlust (nein) und
+     Stimmung (stabil) sind mit den entfernten Einzelfeldern bewusst entfallen —
+     das sind interRAI-Items und werden künftig in der Bedarfsabklärung erhoben.
+     Grösse und Gewicht führen die Vitalzeichen (174 cm / 78.2 kg im Seed). */
+  situationHaeuslich: "Eigene Wohnung im 2. Obergeschoss mit Lift, zu zweit bewohnt. Die Ehefrau Vera übernimmt Körperpflege, Medikamentenrichten und Begleitung ausser Haus; die Spitex unterstützt beim Duschen an drei Tagen pro Woche. Rollator in der Wohnung.",
+  situationSozial: "Lebt mit der Ehefrau Vera zusammen; sie ist die zentrale Bezugs- und Pflegeperson. Umgangssprache Schweizerdeutsch. Kontakte im Quartier sind wegen der Gangunsicherheit seltener geworden.",
+  situationRessourcen: "Kognitiv orientiert, isst und trinkt selbstständig, bewältigt kurze Strecken mit dem Rollator ohne Hilfe. Motiviert, die Selbstständigkeit im Alltag zu erhalten.",
+  situationSonstiges: "",
+  // Situation trägt bewusst einen alten Stempel (> 12 Monate vor der Mock-
+  // Gegenwart 2026-08-04) — er zeigt den Überprüfungshinweis. Die Vorgeschichte
+  // trägt einen jungen Stempel ohne Hinweis.
+  situationBearbeitetVon: "M. Keller", situationBearbeitetAm: "2025-06-12",
+  chronischeErkrankungenListe: [
+    { id: "vg-chron-1", bezeichnung: "Arterielle Hypertonie", zeitangabe: "seit 2018" },
+    { id: "vg-chron-2", bezeichnung: "Diabetes mellitus Typ 2", zeitangabe: "seit 2020" },
+    { id: "vg-chron-3", bezeichnung: "Beginnende Herzinsuffizienz (NYHA II)", zeitangabe: "" },
+  ],
   // BB11: das bisherige "ja" war nicht auflösbar. Neu gesetzt auf 0 — die beiden
   // dokumentierten Eingriffe liegen 2019 und 2022 und damit weit ausserhalb der
   // 90-Tage-Periode; die Anamnese nennt keinen jüngeren Spitalaufenthalt.
-  operationen: "Hüft-Totalprothese rechts (2019), Katarakt beidseits (2022)",
+  operationenListe: [
+    { id: "vg-op-1", bezeichnung: "Hüft-Totalprothese rechts", zeitangabe: "2019" },
+    { id: "vg-op-2", bezeichnung: "Katarakt beidseits", zeitangabe: "2022" },
+  ],
+  krankheitsverlauf: "Zunehmende Gangunsicherheit, benötigt Unterstützung bei Körperpflege und Medikamentenmanagement. Kognitiv orientiert, Stimmung stabil.",
+  vorgeschichteBearbeitetVon: "M. Keller", vorgeschichteBearbeitetAm: "2026-06-18",
   // BB9: der bisherige Freitext war kein Listenwert. Neu gesetzt auf 1 — eigene
   // Wohnung im 2. Obergeschoss mit Lift, zu zweit bewohnt.
   allergien: "Penicillin",
@@ -105,8 +125,6 @@ export const demoSteinerPatient: PatientFormData = {
   formZusammenleben: "2",
   neuZusammenlebend: "0",
   etage: "2", liftVorhanden: "ja", treppen: "ja", personenImHaushalt: "2",
-  anamneseText: "Zunehmende Gangunsicherheit, benötigt Unterstützung bei Körperpflege und Medikamentenmanagement. Kognitiv orientiert, Stimmung stabil.",
-  stimmungAktuell: "stabil",
   atlAssessment: {
     ...emptyPatientForm.atlAssessment,
     "Körperpflege": { ja: true, bemerkungen: "Hilfe beim Duschen an drei Tagen pro Woche" },

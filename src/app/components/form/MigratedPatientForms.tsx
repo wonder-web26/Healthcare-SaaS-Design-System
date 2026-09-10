@@ -2,8 +2,7 @@
  * Migrated form sub-components for StepPatient Tabs 1, 2, 3.
  * Uses new form components from components/form/.
  */
-import { useState } from "react";
-import { User, Users, MapPin, Shield, Phone, IdCard, HeartPulse, Receipt, Stethoscope, Home, ClipboardList, Languages, ChevronDown, ChevronUp, CheckCircle2, FileText } from "lucide-react";
+import { User, Users, MapPin, Shield, Phone, IdCard, Receipt, Stethoscope, Home, ClipboardList, Languages, ChevronDown, ChevronUp, CheckCircle2, FileText, Plus, X } from "lucide-react";
 import { SectionHeader } from "./SectionHeader";
 import { FELD_MAX, katalogFeldBreite } from "./feldbreiten";
 import { TextInput } from "./TextInput";
@@ -15,19 +14,18 @@ import { Combobox as FormSelect } from "./Combobox";
 import { AdressBlock } from "../ui/AdressBlock";
 import { FormField } from "./FormField";
 import { DateField } from "./DateField";
-import type { PatientFormData } from "../StepPatient";
+import type { PatientFormData, VorgeschichteEintrag } from "../StepPatient";
+import { useCurrentUser } from "../../auth";
+import { GEGENWART_ISO } from "../../../lib/gegenwart";
 import { getBeziehungen } from "../../../lib/beziehungen/store";
 import { personName as beziehungsPersonName } from "../../../lib/beziehungen/beziehungen";
 import { getAngehoerige } from "../../../lib/angehoerige/store";
 import { DokumentScanUpload } from "./DokumentScanUpload";
-import { toast } from "sonner";
-import { leseVorgemapptesFeld, schreibeVorgemapptesFeld } from "../../../lib/interrai/vormapping";
 import { KONFESSION_OPTIONS } from "../../../lib/stammdaten/konfession";
 import { VersicherungenAbschnitt } from "../versicherung/VersicherungenAbschnitt";
 import { BezugsteamAbschnitt } from "../beziehungen/BezugsteamAbschnitt";
 import { patientFuerOnboarding } from "../../../lib/patienten/store";
 import { SDA_WOHNSITUATION_OPTIONS } from "../../../lib/stammdaten/sda-wohnsituation";
-import { SDA_SPITALAUFENTHALT_OPTIONS } from "../../../lib/stammdaten/sda-spitalaufenthalt";
 import { GESCHLECHT_OPTIONS } from "../../../lib/stammdaten/geschlecht";
 import { ANREDE_OPTIONS } from "../../../lib/stammdaten/anrede";
 import { ZIVILSTAND_OPTIONS } from "../../../lib/stammdaten/zivilstand";
@@ -47,7 +45,6 @@ function filled(v: string | undefined | null): boolean {
 }
 
 const JA_NEIN = [{ value: "ja", label: "Ja" }, { value: "nein", label: "Nein" }];
-const STIMMUNG = [{ value: "stabil", label: "Stabil" }, { value: "gedrueckt", label: "Gedrückt" }, { value: "wechselhaft", label: "Wechselhaft" }, { value: "belastet", label: "Sehr belastet" }];
 const PERSONEN = [{ value: "1", label: "1 (alleinlebend)" }, { value: "2", label: "2 Personen" }, { value: "3", label: "3 Personen" }, { value: "4+", label: "4+ Personen" }];
 
 interface TabProps {
@@ -404,71 +401,151 @@ export function TabWohnenUmfeldV2({ data, touched, onUpdate }: TabProps) {
 }
 
 /* ══════════════════════════════════════════
-   TAB 3: ANAMNESE (migrated)
+   TAB 3: ANAMNESE — Situation und Vorgeschichte
    ══════════════════════════════════════════ */
-export function TabAnamneseV2({ data, touched, onUpdate, onBlur, onboardingId }: TabProps & { onboardingId?: string }) {
-  const t = (f: string) => touched.has(f);
-  const [, forceAnamnese] = useState(0);
-  // BB11 spitalaufenthalte ist vorgemappt (iA13) → Wert aus dem Registrierungs-
-  // formular; Schreiben legt es bei Bedarf an (§2). Ohne Onboarding kein Ziel.
-  const spital = onboardingId ? String(leseVorgemapptesFeld(onboardingId, "spitalaufenthalte") ?? "") : "";
-  const setSpital = (v: string) => {
-    if (!onboardingId) return;
-    try { schreibeVorgemapptesFeld(onboardingId, "spitalaufenthalte", v); forceAnamnese((n) => n + 1); }
-    catch (e) { toast(e instanceof Error ? e.message : "Nicht speicherbar"); }
-  };
+
+/** Zwölf-Monats-Grenze für den Überprüfungshinweis, gemessen an der Mock-Gegenwart. */
+function aelterAlsZwoelfMonate(iso: string): boolean {
+  if (!iso) return false;
+  const grenze = new Date(GEGENWART_ISO + "T00:00:00");
+  grenze.setFullYear(grenze.getFullYear() - 1);
+  return new Date(iso + "T00:00:00") < grenze;
+}
+
+function datumAnzeige(iso: string): string {
+  const [j, m, t] = iso.split("-");
+  return j && m && t ? `${t}.${m}.${j}` : iso;
+}
+
+/** Bearbeitungsstand eines Blocks (Autor · Datum) mit Überprüfungshinweis ab
+ *  zwölf Monaten. Der Hinweis informiert nur — er sperrt nichts. */
+function BearbeitungsStand({ von, am }: { von: string; am: string }) {
+  return (
+    <div style={{ marginBottom: "var(--space-4)" }}>
+      <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+        {am ? <>Bearbeitungsstand: {von} · {datumAnzeige(am)}</> : "Noch nicht bearbeitet"}
+      </div>
+      {aelterAlsZwoelfMonate(am) && (
+        <div style={{ marginTop: "var(--space-2)", padding: "8px 12px", background: "var(--status-warning-bg)", borderRadius: 8, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
+          Dieser Block wurde seit über zwölf Monaten nicht bearbeitet — bitte prüfen, ob die Angaben noch aktuell sind.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Zeilenliste der Vorgeschichte (Bezeichnung + Zeitangabe, ergänzbar und
+ *  entfernbar). Freitext ohne Codes — bewusst keine Diagnose-Objekte. */
+function VorgeschichteListe({ eintraege, zeitLabel, bezeichnungPlatzhalter, zeitPlatzhalter, erfassenText, weitereText, onChange }: {
+  eintraege: VorgeschichteEintrag[];
+  zeitLabel: string;
+  bezeichnungPlatzhalter: string;
+  zeitPlatzhalter: string;
+  erfassenText: string;
+  weitereText: string;
+  onChange: (neu: VorgeschichteEintrag[]) => void;
+}) {
+  const zeileAendern = (id: string, feld: "bezeichnung" | "zeitangabe", wert: string) =>
+    onChange(eintraege.map(e => e.id === id ? { ...e, [feld]: wert } : e));
+
+  return (
+    <div className="flex flex-col" style={{ gap: "var(--space-3)" }}>
+      {eintraege.length === 0 && (
+        <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Keine Einträge erfasst.</div>
+      )}
+      {eintraege.map(e => (
+        <div key={e.id} className="flex items-end" style={{ gap: "var(--space-3)" }}>
+          <div style={{ flex: 1 }}>
+            <TextInput label="Bezeichnung" value={e.bezeichnung} onChange={v => zeileAendern(e.id, "bezeichnung", v)} placeholder={bezeichnungPlatzhalter} />
+          </div>
+          <div style={{ width: 180, flexShrink: 0 }}>
+            <TextInput label={zeitLabel} value={e.zeitangabe} onChange={v => zeileAendern(e.id, "zeitangabe", v)} placeholder={zeitPlatzhalter} />
+          </div>
+          <button
+            type="button"
+            aria-label={e.bezeichnung ? `Eintrag entfernen: ${e.bezeichnung}` : "Eintrag entfernen"}
+            onClick={() => onChange(eintraege.filter(x => x.id !== e.id))}
+            className="inline-flex items-center justify-center cursor-pointer transition-colors"
+            style={{ width: 32, height: "var(--field-height)", flexShrink: 0, color: "var(--text-tertiary)", borderRadius: "var(--radius-card)" }}
+            onMouseEnter={ev => ev.currentTarget.style.color = "var(--text-primary)"}
+            onMouseLeave={ev => ev.currentTarget.style.color = "var(--text-tertiary)"}
+          >
+            <X style={{ width: 16, height: 16 }} />
+          </button>
+        </div>
+      ))}
+      <div>
+        <button
+          type="button"
+          onClick={() => onChange([...eintraege, { id: crypto.randomUUID(), bezeichnung: "", zeitangabe: "" }])}
+          className="inline-flex items-center cursor-pointer transition-colors"
+          style={{ gap: "var(--space-2)", padding: "9.5px 22px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--text-primary)", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}
+          onMouseEnter={ev => ev.currentTarget.style.background = "var(--bg-secondary)"}
+          onMouseLeave={ev => ev.currentTarget.style.background = "var(--bg-elevated)"}
+        >
+          <Plus style={{ width: 14, height: 14 }} /> {eintraege.length === 0 ? erfassenText : weitereText}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Zwei erzählende Blöcke mit je eigenem Bearbeitungsstand. Die früheren
+ * Einzel-Items sind entfallen: Körpermasse führen die Vitalzeichen, die
+ * interRAI-Items (Brille, Hörgerät, Gewichtsverlust, Sturz, Stimmung) die
+ * Bedarfsabklärung. BB11 (Spitalaufenthalt) lebt im Registrierungsformular.
+ */
+export function TabAnamneseV2({ data, onUpdateMehrere }: TabProps) {
+  const benutzer = useCurrentUser();
+  const kuerzel = `${benutzer.vorname.charAt(0)}. ${benutzer.name}`;
+  // Jede Änderung stempelt ihren Block neu — der Bearbeitungsstand ist der
+  // jeweils letzte Schreibzugriff, nicht ein eigener Bestätigen-Schritt.
+  const situationAendern = (patch: Partial<PatientFormData>) =>
+    onUpdateMehrere?.({ ...patch, situationBearbeitetVon: kuerzel, situationBearbeitetAm: GEGENWART_ISO });
+  const vorgeschichteAendern = (patch: Partial<PatientFormData>) =>
+    onUpdateMehrere?.({ ...patch, vorgeschichteBearbeitetVon: kuerzel, vorgeschichteBearbeitetAm: GEGENWART_ISO });
 
   return (
     <div style={{ padding: "var(--space-6) var(--space-6) var(--space-8)" }}>
-      <SectionHeader icon={Stethoscope} label="Basisanamnese" first />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="Grösse" required value={data.groesse} onChange={v => onUpdate("groesse", v)} suffix="cm" placeholder="170" error={t("groesse") && !filled(data.groesse) ? "Pflichtfeld" : undefined} /></div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="Gewicht" required value={data.gewicht} onChange={v => onUpdate("gewicht", v)} suffix="kg" placeholder="72" error={t("gewicht") && !filled(data.gewicht) ? "Pflichtfeld" : undefined} /></div>
+      {/* Block 1 — Situation */}
+      <SectionHeader icon={Home} label="Situation" first />
+      <BearbeitungsStand von={data.situationBearbeitetVon} am={data.situationBearbeitetAm} />
+      <div className="flex flex-col" style={{ gap: "var(--space-4)" }}>
+        <TextareaInput label="Häusliche Situation" value={data.situationHaeuslich} onChange={v => situationAendern({ situationHaeuslich: v })} placeholder="Wohnverhältnisse, Unterstützung im Alltag, Hilfsmittel zu Hause" />
+        <TextareaInput label="Soziale Situation" value={data.situationSozial} onChange={v => situationAendern({ situationSozial: v })} placeholder="Familie, Bezugspersonen, Kontakte, Tagesstruktur" />
+        <TextareaInput label="Ressourcen" value={data.situationRessourcen} onChange={v => situationAendern({ situationRessourcen: v })} placeholder="Was die Klientin oder der Klient selbst kann und was im Alltag trägt" />
+        <TextareaInput label="Sonstiges" value={data.situationSonstiges} onChange={v => situationAendern({ situationSonstiges: v })} placeholder="Weitere Beobachtungen zur Situation" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <SegmentedControl label="Gewichtsverlust" required value={data.gewichtsverlust} onChange={v => onUpdate("gewichtsverlust", v)} options={JA_NEIN} />
-        <SegmentedControl label="Brille" required value={data.brille} onChange={v => onUpdate("brille", v)} options={JA_NEIN} />
-        <SegmentedControl label="Hörgerät" required value={data.hoergeraet} onChange={v => onUpdate("hoergeraet", v)} options={JA_NEIN} />
-      </div>
+      {/* Block 2 — Vorgeschichte */}
+      <SectionHeader icon={Stethoscope} label="Vorgeschichte" />
+      <BearbeitungsStand von={data.vorgeschichteBearbeitetVon} am={data.vorgeschichteBearbeitetAm} />
 
-      <div style={{ marginTop: "var(--space-4)" }}>
-        <TextareaInput label="Chronische Erkrankungen" required value={data.chronischeErkrankungen} onChange={v => onUpdate("chronischeErkrankungen", v)} onBlur={() => onBlur("chronischeErkrankungen")} placeholder="z.B. Diabetes mellitus Typ 2, Arterielle Hypertonie" error={t("chronischeErkrankungen") && !filled(data.chronischeErkrankungen) ? "Mindestens eine Diagnose erforderlich" : undefined} />
-      </div>
+      <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: "var(--space-3)" }}>Chronische Erkrankungen</div>
+      <VorgeschichteListe
+        eintraege={data.chronischeErkrankungenListe}
+        zeitLabel="Zeitangabe"
+        bezeichnungPlatzhalter="z.B. Arterielle Hypertonie"
+        zeitPlatzhalter="z.B. seit 2018"
+        erfassenText="Erkrankung erfassen"
+        weitereText="Weitere Erkrankung hinzufügen"
+        onChange={liste => vorgeschichteAendern({ chronischeErkrankungenListe: liste })}
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-4)" }}>
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Zeit seit dem letzten Spitalaufenthalt" value={spital || null} onChange={v => setSpital(v || "")} options={SDA_SPITALAUFENTHALT_OPTIONS} placeholder="Bitte wählen" /></div>
-        <TextareaInput label="Operationen" value={data.operationen} onChange={v => onUpdate("operationen", v)} placeholder="z.B. Hüft-TEP rechts (2024), Knie-TEP links (2022), Appendektomie (2018)" rows={4} />
-      </div>
+      <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginTop: "var(--space-6)", marginBottom: "var(--space-3)" }}>Operationen und Eingriffe</div>
+      <VorgeschichteListe
+        eintraege={data.operationenListe}
+        zeitLabel="Jahr"
+        bezeichnungPlatzhalter="z.B. Hüft-Totalprothese rechts"
+        zeitPlatzhalter="z.B. 2019"
+        erfassenText="Eingriff erfassen"
+        weitereText="Weiteren Eingriff hinzufügen"
+        onChange={liste => vorgeschichteAendern({ operationenListe: liste })}
+      />
 
-      {/* Allergien und Unverträglichkeiten tragen einen eigenen Reiter — sie
-          hängen am Patienten-Store, nicht am Anamnese-Formular. */}
-
-      {/* Erweiterte Anamnese (dauerhaft sichtbar) */}
-      <SectionHeader icon={HeartPulse} label="Erweiterte Anamnese" />
-      <div className="flex flex-col" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)" }}>
-        <TextareaInput label="Ausführliche Anamnese" value={data.anamneseText} onChange={v => onUpdate("anamneseText", v)} placeholder="Detaillierte medizinische Vorgeschichte" />
-
-        {/* PA-03: Sturz-Assessment */}
-        <div style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)", marginTop: 4 }}>Sturz-Assessment</div>
-        <div style={{ maxWidth: FELD_MAX.schmal }}><FormSelect label="Stürze in den letzten 12 Monaten?" required value={data.sturzLetzte12m || null} onChange={v => {
-          const val = v || "kein_sturz";
-          onUpdate("sturzLetzte12m", val);
-          if (val === "kein_sturz") { onUpdate("sturzAnzahl", ""); onUpdate("sturzKommentar", ""); }
-        }} options={[
-          { value: "kein_sturz", label: "Kein Sturz" },
-          { value: "innerhalb_6_monate", label: "Ja, innerhalb 6 Monate" },
-          { value: "7_bis_12_monate", label: "Ja, vor 7–12 Monaten" },
-        ]} placeholder="Bitte wählen" /></div>
-        {data.sturzLetzte12m && data.sturzLetzte12m !== "kein_sturz" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2" style={{ rowGap: "var(--space-3)", columnGap: "var(--space-4)", marginTop: "var(--space-3)" }}>
-            <div style={{ maxWidth: FELD_MAX.schmal }}><NumberInput label="Anzahl Stürze" value={data.sturzAnzahl} onChange={v => onUpdate("sturzAnzahl", v)} placeholder="z.B. 2" /></div>
-            <TextareaInput label="Bemerkungen (Umstände, Verletzungen, Ort)" value={data.sturzKommentar} onChange={v => onUpdate("sturzKommentar", v)} placeholder="z.B. Sturz im Bad, Prellung am Arm" />
-          </div>
-        )}
-        <div style={{ maxWidth: FELD_MAX.mittel }}><FormSelect label="Stimmung" value={data.stimmungAktuell || null} onChange={v => onUpdate("stimmungAktuell", v || "")} options={STIMMUNG} placeholder="Stimmung einschätzen" /></div>
-        {/* BB8 Behandlungsziel (behandlungszielFokus) ins Registrierungsformular herausgelöst. */}
+      <div style={{ marginTop: "var(--space-6)" }}>
+        <TextareaInput label="Krankheitsverlauf" value={data.krankheitsverlauf} onChange={v => vorgeschichteAendern({ krankheitsverlauf: v })} placeholder="Verlauf der Erkrankungen, wichtige Ereignisse, aktuelle Entwicklung" />
       </div>
     </div>
   );

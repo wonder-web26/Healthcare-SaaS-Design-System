@@ -114,6 +114,15 @@ export interface SdaProtokollEintrag {
   zeitpunkt: string;
 }
 
+/** Eine Zeile der Vorgeschichte-Listen (chronische Erkrankungen, Eingriffe).
+ *  Bewusst Freitext ohne Codes — keine ICD- oder Diagnose-Objekte im Onboarding. */
+export interface VorgeschichteEintrag {
+  id: string;
+  bezeichnung: string;
+  /** Freitext: bei Erkrankungen z.B. «seit 2018», bei Eingriffen das Jahr «2019». */
+  zeitangabe: string;
+}
+
 export interface PatientFormData {
   /* AA1, AA3, BB16, BB17 und die anmeldende Person sind ins
      Registrierungsformular (SDA) herausgelöst und leben nicht mehr hier. */
@@ -195,15 +204,24 @@ export interface PatientFormData {
   konfession: string;
   quellensteuerHinweise: string;
 
-  /* Tab 3 – Anamnese */
-  groesse: string;
-  gewicht: string;
-  gewichtsverlust: string;
-  brille: string;
-  hoergeraet: string;
-  chronischeErkrankungen: string;
+  /* Tab 3 – Anamnese: zwei erzählende Blöcke (Situation, Vorgeschichte) mit je
+     einem Bearbeitungsstand. Die früheren Einzel-Items (Grösse, Gewicht, Brille,
+     Hörgerät, Gewichtsverlust, Sturz, Stimmung) sind entfallen — Körpermasse
+     führen die Vitalzeichen, die übrigen Items die Bedarfsabklärung (interRAI). */
   // BB11 spitalaufenthalte ist vorgemappt (iA13) und lebt im Registrierungsformular.
-  operationen: string;
+  situationHaeuslich: string;
+  situationSozial: string;
+  situationRessourcen: string;
+  situationSonstiges: string;
+  situationBearbeitetVon: string;
+  /** ISO-Datum; leer = Block noch nie bearbeitet. */
+  situationBearbeitetAm: string;
+  chronischeErkrankungenListe: VorgeschichteEintrag[];
+  operationenListe: VorgeschichteEintrag[];
+  krankheitsverlauf: string;
+  vorgeschichteBearbeitetVon: string;
+  /** ISO-Datum; leer = Block noch nie bearbeitet. */
+  vorgeschichteBearbeitetAm: string;
   allergien: string;
   /* Reiter Wohnen — BB9, BB10a (klient, durchgelesen). BB10b und BB15a–e sind ins
      Registrierungsformular herausgelöst. */
@@ -217,15 +235,6 @@ export interface PatientFormData {
   liftVorhanden: string;
   treppen: string;
   personenImHaushalt: string;
-  anamneseText: string;
-  /** PA-03: Sturz-Assessment */
-  sturzLetzte12m: string;
-  sturzAnzahl: string;
-  sturzKommentar: string;
-  /* Legacy (beibehalten für Kompatibilität) */
-  sturzLetzte6Monate: string;
-  sturzVorEinemJahr: string;
-  stimmungAktuell: string;
   // BB8 behandlungszielFokus entfernt (nur im Registrierungsformular).
 
   /* Tab 4 – Aktivitäten (ATL) */
@@ -312,13 +321,17 @@ export const emptyPatientForm: PatientFormData = {
   konfession: "",
   quellensteuerHinweise: "",
 
-  groesse: "",
-  gewicht: "",
-  gewichtsverlust: "nein",
-  brille: "nein",
-  hoergeraet: "nein",
-  chronischeErkrankungen: "",
-  operationen: "",
+  situationHaeuslich: "",
+  situationSozial: "",
+  situationRessourcen: "",
+  situationSonstiges: "",
+  situationBearbeitetVon: "",
+  situationBearbeitetAm: "",
+  chronischeErkrankungenListe: [],
+  operationenListe: [],
+  krankheitsverlauf: "",
+  vorgeschichteBearbeitetVon: "",
+  vorgeschichteBearbeitetAm: "",
   allergien: "",
   wohnsituation: "",
   formZusammenleben: "",
@@ -327,13 +340,6 @@ export const emptyPatientForm: PatientFormData = {
   liftVorhanden: "nein",
   treppen: "nein",
   personenImHaushalt: "1",
-  anamneseText: "",
-  sturzLetzte12m: "kein_sturz",
-  sturzAnzahl: "",
-  sturzKommentar: "",
-  sturzLetzte6Monate: "nein",
-  sturzVorEinemJahr: "nein",
-  stimmungAktuell: "",
 
   atlAssessment: buildEmptyATL(),
 
@@ -440,12 +446,14 @@ function getTabCompletion(tabKey: string, data: PatientFormData, patientId?: str
       return { done: checks.filter(Boolean).length, total: checks.length };
     }
     case "anamnese": {
-      const checks = [
-        filled(data.groesse),
-        filled(data.gewicht),
-        filled(data.chronischeErkrankungen),
-      ];
-      return { done: checks.filter(Boolean).length, total: checks.length };
+      // Erzählende Blöcke kennen keine Pflichtfelder: der Reiter gilt als
+      // bearbeitet, sobald einer der beiden Blöcke Inhalt trägt.
+      const situation = [data.situationHaeuslich, data.situationSozial, data.situationRessourcen, data.situationSonstiges].some(filled);
+      const vorgeschichte =
+        filled(data.krankheitsverlauf) ||
+        data.chronischeErkrankungenListe.some((e) => filled(e.bezeichnung)) ||
+        data.operationenListe.some((e) => filled(e.bezeichnung));
+      return { done: situation || vorgeschichte ? 1 : 0, total: 1 };
     }
     case "aktivitaeten": {
       const allItems = ATL_CATEGORIES.flatMap((c) => c.items);
@@ -761,7 +769,7 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
             ? <VitalzeichenAbschnitt patientId={patientOnbId} />
             : <OhneFallkennung />)}
           {activeTab === "anamnese" && (
-            <TabAnamneseV2 data={data} touched={touched} onUpdate={updateField} onBlur={markTouched} onboardingId={onboardingId} />
+            <TabAnamneseV2 data={data} touched={touched} onUpdate={updateField} onUpdateMehrere={updateFields} onBlur={markTouched} />
           )}
           {/* Allergien: dieselbe Komponente wie in der Patientenansicht, ohne
               Abwandlung. Der Reiter trägt keine SDA-Felder — die Erfassung folgt
