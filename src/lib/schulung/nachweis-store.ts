@@ -120,6 +120,54 @@ export function erstelleNachweis(
    UNTERSCHREIBEN
    ══════════════════════════════════════════ */
 
+export interface PositionenErgebnis {
+  ok: boolean;
+  fehler?: string;
+}
+
+/**
+ * Die Leistungspositionen eines Nachweises setzen.
+ *
+ * Bis zum ersten Release gibt es kein KLV-Management — die Verordnung, aus der
+ * die Positionen bisher kamen, ist nicht zertifiziert und wird nicht
+ * ausgeliefert. Die Pflegefachperson wählt sie deshalb von Hand aus dem
+ * Leistungskatalog; diese Funktion nimmt die Auswahl entgegen.
+ *
+ * Zwei Sperren, beide fachlich:
+ *   - Ein abgeschlossener Nachweis ist unveränderbar. Das gilt hier wie bei
+ *     jeder anderen Änderung.
+ *   - Eine bereits unterschriebene Position lässt sich nicht entfernen. Die
+ *     Unterschrift bezieht sich auf genau diese Anleitung; sie ins Leere zeigen
+ *     zu lassen wäre schlimmer, als die Auswahl nicht ändern zu können.
+ * Positionen HINZUFÜGEN bleibt jederzeit möglich, auch nach ersten
+ * Unterschriften — die neuen sind dann schlicht noch nicht unterschrieben.
+ */
+export function setzePositionen(
+  nachweisId: string,
+  nummern: string[],
+  benutzer: string,
+): PositionenErgebnis {
+  const n = NACHWEISE.find(x => x.id === nachweisId);
+  if (!n) return { ok: false, fehler: "Nachweis nicht gefunden" };
+  if (n.status === "abgeschlossen") return { ok: false, fehler: "Nachweis ist abgeschlossen und unveränderbar" };
+
+  const neueMenge = new Set(nummern);
+  const verloren = n.unterschriften.map(u => u.nr).filter(nr => !neueMenge.has(nr));
+  if (verloren.length > 0) {
+    return { ok: false, fehler: `Bereits unterschrieben und darum nicht entfernbar: ${verloren.join(", ")}` };
+  }
+
+  const vorher = n.positionen.length;
+  n.positionen = [...neueMenge];
+  n.auditLog.push({
+    zeitpunkt: new Date().toISOString(),
+    benutzer,
+    aktion: "Positionen ausgewählt",
+    details: `${vorher} → ${n.positionen.length} Positionen, von Hand ausgewählt`,
+  });
+  return { ok: true };
+}
+
 export interface UnterschriftErgebnis {
   ok: boolean;
   fehler?: string;

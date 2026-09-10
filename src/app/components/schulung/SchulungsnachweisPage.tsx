@@ -1,15 +1,25 @@
 /**
- * Initialschulung — KLV-gefilterter Schulungsnachweis mit Unterschrift pro Position.
+ * Initialschulung — Schulungsnachweis mit Unterschrift.
  *
- * Der Nachweis enthält die dem Patienten zugeordneten KLV-Positionen,
- * gruppiert nach Bereich, mit Ausführungsschritten und je einem Unterschriftsfeld.
- * Fortlaufender Signaturmodus: nach Unterschrift → nächste offene Position.
+ * DIE POSITIONEN WERDEN VON HAND GEWÄHLT. Sie kamen bisher aus der
+ * KLV-Verordnung des Patienten. Das KLV-Management wird im ersten Release nicht
+ * ausgeliefert — die Zertifizierung steht aus —, also gäbe es nichts, woraus
+ * sie folgen könnten. Die Pflegefachperson wählt sie deshalb aus dem
+ * Leistungskatalog (115 Positionen, 11 Bereiche).
+ *
+ * Zwei Zustände auf derselben Seite:
+ *   Auswahl   — der ganze Katalog mit Suche, Bereiche aufklappbar
+ *   Nachweis  — die gewählten Positionen mit Ausführungsschritten, unterschreibbar
+ * Zwischenspeichern führt vom einen zum anderen; «Positionen ändern» zurück.
+ *
+ * Kommt das KLV-Management später dazu, ist die Auswahl der Ort, an dem eine
+ * Vorbelegung ansetzt — die Handauswahl bleibt daneben bestehen.
  */
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import {
   ArrowLeft, Check, CheckCircle2, AlertTriangle, FileText, Download,
-  ChevronDown, ChevronUp, Info, Lock, Pen, ClipboardList,
+  ChevronDown, ChevronUp, Info, Lock, Pen, ClipboardList, Search, Save, Pencil,
 } from "lucide-react";
 import { SPITEX_LEISTUNGSKATALOG_2025, type LeistungskatalogPosition } from "../../../lib/klv/spitex-leistungskatalog-2025";
 import { KLV_AUSFUEHRUNGSSCHRITTE, type KLVAusfuehrungsschritte } from "../../../lib/klv/klv-ausfuehrungsschritte";
@@ -18,6 +28,7 @@ import {
   getNachweisById,
   positionUnterschreiben,
   nachweisAbschliessen,
+  setzePositionen,
   type Schulungsnachweis,
   type PositionsUnterschrift,
 } from "../../../lib/schulung/nachweis-store";
@@ -106,6 +117,27 @@ export function SchulungsnachweisPage() {
     );
   }
 
+  /* Auswahlmodus: sobald noch keine Position gewählt ist, sowieso; sonst auf
+     Verlangen. Ein abgeschlossener Nachweis lässt sich nicht mehr ändern. */
+  const istAbgeschlossenFuerModus = nachweis.status === "abgeschlossen";
+  const [auswahlOffen, setAuswahlOffen] = useState(nachweis.positionen.length === 0 && !istAbgeschlossenFuerModus);
+  const [auswahl, setAuswahl] = useState<Set<string>>(new Set(nachweis.positionen));
+  const [suche, setSuche] = useState("");
+
+  const oeffneAuswahl = () => {
+    setAuswahl(new Set(nachweis.positionen));
+    setSuche("");
+    setAuswahlOffen(true);
+  };
+
+  const handleZwischenspeichern = () => {
+    const r = setzePositionen(nachweis.id, [...auswahl], nachweis.ausbildendeName);
+    if (!r.ok) { toast(r.fehler ?? "Auswahl konnte nicht gespeichert werden"); return; }
+    setAuswahlOffen(false);
+    refresh();
+    toast(`${auswahl.size} ${auswahl.size === 1 ? "Position" : "Positionen"} gespeichert`);
+  };
+
   const positionen = bereitePositionenAuf(nachweis);
   const unterschreibbar = positionen.filter(p => p.qualErlaubt);
   // Es werden nur die dem Angehörigen zugewiesenen (ausführbaren) Positionen
@@ -188,28 +220,70 @@ export function SchulungsnachweisPage() {
         </div>
       )}
 
-      {/* Positionsanzahl */}
-      <div style={{ marginBottom: 16, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-        {unterschreibbar.length} {unterschreibbar.length === 1 ? "Leistungsposition" : "Leistungspositionen"} für diese Betreuung
-      </div>
-
-      {/* Positionen nach Bereich */}
-      <div className="flex flex-col" style={{ gap: 20 }}>
-        {gruppen.map(gruppe => (
-          <div key={gruppe.bereich}>
-            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", letterSpacing: "0.05em", textTransform: "uppercase" as const, fontWeight: 500, marginBottom: 8, paddingLeft: 2 }}>
-              {gruppe.bereich}
+      {/* ── AUSWAHL ─────────────────────────────────────────────────────────
+             Der ganze Leistungskatalog. Die Pflegefachperson wählt, was für
+             diese Betreuung angeleitet wurde. ── */}
+      {auswahlOffen ? (
+        <KatalogAuswahl
+          auswahl={auswahl}
+          onToggle={nr => setAuswahl(prev => {
+            const s = new Set(prev);
+            if (s.has(nr)) s.delete(nr); else s.add(nr);
+            return s;
+          })}
+          suche={suche}
+          onSuche={setSuche}
+          gesperrt={new Set(nachweis.unterschriften.map(u => u.nr))}
+          qualifikation={nachweis.angehoerigerQualifikation}
+          onSpeichern={handleZwischenspeichern}
+          onAbbrechen={nachweis.positionen.length > 0 ? () => setAuswahlOffen(false) : undefined}
+        />
+      ) : (
+        <>
+          {/* Positionsanzahl + Weg zurück in die Auswahl */}
+          <div className="flex items-center justify-between flex-wrap" style={{ gap: 8, marginBottom: 16 }}>
+            <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+              {unterschreibbar.length} {unterschreibbar.length === 1 ? "Leistungsposition" : "Leistungspositionen"} für diese Betreuung
             </div>
-            <div className="flex flex-col" style={{ gap: 8 }}>
-              {gruppe.positionen.map(pos => (
-                <PositionsZeile key={pos.nr} position={pos} />
+            {!istAbgeschlossen && (
+              <button
+                type="button"
+                onClick={oeffneAuswahl}
+                className="ui-fokusring inline-flex items-center cursor-pointer"
+                style={{ gap: 6, padding: "6px 14px", borderRadius: 999, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-primary)" }}
+              >
+                <Pencil style={{ width: 13, height: 13 }} /> Positionen ändern
+              </button>
+            )}
+          </div>
+
+          {/* Positionen nach Bereich */}
+          {gruppen.length === 0 ? (
+            <div style={{ padding: "24px 20px", background: "var(--bg-secondary)", borderRadius: 10, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+              Noch keine Leistungspositionen gewählt. Über «Positionen ändern» aus dem Katalog auswählen.
+            </div>
+          ) : (
+            <div className="flex flex-col" style={{ gap: 20 }}>
+              {gruppen.map(gruppe => (
+                <div key={gruppe.bereich}>
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", letterSpacing: "0.05em", textTransform: "uppercase" as const, fontWeight: 500, marginBottom: 8, paddingLeft: 2 }}>
+                    {gruppe.bereich}
+                  </div>
+                  <div className="flex flex-col" style={{ gap: 8 }}>
+                    {gruppe.positionen.map(pos => (
+                      <PositionsZeile key={pos.nr} position={pos} />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </>
+      )}
 
-      {/* Unterschrift + Abschluss / PDF */}
+      {/* Unterschrift + Abschluss / PDF — nicht während der Auswahl: erst steht
+          fest, was angeleitet wurde, dann wird es bestätigt. */}
+      {!auswahlOffen && (
       <div style={{ marginTop: 24, padding: 20, background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", borderRadius: 12 }}>
         {istAbgeschlossen ? (
           <div>
@@ -242,11 +316,190 @@ export function SchulungsnachweisPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Versionsangaben */}
       <div style={{ marginTop: 32, padding: "10px 16px", background: "var(--bg-secondary)", borderRadius: 8, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
         Katalog: {nachweis.katalogVersion} · Vorlage: {nachweis.vorlagenVersion}
         {nachweis.integritaetsHash && <> · Hash: {nachweis.integritaetsHash.slice(0, 12)}…</>}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   KATALOGAUSWAHL — alle Leistungspositionen zur Wahl
+
+   115 Positionen in 11 Bereichen. Eine flache Liste wäre unbenutzbar, deshalb
+   nach Bereich gruppiert und aufklappbar, dazu eine Suche über Nummer und
+   Bezeichnung. Ein Bereich, in dem etwas gewählt ist, steht offen — sonst
+   müsste man ihn suchen, um zu sehen, was man gewählt hat.
+   ══════════════════════════════════════════ */
+
+function KatalogAuswahl({ auswahl, onToggle, suche, onSuche, gesperrt, qualifikation, onSpeichern, onAbbrechen }: {
+  auswahl: Set<string>;
+  onToggle: (nr: string) => void;
+  suche: string;
+  onSuche: (v: string) => void;
+  /** Bereits unterschrieben — nicht abwählbar. */
+  gesperrt: Set<string>;
+  /** Qualifikation der angehörigen Person — entscheidet, was anleitbar ist. */
+  qualifikation: string;
+  onSpeichern: () => void;
+  /** Fehlt, solange noch nie gespeichert wurde: dann gibt es nichts abzubrechen. */
+  onAbbrechen?: () => void;
+}) {
+  const q = suche.trim().toLowerCase();
+  const treffer = q
+    ? SPITEX_LEISTUNGSKATALOG_2025.filter(p =>
+        p.nr.includes(q) || p.bezeichnung.toLowerCase().includes(q) || p.bereich.toLowerCase().includes(q))
+    : SPITEX_LEISTUNGSKATALOG_2025;
+
+  const bereiche = new Map<string, LeistungskatalogPosition[]>();
+  for (const p of treffer) {
+    if (!bereiche.has(p.bereich)) bereiche.set(p.bereich, []);
+    bereiche.get(p.bereich)!.push(p);
+  }
+
+  /* Offen: bei aktiver Suche alles, sonst was etwas Gewähltes enthält. */
+  const [offen, setOffen] = useState<Set<string>>(new Set());
+  const istOffen = (b: string) =>
+    q.length > 0 || offen.has(b) || (bereiche.get(b) ?? []).some(p => auswahl.has(p.nr));
+
+  return (
+    <div>
+      <div style={{ padding: "12px 16px", background: "var(--status-info-bg)", borderRadius: 10, marginBottom: 16, fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.55 }}>
+        Wählen Sie die Leistungspositionen, in denen die pflegende Angehörige angeleitet wurde.
+        Die Auswahl erfolgt von Hand — eine KLV-Verordnung wird in dieser Fassung nicht ausgewertet.
+      </div>
+
+      {/* Suche */}
+      <div className="flex items-center" style={{ gap: 8, marginBottom: 12, padding: "0 14px", height: "var(--field-height)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)" }}>
+        <Search style={{ width: 15, height: 15, color: "var(--text-tertiary)", flexShrink: 0 }} />
+        <input
+          value={suche}
+          onChange={e => onSuche(e.target.value)}
+          placeholder="Nummer, Bezeichnung oder Bereich suchen"
+          className="flex-1 outline-none"
+          style={{ background: "transparent", border: "none", fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit" }}
+        />
+        {suche && (
+          <button type="button" onClick={() => onSuche("")} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
+            zurücksetzen
+          </button>
+        )}
+      </div>
+
+      {treffer.length === 0 && (
+        <div style={{ padding: "20px", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+          Keine Position gefunden. Suchbegriff anpassen.
+        </div>
+      )}
+
+      {/* Bereiche */}
+      <div className="flex flex-col" style={{ gap: 8 }}>
+        {[...bereiche.entries()].map(([bereich, positionen]) => {
+          const gewaehlt = positionen.filter(p => auswahl.has(p.nr)).length;
+          const auf = istOffen(bereich);
+          return (
+            <div key={bereich} style={{ border: "var(--border-thin) solid var(--border-default)", borderRadius: 10, background: "var(--bg-elevated)", overflow: "hidden" }}>
+              <button
+                type="button"
+                onClick={() => setOffen(prev => { const s = new Set(prev); if (s.has(bereich)) s.delete(bereich); else s.add(bereich); return s; })}
+                className="ui-fokusring w-full flex items-center justify-between cursor-pointer"
+                style={{ padding: "10px 14px", background: "transparent", border: "none", fontFamily: "inherit", textAlign: "left" }}
+              >
+                <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>{bereich}</span>
+                <span className="inline-flex items-center" style={{ gap: 8 }}>
+                  <span style={{ fontSize: "var(--text-micro)", color: gewaehlt > 0 ? "var(--text-primary)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                    {gewaehlt > 0 ? `${gewaehlt} von ${positionen.length}` : `${positionen.length}`}
+                  </span>
+                  {auf ? <ChevronUp style={{ width: 14, height: 14, color: "var(--text-tertiary)" }} /> : <ChevronDown style={{ width: 14, height: 14, color: "var(--text-tertiary)" }} />}
+                </span>
+              </button>
+              {auf && (
+                <div style={{ borderTop: "var(--border-thin) solid var(--border-default)" }}>
+                  {positionen.map(p => {
+                    const gewaehltP = auswahl.has(p.nr);
+                    const fest = gesperrt.has(p.nr);
+                    /* Die Qualifikationsregel entscheidet, ob eine Position
+                       angeleitet werden DARF. Sie stand bisher nur in der
+                       Anzeige — bei Handauswahl muss sie schon hier stehen,
+                       sonst wählt jemand etwas, das danach verschwindet. */
+                    const qual = pruefeQualifikation(qualifikation, p.klvKategorie ?? null);
+                    return (
+                      <label
+                        key={p.nr}
+                        className="flex items-start"
+                        style={{ gap: 10, padding: "9px 14px", cursor: fest ? "not-allowed" : "pointer", borderTop: "var(--border-thin) solid var(--border-default)", opacity: fest ? 0.65 : 1 }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={gewaehltP}
+                          disabled={fest}
+                          onChange={() => onToggle(p.nr)}
+                          style={{ marginTop: 2, width: 15, height: 15, flexShrink: 0, accentColor: "var(--brand-primary)" }}
+                        />
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
+                            <span className="font-mono" style={{ color: "var(--text-tertiary)", marginRight: 8 }}>{p.nr}</span>
+                            {p.bezeichnung}
+                          </span>
+                          {fest && (
+                            <span style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 1 }}>
+                              Bereits unterschrieben — nicht mehr abwählbar
+                            </span>
+                          )}
+                          {!qual.erlaubt && (
+                            <span style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--status-warning-text)", marginTop: 1 }}>
+                              {qual.grund ?? "Für diese Qualifikation nicht anleitbar"} — erscheint nicht im Nachweis
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Zwischenspeichern */}
+      <div className="flex items-center flex-wrap" style={{ gap: 10, marginTop: 20 }}>
+        <button
+          type="button"
+          onClick={onSpeichern}
+          disabled={auswahl.size === 0}
+          className="ui-fokusring inline-flex items-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ gap: 6, padding: "10px 22px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}
+        >
+          <Save style={{ width: 15, height: 15 }} /> Zwischenspeichern
+        </button>
+        {(() => {
+          /* Beide Zahlen nennen, sonst wählt jemand zwölf und findet vier vor. */
+          const anleitbar = [...auswahl].filter(nr => {
+            const kat = SPITEX_LEISTUNGSKATALOG_2025.find(p => p.nr === nr);
+            return pruefeQualifikation(qualifikation, kat?.klvKategorie ?? null).erlaubt;
+          }).length;
+          const abweichend = auswahl.size - anleitbar;
+          return (
+            <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+              {auswahl.size} {auswahl.size === 1 ? "Position" : "Positionen"} gewählt
+              {abweichend > 0 && (
+                <span style={{ color: "var(--status-warning-text)" }}>
+                  {" "}· {anleitbar} davon anleitbar
+                </span>
+              )}
+            </span>
+          );
+        })()}
+        {onAbbrechen && (
+          <button type="button" onClick={onAbbrechen} className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: "10px 4px", fontFamily: "inherit", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
+            Abbrechen
+          </button>
+        )}
       </div>
     </div>
   );
