@@ -161,7 +161,7 @@ export function PersonalienFormV2({
                     error={touched.aufenthaltsgrund && !data.aufenthaltsgrund ? "Pflichtfeld" : undefined}
                   />
                   <div style={{ marginTop: "var(--space-2)", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
-                    Der Grund steht nicht auf dem Ausweis, sondern in der Verfügung des Migrationsamts. Im Zweifel bei der Angehörigen erfragen und „Anderer Grund" wählen.
+                    Der Grund steht nicht auf dem Ausweis, sondern in der Verfügung des Migrationsamts. Im Zweifel bei der Angehörigen erfragen und das Feld bis zur Klärung leer lassen.
                   </div>
                 </div>
               )}
@@ -295,11 +295,10 @@ export function SteuerFormV2({
                abweichender Eintrag wäre entweder falsch oder ein Zeichen dafür,
                dass die Regel zu ändern ist — nicht der Einzelfall.
 
-               EINE Ausnahme, und sie widerspricht dem nicht: bei Ehe mit einer
-               Schweizerin oder einem Niedergelassenen trifft die Regel
-               ausdrücklich KEINE Aussage. Dort entscheidet ein Mensch, was
-               offen ist — er überstimmt nichts. Diese Entscheidung bleibt
-               änderbar, weil die Regel sie nie zurücknehmen kann.
+               Auch die Ehe mit einer Schweizerin entscheidet die Regel: DBG
+               Art. 83 nimmt sie ausdrücklich von der Quellensteuer aus. Hier
+               stand einmal ein Zweifelsfall mit zwei Knöpfen — er beruhte auf
+               einer Fehleinschätzung und ist entfallen.
 
                Sichtbar bleibt das Feld in jeder Lage: der Wert wirkt auf die
                Lohnabrechnung, und ein unsichtbares "nicht pflichtig" wäre eine
@@ -314,67 +313,36 @@ export function SteuerFormV2({
           /* Nachziehen, sobald die Regel etwas sagt — ohne Vorbehalt, weil es
              keinen abweichenden Eintrag mehr geben kann. Über setTimeout, damit
              die Zustandsänderung nicht im Rendern geschieht. */
-          if (abl.wert !== null && (abl.wert !== data.quellensteuer || data.quellensteuerZweifelEntschieden)) {
+          if (abl.wert !== null && abl.wert !== data.quellensteuer) {
             setTimeout(() => onChange({
               ...data,
               quellensteuer: abl.wert!,
-              /* Sagt die Regel wieder etwas, ist eine frühere Entscheidung
-                 gegenstandslos — sonst hinge sie an einer Frage, die gar nicht
-                 mehr gestellt wird. */
-              quellensteuerZweifelEntschieden: false,
               ...(abl.wert === "nein" ? { quellensteuerTarif: "" } : null),
             }), 0);
           }
 
-          const entscheide = (v: string) => onChange({
-            ...data, quellensteuer: v, quellensteuerZweifelEntschieden: v !== "",
-            ...(v === "nein" ? { quellensteuerTarif: "" } : null),
-          });
-
-          const istZweifel = abl.wert === null && !abl.unvollstaendig;
-          /* Nur ein ausdrücklich gesetzter Wert zählt als Entscheidung. Ein
-             Wert, der aus einer früheren Ableitung stammt, ist keine. */
-          const zweifelEntschieden = istZweifel && data.quellensteuerZweifelEntschieden;
-
-          /* ── Zweifelsfall, noch offen: zwei Knöpfe auf Feldhöhe ── */
-          if (istZweifel && !zweifelEntschieden) {
-            return (
-              <FormField label="Quellensteuerpflichtig?" required hint={abl.begruendung}>
-                <div className="flex items-center" style={{ gap: 8 }}>
-                  {[{ v: "ja", t: "Pflichtig" }, { v: "nein", t: "Nicht pflichtig" }].map(o => (
-                    <button key={o.v} type="button"
-                      onClick={() => entscheide(o.v)}
-                      className="ui-fokusring cursor-pointer"
-                      style={{
-                        height: "var(--field-height)", padding: "0 16px", borderRadius: "var(--radius-card)",
-                        background: "var(--bg-elevated)", color: "var(--text-primary)",
-                        border: "var(--border-thin) solid var(--status-warning)",
-                        fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)",
-                      }}>
-                      {o.t}
-                    </button>
-                  ))}
-                </div>
-              </FormField>
-            );
-          }
+          /* Einen Zweifelsfall gibt es nicht mehr. Er stand hier für die Ehe
+             mit einer Schweizerin — bis sich zeigte, dass DBG Art. 83 ihn
+             ausdrücklich regelt. Die Regel entscheidet jetzt jede Konstellation,
+             in der die nötigen Angaben erfasst sind; fehlen sie, ist das eine
+             Lücke und kein Zweifel. */
 
           /* ── Der Wert als ruhiges Feld ───────────────────────────────────────
                  Der Stift erscheint NUR im entschiedenen Zweifelsfall: dort hat
                  ein Mensch gesetzt, was die Regel offenliess, und darf es
                  revidieren. Wo die Regel entschieden hat, gibt es nichts zu
                  bearbeiten — das Feld ist dann reine Anzeige. */
-          const bestimmt = abl.wert !== null || zweifelEntschieden;
+          const bestimmt = abl.wert !== null;
           const anzeige = !bestimmt
             ? "Noch nicht bestimmbar"
-            : (abl.wert ?? data.quellensteuer) === "ja" ? "Pflichtig" : "Nicht pflichtig";
+            : abl.wert === "ja" ? "Pflichtig" : "Nicht pflichtig";
 
           return (
             <FormField label="Quellensteuerpflichtig?" required hint={abl.begruendung}>
               <div
                 className="flex items-center justify-between"
                 style={{
-                  height: "var(--field-height)", padding: istZweifel ? "0 8px 0 16px" : "0 16px", gap: 8,
+                  height: "var(--field-height)", padding: "0 16px", gap: 8,
                   borderRadius: "var(--radius-card)",
                   border: "var(--border-thin) solid var(--border-default)",
                   background: "var(--bg-secondary)",
@@ -388,20 +356,6 @@ export function SteuerFormV2({
                 }}>
                   {anzeige}
                 </span>
-                {istZweifel && (
-                  <button
-                    type="button"
-                    aria-label="Entscheidung zur Quellensteuerpflicht ändern"
-                    title="Entscheidung ändern"
-                    onClick={() => entscheide("")}
-                    className="ui-fokusring inline-flex items-center justify-center shrink-0 cursor-pointer"
-                    style={{ width: 28, height: 28, borderRadius: "var(--control-radius)", background: "transparent", border: "none", color: "var(--text-secondary)" }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-elevated)")}
-                    onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                  >
-                    <Pencil style={{ width: 14, height: 14 }} />
-                  </button>
-                )}
               </div>
             </FormField>
           );

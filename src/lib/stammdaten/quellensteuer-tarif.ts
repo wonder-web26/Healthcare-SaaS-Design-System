@@ -166,17 +166,25 @@ export interface SteuerpflichtEingabe {
 /**
  * Quellensteuerpflicht aus den erfassten Angaben ableiten.
  *
- * Drei Konstellationen, von denen nur zwei entscheidbar sind:
+ * Drei Konstellationen, alle drei entscheidbar:
  *
- *   1. eigene Schweizer Staatsangehörigkeit oder Ausweis C → NEIN, sicher
- *   2. ausländisch, nicht mit CH/C verheiratet             → JA, sicher
- *   3. ausländisch, mit CH/C verheiratet                   → OFFEN
+ *   1. eigene Schweizer Staatsangehörigkeit oder Ausweis C → NEIN
+ *   2. ausländisch, nicht mit CH/C verheiratet             → JA
+ *   3. ausländisch, mit CH/C verheiratet                   → NEIN
  *
- * Der dritte Fall bleibt bewusst ohne Wert. Wer mit einer Schweizerin oder
- * einem Niedergelassenen verheiratet ist, unterliegt der ordentlichen
- * Veranlagung — aber ob das hier zutrifft, hängt am Einzelfall und ist vor der
- * ersten Lohnabrechnung zu klären. Ein gesetzter Wert wäre geraten, und die
- * Lohnabrechnung hängt daran.
+ * Der dritte Fall stand hier zunächst als Zweifelsfall ohne Wert, mit der
+ * Begründung, er sei am Einzelfall zu klären. Das war zu vorsichtig: DBG
+ * Art. 83 regelt ihn ausdrücklich — wer in ungetrennter Ehe mit einer Person
+ * mit Schweizer Bürgerrecht oder Niederlassungsbewilligung lebt, unterliegt
+ * nicht der Quellensteuer, sondern der ordentlichen Veranlagung.
+ *
+ * ZWEI VORAUSSETZUNGEN, DIE DAS FORMULAR NICHT ERHEBT, und die deshalb im
+ * Begründungstext stehen statt in der Bedingung:
+ *   - «rechtlich und tatsächlich ungetrennt»: die Zivilstandsliste kennt kein
+ *     «getrennt», eine getrennt lebende Person steht weiter auf «verheiratet».
+ *   - gemeinsamer steuerrechtlicher Wohnsitz in der Schweiz: vom Partner wird
+ *     keine Adresse erfasst.
+ * Wer eine der beiden Angaben aufnimmt, gehört sie hier in die Bedingung.
  *
  * ZWEI GRENZEN, die diese Ableitung NICHT kennt:
  *
@@ -218,9 +226,9 @@ export function leiteQuellensteuerpflichtAb(e: SteuerpflichtEingabe): Steuerpfli
 
   if (verheiratet && partnerBefreit) {
     return {
-      wert: null,
+      wert: "nein",
       unvollstaendig: false,
-      begruendung: "Ehe mit einer Schweizerin oder einem Niedergelassenen: dann gilt die ordentliche Veranlagung. Das ist am Einzelfall zu klären und wird deshalb nicht automatisch gesetzt.",
+      begruendung: "Ehe mit einer Schweizer Staatsangehörigen oder einem Niedergelassenen — ordentliche Veranlagung statt Quellensteuer (DBG Art. 83). Gilt bei ungetrennter Ehe und gemeinsamem Wohnsitz in der Schweiz.",
     };
   }
 

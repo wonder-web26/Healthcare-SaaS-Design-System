@@ -120,15 +120,10 @@ export interface AngehoerigerFormData {
   bagNr: string;
   /* 2. Steuer & Sozialversicherung */
   quellensteuer: string;
-  /* Zur Quellensteuerpflicht gibt es keine Herkunft und keine Begründung mehr:
-     die Regel ist massgebend und lässt sich nicht überstimmen.
-
-     Dieses eine Merkmal bleibt: es hält fest, dass ein MENSCH den Zweifelsfall
-     (Ehe mit CH/C) entschieden hat. Ohne es wäre ein Wert aus einer früheren
-     Ableitung von einer Entscheidung nicht zu unterscheiden — wechselt jemand
-     die Staatsangehörigkeit von "schweiz" auf "deutschland", stünde das alte
-     "nein" noch da und sähe aus wie eine Antwort auf die neue Frage. */
-  quellensteuerZweifelEntschieden: boolean;
+  /* Zur Quellensteuerpflicht gibt es weder Herkunft noch Begründung noch ein
+     Entschieden-Merkmal: die Regel bestimmt sie vollständig und lässt sich
+     nicht überstimmen. Das Merkmal trug einmal den Zweifelsfall bei Ehe mit
+     CH/C — DBG Art. 83 regelt den ausdrücklich, damit entfiel der Zweifel. */
   konfession: string;
   /** SP-10: Abgeleiteter oder manuell überschriebener QSt-Tarifcode (z.B. "B2Y") */
   quellensteuerTarif: string;
@@ -308,7 +303,6 @@ export const emptyAngehoerigerForm: AngehoerigerFormData = {
      und Ausweisart erfasst sind. Ein vorbelegtes "nein" wäre eine Behauptung
      über eine Person, von der noch nichts bekannt ist. */
   quellensteuer: "",
-  quellensteuerZweifelEntschieden: false,
   konfession: "",
   quellensteuerTarif: "",
   tarifcodeQuelle: "abgeleitet",

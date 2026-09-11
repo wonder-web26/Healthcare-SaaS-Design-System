@@ -105,7 +105,11 @@ const ab = (e: Partial<Parameters<typeof leiteQuellensteuerpflichtAb>[0]>) =>
   assert.equal(r.wert, "ja");
 }
 
-// 3. DER ZWEIFELSFALL: verheiratet mit CH bzw. C → KEIN Wert.
+/* 3. EHE MIT CH ODER C → nicht pflichtig.
+   Dieser Fall stand hier als Zweifelsfall ohne Wert. Das war zu vorsichtig:
+   DBG Art. 83 nimmt Ehegatten in ungetrennter Ehe ausdrücklich von der
+   Quellensteuer aus, wenn einer von beiden das Schweizer Bürgerrecht oder die
+   Niederlassungsbewilligung hat. Die Regel entscheidet. */
 {
   for (const partner of [
     { partnerNationalitaet: "schweiz", partnerAufenthaltsstatus: "" },
@@ -113,9 +117,33 @@ const ab = (e: Partial<Parameters<typeof leiteQuellensteuerpflichtAb>[0]>) =>
     { partnerNationalitaet: "italien", partnerAufenthaltsstatus: "CH" },
   ]) {
     const r = ab({ nationalitaet: "deutschland", aufenthaltsstatus: "B", zivilstand: "verheiratet", ...partner });
-    assert.equal(r.wert, null, `Zweifelsfall setzt keinen Wert: ${JSON.stringify(partner)}`);
-    assert.equal(r.unvollstaendig, false, "es ist ein Zweifel, keine Lücke");
-    assert.ok(r.begruendung.length > 0);
+    assert.equal(r.wert, "nein", `Ehe mit CH/C befreit: ${JSON.stringify(partner)}`);
+    assert.equal(r.unvollstaendig, false);
+    // Die Begründung nennt die Norm und den Vorbehalt, den das Formular nicht prüfen kann.
+    assert.ok(r.begruendung.includes("Art. 83"), "Begründung nennt die Rechtsgrundlage");
+    assert.ok(r.begruendung.includes("ungetrennt"), "Begründung nennt den Vorbehalt");
+  }
+  // Eingetragene Partnerschaft ist gleichgestellt.
+  assert.equal(ab({ nationalitaet: "deutschland", aufenthaltsstatus: "B", zivilstand: "eingetragene_partnerschaft",
+                    partnerNationalitaet: "schweiz", partnerAufenthaltsstatus: "" }).wert, "nein");
+}
+
+/* Es gibt KEINEN Zweifelsfall mehr: wo Angaben fehlen, ist das eine Lücke, und
+   sonst entscheidet die Regel. Die Zusicherung steht hier, damit ein künftiger
+   Fall ohne Wert nicht unbemerkt als "unentscheidbar" durchrutscht. */
+{
+  const nat = ["", "schweiz", "deutschland"];
+  const aus = ["", "B", "C", "G", "L", "F"];
+  const ziv = ["", "ledig", "verheiratet", "eingetragene_partnerschaft", "verwitwet", "geschieden"];
+  const pn = ["", "schweiz", "italien"];
+  const pa = ["", "CH", "C", "B"];
+  for (const a of nat) for (const b of aus) for (const c of ziv) for (const d of pn) for (const e of pa) {
+    const r = leiteQuellensteuerpflichtAb({ nationalitaet: a, aufenthaltsstatus: b, zivilstand: c,
+                                            partnerNationalitaet: d, partnerAufenthaltsstatus: e });
+    if (r.wert === null) {
+      assert.equal(r.unvollstaendig, true,
+        `ohne Wert muss es eine Lücke sein: ${JSON.stringify({ a, b, c, d, e })}`);
+    }
   }
 }
 
