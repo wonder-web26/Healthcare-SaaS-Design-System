@@ -4,9 +4,16 @@
  * Verfügung des Migrationsamts; aus Familiennachzug, Erwerbstätigkeit und
  * anerkanntem Flüchtling folgen ausländerrechtlich verschiedene Verfahren.
  *
- * `andere` ist unverzichtbar: Studium, Härtefall und weitere Gründe sind
- * fachlich noch ungeklärt. Ohne diesen Wert wählte jemand einen der drei
- * benannten, weil das Formular eine Antwort verlangt.
+ * `andere` — "Anderer Grund" — ist auf Entscheid des Eigners aus der AUSWAHL
+ * entfernt. Es bleiben die drei Gründe, aus denen ein Verfahren folgt.
+ *
+ * Was das heisst: Studium, Härtefall und weitere Gründe lassen sich nicht mehr
+ * ausdrücklich festhalten; das Feld bleibt dann leer. Fachlich ändert sich
+ * nichts — die Prüfung liefert in beiden Fällen Z3 "nicht bestimmbar" mit der
+ * Aufforderung, den Grund zu erfassen. Verloren geht allein der Unterschied
+ * zwischen "geprüft, keiner der drei" und "noch nicht bearbeitet".
+ *
+ * Der Schlüssel bleibt im Typ, damit ein bestehender Datensatz lesbar bleibt.
  *
  * Dieser Wert wird in Lauf 2 nur erfasst, gespeichert und angezeigt — nicht
  * ausgewertet. Die Auswertung folgt in Lauf 3.
@@ -25,8 +32,11 @@ export const AUFENTHALTSGRUND_LABEL: Record<Aufenthaltsgrund, string> = {
   andere: "Anderer Grund",
 };
 
+/** Gründe, die zur Auswahl stehen — "andere" ist entfernt (siehe Kopf). */
+const WAEHLBAR: Aufenthaltsgrund[] = ["erwerbstaetigkeit", "familiennachzug", "asyl_anerkannt"];
+
 /** Auswahloptionen (value = Schlüssel). */
-export const AUFENTHALTSGRUND_OPTIONS = (Object.keys(AUFENTHALTSGRUND_LABEL) as Aufenthaltsgrund[])
+export const AUFENTHALTSGRUND_OPTIONS = WAEHLBAR
   .map(k => ({ value: k, label: AUFENTHALTSGRUND_LABEL[k] }));
 
 /** Beschriftung zu einem Schlüssel; leerer String, wenn nicht gesetzt. */
