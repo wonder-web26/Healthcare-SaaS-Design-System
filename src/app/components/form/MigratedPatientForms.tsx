@@ -545,7 +545,9 @@ export function TabAnamneseV2({ data, onUpdateMehrere }: TabProps) {
       />
 
       <div style={{ marginTop: "var(--space-6)" }}>
-        <TextareaInput label="Krankheitsverlauf" value={data.krankheitsverlauf} onChange={v => vorgeschichteAendern({ krankheitsverlauf: v })} placeholder="Verlauf der Erkrankungen, wichtige Ereignisse, aktuelle Entwicklung" />
+        {/* Feldname im Code bleibt krankheitsverlauf — «vorgeschichte» würde mit
+            den Block-Stempeln vorgeschichteBearbeitetVon/-Am verwechselbar. */}
+        <TextareaInput label="Vorgeschichte" value={data.krankheitsverlauf} onChange={v => vorgeschichteAendern({ krankheitsverlauf: v })} placeholder="Verlauf der Erkrankungen, wichtige Ereignisse, aktuelle Entwicklung" />
       </div>
     </div>
   );

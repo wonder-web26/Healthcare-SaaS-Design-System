@@ -14,7 +14,7 @@ Der Reiter besteht neu aus zwei erzählenden Blöcken:
   Ressourcen, Sonstiges.
 - **Vorgeschichte** — zwei Zeilenlisten (chronische Erkrankungen mit Bezeichnung +
   Zeitangabe, Operationen/Eingriffe mit Bezeichnung + Jahr) und ein Freitext
-  «Krankheitsverlauf».
+  «Vorgeschichte» (Verlaufstext; im Code `krankheitsverlauf`).
 
 Beide Blöcke tragen einen **Bearbeitungsstand** (Autor + Datum des letzten
 Schreibzugriffs). Ist er älter als zwölf Monate, zeigt die Oberfläche einen
@@ -38,7 +38,7 @@ diese Tabellen gepresst werden.
 | `situationOther` | text | Sonstiges |
 | `situationUpdatedBy` | uuid → User | Bearbeitungsstand Block Situation |
 | `situationUpdatedAt` | timestamp | dito |
-| `historyCourse` | text | Krankheitsverlauf |
+| `historyCourse` | text | Verlaufstext (UI-Label «Vorgeschichte») |
 | `historyUpdatedBy` | uuid → User | Bearbeitungsstand Block Vorgeschichte |
 | `historyUpdatedAt` | timestamp | dito |
 
