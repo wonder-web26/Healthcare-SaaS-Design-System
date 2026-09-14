@@ -67,6 +67,32 @@ kommt mit Lauf 6 zurück.
 - **Prüfbereitschaft (Controlling):** `pflegediagnosen` wird mit `null`
   («kein Pflegeplan») gespeist — ein im Prüfmodell vorgesehener Zustand.
 
+## Abweichungen aus Lauf 1 (Datenvertrag und Mock-Adapter)
+
+Der Vertrag in `src/lib/pflegeplan/vertrag.ts` braucht vier Dinge, die die
+dbml heute nicht vorsieht:
+
+1. **Diagnosetyp** (`problem | risiko | bereitschaft`): `NandaDiagnosisCatalog`
+   trägt kein Typ-Feld. Der Typ steuert später die Begründungsfelder des UI
+   (Bestimmende Merkmale/Beeinflussende Faktoren vs. Risikofaktoren).
+   Antrag: Spalte `diagnosisType` am Katalog — der Typ ist Katalogwissen,
+   kein Patientenwissen.
+2. **Detaildialog-Struktur**: Die dbml nennt 5'201 action-guiding detail
+   interventions unter `EnpInterventionCatalog`, aber keine Struktur für
+   Gruppen, Items und deren Positionswirkung (`folgePosition`). Antrag:
+   Detailinterventionen als eigene Tabelle mit Gruppenlabel, Itemlabel und
+   optionalem ServiceCatalog-Verweis.
+3. **Intervention→Position-Regel**: Es gibt keine Mapping-Tabelle von der
+   ENP-Intervention zur `ServiceCatalog`-Position (weder Standardposition
+   noch detailabhängige Umschaltung). `positionFuer` braucht genau das.
+4. **ServiceCatalog-Erweiterungen**: `maxAnzahl`/`maxEinheit`
+   (Mengenbegrenzung je Tag/Woche) und `teilhandlungen` fehlen;
+   `requiresQualification` existiert bereits und deckt
+   `mindestqualifikation`. Zusätzlich braucht jedes Feld eine **Herkunft**
+   (`katalog | kuratiert | mock`) — im Prototyp als parallele Karte je
+   Objekt gelöst; produktiv wäre das eine Quellenangabe je Anreicherungs-
+   tabelle, nicht je Zelle.
+
 ## Was bewusst bleibt
 
 - `spitex-leistungskatalog-2025.ts` — wird in Lauf 1 die einzige
