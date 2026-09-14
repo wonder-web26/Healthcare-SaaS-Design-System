@@ -14,9 +14,12 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowRight, ClipboardList } from "lucide-react";
 import { MOCK_ASSESSMENTS } from "../../../lib/mocks/klinische-artefakte-mock";
-import { zieleZuDiagnose, interventionenZuZiel } from "../../../lib/pflegeplan/mock-adapter";
+import { zieleZuDiagnose, interventionenZuZiel, positionFuer } from "../../../lib/pflegeplan/mock-adapter";
 import { usePlan } from "../../../lib/pflegeplan/plan-store";
+import { wochenMinuten, type MandatKurz } from "../../../lib/pflegeplan/planung";
 import { getPatient } from "../../../lib/patienten/store";
+import { useMandate } from "../../../lib/mandate/store";
+import { GESETZESGRUNDLAGE } from "../../../lib/stammdaten/mandat";
 import { PlanBaum } from "./PlanBaum";
 import { AuswahlBereich } from "./AuswahlBereich";
 import type { Fokus } from "./gemeinsam";
@@ -109,6 +112,24 @@ export function PflegeplanAufbau() {
     () => assessment?.getriggerteCaps.filter(c => c.getriggert).map(c => c.id) ?? [],
     [assessment]);
 
+  /* Mandate nur GELESEN — das Mandats-Modul bleibt bis Lauf 6 unberührt.
+     Der Mock-Klient trägt heute genau eines; die Mehrfach-Logik ist über
+     planung.test.ts belegt. */
+  const alleMandate = useMandate();
+  const mandate: MandatKurz[] = useMemo(() => alleMandate
+    .filter(x => x.patientId === patientId && !x.ende)
+    .map(x => ({ id: x.id, label: GESETZESGRUNDLAGE.find(g => g.code === x.gesetzesgrundlage)?.label ?? x.gesetzesgrundlage })),
+    [alleMandate, patientId]);
+
+  /* Wochensumme über alle Massnahmen mit Erbringer S — eine PLANUNGSNÄHERUNG
+     (siehe wochenMinuten), keine Abrechnungsgrösse. */
+  const dauerVon = (m: (typeof plan.massnahmen)[number]) =>
+    m.planung.dauerMin ?? positionFuer(m.interventionId, m.planung.detailAuswahl)?.vorgabeMinuten ?? null;
+  const summeMin = plan.massnahmen
+    .filter(m => m.planung.erbringer === "S")
+    .reduce((s, m) => s + wochenMinuten(m.planung, dauerVon(m)), 0);
+  const dritte = plan.massnahmen.filter(m => m.planung.erbringer !== "S").length;
+
   const schritt = naechsterSchritt(plan);
 
   return (
@@ -175,12 +196,27 @@ export function PflegeplanAufbau() {
                 : <>{schritt.text} <ArrowRight style={{ width: 13, height: 13, flexShrink: 0, marginLeft: "auto" }} /></>}
             </button>
 
-            <PlanBaum plan={plan} onFokus={setFokus} />
+            {/* Wochensummen-Kopfzeile: Mandate und geplante Zeit (nur S). */}
+            <div data-wochensumme className="flex items-center flex-wrap" style={{ gap: 12, padding: "7px 14px", marginBottom: 12, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                {mandate.length === 1 ? "Mandat" : "Mandate"}: {mandate.map(x => x.label).join(" · ") || "—"}
+              </span>
+              <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>
+                Geplant: {(summeMin / 60).toFixed(2)} h/Woche
+              </span>
+              {dritte > 0 && (
+                <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
+                  {dritte} {dritte === 1 ? "Leistung" : "Leistungen"} durch Dritte oder abgelehnt
+                </span>
+              )}
+            </div>
+
+            <PlanBaum plan={plan} mandate={mandate} onFokus={setFokus} />
           </div>
 
           {/* Rechts: die Auswahl zum aktuellen Fokus */}
           <div style={{ width: 480, flexShrink: 0, borderLeft: "var(--border-thin) solid var(--border-default)", padding: "14px var(--space-4)", overflowY: "auto", background: "var(--bg-primary)" }}>
-            <AuswahlBereich fokus={fokus} onFokus={setFokus} caps={caps}
+            <AuswahlBereich fokus={fokus} onFokus={setFokus} caps={caps} mandate={mandate}
               assessmentDatum={assessment.abschlussDatum ?? assessment.startDatum} />
           </div>
         </div>

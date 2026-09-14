@@ -3,14 +3,17 @@
  * Positionsvorschau. Baum und Auswahl lesen dieselbe Vorschau — zwei
  * Formulierungen für dieselbe Ableitung liefen auseinander.
  */
-import type { DiagnoseCode, DiagnoseTyp, InterventionId, ZielId } from "../../../lib/pflegeplan/vertrag";
+import type { DetailAuswahl, DiagnoseCode, DiagnoseTyp, InterventionId, ZielId } from "../../../lib/pflegeplan/vertrag";
 import { detaildialog, positionFuer } from "../../../lib/pflegeplan/mock-adapter";
 
-/** Wo die Fachperson gerade steht — bestimmt, was rechts angeboten wird. */
+/** Wo die Fachperson gerade steht — bestimmt, was rechts angeboten wird.
+ *  «editor» ist die zweite Rolle des rechten Bereichs: Bearbeiten von
+ *  Bestätigtem statt Auswählen aus Katalogen. */
 export type Fokus =
   | { schritt: 1 }
   | { schritt: 2; diagnoseCode: DiagnoseCode }
-  | { schritt: 3; diagnoseCode: DiagnoseCode; zielId: ZielId; zielTitel: string };
+  | { schritt: 3; diagnoseCode: DiagnoseCode; zielId: ZielId; zielTitel: string }
+  | { schritt: "editor"; interventionId: InterventionId };
 
 export const TYP_LABEL: Record<DiagnoseTyp, string> = {
   problem: "Problem",
@@ -42,6 +45,22 @@ export function positionsVorschau(interventionId: InterventionId): string {
   if (!pos) return "Keine Position hinterlegt — bleibt planerisch";
   const zeit = pos.vorgabeMinuten !== null ? ` · Vorgabe ${pos.vorgabeMinuten} min` : "";
   return `Position ${pos.nummer} ${pos.bezeichnung}${zeit}`;
+}
+
+/** Positionslage einer Massnahme unter Berücksichtigung ihrer Detailauswahl —
+ *  für Satzzeile und Editor-Kopf dieselbe Ableitung. */
+export function positionsLage(interventionId: InterventionId, auswahl: DetailAuswahl): {
+  text: string; vorgabeMinuten: number | null; qualifikation: string | null;
+} {
+  const dialog = detaildialog(interventionId);
+  const pos = positionFuer(interventionId, auswahl);
+  if (dialog && !pos) return { text: "Position offen — die Detailauswahl entscheidet", vorgabeMinuten: null, qualifikation: null };
+  if (!pos) return { text: "Keine Position hinterlegt — bleibt planerisch", vorgabeMinuten: null, qualifikation: null };
+  return {
+    text: `Position ${pos.nummer} ${pos.bezeichnung}`,
+    vorgabeMinuten: pos.vorgabeMinuten,
+    qualifikation: pos.mindestqualifikation,
+  };
 }
 
 /** Gruppentitel der Massnahmenauswahl: Katalogkategorie der Standardposition. */

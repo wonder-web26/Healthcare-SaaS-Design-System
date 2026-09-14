@@ -112,6 +112,31 @@ dbml heute nicht vorsieht:
    Zuordnungsliste). Sichtbare Nebenwirkung: die interRAI-Ansichten dieses
    Assessments zeigen vier statt drei CAP-Karten.
 
+## Abweichungen aus Lauf 3 (Massnahmen-Editor)
+
+1. **Zweitmandat als Lauf-6-Bedarf:** Der Massnahmen-Editor trägt einen
+   Mandatsbezug; die Auswahl erscheint nur bei mehreren Mandaten (belegt per
+   Unit-Test, nicht per Browser). Der Mock kann den Mehrfach-Fall heute nicht
+   zeigen: `lib/mandate/store.ts:31` leitet **genau ein KVG-Mandat je
+   Patient** ab, und das Mandats-Modul ist bis Lauf 6 unberührbar. Die dbml
+   sieht den Fall ausdrücklich vor («a patient can be under KVG long-term
+   care AND UVG accident cover at the same time», `CareMandate` ohne
+   Unique-Constraint). **Lauf 6 braucht ein zweites aktives Mandat
+   (UVG-Unfall) für den Demo-Klienten** — zusammen mit der dortigen
+   Verifikation von Lagebild, Prüfbereitschaft, Monatsabschluss und
+   Einsatzkontrolle gegen den Mehrmandats-Fall.
+2. **I-STURZASSESS → 10901** (Herkunft mock): frei gewählte
+   Prototyp-Zuordnung, damit eine Position ohne Teilhandlungen über die
+   Oberfläche erreichbar ist.
+3. **Feinplanungsfelder der Massnahme** (Wiederholung mit sechs Formen,
+   Tageszeitfenster mit Verbindlichkeits-Kennzeichen, Erbringer S/I/A/V mit
+   Begründungstext, Dauerabweichung mit Pflichtbegründung, überschriebene
+   Qualifikation): leben im Prototyp am Plan-Zustand. In der dbml decken
+   `SpitexServicePlanPosition.schedulePreference` (recurrence, weekdays,
+   time-of-day band, strict-time flag), `performedBy` (S/I/A/V),
+   `durationMinutes` und `minQualification` das meiste — es fehlt ein Feld
+   für die **Begründung einer Dauerabweichung** vom Katalogrichtwert.
+
 ## Abweichungen aus Lauf 0b (Abriss des KLV-/LPB-Moduls)
 
 Das KLV-/LPB-Modul ist vollständig entfernt; das Fachmodell ist in

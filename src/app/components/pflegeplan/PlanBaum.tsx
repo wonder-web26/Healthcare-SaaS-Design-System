@@ -8,7 +8,8 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, ClipboardList } from "lucide-react";
 import type { PlanZustand, PlanMassnahme, PlanZiel } from "../../../lib/pflegeplan/plan-store";
-import { type Fokus, TypMarke, positionsVorschau } from "./gemeinsam";
+import { massnahmenSatz, type MandatKurz } from "../../../lib/pflegeplan/planung";
+import { type Fokus, TypMarke, positionsLage } from "./gemeinsam";
 
 const KARTE: React.CSSProperties = {
   background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
@@ -25,26 +26,48 @@ function FaltKnopf({ zu, onToggle, label }: { zu: boolean; onToggle: () => void;
   );
 }
 
-/** Satzzeile einer Massnahme unter einem Ziel. Der erste Zielbezug trägt
- *  Position und Zeit; unter weiteren Zielen wird nicht doppelt gezählt. */
-function MassnahmenZeile({ m, zielId, zielTitelVon }: {
-  m: PlanMassnahme; zielId: string | null; zielTitelVon: (diagnoseCode: string, zielId: string) => string;
+/** Satzzeile einer Massnahme unter einem Ziel: die Massnahme liest sich als
+ *  Satz — fett ist, was gesetzt wurde, der Rest kommt aus dem Katalog. Der
+ *  erste Zielbezug trägt Position und Zeit; unter weiteren Zielen wird nicht
+ *  doppelt gezählt. Die Zeile öffnet den Editor rechts (Lauf 3); der Baum
+ *  bleibt dabei stehen. */
+function MassnahmenZeile({ m, zielId, zielTitelVon, mandate, onFokus }: {
+  m: PlanMassnahme; zielId: string | null;
+  zielTitelVon: (diagnoseCode: string, zielId: string) => string;
+  mandate: MandatKurz[];
+  onFokus: (f: Fokus) => void;
 }) {
   const erster = m.zielBezuege[0] ?? null;
   const istErster = zielId === null || (erster !== null && erster.zielId === zielId);
-  const satz = istErster
-    ? positionsVorschau(m.interventionId)
-    : `Dieselbe Leistung wie unter „${erster ? zielTitelVon(erster.diagnoseCode, erster.zielId) : ""}", bereits gezählt`;
   return (
-    <div style={{ padding: "6px 0 6px 30px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+    <button type="button" data-massnahme={istErster ? m.interventionId : undefined}
+      onClick={() => onFokus({ schritt: "editor", interventionId: m.interventionId })}
+      className="ui-fokusring cursor-pointer w-full text-left"
+      style={{ display: "block", background: "none", border: "none", fontFamily: "inherit", padding: "6px 0 6px 30px", borderTop: "var(--border-thin) solid var(--border-default)" }}>
       <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{m.titel}</div>
-      <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 1 }}>{satz}</div>
-    </div>
+      <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 1, lineHeight: 1.5 }}>
+        {istErster
+          ? (() => {
+              const lage = positionsLage(m.interventionId, m.planung.detailAuswahl);
+              return massnahmenSatz(m.planung, { positionsText: lage.text, vorgabeMinuten: lage.vorgabeMinuten, qualifikation: lage.qualifikation }, mandate);
+            })().map((t, i) => (
+              <span key={i}>
+                {i > 0 && " · "}
+                <span style={{
+                  fontWeight: t.fett ? "var(--weight-medium)" : "var(--weight-regular)",
+                  color: t.warn ? "var(--status-warning-text)" : t.fett ? "var(--text-secondary)" : "var(--text-tertiary)",
+                }}>{t.text}</span>
+              </span>
+            ))
+          : `Dieselbe Leistung wie unter „${erster ? zielTitelVon(erster.diagnoseCode, erster.zielId) : ""}", bereits gezählt`}
+      </div>
+    </button>
   );
 }
 
-export function PlanBaum({ plan, onFokus }: {
+export function PlanBaum({ plan, mandate, onFokus }: {
   plan: PlanZustand;
+  mandate: MandatKurz[];
   onFokus: (f: Fokus) => void;
 }) {
   const [zugeklappt, setZugeklappt] = useState<Set<string>>(new Set());
@@ -170,7 +193,7 @@ export function PlanBaum({ plan, onFokus }: {
                                 ohne Zieldatum — es entsteht mit der Feinplanung
                               </div>
                               {massnahmen.map(m => (
-                                <MassnahmenZeile key={m.interventionId} m={m} zielId={z.zielId} zielTitelVon={zielTitelVon} />
+                                <MassnahmenZeile key={m.interventionId} m={m} zielId={z.zielId} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
                               ))}
                               {massnahmen.length === 0 && (
                                 <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", padding: "4px 0 2px 30px" }}>
@@ -201,7 +224,7 @@ export function PlanBaum({ plan, onFokus }: {
             «Mit diesem Ziel verknüpfen» in der Massnahmenauswahl.
           </div>
           {ohneZuordnung.map(m => (
-            <MassnahmenZeile key={m.interventionId} m={m} zielId={null} zielTitelVon={zielTitelVon} />
+            <MassnahmenZeile key={m.interventionId} m={m} zielId={null} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
           ))}
         </div>
       )}

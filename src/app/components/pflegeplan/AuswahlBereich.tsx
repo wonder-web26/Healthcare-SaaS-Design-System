@@ -20,6 +20,8 @@ import {
 } from "../../../lib/pflegeplan/plan-store";
 import { useCurrentUser } from "../../auth";
 import { GEGENWART_ISO } from "../../../lib/gegenwart";
+import type { MandatKurz } from "../../../lib/pflegeplan/planung";
+import { MassnahmenEditor } from "./MassnahmenEditor";
 import { type Fokus, TypMarke, positionsVorschau, katalogGruppe, datumAnzeige } from "./gemeinsam";
 
 const KARTE: React.CSSProperties = {
@@ -198,7 +200,7 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
                 <div className="flex items-center" style={{ gap: 8, marginTop: 6 }}>
                   {imPlan ? <ImPlanMarke /> : (
                     <PillKnopf primaer label="Übernehmen" onClick={() => {
-                      diagnoseUebernehmen({ code, titel: v.diagnose.titel, typ: v.diagnose.typ, belegZeile: belegZeile(v) });
+                      diagnoseUebernehmen({ code, titel: v.diagnose.titel, typ: v.diagnose.typ, belegZeile: belegZeile(v), ausloesendeCaps: v.ausloesendeCaps });
                       onUebernommen(code);
                     }} />
                   )}
@@ -440,12 +442,31 @@ function MassnahmenAuswahl({ diagnoseCode, zielId, zielTitel, onZurueck }: {
 /* ══════════════════════════════════════════
    DER RECHTE BEREICH
    ══════════════════════════════════════════ */
-export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum }: {
+export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum, mandate }: {
   fokus: Fokus;
   onFokus: (f: Fokus) => void;
   caps: CapCode[];
   assessmentDatum: string;
+  mandate: MandatKurz[];
 }) {
+  const plan = usePlan();
+
+  /* Der Editor ist die zweite Rolle des Bereichs: keine Schrittanzeige,
+     eigene Kopfkarte, «Fertig» führt zur Auswahl zurück. */
+  if (fokus.schritt === "editor") {
+    const m = plan.massnahmen.find(x => x.interventionId === fokus.interventionId);
+    const bezug = m?.zielBezuege[0] ?? null;
+    const zielTitel = bezug
+      ? plan.ziele.find(z => z.diagnoseCode === bezug.diagnoseCode && z.zielId === bezug.zielId)?.titel ?? bezug.zielId
+      : "";
+    return (
+      <MassnahmenEditor interventionId={fokus.interventionId} mandate={mandate}
+        onFertig={() => onFokus(bezug
+          ? { schritt: 3, diagnoseCode: bezug.diagnoseCode, zielId: bezug.zielId, zielTitel }
+          : { schritt: 1 })} />
+    );
+  }
+
   return (
     <div>
       <SchrittAnzeige fokus={fokus} />

@@ -231,9 +231,13 @@ export const DETAILDIALOGE: Readonly<Record<InterventionId, Detaildialog>> = {
 /* ── Positionsregeln ohne Dialog ────────────────────────────────────────── */
 /** Feste Standardposition je Intervention. Interventionen ohne Eintrag —
  *  etwa I-ZIELGESPRAECH — haben keine Regel: sie bleiben planerisch und
- *  werden nicht verrechnet (positionFuer liefert null, gültiger Zustand). */
+ *  werden nicht verrechnet (positionFuer liefert null, gültiger Zustand).
+ *  I-STURZASSESS → 10901 ist eine frei gewählte Prototyp-Zuordnung (mock,
+ *  Lauf 3): 10901 trägt keine Ausführungsschritte, damit der Fall «Position
+ *  ohne Teilhandlungen» über die Oberfläche beobachtbar ist. */
 export const STANDARD_POSITION: Readonly<Record<InterventionId, PositionsNummer>> = {
   "I-TEILWAESCHE": "10103",
   "I-GEHTRAINING": "10505",
   "I-HAARWAESCHE": "10107",
+  "I-STURZASSESS": "10901",
 };

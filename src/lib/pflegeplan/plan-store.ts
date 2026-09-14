@@ -12,7 +12,7 @@
  *   fallen in «Ohne Zuordnung». Das ist ein Arbeitszustand, kein Fehler.
  */
 import { useSyncExternalStore } from "react";
-import type { DiagnoseCode, DiagnoseTyp, InterventionId, ZielId } from "./vertrag";
+import type { CapCode, DetailAuswahl, DiagnoseCode, DiagnoseTyp, InterventionId, ZielId } from "./vertrag";
 
 export interface PlanDiagnose {
   code: DiagnoseCode;
@@ -20,6 +20,9 @@ export interface PlanDiagnose {
   typ: DiagnoseTyp;
   /** Belegzeile aus dem Vorschlag — bleibt nach der Übernahme am Element. */
   belegZeile: string;
+  /** Die auslösenden CAPs, strukturiert — als Text wären sie für die
+   *  Herleitung und die spätere Prüfung (Lauf 6) nicht auswertbar. */
+  ausloesendeCaps: CapCode[];
 }
 
 export interface PlanZiel {
@@ -37,12 +40,76 @@ export interface ZielBezug {
   zielId: ZielId;
 }
 
+/* ── Feinplanung (Lauf 3) ──────────────────────────────────────────────── */
+
+export type Wiederholung = "einmalig" | "taeglich" | "werktage" | "woechentlich" | "monatlich" | "benutzerdefiniert";
+
+/** Die vier Erbringer-Werte entscheiden über die Verrechnung, nicht über die
+ *  Rolle: nur S wird verrechnet und zählt zur Wochensumme; I, A und V bleiben
+ *  im Plan (Bedarf gedeckt / anderer Anbieter / Bedarf festgestellt und
+ *  abgelehnt), werden aber nicht von uns verrechnet. */
+export type ErbringerCode = "S" | "I" | "A" | "V";
+
+export interface MassnahmenPlanung {
+  detailAuswahl: DetailAuswahl;
+  /** null = noch nicht geplant; der Satz im Baum zeigt dann nur Position und Zeit. */
+  wiederholung: Wiederholung | null;
+  /** ISO-Datum; nur bei «einmalig». */
+  einmalDatum: string;
+  /** Ausführungen je Vorkommen (Tag bzw. Monat). */
+  anzahl: number;
+  /** «alle N Tage/Wochen» — nur bei «benutzerdefiniert». */
+  intervallN: number;
+  intervallEinheit: "tage" | "wochen";
+  /** 0 = Montag … 6 = Sonntag. */
+  wochentage: number[];
+  /** Kennungen der gewählten Tageszeitfenster. */
+  tageszeiten: string[];
+  /** Eigene Uhrzeiten «HH:MM», einzeln entfernbar. */
+  eigeneZeiten: string[];
+  /** Verbindlich statt nur bevorzugt — nur Ersteres darf später die
+   *  Einsatzplanung einschränken. */
+  zeitVerbindlich: boolean;
+  erbringer: ErbringerCode;
+  /** Pflichttext bei I/A/V: wer erbringt bzw. was wurde abgelehnt. */
+  erbringerNotiz: string;
+  /** Mandatsbezug — existiert immer, angezeigt nur bei mehreren Mandaten. */
+  mandatId: string | null;
+  /** null = Katalog-Vorgabezeit gilt. */
+  dauerMin: number | null;
+  /** Pflicht, sobald die Dauer vom Katalogwert abweicht. */
+  dauerBegruendung: string;
+  /** null = Katalogminimum gilt. */
+  qualifikation: string | null;
+}
+
+export const LEERE_PLANUNG: MassnahmenPlanung = {
+  detailAuswahl: [],
+  wiederholung: null,
+  einmalDatum: "",
+  anzahl: 1,
+  intervallN: 2,
+  intervallEinheit: "tage",
+  wochentage: [],
+  tageszeiten: [],
+  eigeneZeiten: [],
+  zeitVerbindlich: false,
+  erbringer: "S",
+  erbringerNotiz: "",
+  mandatId: null,
+  dauerMin: null,
+  dauerBegruendung: "",
+  qualifikation: null,
+};
+
 export interface PlanMassnahme {
   interventionId: InterventionId;
   titel: string;
   /** Leer = «Ohne Zuordnung» (Arbeitszustand). Reihenfolge = Verknüpfungsreihenfolge:
    *  der erste Bezug trägt Position und Zeit, weitere sagen «bereits gezählt». */
   zielBezuege: ZielBezug[];
+  /** EIN Zustand je Massnahme — auch wenn sie mehreren Zielen dient. */
+  planung: MassnahmenPlanung;
 }
 
 export type VerwerfGrund =
@@ -152,8 +219,19 @@ export function massnahmeVerknuepfen(interventionId: InterventionId, titel: stri
         : m),
     };
   } else {
-    zustand = { ...zustand, massnahmen: [...zustand.massnahmen, { interventionId, titel, zielBezuege: [bezug] }] };
+    zustand = { ...zustand, massnahmen: [...zustand.massnahmen, { interventionId, titel, zielBezuege: [bezug], planung: { ...LEERE_PLANUNG } }] };
   }
+  melden();
+}
+
+/** Feinplanung einer Massnahme ändern — ein Zustand, unter allen Zielen gleich. */
+export function massnahmePlanen(interventionId: InterventionId, patch: Partial<MassnahmenPlanung>): void {
+  zustand = {
+    ...zustand,
+    massnahmen: zustand.massnahmen.map(m => m.interventionId === interventionId
+      ? { ...m, planung: { ...m.planung, ...patch } }
+      : m),
+  };
   melden();
 }
 
