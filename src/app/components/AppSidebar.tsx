@@ -28,9 +28,9 @@ export const navItems = [
   { id: "angehoerige", label: "Angehörige", icon: HeartHandshake },
   /* Dritte Personen — Ärztinnen, Beistände, Sozialdienste. */
   { id: "kontakte", label: "Kontakte", icon: BookUser },
-  /* Kurzform statt „Leistungsplanungsblatt" — für die Zielgruppe eindeutig.
-     Die Ansicht im Dossier behält den vollen Namen. */
-  { id: "klv", label: "KLV", icon: ClipboardList },
+  /* Der Menüpunkt „KLV" (Leistungsplanungsblätter) ist mit dem alten
+     KLV-/LPB-Modul abgerissen — der Neubau kommt in Lauf 6 aus dem
+     Pflegeplan-Vertrag. */
   /* Die Prüfung der erfassten Einsätze über alle Patienten — der Bildschirm
      über der Pflegekontrolle im Dossier. */
   { id: "abschluss", label: "Abschluss", icon: CalendarCheck },

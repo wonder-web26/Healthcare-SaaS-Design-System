@@ -14,10 +14,8 @@
  * achtzig Prozent — es heisst, dass jede verlangte Unterlage vorliegt. Eine
  * Gesamtnote verwischte genau das.
  */
-import type { KLVVerordnung } from "../../types/klinische-artefakte";
 import type { Verordnung, Kostengutsprache } from "../mandate/verordnungen";
 import { ausAnzeigedatum, alsAnzeigedatum, lueckenBerechnen } from "../mandate/verordnungen";
-import { lpbRang, lpbStatusLabel } from "../stammdaten/lpb-status";
 import { srkZertifikatFehlt } from "../angehoerige/store";
 import type { Angehoeriger } from "../../app/components/angehoerigeData";
 import type { MonatsKennzahlen } from "../einsaetze/kontrolle";
@@ -43,7 +41,6 @@ export interface PruefZeile {
  * Codes — sonst liefen Kette und Prüfung auseinander, sobald ein Zustand
  * dazukommt.
  */
-const UNTERZEICHNET_AB = "unterzeichnet";
 
 export interface Zeitraum {
   von: Date;
@@ -74,7 +71,6 @@ export function zeitraumText(z: Zeitraum): string {
 export interface PruefQuellen {
   patientId: string;
   zeitraum: Zeitraum;
-  blatt: KLVVerordnung | null;
   verordnungen: Verordnung[];
   kostengutsprachen: Kostengutsprache[];
   /** Hat der Pflegeplan des Patienten Pflegediagnosen? null = kein Pflegeplan. */
@@ -120,7 +116,7 @@ export function pruefbereitschaft(q: PruefQuellen): PruefZeile[] {
       : teilweise
         ? `${teilweise.id} deckt nur einen Teil des Zeitraums (gültig ${teilweise.gueltigAb}${teilweise.gueltigBis ? ` bis ${teilweise.gueltigBis}` : ", unbefristet"}).`
         : "Keine ärztliche Verordnung deckt diesen Zeitraum. Ohne sie darf nicht abgerechnet werden.",
-    ansicht: "verordnung", verweis: "Verordnung",
+    ansicht: "mandate", verweis: "Verordnung",
   });
 
   /* ── 2 · Kostengutsprache ──
@@ -137,19 +133,17 @@ export function pruefbereitschaft(q: PruefQuellen): PruefZeile[] {
       : luecken.length > 0
         ? `${luecken.reduce((s, l) => s + l.tage, 0)} Tage ohne Deckung: ${luecken.map(l => `${alsAnzeigedatum(l.von)} bis ${alsAnzeigedatum(l.bis)}`).join(", ")}.`
         : "",
-    ansicht: "verordnung", verweis: "Kostengutsprache",
+    ansicht: "mandate", verweis: "Kostengutsprache",
   });
 
-  /* ── 3 · Leistungsplanungsblatt unterzeichnet ── */
-  const rangJetzt = q.blatt ? lpbRang(q.blatt.status) : -1;
-  const rangNoetig = lpbRang(UNTERZEICHNET_AB);
+  /* ── 3 · Leistungsplanungsblatt unterzeichnet ──
+     Das LPB-Modul ist abgerissen (Lauf 0b); der Zustand «kein Blatt» ist im
+     Prüfmodell vorgesehen und bleibt stehen, bis Lauf 6 das neue Blatt aus
+     dem Pflegeplan-Vertrag bringt. */
   zeilen.push({
     id: "blatt", unterlage: "Leistungsplanungsblatt unterzeichnet",
-    zustand: !q.blatt ? "fehlt" : rangJetzt >= rangNoetig ? "vollstaendig" : "lueckenhaft",
-    befund: !q.blatt
-      ? "Kein aktives Leistungsplanungsblatt."
-      : rangJetzt >= rangNoetig ? ""
-        : `${q.blatt.id} steht auf „${lpbStatusLabel(q.blatt.status)}" — die ärztliche Unterschrift fehlt noch.`,
+    zustand: "fehlt",
+    befund: "Kein Leistungsplanungsblatt — es entsteht neu aus dem Pflegeplan-Modul.",
     ansicht: "leistungsplanungsblatt", verweis: "Leistungsplanungsblatt",
   });
 

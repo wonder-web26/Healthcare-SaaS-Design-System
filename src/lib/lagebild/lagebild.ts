@@ -11,12 +11,8 @@
  * erzeugter Text. Sie beantwortete keine Frage, die der Kopf nicht schon
  * beantwortet hatte.
  */
-import type { KLVVerordnung } from "../../types/klinische-artefakte";
 import type { Kostengutsprache } from "../mandate/verordnungen";
 import { offeneLuecke, tageInklusive } from "../mandate/verordnungen";
-import { lpbAmZug, lpbStatusLabel } from "../stammdaten/lpb-status";
-import { wartetSeitTagen } from "../klv/warten";
-import { abgleichen } from "../klv/abgleich";
 import type { MonatsKennzahlen } from "../einsaetze/kontrolle";
 import { type Austritt, austrittText } from "../patienten/austritt";
 import { WOCHENTAGE_LANG, MONATE } from "../einsaetze/einsaetze";
@@ -57,7 +53,6 @@ export const NICHT_BEURTEILBAR = [
 
 export interface LagebildQuellen {
   patientId: string;
-  klvs: KLVVerordnung[];
   kostengutsprachen: Kostengutsprache[];
   mandatIds: string[];
   kennzahlen: MonatsKennzahlen;
@@ -69,13 +64,9 @@ export interface LagebildQuellen {
   austritt: Austritt | null;
 }
 
-/** Wer am Zug ist, im Klartext — `lpbAmZug` gibt einen Code zurück. */
-const AM_ZUG_TEXT: Record<string, string> = {
-  spitex: "bei der Spitex",
-  arzt: "bei der Ärztin",
-  kasse: "bei der Krankenkasse",
-  null: "",
-};
+/* Die Befunde zum Leistungsplanungsblatt (wartendes Blatt, über der
+   Bewilligung) sind mit dem KLV-/LPB-Modul abgerissen (Lauf 0b) — sie
+   kommen in Lauf 6 aus dem neuen Modul zurück. */
 
 /** Zahlwörter bis zwölf, darüber die Ziffer — wie in der Pflegekontrolle. */
 const WORT = ["kein", "ein", "zwei", "drei", "vier", "fünf", "sechs", "sieben",
@@ -106,24 +97,11 @@ export function lagebild(q: LagebildQuellen): Befund[] {
     });
   }
 
-  /* ── Leistungsplanungsblatt: wartet es, und bei wem? ── */
-  const blatt = [...q.klvs]
-    .filter(k => k.patientId === q.patientId && k.status !== "ersetzt")
-    .sort((a, b) => b.version - a.version)[0] ?? null;
-  if (blatt && !ausgetreten) {
-    const tage = wartetSeitTagen(blatt);
-    if (tage !== null) {
-      befunde.push({
-        id: "blatt-wartet", band: "pruefen", rang: 20,
-        text: `Das Leistungsplanungsblatt ${blatt.id} wartet seit ${tage} Tagen ${AM_ZUG_TEXT[lpbAmZug(blatt.status) ?? "null"]} — Zustand „${lpbStatusLabel(blatt.status)}".`,
-        quelle: "Leistungsplanungsblatt", ansicht: "leistungsplanungsblatt",
-      });
-    }
-  }
-
   /* ── Kostengutsprache: besteht eine Lücke? ──
      Ohne gültige Gutsprache kann die Kasse bis zu fünf Jahre rückwirkend
-     zurückfordern — auch für erbrachte und ärztlich verordnete Leistungen. */
+     zurückfordern — auch für erbrachte und ärztlich verordnete Leistungen.
+     Der Verweis führt zu den Mandaten: die Gutsprache hängt am Mandat, die
+     frühere Ansicht «Verordnung und Kostengutsprache» ist abgerissen. */
   const eigeneKgs = q.kostengutsprachen.filter(k => q.mandatIds.includes(k.mandatId));
   const luecke = offeneLuecke(eigeneKgs, q.stichtag);
   if (luecke && !ausgetreten) {
@@ -131,24 +109,8 @@ export function lagebild(q: LagebildQuellen): Befund[] {
     befunde.push({
       id: "kgs-luecke", band: "pruefen", rang: 10,
       text: `Seit ${tage} Tagen besteht keine gültige Kostengutsprache. Erbrachte Leistungen kann die Kasse bis zu fünf Jahre rückwirkend zurückfordern.`,
-      quelle: "Verordnung und Kostengutsprache", ansicht: "verordnung",
+      quelle: "Mandate", ansicht: "mandate",
     });
-  }
-
-  /* ── Geplant gegen bewilligt ── */
-  if (blatt && !ausgetreten) {
-    const a = abgleichen(blatt, eigeneKgs, q.stichtag);
-    /* `differenz` steht in Stunden je Woche (bewilligt − geplant, negativ =
-       zu viel geplant). Gerundet auf Minuten; unter einer Minute wird nichts
-       gemeldet — eine Aussage über eine halbe Minute ist keine. */
-    const zuVielMin = a.lage === "ueber" && a.differenz !== null ? Math.round(-a.differenz * 60) : 0;
-    if (zuVielMin >= 1) {
-      befunde.push({
-        id: "ueber-bewilligung", band: "pruefen", rang: 30,
-        text: `Das Blatt plant ${zuVielMin} Minuten je Woche mehr, als die Kasse bewilligt hat.`,
-        quelle: "Leistungsplanungsblatt", ansicht: "leistungsplanungsblatt",
-      });
-    }
   }
 
   /* ── Pflegekontrolle des laufenden Monats ── */

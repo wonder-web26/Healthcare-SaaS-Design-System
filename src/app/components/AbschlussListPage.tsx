@@ -25,7 +25,6 @@ import { ChevronLeft, ChevronRight, AlertTriangle, Lock } from "lucide-react";
 import { ListenGeruest, type ListenChip } from "./ui/ListenGeruest";
 import { DataTable, type SpalteDef } from "./ui/DataTable";
 import { useEinsaetze, useErbrachteLeistungen, EINSATZ_BEZUGSMONAT } from "../../lib/einsaetze/store";
-import { useKlvVerordnungen } from "../../lib/klv/store";
 import { useMandate } from "../../lib/mandate/store";
 import { type Austritt, austrittVon } from "../../lib/patienten/austritt";
 import { useVerordnungen } from "../../lib/mandate/verordnungen-store";
@@ -82,7 +81,6 @@ export function AbschlussListPage() {
   const nav = useNavigate();
   const einsaetze = useEinsaetze();
   const leistungen = useErbrachteLeistungen();
-  const klvs = useKlvVerordnungen();
   const mandate = useMandate();
   const verordnungen = useVerordnungen();
   const patienten = usePatienten();
@@ -110,7 +108,7 @@ export function AbschlussListPage() {
   /* Nur Patienten mit Erfassung im Monat. Wer im Monat nichts hat, ist keine
      leere Zeile, sondern gar keine. */
   const zeilen: Zeile[] = useMemo(() => {
-    const quellen = { einsaetze, leistungen, klvs, mandate, verordnungen };
+    const quellen = { einsaetze, leistungen, mandate, verordnungen };
     const praefix = `${String(zeitraum.monat + 1).padStart(2, "0")}.${zeitraum.jahr}`;
     const mitEinsatz = new Set(einsaetze.filter(e => e.datum.endsWith(praefix)).map(e => e.patientId));
     return [...mitEinsatz].map(id => {
@@ -128,7 +126,7 @@ export function AbschlussListPage() {
         austritt: p ? austrittVon(p) : null,
       };
     });
-  }, [einsaetze, leistungen, klvs, mandate, verordnungen, patienten, zeitraum, abschluesse]);
+  }, [einsaetze, leistungen, mandate, verordnungen, patienten, zeitraum, abschluesse]);
 
   const chips: ListenChip[] = CHIPS.map(c => ({
     id: c.id,

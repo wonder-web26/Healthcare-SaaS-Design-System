@@ -93,6 +93,37 @@ dbml heute nicht vorsieht:
    Objekt gelöst; produktiv wäre das eine Quellenangabe je Anreicherungs-
    tabelle, nicht je Zelle.
 
+## Abweichungen aus Lauf 0b (Abriss des KLV-/LPB-Moduls)
+
+Das KLV-/LPB-Modul ist vollständig entfernt; das Fachmodell ist in
+`docs/lpb-fachmodell.md` gesichert. Was in Lauf 6 aus dem Pflegeplan-Vertrag
+neu entstehen muss:
+
+1. **Das Leistungsplanungsblatt selbst** — Positionen mit Häufigkeit, Zeit
+   und erbringender Rolle, abgeleitet über die Vertragskette (Massnahme →
+   Detailintervention → Position) statt frei erfasst; dazu Zustandskette,
+   Sperre ab Kasseneinreichung, Versionierung und Protokoll wie im
+   Fachmodell beschrieben. Die dbml trägt dies bereits als
+   `SpitexServicePlan`/`SpitexServicePlanPosition`.
+2. **Der Bewilligungs-Abgleich** (geplant gegen bewilligt, je Mandat) und
+   die Übersichts-Filter (wartet auf Antwort, ohne Kostengutsprache, über
+   der Bewilligung, einschliesslich ersetzter).
+3. **Das Tagessoll der Einsatzkontrolle**: Soll-Ist-Vergleich und
+   Abweichungs-Befunde sind stillgelegt — erbrachte Zeiten bleiben sichtbar,
+   ohne Urteil. Ebenso die Tarifkategorie je erbrachter Leistung: sie fällt
+   bis Lauf 6 pauschal auf Grundpflege (c) zurück, die Positionsauflösung
+   (Bezeichnung, Häufigkeit) zeigt die rohe Positionsnummer.
+4. **Der Abschnitt «Verordnet gegen dokumentiert»** im Controlling (der
+   maschinelle Kassen-Abgleich) und die Prüfkarte «Leistungsplanungsblatt
+   unterzeichnet» (steht konstant auf «fehlt»).
+5. **Der Initialschulungs-Nachweis** beim Onboarding-Abschluss: er entstand
+   aus den KLV-Nummern des Blattes und wird bis Lauf 6 nicht erzeugt.
+6. **Die Sichtbarkeit der Kostengutsprachen**: die Ansicht «Verordnung und
+   Kostengutsprache» ist entfernt; das Mandats-Modul (Verordnung,
+   Kostengutsprache, Lücken, Stillschweige-Annahme) besteht weiter und
+   speist Lagebild und Prüfbereitschaft — die Verweise führen zu den
+   Mandaten. Eine eigene Anzeige gehört zum Lauf-6-Umfang.
+
 ## Was bewusst bleibt
 
 - `spitex-leistungskatalog-2025.ts` — wird in Lauf 1 die einzige

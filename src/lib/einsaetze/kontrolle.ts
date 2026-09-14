@@ -11,11 +11,9 @@
  */
 import type { Einsatz, ErbrachteLeistung, Monatstag } from "./einsaetze";
 import { monatAufteilen, fehlendeTageMuster, einsatzDauer } from "./einsaetze";
-import type { KLVVerordnung } from "../../types/klinische-artefakte";
 import type { Mandat } from "../mandate/mandate";
 import type { Verordnung } from "../mandate/verordnungen";
 import { ausAnzeigedatum, hatBedarfsmeldung } from "../mandate/verordnungen";
-import { istTaeglich, tagessollMinuten } from "../klv/berechnung";
 import {
   einsatzAbrechnen, monatAbrechnen,
   type MinutenJeArt, type Monatsabrechnung,
@@ -27,16 +25,12 @@ import { quartalsMonate } from "../abschluss/abschluss";
 export interface KontrollQuellen {
   einsaetze: Einsatz[];
   leistungen: ErbrachteLeistung[];
-  klvs: KLVVerordnung[];
   mandate: Mandat[];
   verordnungen: Verordnung[];
 }
 
 export interface MonatsKennzahlen {
   patientId: string;
-  /** Aktives Leistungsplanungsblatt, oder null. */
-  blatt: KLVVerordnung | null;
-  sollProTag: number;
   tage: Monatstag[];
   muster: { tage: Monatstag[]; wochentag: number | null };
   abrechnung: Monatsabrechnung;
@@ -79,25 +73,13 @@ export function monatsKennzahlen(
   const eigene = q.einsaetze.filter(e => e.patientId === patientId);
   const leistungenVon = (id: string) => q.leistungen.filter(l => l.einsatzId === id);
 
-  const blatt = [...q.klvs]
-    .filter(k => k.patientId === patientId && k.status !== "ersetzt")
-    .sort((a, b) => b.version - a.version)[0] ?? null;
-  const positionen = blatt?.leistungspositionen ?? [];
-
-  /* Das Tagessoll sind die täglich verordneten Positionen — nicht die
-     Wochensumme durch sieben. Eine Position mit 3×/Woche steht an keinem
-     bestimmten Tag im Plan; sie in ein Tagesmittel zu rechnen, machte aus
-     einer Unbekannten eine Zahl. */
-  const sollProTag = tagessollMinuten(positionen);
-  const taeglicheIds = new Set(positionen.filter(istTaeglich).map(p => p.id));
-  const istTaeglichePosition = (id: string) => taeglicheIds.has(id);
-  const verordneteZeit = (id: string) => {
-    const p = positionen.find(x => x.id === id);
-    return p ? p.anzahl * p.zeitMin : 0;
-  };
-
-  const tage = monatAufteilen(eigene, leistungenVon, jahr, monat, sollProTag,
-    istTaeglichePosition, verordneteZeit);
+  /* Das Leistungsplanungsblatt ist abgerissen (Lauf 0b) — bis Lauf 6 gibt es
+     keinen verordneten Massstab. Ohne Soll gibt es keine Abweichung: die
+     erbrachten Zeiten bleiben sichtbar (Anzeige ohne Urteil), Soll steht auf
+     null und die Abweichung wird nicht behauptet. */
+  const tage = monatAufteilen(eigene, leistungenVon, jahr, monat, 0,
+    () => false, () => 0)
+    .map(t => ({ ...t, abweichung: 0 }));
   const muster = fehlendeTageMuster(tage);
 
   /* Verglichen wird gegen die Bedarfsmeldung der Verordnung, die den Monat
@@ -117,19 +99,18 @@ export function monatsKennzahlen(
     : null;
 
   const geleistet = tage.flatMap(t => t.einsaetze).filter(e => e.zustand === "erbracht");
+  /* Ohne Blatt keine Positionsauflösung: die Tarifkategorie fällt bis Lauf 6
+     pauschal auf Grundpflege (c) zurück, die verordnete Zeit auf null. */
   const abrechnung = monatAbrechnen(
     geleistet.map(e => einsatzAbrechnen(einsatzDauer(e), leistungenVon(e.id)
       .filter(l => l.erbracht)
-      .map(l => {
-        const pos = positionen.find(p => p.id === l.positionId);
-        return { kategorie: (pos?.kategorie ?? "c") as TarifKategorie, verordnet: pos ? pos.anzahl * pos.zeitMin : 0 };
-      }))),
+      .map(() => ({ kategorie: "c" as TarifKategorie, verordnet: 0 })))),
     gemeldet);
 
   const alleEinsaetze = tage.flatMap(t => t.einsaetze);
 
   return {
-    patientId, blatt, sollProTag, tage, muster, abrechnung, gemeldet, verordnung,
+    patientId, tage, muster, abrechnung, gemeldet, verordnung,
     einsaetzeGesamt: alleEinsaetze.length,
     offen: alleEinsaetze.filter(e => e.pruefzustand !== "geprueft").length,
     abweichungsTage: tage.filter(t => !t.fehlt && t.abweichung !== 0 && t.einsaetze.length > 0).length,

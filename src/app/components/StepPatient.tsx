@@ -56,14 +56,9 @@ import { FORMULAR_MAX } from "./form/feldbreiten";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
 import { jetztAnzeige } from "../../lib/datum";
-import { MOCK_ARZT_DIAGNOSEN } from "../../lib/mocks/klinische-artefakte-mock";
-import {
-  useKlvVerordnungen, positionHinzufuegen, positionAendern, positionEntfernen, positionenSetzen,
-} from "../../lib/klv/store";
 import { useRecording } from "../recording/RecordingContext";
 import { getPersonByOnboardingId, getOrCreatePersonForOnboarding, offenenFallSicherstellen, erstelleNaechstesFormular, registrierungFuerOnboarding, getOpenFieldCount } from "../../lib/interrai/store";
 import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
-import type { KLVLeistung, KLVEinheit } from "../../types/klinische-artefakte";
 import { ReviewBlock } from "./ui/ReviewBlock";
 import { InlineSelect } from "./ui/InlineSelect";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
@@ -75,11 +70,7 @@ import { sdaVerlangtInterrai } from "../../lib/stammdaten/sda-einschaetzung-situ
 import { INTERRAI_SCHRITTE } from "../../lib/rhythmus/vorlage";
 import { SectionAccordion, SektionBadge } from "./ui/SectionAccordion";
 import { ItemRow } from "./ui/ItemRow";
-import { hProWoche, einmaligeMin, istPeriodisch, einheitLabel, werLabel, berechnungsText, kompaktParams, berechneSummen, getSimultanPartner } from "../../lib/klv/berechnung";
-import { SPITEX_LEISTUNGSKATALOG_2025 } from "../../lib/klv/spitex-leistungskatalog-2025";
 import { toast } from "sonner";
-import { pruefeInklusiv } from "../../lib/klv/inklusiv-regeln";
-import { pruefeKassenregeln } from "../../lib/klv/kassenregeln";
 import { useEinwilligung } from "./EinwilligungContext";
 import { SectionAction } from "./ui/SectionAction";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
@@ -95,7 +86,6 @@ import { DokumentScanUpload, type ScanFile } from "./form/DokumentScanUpload";
 import { EinwilligungModal } from "./einwilligung/EinwilligungModal";
 import { ScanDisplay, ScanSlot } from "./form/MigratedAngehoerigerForms2";
 import { useCurrentUser } from "../auth";
-import { KLV_WER_OPTIONS, KLV_WER_STANDARD } from "../../lib/stammdaten/klv-wer";
 
 export interface ATLEntry {
   ja: boolean | null;
@@ -496,7 +486,8 @@ const tabDefs = [
   { key: "interrai", label: "Bedarfsabklärung", icon: ClipboardList },
   // Der Reiter "Pflegeplan" ist mit der alten Pflegeplanung abgerissen und
   // kommt mit dem neuen Pflegeplan-Modul zurück.
-  { key: "klv", label: "KLV", icon: FileText },
+  // Der Reiter "KLV" ist mit dem alten KLV-/LPB-Modul abgerissen (Lauf 0b)
+  // und kommt in Lauf 6 aus dem Pflegeplan-Vertrag zurück.
   { key: "workflow", label: "Betreuung", icon: ClipboardList },
   { key: "dokumente", label: "Dokumente", icon: FileText },
   { key: "abschluss", label: "Abschluss", icon: CheckCircle2 },
@@ -786,9 +777,6 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           )}
           {activeTab === "interrai" && (onboardingId
             ? <OnboardingTabBA onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />
-            : <OhneFallkennung />)}
-          {activeTab === "klv" && (onboardingId
-            ? <OnboardingTabKLV onboardingId={onboardingId} />
             : <OhneFallkennung />)}
           {activeTab === "workflow" && (onboardingId
             ? (() => {
@@ -1452,362 +1440,3 @@ function OnboardingTabBA({ onboardingId, patientVorname, patientNachname }: { on
   return <AssessmentStatusView person={person} returnTo={returnTo} kontext="onboarding" />;
 }
 
-function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
-  const navigate = useNavigate();
-  /* Der Bestand ist die Quelle — kein lokaler Abzug mehr. */
-  const klv = useKlvVerordnungen().find(k => k.onboardingId === onboardingId);
-  // Krankenkasse: Name des aktiven KVG-Versicherers (Zahlerseite), sonst Demo-Default.
-  const patient = klv?.patientId ? getPatient(klv.patientId) : null;
-  const krankenkasse = (patient ? aktiverVersichererName(patient.id, "kvg") : "") || "Groupe Mutuel";
-
-  /* Positionen kommen aus dem Bestand; nur die Bedienzustände bleiben lokal. */
-  const leistungen = klv?.leistungspositionen ?? [];
-  const setLeistungen = (f: (prev: KLVLeistung[]) => KLVLeistung[]) => {
-    if (klv) positionenSetzen(klv.id, f(leistungen));
-  };
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [katalogOpen, setKatalogOpen] = useState(false);
-  const [katalogSuche, setKatalogSuche] = useState("");
-
-  // Initialize leistungen from KLV mock data
-  useEffect(() => {
-    if (klv) {
-      // Auto-expand niedrig confidence or unvalidated items
-      const autoExpand = new Set<string>();
-      for (const lp of klv.leistungspositionen) {
-        if (!lp.validiert && (lp.annaKonfidenz === "niedrig" || lp.annaKonfidenz === null)) {
-          autoExpand.add(lp.id);
-        }
-      }
-      setExpandedIds(autoExpand);
-    }
-  }, [klv?.id]);
-
-  const katBg = (k: string) => k === "a" ? "var(--status-info-bg)" : k === "b" ? "var(--status-warning-bg)" : "var(--status-success-bg)";
-  const katColor = (k: string) => k === "a" ? "var(--status-info)" : k === "b" ? "var(--status-warning-text)" : "var(--status-success-text)";
-  const katLabel = (k: string) => k === "a" ? "a – Abklärung und Beratung" : k === "b" ? "b – Untersuchung und Behandlung" : "c – Grundpflege";
-
-
-  const toggleExpand = (id: string) => {
-    setExpandedIds(prev => {
-      const next = new Set<string>();
-      if (!prev.has(id)) next.add(id); // only one open at a time
-      return next;
-    });
-  };
-
-  const validateLeistung = (id: string) => {
-    if (klv) positionAendern(klv.id, id, { validiert: true });
-    setExpandedIds(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  };
-
-  const updateLeistung = (id: string, patch: Partial<KLVLeistung>) => {
-    if (klv) positionAendern(klv.id, id, patch);
-  };
-
-  const removeLeistung = (id: string) => {
-    if (klv) positionEntfernen(klv.id, id);
-    setExpandedIds(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  };
-
-  /* Die WZW-Auswertung ist mit der alten Pflegeplanung entfernt — eine
-     Zweckmässigkeits-Begründung ohne Diagnosebezug wäre eine halbe Prüfung.
-     Sie kommt mit dem neuen Pflegeplan-Modul (Lauf 6) zurück. */
-
-  const addFromKatalog = (pos: typeof SPITEX_LEISTUNGSKATALOG_2025[number]) => {
-    const newId = `klv-new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const newLeistung: KLVLeistung = {
-      id: newId,
-      klvNummer: pos.nr,
-      bezeichnung: pos.bezeichnung,
-      kategorie: pos.klvKategorie ?? "c",
-      wer: KLV_WER_STANDARD,
-      training: "N",
-      anzahl: 1,
-      einheit: "w",
-      zeitMin: pos.zeitMin ?? 15,
-      ausAnna: false,
-      annaKonfidenz: null,
-      validiert: false,
-      simultanGruppe: null,
-    };
-    if (klv) positionHinzufuegen(klv.id, newLeistung);
-    setExpandedIds(prev => new Set(prev).add(newId));
-    setKatalogOpen(false);
-    setKatalogSuche("");
-  };
-
-  // Group leistungen by kategorie
-  const grouped: Record<"a" | "b" | "c", KLVLeistung[]> = { a: [], b: [], c: [] };
-  for (const l of leistungen) {
-    grouped[l.kategorie].push(l);
-  }
-
-  const summen = berechneSummen(leistungen);
-  const alleErfasstenNummern = leistungen.map(l => l.klvNummer);
-
-  // Filtered catalog for search overlay
-  const katalogFiltered = katalogSuche.trim().length > 0
-    ? SPITEX_LEISTUNGSKATALOG_2025.filter(p =>
-        p.klvKategorie !== null && (
-          p.bezeichnung.toLowerCase().includes(katalogSuche.toLowerCase()) ||
-          p.nr.includes(katalogSuche) ||
-          p.bereich.toLowerCase().includes(katalogSuche.toLowerCase())
-        )
-      )
-    : SPITEX_LEISTUNGSKATALOG_2025.filter(p => p.klvKategorie !== null);
-
-  // ─── Empty state (§B: einheitliches Muster, sekundärer Knopf statt Primär) ───
-  if (!klv) return (
-    <LeerZustand
-      icon={FileText}
-      titel="Noch keine KLV-Verordnung"
-      untertitel="Wird aus dem Gespräch oder manuell erstellt."
-      aktion={{ label: "KLV anlegen", onClick: () => navigate("/klv/neu"), icon: FileText }}
-    />
-  );
-
-  // ─── KLV exists — full inline editor ──────────────────
-  return (
-    <div style={{ padding: "var(--space-4)" }}>
-      <TabHeader
-        titel="KLV-Leistungen"
-        meta={<HeaderMeta modus="zusammenfassung" text={`${summen.total.toFixed(1)} h/Woche`} />}
-        aktion={
-          <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
-            <button onClick={() => navigate(`/klv/${klv.id}`)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "9.5px 22px", borderRadius: 999, background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: 14, fontWeight: 500, border: "0.5px solid var(--text-primary)" }}><Send style={{ width: 13, height: 13 }} /> Verordnung &amp; Versand</button>
-            <button onClick={() => setKatalogOpen(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 22px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}><Plus style={{ width: 14, height: 14 }} /> Leistung hinzufügen</button>
-          </div>
-        }
-      />
-
-      {/* Diagnosen summary — sourced from ärztliche Diagnosen-Artefakt (nur bestätigte) */}
-      {(() => {
-        const bestaetigteArztDiag = MOCK_ARZT_DIAGNOSEN.filter(d => d.onboardingId === onboardingId && d.status === "bestaetigt");
-        return bestaetigteArztDiag.length > 0 ? (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", color: "var(--text-secondary)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Ärztliche Diagnosen
-            </div>
-            {bestaetigteArztDiag.map(d => (
-              <div key={d.id} style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", padding: "2px 0" }}>
-                <span style={{ fontFamily: "monospace", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginRight: 6 }}>{d.icdCode}</span>
-                {d.bezeichnung}
-              </div>
-            ))}
-          </div>
-        ) : null;
-      })()}
-
-      {/* Leistungen grouped by Kategorie — SectionAccordion (8.12) + ItemRow (8.13) */}
-      {leistungen.length > 0 ? (
-        <div>
-          {(["a", "b", "c"] as const).map(kat => {
-            const items = grouped[kat];
-            if (items.length === 0) return null;
-            const katSubtotal = items.reduce((s, l) => s + (istPeriodisch(l) ? hProWoche(l) : 0), 0);
-            const katStatus = items.every(l => l.validiert) ? "vollstaendig" as const : items.some(l => l.validiert) ? "teilweise" as const : "leer" as const;
-            return (
-              <SectionAccordion
-                key={kat}
-                id={kat}
-                titel={katLabel(kat)}
-                marker={<SektionBadge buchstabe={kat} status={katStatus} />}
-                count={`${items.length} Positionen · ${katSubtotal.toFixed(2)} h/Wo.`}
-                status={katStatus}
-                defaultOffen
-              >
-                {items.map((l, idx) => {
-                  const isExpanded = expandedIds.has(l.id);
-                  const partners = getSimultanPartner(l, leistungen);
-                  const hW = hProWoche(l);
-                  const isPer = istPeriodisch(l);
-                  const inklusivTreffer = pruefeInklusiv(l.klvNummer, alleErfasstenNummern);
-                  const kassenTreffer = pruefeKassenregeln(l, krankenkasse);
-                  return (
-                    <ItemRow
-                      key={l.id}
-                      marker={<span style={{ fontSize: "var(--text-meta)", fontFamily: "monospace", fontWeight: 500, color: "var(--text-tertiary)", minWidth: 40, display: "inline-block" }}>{l.klvNummer}</span>}
-                      titel={l.bezeichnung}
-                      hilfstext={`${werLabel(l.wer)} · ${l.anzahl}× ${einheitLabel(l.einheit)}${partners.length > 0 ? " · ⟂ simultan" : ""}`}
-                      last={idx === items.length - 1}
-                      onClick={() => toggleExpand(l.id)}
-                    >
-                      {/* Inklusiv-Hinweis (Anna, regelbasiert) */}
-                      {inklusivTreffer && (
-                        <div className="flex items-center" style={{ gap: 6, marginBottom: 6, padding: "4px 8px", background: "var(--status-warning-bg)", borderRadius: 8 }}>
-                          <Sparkles style={{ width: 12, height: 12, color: "var(--brand-primary)", flexShrink: 0 }} />
-                          <span style={{ fontSize: 9, fontWeight: 500, color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" as const }}>Anna</span>
-                          <span className="inline-flex items-center" style={{ gap: 3, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
-                            <AlertTriangle style={{ width: 10, height: 10 }} />
-                            inklusive in {inklusivTreffer.hauptBezeichnung}
-                          </span>
-                        </div>
-                      )}
-                      {/* Kassenregel-Hinweis (Anna, regelbasiert, warn-only) */}
-                      {kassenTreffer.length > 0 && kassenTreffer.map((t, ti) => (
-                        <div key={ti} className="flex items-center" style={{ gap: 6, marginBottom: 6, padding: "4px 8px", background: "var(--status-warning-bg)", borderRadius: 8 }}>
-                          <Sparkles style={{ width: 12, height: 12, color: "var(--brand-primary)", flexShrink: 0 }} />
-                          <span style={{ fontSize: 9, fontWeight: 500, color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" as const }}>Anna</span>
-                          <span className="inline-flex items-center" style={{ gap: 3, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
-                            <AlertTriangle style={{ width: 10, height: 10 }} />
-                            {t.hinweis}
-                          </span>
-                        </div>
-                      ))}
-                      {/* Compact info */}
-                      <div className="flex items-center justify-between" style={{ gap: 8 }}>
-                        <div className="flex items-center" style={{ gap: 6 }}>
-                          {l.ausAnna && <div className="flex items-center" style={{ gap: 3 }}><Sparkles style={{ width: 12, height: 12, color: "var(--brand-primary)" }} /><span style={{ fontSize: 9, fontWeight: 500, color: "var(--text-secondary)", letterSpacing: "0.05em", textTransform: "uppercase" as const }}>Anna</span></div>}
-                          {l.ausAnna && (<span className="inline-flex items-center" style={{ gap: 3, padding: "1px 8px", borderRadius: 999, fontSize: "var(--text-meta)", fontWeight: 500, background: l.validiert ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: l.validiert ? "var(--status-success-text)" : "var(--status-warning-text)" }}>
-                            {l.validiert ? <Check style={{ width: 10, height: 10 }} /> : <Clock style={{ width: 10, height: 10 }} />}
-                            {l.validiert ? "Bestätigt" : "Vorschlag"}
-                          </span>
-                          )}
-                        </div>
-                        <div className="flex items-center" style={{ gap: 8 }}>
-                          <span className="hidden sm:inline" style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{l.zeitMin} min</span>
-                          <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: isPer ? "var(--text-primary)" : "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", minWidth: 56, textAlign: "right" }}>
-                            {isPer ? `${hW.toFixed(2)}` : l.einheit === "e" ? "einm." : "n. B."}
-                          </span>
-                          <button onClick={e => { e.stopPropagation(); removeLeistung(l.id); }} className="cursor-pointer" title="Löschen" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 2, flexShrink: 0 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 14, height: 14 }} /></button>
-                          <ChevronDown style={{ width: 14, height: 14, color: "var(--text-tertiary)", transition: "transform 0.15s", transform: isExpanded ? "rotate(180deg)" : "none" }} />
-                        </div>
-                      </div>
-
-                      {/* Expanded edit body.
-                          Der Aufklappbereich liegt INNERHALB der Zeile, und die Zeile
-                          trägt den Auslöser (ItemRow onClick). Ohne diesen Riegel
-                          erreichte jeder Klick auf ein Feld den Auslöser und klappte
-                          die Position wieder zu — der Bereich war unbedienbar.
-                          Der Riegel sitzt hier, nicht in ItemRow: nur diese eine
-                          Verwendung übergibt einen Zeilen-Auslöser. */}
-                      {isExpanded && (() => {
-                        const rhythmus = l.einheit === "e" ? "einmalig" : l.einheit === "nB" ? "nachBedarf" : l.einheit === "m" ? "monatlich" : l.einheit === "w" ? "wöchentlich" : "täglich";
-                        const tage = l.einheit.startsWith("t") ? parseInt(l.einheit.slice(1)) : (l.einheit === "w" ? 1 : 7);
-                        const tageDisabled = rhythmus !== "täglich";
-                        const anzahlDisabled = rhythmus === "einmalig" || rhythmus === "nachBedarf";
-                        const liveHW = hW;
-                        const setRhythmus = (r: string) => {
-                          if (r === "einmalig") updateLeistung(l.id, { einheit: "e" as KLVEinheit, anzahl: 1 });
-                          else if (r === "nachBedarf") updateLeistung(l.id, { einheit: "nB" as KLVEinheit, anzahl: 1 });
-                          else if (r === "monatlich") updateLeistung(l.id, { einheit: "m" as KLVEinheit });
-                          else if (r === "wöchentlich") updateLeistung(l.id, { einheit: "w" as KLVEinheit });
-                          else updateLeistung(l.id, { einheit: `t${tage}` as KLVEinheit });
-                        };
-                        const setTage = (t: number) => { const c = Math.max(1, Math.min(7, t)); updateLeistung(l.id, { einheit: (c === 1 ? "w" : `t${c}`) as KLVEinheit }); };
-                        const calcText = rhythmus === "täglich" ? `${tage} Tage × ${l.anzahl} × ${l.zeitMin} min` : rhythmus === "wöchentlich" ? `${l.anzahl} Einsätze/Woche × ${l.zeitMin} min` : rhythmus === "monatlich" ? `${l.anzahl}× pro Monat × ${l.zeitMin} min ÷ 4.33` : "";
-                        const ss = { width: "100%", padding: "8px 12px", fontSize: 14, borderRadius: 12, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "inherit" } as const;
-                        const ssDis = { ...ss, opacity: 0.4, pointerEvents: "none" as const, background: "var(--bg-secondary)", color: "var(--text-tertiary)", cursor: "not-allowed" as const };
-                        return (
-                          <div onClick={e => e.stopPropagation()}>
-                          <div style={{ marginTop: 8, paddingTop: 10, borderTop: "0.5px solid var(--border-default)", borderLeft: `4px solid ${l.validiert ? "var(--status-success)" : "var(--status-warning)"}`, paddingLeft: 12 }}>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginBottom: 10 }}>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Wer</label><InlineSelect value={l.wer} onChange={v => updateLeistung(l.id, { wer: v as KLVLeistung["wer"] })} options={KLV_WER_OPTIONS} /></div>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Rhythmus</label><InlineSelect value={rhythmus} onChange={v => setRhythmus(v)} options={[{ value: "täglich", label: "Täglich" }, { value: "wöchentlich", label: "Wöchentlich" }, { value: "monatlich", label: "Monatlich" }, { value: "einmalig", label: "Einmalig" }, { value: "nachBedarf", label: "Nach Bedarf" }]} /></div>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>an wie vielen Tagen</label><input type="number" min={1} max={7} value={tage} onChange={e => setTage(parseInt(e.target.value) || 1)} disabled={tageDisabled} style={tageDisabled ? ssDis : ss} /></div>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Anzahl</label><input type="number" min={1} value={l.anzahl} onChange={e => updateLeistung(l.id, { anzahl: Math.max(1, parseInt(e.target.value) || 1) })} disabled={anzahlDisabled} style={anzahlDisabled ? ssDis : ss} /></div>
-                              <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Zeit pro Einsatz</label><div className="flex items-center" style={{ gap: 4 }}><input type="number" min={1} value={l.zeitMin} onChange={e => updateLeistung(l.id, { zeitMin: Math.max(1, parseInt(e.target.value) || 1) })} style={{ ...ss, flex: 1 }} /><span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>min</span></div></div>
-                            </div>
-                            {/* Der Pflegediagnose-Bezug je Position kommt in Lauf 6
-                                aus dem neuen Pflegeplan-Modul. */}
-                            {!l.validiert && (
-                              <div className="flex items-center" style={{ gap: 8 }}>
-                                <button onClick={e => { e.stopPropagation(); validateLeistung(l.id); }} className="inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "10px 22px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}><Check style={{ width: 14, height: 14 }} /> Bestätigen</button>
-                              </div>
-                            )}
-                          </div>
-                          </div>
-                        );
-                      })()}
-                    </ItemRow>
-                  );
-                })}
-              </SectionAccordion>
-            );
-          })}
-
-          {/* Summen */}
-          <div style={{ borderTop: "2px solid var(--border-default)", paddingTop: 10, marginTop: 8 }}>
-            {(["a","b","c"] as const).map(k => { const v = k === "a" ? summen.kategorieA : k === "b" ? summen.kategorieB : summen.kategorieC; return v > 0 ? (
-              <div key={k} className="flex items-center justify-between" style={{ padding: "2px 0", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-                <span>Kategorie {k}:</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{v.toFixed(2)} h/Wo.</span>
-              </div>
-            ) : null; })}
-            <div style={{ borderTop: "0.5px solid var(--border-default)", margin: "4px 0" }} />
-            <div className="flex items-center justify-between" style={{ padding: "2px 0", fontWeight: 500, color: "var(--text-primary)", fontSize: "var(--text-body)" }}>
-              <span>Total</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{summen.total.toFixed(2)} h/Wo.</span>
-            </div>
-            {summen.einmaligMin > 0 && (
-              <div className="flex items-center justify-between" style={{ padding: "2px 0", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-                <span>Einmalige Leistungen</span><span style={{ fontVariantNumeric: "tabular-nums" }}>{summen.einmaligMin} min ({summen.einmaligH.toFixed(2)} h)</span>
-              </div>
-            )}
-          </div>
-
-          {/* Dokument-Aktionen (Output, getrennt vom Editieren) */}
-          <div style={{ marginTop: 16, paddingTop: 12, borderTop: "0.5px solid var(--border-default)" }}>
-            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginBottom: 6 }}>Dokumente</div>
-            <div className="flex flex-wrap" style={{ gap: 8 }}>
-              <button onClick={() => toast("Dokument-Generierung folgt")} className="inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "6px 14px", borderRadius: 999, background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}><FileText style={{ width: 13, height: 13 }} /> Leistungsplanungsblatt</button>
-              <button onClick={() => toast("Dokument-Generierung folgt")} className="inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "6px 14px", borderRadius: 999, background: "var(--bg-elevated)", border: "0.5px solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}><FileText style={{ width: 13, height: 13 }} /> Bedarfsmeldeformular (KLV Art. 7)</button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)", padding: "12px 0" }}>
-          Noch keine Leistungspositionen – starte ein Gespräch oder öffne den KLV-Arbeitsbereich.
-        </div>
-      )}
-
-      {/* ── Leistungssuche — Overlay, triggered from TabHeader ── */}
-      {katalogOpen && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center" style={{ background: "rgba(19,19,20,0.3)", paddingTop: 80 }} onClick={() => { setKatalogOpen(false); setKatalogSuche(""); }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-elevated)", borderRadius: 12, border: "0.5px solid var(--border-default)", boxShadow: "0 8px 32px rgba(0,0,0,0.12)", width: "92%", maxWidth: 520, maxHeight: "60vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {/* Pill search field (8.2) */}
-            <div className="flex items-center" style={{ padding: "12px 16px", gap: 8, borderBottom: "0.5px solid var(--border-default)" }}>
-              <Search style={{ width: 16, height: 16, color: "var(--text-tertiary)", flexShrink: 0 }} />
-              <input
-                type="text"
-                value={katalogSuche}
-                onChange={e => setKatalogSuche(e.target.value)}
-                placeholder="Leistung suchen (Nr., Bezeichnung oder Bereich)…"
-                autoFocus
-                style={{ flex: 1, border: "none", outline: "none", fontSize: 14, background: "transparent", color: "var(--text-primary)", fontFamily: "inherit" }}
-              />
-              <button onClick={() => { setKatalogOpen(false); setKatalogSuche(""); }} className="cursor-pointer" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 2 }}><X style={{ width: 16, height: 16 }} /></button>
-            </div>
-            {/* Results — ItemRow pattern */}
-            <div style={{ overflowY: "auto", flex: 1 }}>
-              {katalogFiltered.length === 0 ? (
-                <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 14, color: "var(--text-tertiary)" }}>Keine Ergebnisse</div>
-              ) : katalogFiltered.slice(0, 40).map(pos => (
-                <div
-                  key={pos.nr}
-                  onClick={() => addFromKatalog(pos)}
-                  className="flex items-center cursor-pointer"
-                  style={{ padding: "10px 16px", gap: 10, borderBottom: "0.5px solid var(--border-default)" }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                >
-                  <span style={{ fontSize: "var(--text-meta)", fontFamily: "monospace", fontWeight: 500, color: "var(--text-tertiary)", minWidth: 40 }}>{pos.nr}</span>
-                  <span className="flex-1 truncate" style={{ fontSize: 14, color: "var(--text-primary)" }}>{pos.bezeichnung}</span>
-                  <span style={{ padding: "1px 8px", borderRadius: 999, fontSize: "var(--text-micro)", fontWeight: 500, background: katBg(pos.klvKategorie!), color: katColor(pos.klvKategorie!), flexShrink: 0 }}>{pos.klvKategorie}</span>
-                  {pos.zeitMin && <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{pos.zeitMin} min</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}

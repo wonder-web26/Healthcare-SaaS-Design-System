@@ -62,8 +62,6 @@ import { erfasseAngehoerigenImOnboarding, angehoerigerFuerOnboarding, type Angeh
 import { sichereGepflegteAngehoerige } from "../../lib/beziehungen/store";
 import { GEGENWART, GEGENWART_ISO } from "../../lib/gegenwart";
 import { MOCK_ASSESSMENTS } from "../../lib/mocks/klinische-artefakte-mock";
-import { getKlvVerordnungen, getKlvFuerOnboarding } from "../../lib/klv/store";
-import { lpbStatusLabel } from "../../lib/stammdaten/lpb-status";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
 import { formatFaelligkeit, isoZuDate, formatAnzeige } from "../../lib/datum";
 import { toast } from "sonner";
@@ -1340,10 +1338,7 @@ export function OnboardingPage() {
               // wird ihr Fehlen nicht als Lücke gemeldet.
               const chbb16Hint = registrierungFuerOnboarding(wirksameFallKennung)?.answers["CHBB16"] ?? "";
               if (chbb16Hint !== "" && sdaVerlangtInterrai(chbb16Hint) && (!ba || ba.status !== "abgeschlossen")) hints.push("Das InterRAI ist noch nicht abgeschlossen. Es wird mitkonvertiert und kann später vervollständigt werden.");
-              const klv = getKlvFuerOnboarding(wirksameFallKennung);
-              // Hinweistext, keine Bedingung: der Abschluss hängt nicht am KLV-Zustand.
-              // Gezeigt wird die Beschriftung, nie der gespeicherte Code.
-              if (klv && klv.status !== "entscheid_erhalten") hints.push(`Die KLV ist im Zustand „${lpbStatusLabel(klv.status)}“. Die Pipeline läuft am aktiven Patient weiter.`);
+              // Der KLV-Hinweis ist mit dem LPB-Modul abgerissen (Lauf 0b).
               if (hints.length === 0) return null;
               return hints.map((h, i) => (
                 <div key={i} className="flex items-start" style={{ gap: 6, padding: "6px 10px", background: "var(--status-warning-bg)", borderRadius: "var(--radius-card)", marginBottom: 6, fontSize: "var(--text-small)", color: "var(--status-warning-text)" }}>
@@ -1371,7 +1366,7 @@ export function OnboardingPage() {
                       setAbschlussAuditLog(auditNote);
                       console.info("[Audit] Abschluss mit Override:", auditNote);
                     }
-                    const ergebnis = konvertiereOnboarding(wirksameFallKennung, { interRAIAssessments: MOCK_ASSESSMENTS, klvVerordnungen: getKlvVerordnungen(), workflows: [] }, {
+                    const ergebnis = konvertiereOnboarding(wirksameFallKennung, { interRAIAssessments: MOCK_ASSESSMENTS, workflows: [] }, {
                       name: `${angehoerigerData.vorname || ""} ${angehoerigerData.name || ""}`.trim(),
                       quellensteuerpflichtig: angehoerigerData.quellensteuer === "ja",
                       aufenthaltsstatus: angehoerigerData.aufenthaltsstatus,
@@ -1404,7 +1399,6 @@ export function OnboardingPage() {
                     const a = ergebnis.konvertierteArtefakte;
                     const uebernommen: string[] = [];
                     if (a.interRAIAssessments.length > 0) uebernommen.push(`${a.interRAIAssessments.length} InterRAI`);
-                    if (a.klvVerordnungen.length > 0) uebernommen.push(`${a.klvVerordnungen.length} KLV`);
                     const artefaktInfo = uebernommen.length > 0 ? ` (${uebernommen.join(", ")})` : "";
                     console.info("[Konvertierung]", ergebnis);
                   }

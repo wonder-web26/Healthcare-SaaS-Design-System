@@ -7,13 +7,11 @@
  *
  * Currently a stub — will be called from the Onboarding-Abschluss-Dialog in Prompt B.
  */
-import type { InterRAIAssessment, KLVVerordnung, WorkflowPlan } from "../../types/klinische-artefakte";
+import type { InterRAIAssessment, WorkflowPlan } from "../../types/klinische-artefakte";
 import { verwalteQuellensteuerPendenz } from "../stammdaten/quellensteuer-automatik";
 import { workflowTasks } from "../mocks/workflow-tasks";
 import { konvertiereRhythmusSubjekt, generiereRhythmusTickets, getTicketsFuerSubjekt } from "../rhythmus/engine";
 import { protokolliereAufteilung } from "./aufteilung-log";
-import { erstelleNachweis } from "../schulung/nachweis-store";
-import { getKlvVerordnungen } from "../klv/store";
 import { getPersonByOnboardingId, setPatientId } from "../interrai/store";
 import { schliessePatientOnboardingAb } from "../patienten/store";
 import { schliesseAngehoerigenOnboardingAb } from "../angehoerige/store";
@@ -28,9 +26,8 @@ export interface KonvertierungsErgebnis {
   qualifikation: string | null;
   konvertierteArtefakte: {
     interRAIAssessments: string[];
-    // Pflegeplanungen sind mit der alten Pflegeplanung abgerissen; der neue
-    // Bezug kommt in Lauf 6 aus dem neuen Pflegeplan-Modul.
-    klvVerordnungen: string[];
+    // Pflegeplanungen (Lauf 0) und KLV-Verordnungen (Lauf 0b) sind mit den
+    // alten Modulen abgerissen; der neue Bezug kommt in Lauf 6.
     workflows: string[];
   };
 }
@@ -50,7 +47,6 @@ export function konvertiereOnboarding(
   onboardingId: string,
   artefakte: {
     interRAIAssessments: InterRAIAssessment[];
-    klvVerordnungen: KLVVerordnung[];
     workflows: WorkflowPlan[];
   },
   /** Angehoerigen-Stammdaten fuer Pendenz-Erzeugung */
@@ -85,14 +81,6 @@ export function konvertiereOnboarding(
   // their Fall by stable fallId; the Klient gains a patientId above, which
   // flips klientZustand to "aktiv". The forms remain unchanged.
   const konvertierteBA: string[] = [];
-
-  const konvertierteKLV: string[] = [];
-  for (const klv of artefakte.klvVerordnungen) {
-    if (klv.onboardingId === onboardingId) {
-      klv.patientId = patientId;
-      konvertierteKLV.push(klv.id);
-    }
-  }
 
   const konvertierteWF: string[] = [];
   for (const wf of artefakte.workflows) {
@@ -137,24 +125,10 @@ export function konvertiereOnboarding(
     anzahlNeuAngehoeriger,
   });
 
-  // Initialschulung: Nachweis erstellen wenn KLV-Positionen vorhanden
-  const klvVerordnung = [...artefakte.klvVerordnungen, ...getKlvVerordnungen()].find(
-    k => k.onboardingId === onboardingId || k.patientId === patientId
-  );
-  if (klvVerordnung && klvVerordnung.leistungspositionen.length > 0 && angehoerigenDaten) {
-    const klvNummern = klvVerordnung.leistungspositionen.map(lp => lp.klvNummer);
-    const patientName = klvVerordnung.patientName || "Patient";
-    erstelleNachweis(
-      angehoerigerId,
-      angehoerigenDaten.name,
-      angehoerigenDaten.qualifikation || "",
-      patientId,
-      patientName,
-      "Sandra Weber",
-      klvNummern,
-    );
-    console.info(`[Audit] Schulungsnachweis erstellt: ${angehoerigenDaten.name} → ${patientName}, ${klvNummern.length} Positionen`);
-  }
+  /* Initialschulungs-Nachweis: entstand aus den KLV-Positionen des Blattes —
+     mit dem LPB-Modul abgerissen (Lauf 0b). Bis Lauf 6 erzeugt der Abschluss
+     keinen Schulungsnachweis; danach kommen die Positionen aus dem neuen
+     Modul (siehe docs/schema-delta-pflegeplan.md). */
 
   // SP-07: Bei Quellensteuerpflicht Pendenz fuer Buchhaltung erzeugen
   // Erst jetzt, weil der Angehoerige als Mitarbeiter erst nach Konvertierung existiert.
@@ -225,7 +199,6 @@ export function konvertiereOnboarding(
     qualifikation: angehoerigenDaten?.qualifikation ?? null,
     konvertierteArtefakte: {
       interRAIAssessments: konvertierteBA,
-      klvVerordnungen: konvertierteKLV,
       workflows: konvertierteWF,
     },
   };

@@ -1,5 +1,3 @@
-import type { KlvWerCode } from "../lib/stammdaten/klv-wer";
-
 /**
  * Klinische Artefakte — Lead-Konvertierungs-Modell.
  *
@@ -158,98 +156,10 @@ export interface AerztlicheDiagnose {
    Typwelt entsteht als eigenes Modul (Kette Diagnose → Ziel → Massnahme →
    Detailintervention → Leistungsposition). Siehe docs/schema-delta-pflegeplan.md. */
 
-/* ══════════════════════════════════════════
-   KLV-VERORDNUNG
-   ══════════════════════════════════════════ */
-
-/**
- * Zustand des Leistungsplanungsblatts. Die Werteliste liegt in
- * lib/stammdaten/lpb-status.ts — hier nur der Typ, damit die Artefakt-Typen
- * nicht auf die Stammdaten zeigen muessen.
- */
-export type KLVStatus =
-  | "entwurf"
-  | "kontrolliert"
-  | "an_arzt"
-  | "unterzeichnet"
-  | "an_kasse"
-  | "entscheid_erhalten"
-  | "ersetzt";
-
-/** Ein Statuswechsel, wie er am Blatt protokolliert wird. */
-export interface KLVStatusEintrag {
-  status: KLVStatus;
-  person: string;
-  /** TT.MM.JJJJ HH:MM */
-  zeitpunkt: string;
-}
-
-export interface KLVDiagnose {
-  id: string;
-  icdCode: string | null;
-  titel: string;
-  beschreibung: string;
-}
-
-export type KLVEinheit =
-  | "e"     // einmalig
-  | "w"     // wöchentlich
-  | "t2" | "t3" | "t4" | "t5" | "t6" | "t7"  // an 2..7 Tagen pro Woche
-  | "m"     // monatlich
-  | "nB";   // nach Bedarf
-
-export interface KLVLeistung {
-  id: string;
-  klvNummer: string;
-  bezeichnung: string;
-  kategorie: "a" | "b" | "c";
-  /**
-   * Spalte W des Leistungsplanungsblatts — wer die Leistung erbringt.
-   * Werteliste: lib/stammdaten/klv-wer.ts. Code, nie Beschriftung.
-   */
-  wer: KlvWerCode;
-  training: "N" | "T";
-  anzahl: number;
-  einheit: KLVEinheit;
-  zeitMin: number;
-  ausAnna: boolean;
-  annaKonfidenz: "hoch" | "mittel" | "niedrig" | null;
-  validiert: boolean;
-  simultanGruppe: string | null;
-  /* Diagnose- und Massnahmenbezug (bezugMassnahmeId, diagnoseIds) sowie die
-     WZW-Begründung sind mit der alten Pflegeplanung entfernt. Der Bezug kommt
-     in Lauf 6 aus dem neuen Pflegeplan-Modul (siehe docs/schema-delta-pflegeplan.md). */
-}
-
-export interface KLVVerordnung {
-  id: string;
-  onboardingId: string | null;
-  patientId: string | null;
-  /**
-   * Abrechnungsbeziehung, zu der das Blatt gehört. Ein Patient kann mehrere
-   * Mandate tragen — dann gehören seine Blätter zu verschiedenen Zahlern mit
-   * verschiedenen Tarifen. `patientId` bleibt daneben bestehen; die Liste
-   * filtert danach.
-   */
-  mandatId: string | null;
-  patientName: string;
-  status: KLVStatus;
-  /** Fortlaufend je Patient, aufsteigend. */
-  version: number;
-  art: "erst" | "folge";
-  /** Jeder Statuswechsel mit Person und Zeitpunkt; aelteste zuerst. */
-  statusProtokoll: KLVStatusEintrag[];
-  erstelltVon: string;
-  erstellDatum: string;
-  beginnDatum: string | null;
-  endDatum: string | null;
-  diagnosen: KLVDiagnose[];
-  leistungspositionen: KLVLeistung[];
-  zielformulierungen: string[];
-  arztAngeordnetAm: string | null;
-  krankenkasseGutspracheAm: string | null;
-  ablehnungsgrund: string | null;
-}
+/* Die KLV-/LPB-Typen (KLVVerordnung, KLVLeistung, KLVStatus, KLVStatusEintrag,
+   KLVDiagnose, KLVEinheit) sind mit dem alten KLV-/LPB-Modul abgerissen
+   (Lauf 0b). Das Fachmodell ist in docs/lpb-fachmodell.md gesichert; der
+   Neubau kommt in Lauf 6 aus dem Pflegeplan-Vertrag. */
 
 /* ══════════════════════════════════════════
    WORKFLOW / ACTION PLAN
@@ -278,10 +188,3 @@ export interface WorkflowPlan {
   schritte: WorkflowSchritt[];
 }
 
-/* ══════════════════════════════════════════
-   KLV STATUS PIPELINE
-   ══════════════════════════════════════════ */
-
-/* KLV_STATUS_PIPELINE ist entfallen: die Kette steht als LPB_ABLAUF in
-   lib/stammdaten/lpb-status.ts, zusammen mit Beschriftung und der Angabe,
-   wer am Zug ist. Zwei Listen fuer dieselbe Kette waeren zwei Wahrheiten. */

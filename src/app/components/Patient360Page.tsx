@@ -117,12 +117,6 @@ import { StatusModal } from "./StatusModal";
 import { DetailNavigation } from "./DetailNavigation";
 import { MOCK_ASSESSMENTS } from "../../lib/mocks/klinische-artefakte-mock";
 import {
-  useKlvVerordnungen, verordnungAnlegen, verordnungEntfernen,
-  statusWechseln, neueVersionErstellen, istGesperrt, sperrGrund,
-} from "../../lib/klv/store";
-import { wartetSeitTagen } from "../../lib/klv/warten";
-import { abgleichen, stunden } from "../../lib/klv/abgleich";
-import {
   abweichungNachRichtung, einsatzDauer,
   aktuelleFassung, fruehereFassungen,
   hatAbweichung, WOCHENTAGE, WOCHENTAGE_LANG, MONATE,
@@ -133,7 +127,7 @@ import {
   useEinsaetze, useErbrachteLeistungen, einsatzBestaetigen, einsatzRueckfrage, berichtSchreiben,
   EINSATZ_BEZUGSMONAT,
 } from "../../lib/einsaetze/store";
-import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung, type AerztlicheDiagnose, type ArztDiagnoseStatus } from "../../types/klinische-artefakte";
+import { getArtefaktContainer, type AerztlicheDiagnose, type ArztDiagnoseStatus } from "../../types/klinische-artefakte";
 import { TAKT_MINUTEN, MINDESTWERT_EINSATZ, type Monatsabrechnung } from "../../lib/abrechnung/leistungsarten";
 import { monatsKennzahlen } from "../../lib/einsaetze/kontrolle";
 import { lagebild, NICHT_BEURTEILBAR, GEPRUEFT_WURDE } from "../../lib/lagebild/lagebild";
@@ -170,11 +164,6 @@ import {
 import { dokumenttyp, ordnerFuer, type DokumentKontext } from "../../lib/stammdaten/dokumenttypen";
 import { useAbschluesse } from "../../lib/abschluss/store";
 import { pruefzustandLabel } from "../../lib/stammdaten/einsatz";
-import { LPB_ABLAUF, lpbStatusLabel, lpbAmZug, lpbNaechster, lpbRang } from "../../lib/stammdaten/lpb-status";
-import {
-  hProWoche, berechneSummen, einheitLabel,
-  istTaeglich, haeufigkeitText, istPeriodisch, erwarteteAnzahlImMonat,
-} from "../../lib/klv/berechnung";
 import { toast } from "sonner";
 import { useRecording } from "../recording/RecordingContext";
 import { getPersonByPatientId } from "../../lib/interrai/store";
@@ -258,9 +247,10 @@ const PATIENT_NAV: GruppeDef[] = [
   ] },
   { schluessel: "leistungen", label: "Leistungen", ansichten: [
     { schluessel: "mandate", label: "Mandate" },
+    /* «Verordnung und Kostengutsprache» und «Kassenregeln» sind mit dem
+       KLV-/LPB-Modul abgerissen (Lauf 0b); das Leistungsplanungsblatt zeigt
+       den Leerzustand, bis Lauf 6 das neue Blatt bringt. */
     { schluessel: "leistungsplanungsblatt", label: "Leistungsplanungsblatt" },
-    { schluessel: "verordnung-und-kostengutsprache", label: "Verordnung und Kostengutsprache" },
-    { schluessel: "kassenregeln", label: "Kassenregeln" },
   ] },
   { schluessel: "einsaetze", label: "Einsätze", ansichten: [
     { schluessel: "termine", label: "Termine" },
@@ -750,7 +740,7 @@ function Patient360Inhalt() {
 const ANSICHT_HAT_INHALT: Record<string, true> = {
   ueberblick: true, beziehungen: true, mandate: true, "interrai-hc": true, atl: true, anamnese: true,
   pflegeplan: true, vitalwerte: true, betreuungsrhythmus: true, unvertraeglichkeiten: true,
-  leistungsplanungsblatt: true, "verordnung-und-kostengutsprache": true,
+  leistungsplanungsblatt: true,
   pflegekontrolle: true, dokumente: true, pendenzen: true, verlauf: true, controlling: true,
   ordnerstruktur: true, pflichtluecken: true,
   stammdaten: true, vorgeschichte: true, diagnosen: true, pflegeberichte: true,
@@ -805,8 +795,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "vitalwerte": return <VitalzeichenAbschnitt patientId={patient.id} />;
     case "unvertraeglichkeiten": return <AllergienAbschnitt patientId={patient.id} />;
     case "betreuungsrhythmus": return <TabWorkflow patient={patient} />;
-    case "leistungsplanungsblatt": return <TabKLV patientId={patient.id} />;
-    case "verordnung-und-kostengutsprache": return <AnsichtVerordnung patient={patient} />;
+    case "leistungsplanungsblatt": return <TabKLV />;
     case "pflegekontrolle": return <AnsichtPflegekontrolle patient={patient} />;
     case "pflegeberichte": return <AnsichtPflegeberichte patient={patient} />;
     case "controlling": return <AnsichtControlling patient={patient} />;
@@ -2405,350 +2394,6 @@ function MandatBeendete({ mandate }: { mandate: Mandat[] }) {
   );
 }
 
-/* ══════════════════════════════════════════
-   ANSICHT: Leistungen › Verordnung und Kostengutsprache
-
-   Zwei datierte Ketten am Mandat: ärztliche Verordnungen und Kostengutsprachen
-   der Kasse. Eine Zeit ohne gültige Gutsprache steht als eigene rote Zeile an
-   ihrer chronologischen Stelle — nicht als Randnotiz, denn sie ist bei einer
-   Kontrolle die erste Frage.
-   ══════════════════════════════════════════ */
-function AnsichtVerordnung({ patient }: { patient: Patient }) {
-  const navigate = useNavigate();
-  const mandate = useMandate().filter(m => m.patientId === patient.id);
-  const aktivesMandat = mandate.find(m => istAktiv(m, MANDAT_STICHTAG)) ?? null;
-  const alleVo = useVerordnungen();
-  const alleKgs = useKostengutsprachen();
-
-  if (!aktivesMandat) {
-    return (
-      <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-6)" }}>
-        <h3 style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Verordnung und Kostengutsprache</h3>
-        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 6, maxWidth: 560 }}>
-          Beides hängt am Mandat. Ohne aktive Abrechnungsbeziehung gibt es
-          nichts zu verordnen und nichts zuzusichern.
-        </p>
-        <div style={{ marginTop: 14 }}>
-          <AppButton variant="sekundaer" onClick={() => navigate(ansichtPfad(patient.id, "mandate"))}>Zu den Mandaten</AppButton>
-        </div>
-      </div>
-    );
-  }
-
-  const vo = alleVo.filter(v => v.mandatId === aktivesMandat.id);
-  const kgs = alleKgs.filter(k => k.mandatId === aktivesMandat.id);
-  const luecke = offeneLuecke(kgs, MANDAT_STICHTAG);
-
-  return (
-    <div className="space-y-4">
-      {luecke && <LueckenWarnband luecke={luecke} />}
-      <KgsZeitachse kgs={kgs} mandat={aktivesMandat} hatVerordnung={vo.length > 0} />
-      <VoZeitachse verordnungen={vo} />
-    </div>
-  );
-}
-
-/* ── Abschnitt 1: Warnband, nur bei offener Lücke ──────────────────────────── */
-function LueckenWarnband({ luecke }: { luecke: Luecke }) {
-  return (
-    <div className="flex items-start" style={{ gap: 10, padding: "12px 14px", borderRadius: "var(--radius-card)", background: "var(--status-danger-bg)", border: "var(--border-thin) solid var(--status-danger)" }}>
-      <AlertTriangle style={{ width: 16, height: 16, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
-      <div className="flex-1 min-w-0">
-        <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--status-danger)" }}>
-          Seit {luecke.tage} Tagen ohne gültige Kostengutsprache
-        </div>
-        <div style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)", marginTop: 3 }}>
-          In dieser Zeit erbrachte Leistungen kann die Kasse bis zu fünf Jahre
-          rückwirkend zurückfordern — auch bei gültiger Verordnung.
-        </div>
-      </div>
-      <AppButton variant="sekundaer" icon={Plus}>Kostengutsprache einreichen</AppButton>
-    </div>
-  );
-}
-
-/* ── Abschnitt 2: Kostengutsprachen als Zeitachse ──────────────────────────── */
-
-/** Ein Eintrag der Zeitachse: entweder eine Gutsprache oder eine Lücke. */
-type KgsEintrag =
-  | { art: "kgs"; k: Kostengutsprache; version: number; sortAb: Date }
-  | { art: "luecke"; l: Luecke; sortAb: Date };
-
-function KgsZeitachse({ kgs, mandat, hatVerordnung }: {
-  kgs: Kostengutsprache[];
-  mandat: Mandat;
-  hatVerordnung: boolean;
-}) {
-  if (kgs.length === 0) {
-    return (
-      <PSectionCard title="Kostengutsprachen" icon={Shield}>
-        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", maxWidth: 560 }}>
-          {hatVerordnung
-            ? "Für dieses Mandat wurde noch keine Kostengutsprache eingereicht. Ohne Zusicherung der Kasse bleibt jede erbrachte Leistung rückforderbar."
-            : "Noch keine Kostengutsprache eingereicht."}
-        </p>
-        <div style={{ marginTop: 14 }}>
-          <AppButton variant="primaer" icon={Plus}>Kostengutsprache einreichen</AppButton>
-        </div>
-      </PSectionCard>
-    );
-  }
-
-  /* Version aus der zeitlichen Reihenfolge — kein gespeicherter Zähler. */
-  const chronologisch = [...kgs].sort((a, b) => {
-    const aa = ausAnzeigedatum(a.gueltigAb), bb = ausAnzeigedatum(b.gueltigAb);
-    return (aa?.getTime() ?? 0) - (bb?.getTime() ?? 0);
-  });
-  const version = new Map(chronologisch.map((k, i) => [k.id, i + 1]));
-
-  const eintraege: KgsEintrag[] = [
-    ...chronologisch.map(k => ({
-      art: "kgs" as const, k, version: version.get(k.id)!,
-      sortAb: ausAnzeigedatum(k.gueltigAb) ?? new Date(0),
-    })),
-    ...lueckenBerechnen(kgs, MANDAT_STICHTAG).map(l => ({ art: "luecke" as const, l, sortAb: l.von })),
-  ].sort((a, b) => b.sortAb.getTime() - a.sortAb.getTime()); // neueste zuerst
-
-  return (
-    <PSectionCard title="Kostengutsprachen" icon={Shield}>
-      <div className="flex flex-col" style={{ gap: 8 }}>
-        {eintraege.map(e => e.art === "luecke"
-          ? <LueckenZeile key={`l-${e.l.von.getTime()}`} luecke={e.l} />
-          : <KgsZeile key={e.k.id} k={e.k} version={e.version} mandat={mandat} />)}
-      </div>
-    </PSectionCard>
-  );
-}
-
-function LueckenZeile({ luecke }: { luecke: Luecke }) {
-  return (
-    <div style={{ padding: "10px 12px", borderRadius: 10, background: "var(--status-danger-bg)", border: "var(--border-thin) solid var(--status-danger)" }}>
-      <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
-        <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-danger)", flexShrink: 0 }} />
-        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--status-danger)" }}>
-          Lücke · {luecke.tage} {luecke.tage === 1 ? "Tag" : "Tage"}
-        </span>
-        <span style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)", fontVariantNumeric: "tabular-nums" }}>
-          {alsAnzeigedatum(luecke.von)} – {luecke.offen ? "offen" : alsAnzeigedatum(luecke.bis)}
-        </span>
-      </div>
-      <div style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)", marginTop: 3, marginLeft: 21 }}>
-        Ohne gültige Kostengutsprache sind erbrachte Leistungen rückforderbar.
-      </div>
-    </div>
-  );
-}
-
-function KgsZeile({ k, version, mandat }: { k: Kostengutsprache; version: number; mandat: Mandat }) {
-  const [bearbeitet, setBearbeitet] = useState(false);
-  const [entwurf, setEntwurf] = useState(k);
-  useEffect(() => { if (!bearbeitet) setEntwurf(k); }, [k, bearbeitet]);
-
-  const angezeigt = entscheidAnzeige(k, MANDAT_STICHTAG);
-  const aktiv = kgsDecktAm(k, MANDAT_STICHTAG, MANDAT_STICHTAG);
-  const seitEinreichung = tageSeitEinreichung(k, MANDAT_STICHTAG);
-  const bisAblauf = tageBisAblauf(k, MANDAT_STICHTAG);
-  const grundFehlt = v3GrundFehlt(entwurf);
-
-  const speichern = () => {
-    const { id: _i, mandatId: _m, ...felder } = entwurf;
-    aktualisiereKostengutsprache(k.id, felder);
-    setBearbeitet(false);
-  };
-  const setzeFeld = <K extends keyof Kostengutsprache>(f: K, v: Kostengutsprache[K]) =>
-    setEntwurf(e => ({ ...e, [f]: v }));
-
-  const marke = ENTSCHEID_MARKE[angezeigt] ?? ENTSCHEID_MARKE.ausstehend;
-
-  return (
-    <div style={{
-      padding: "12px 14px", borderRadius: 10,
-      background: aktiv ? "var(--bg-elevated)" : "transparent",
-      border: `var(--border-thin) solid ${aktiv ? "var(--brand-primary)" : "var(--border-default)"}`,
-    }}>
-      <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-          Version {version}
-        </span>
-        <span style={{ padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: marke.bg, color: marke.text }}>
-          {entscheidLabel(angezeigt)}
-        </span>
-        {aktiv && (
-          <span style={{ padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-success-bg)", color: "var(--status-success-text)" }}>
-            Gültig
-          </span>
-        )}
-        {bisAblauf !== null && (
-          <span className="inline-flex items-center" style={{ gap: 4, padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}>
-            <Clock style={{ width: 11, height: 11 }} /> Läuft ab in {bisAblauf} {bisAblauf === 1 ? "Tag" : "Tagen"}
-          </span>
-        )}
-        <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
-          {k.gueltigAb} – {k.gueltigBis || "offen"}
-        </span>
-        <button type="button" onClick={() => (bearbeitet ? speichern() : setBearbeitet(true))}
-          className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
-          {bearbeitet ? "Sichern" : "Bearbeiten"}
-        </button>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" style={{ gap: 12 }}>
-        <MandatFeld label="Versicherer" wert={getKrankenkasseLabel(mandat.versichererId)} />
-        <VoFeld label="Eingereicht am" wert={entwurf.eingereichtAm} bearbeitet={bearbeitet} onChange={v => setzeFeld("eingereichtAm", v)} />
-        <VoFeld label="Entscheid am" wert={entwurf.entscheidAm} bearbeitet={bearbeitet} onChange={v => setzeFeld("entscheidAm", v)} />
-        <VoFeld label="Gültig ab" wert={entwurf.gueltigAb} bearbeitet={bearbeitet} onChange={v => setzeFeld("gueltigAb", v)} />
-        <VoFeld label="Gültig bis" wert={entwurf.gueltigBis} bearbeitet={bearbeitet} onChange={v => setzeFeld("gueltigBis", v)} />
-        <VoFeld label="Minuten je Woche" wert={entwurf.bewilligteMinutenProWoche} bearbeitet={bearbeitet} onChange={v => setzeFeld("bewilligteMinutenProWoche", v)} />
-        <VoFeld label="Minuten je Tag" wert={entwurf.bewilligteMinutenProTag} bearbeitet={bearbeitet} onChange={v => setzeFeld("bewilligteMinutenProTag", v)} />
-        <VoFeld label="Einsatztage" wert={entwurf.bewilligteEinsatztage} bearbeitet={bearbeitet} onChange={v => setzeFeld("bewilligteEinsatztage", v)} />
-      </div>
-
-      {angezeigt === "ausstehend" && seitEinreichung !== null && (
-        <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 8 }}>
-          Seit {seitEinreichung} {seitEinreichung === 1 ? "Tag" : "Tagen"} eingereicht, noch kein Entscheid.
-        </div>
-      )}
-      {angezeigt === "stillschweigend_angenommen" && seitEinreichung !== null && (
-        <div style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginTop: 8 }}>
-          Seit {seitEinreichung} Tagen eingereicht, ohne Antwort der Kasse. Nach
-          vierzehn Tagen gilt das Blatt als angenommen — das Rückforderungsrisiko
-          bleibt bestehen, nur eine offizielle Kostengutsprache schliesst es.
-        </div>
-      )}
-      {(entwurf.kuerzungsgrund || grundFehlt) && (
-        <div style={{ marginTop: 8 }}>
-          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>
-            Kürzungsgrund{grundFehlt ? " *" : ""}
-          </div>
-          {bearbeitet ? (
-            <textarea value={entwurf.kuerzungsgrund} onChange={e => setzeFeld("kuerzungsgrund", e.target.value)} rows={2}
-              className="w-full outline-none"
-              style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", background: "var(--bg-elevated)", border: `var(--border-thin) solid ${grundFehlt ? "var(--status-danger)" : "var(--border-default)"}`, borderRadius: 8, padding: "6px 9px", fontFamily: "inherit", resize: "vertical" }} />
-          ) : (
-            <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", lineHeight: 1.45 }}>{entwurf.kuerzungsgrund}</div>
-          )}
-          {grundFehlt && (
-            <div style={{ fontSize: "var(--text-micro)", color: "var(--status-danger)", marginTop: 3 }}>
-              Bei Kürzung und Ablehnung ist der Grund erforderlich.
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Farbe der Entscheidmarke. Unbekannte Werte fallen auf „ausstehend". */
-const ENTSCHEID_MARKE: Record<string, { bg: string; text: string }> = {
-  ausstehend: { bg: "var(--bg-secondary)", text: "var(--text-secondary)" },
-  stillschweigend_angenommen: { bg: "var(--status-warning-bg)", text: "var(--status-warning-text)" },
-  bewilligt: { bg: "var(--status-success-bg)", text: "var(--status-success-text)" },
-  gekuerzt: { bg: "var(--status-warning-bg)", text: "var(--status-warning-text)" },
-  abgelehnt: { bg: "var(--status-danger-bg)", text: "var(--status-danger)" },
-};
-
-/* ── Abschnitt 3: ärztliche Verordnungen ───────────────────────────────────── */
-function VoZeitachse({ verordnungen }: { verordnungen: Verordnung[] }) {
-  if (verordnungen.length === 0) {
-    return (
-      <PSectionCard title="Ärztliche Verordnungen" icon={FileText}>
-        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", maxWidth: 560 }}>
-          Für dieses Mandat liegt keine ärztliche Verordnung vor. Ohne
-          Verordnung darf nicht abgerechnet werden.
-        </p>
-        <div style={{ marginTop: 14 }}>
-          <AppButton variant="primaer" icon={Plus}>Verordnung erfassen</AppButton>
-        </div>
-      </PSectionCard>
-    );
-  }
-
-  const neuesteZuerst = [...verordnungen].sort((a, b) =>
-    (ausAnzeigedatum(b.gueltigAb)?.getTime() ?? 0) - (ausAnzeigedatum(a.gueltigAb)?.getTime() ?? 0));
-
-  return (
-    <PSectionCard title="Ärztliche Verordnungen" icon={FileText}>
-      <div className="flex flex-col" style={{ gap: 8 }}>
-        {neuesteZuerst.map(v => (
-          <VoZeile key={v.id} v={v} alleDesMandats={verordnungen} />
-        ))}
-      </div>
-    </PSectionCard>
-  );
-}
-
-const VO_MARKE: Record<string, { bg: string; text: string; label: string }> = {
-  aktiv: { bg: "var(--status-success-bg)", text: "var(--status-success-text)", label: "Aktiv" },
-  ersetzt: { bg: "var(--bg-secondary)", text: "var(--text-secondary)", label: "Ersetzt" },
-  abgelaufen: { bg: "var(--bg-secondary)", text: "var(--text-tertiary)", label: "Abgelaufen" },
-};
-
-function VoZeile({ v, alleDesMandats }: { v: Verordnung; alleDesMandats: Verordnung[] }) {
-  const [bearbeitet, setBearbeitet] = useState(false);
-  const [entwurf, setEntwurf] = useState(v);
-  useEffect(() => { if (!bearbeitet) setEntwurf(v); }, [v, bearbeitet]);
-
-  const zustand = verordnungZustand(v, alleDesMandats, MANDAT_STICHTAG);
-  const marke = VO_MARKE[zustand] ?? VO_MARKE.abgelaufen;
-  const aktiv = zustand === "aktiv";
-
-  const speichern = () => {
-    const { id: _i, mandatId: _m, ...felder } = entwurf;
-    aktualisiereVerordnung(v.id, felder);
-    setBearbeitet(false);
-  };
-  const setzeFeld = <K extends keyof Verordnung>(f: K, w: Verordnung[K]) =>
-    setEntwurf(e => ({ ...e, [f]: w }));
-
-  return (
-    <div style={{
-      padding: "12px 14px", borderRadius: 10,
-      background: aktiv ? "var(--bg-elevated)" : "transparent",
-      border: `var(--border-thin) solid ${aktiv ? "var(--brand-primary)" : "var(--border-default)"}`,
-    }}>
-      <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-          {verordnungsartLabel(v.art)}
-        </span>
-        <span style={{ padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: marke.bg, color: marke.text }}>
-          {marke.label}
-        </span>
-        <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
-          {v.gueltigAb} – {v.gueltigBis || "unbefristet"}
-        </span>
-        <button type="button" onClick={() => (bearbeitet ? speichern() : setBearbeitet(true))}
-          className="ui-fokusring cursor-pointer" style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
-          {bearbeitet ? "Sichern" : "Bearbeiten"}
-        </button>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" style={{ gap: 12 }}>
-        <VoFeld label="Verordnende Ärztin" wert={entwurf.verordnendeAerztin} bearbeitet={bearbeitet} onChange={w => setzeFeld("verordnendeAerztin", w)} />
-        <VoFeld label="Ausstellungsdatum" wert={entwurf.ausstellungsdatum} bearbeitet={bearbeitet} onChange={w => setzeFeld("ausstellungsdatum", w)} />
-        <VoFeld label="Gültig ab" wert={entwurf.gueltigAb} bearbeitet={bearbeitet} onChange={w => setzeFeld("gueltigAb", w)} />
-        <VoFeld label="Gültig bis" wert={entwurf.gueltigBis} bearbeitet={bearbeitet} onChange={w => setzeFeld("gueltigBis", w)} />
-        <VoFeld label="Unterzeichnet am" wert={entwurf.unterzeichnetAm} bearbeitet={bearbeitet} onChange={w => setzeFeld("unterzeichnetAm", w)} />
-        <VoFeld label="Bemerkung" wert={entwurf.bemerkung} bearbeitet={bearbeitet} onChange={w => setzeFeld("bemerkung", w)} />
-      </div>
-    </div>
-  );
-}
-
-/** Kleines Feld der beiden Zeitachsen — lesen oder bearbeiten. */
-function VoFeld({ label, wert, bearbeitet, onChange }: {
-  label: string; wert: string; bearbeitet: boolean; onChange: (v: string) => void;
-}) {
-  return (
-    <div>
-      <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>{label}</div>
-      {bearbeitet ? (
-        <input value={wert} onChange={e => onChange(e.target.value)} className="w-full outline-none"
-          style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: 8, padding: "5px 8px", fontFamily: "inherit" }} />
-      ) : (
-        <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", minHeight: 19 }}>{wert}</div>
-      )}
-    </div>
-  );
-}
 
 /* ══════════════════════════════════════════
    ANSICHT: Einsätze › Pflegekontrolle
@@ -2810,10 +2455,11 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   const nav = useNavigate();
   const alleEinsaetze = useEinsaetze();
   const alleLeistungen = useErbrachteLeistungen();
-  const klvs = useKlvVerordnungen().filter(k => k.patientId === patient.id);
   const alleMandate = useMandate();
   const alleVerordnungen = useVerordnungen();
-  const blatt = [...klvs].filter(k => k.status !== "ersetzt").sort((a, b) => b.version - a.version)[0] || null;
+  /* Das Leistungsplanungsblatt ist abgerissen (Lauf 0b) — bis Lauf 6 gibt es
+     kein Tagessoll und keine Positionsauflösung; erbrachte Zeiten bleiben
+     sichtbar, ohne Urteil. */
   const [meldung, setMeldung] = useState("");
   /* Zeitraum als Jahr/Monat, nicht als Datum: die Schaltung bewegt sich in
      Monatsschritten, ein Tag im Zustand liesse Zwischenstände zu, die es nicht
@@ -2835,27 +2481,21 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
   const [erzeugtAm, setErzeugtAm] = useState(() => jetztAnzeige());
 
   const leistungenVon = (id: string) => alleLeistungen.filter(l => l.einsatzId === id);
-  const positionVon = (positionId: string) =>
-    blatt?.leistungspositionen.find(p => p.id === positionId) ?? null;
 
   /* Eine Rechnung für zwei Orte: dieselbe Funktion speist die Liste unter
      /kontrolle. Zwei Rechnungen liefen auseinander, und dann stünde dort eine
      andere Zahl als hier. */
   const k = monatsKennzahlen(patient.id, zeitraum.jahr, zeitraum.monat, {
     einsaetze: alleEinsaetze, leistungen: alleLeistungen,
-    klvs, mandate: alleMandate, verordnungen: alleVerordnungen,
+    mandate: alleMandate, verordnungen: alleVerordnungen,
   });
-  const { tage, muster, abrechnung, gemeldet, verordnung: gueltigeVerordnung, sollProTag } = k;
+  const { tage, muster, abrechnung, gemeldet, verordnung: gueltigeVerordnung } = k;
   /* Ist der Monat abgeschlossen, sind alle Schreibwege gesperrt — das steht
      im Kopf, damit niemand vergeblich auf „Bestätigen" drückt. */
   const alleAbschluesse = useAbschluesse();
   const abgeschlossen = alleAbschluesse.find(a =>
     a.patientId === patient.id && a.jahr === zeitraum.jahr && a.monat === zeitraum.monat) ?? null;
   const bilanz = abweichungNachRichtung(tage);
-
-  const positionen = blatt?.leistungspositionen ?? [];
-  const taeglicheIds = new Set(positionen.filter(istTaeglich).map(p => p.id));
-  const istTaeglichePosition = (id: string) => taeglicheIds.has(id);
 
   const tagVon = (datum: string) => tage.find(t => t.datum === datum) ?? null;
   const gewaehlt = gewaehlterTag ? tagVon(gewaehlterTag) : null;
@@ -2905,8 +2545,10 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
      Jeder Satz zählt etwas ab, das im Kalender darüber sichtbar ist. Nichts
      wird geschätzt, nichts geraten, und kein Berichtsinhalt wird gelesen —
      Anna sagt, was zu prüfen ist, nicht was jemand geschrieben hat. */
+  /* Ohne Blatt gibt es kein Soll — die abzählenden Sätze zu Abweichungen
+     entfallen bis Lauf 6; der Berichtssatz bleibt, er braucht kein Soll. */
   const einordnung: string[] = [];
-  if (blatt) {
+  {
     if (muster.wochentag !== null && muster.tage.length >= 2) {
       einordnung.push(`Alle ${anzahlWort(muster.tage.length)} Tage ohne Erfassung fallen auf einen ${WOCHENTAGE_LANG[muster.wochentag]} — zusammen ${min(bilanz.ausgefallen)}. Das ist ein Muster, keine Reihe von Zufällen.`);
     } else if (muster.tage.length > 0) {
@@ -2950,7 +2592,7 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
             </button>
           </div>
           <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-            {blatt ? `Tagessoll ${min(sollProTag)} · Blatt ${blatt.id} · V${blatt.version}` : "Kein aktives Blatt"}
+            Kein Leistungsplanungsblatt — das Tagessoll folgt mit dem neuen Pflegeplan-Modul
           </span>
           {/* Der Abschluss geschieht auf dem Monatsabschluss über alle
               Patienten — dort steht, ob der Monat überhaupt reif ist, und
@@ -3002,7 +2644,7 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
       <PSectionCard title="Monat im Überblick" icon={Clock}>
         <Monatskalender
           tage={tage} jahr={zeitraum.jahr} monat={zeitraum.monat}
-          gewaehlt={gewaehlterTag} hatSoll={!!blatt}
+          gewaehlt={gewaehlterTag} hatSoll={false}
           onWaehlen={d => setGewaehlterTag(v => (v === d ? null : d))}
         />
       </PSectionCard>
@@ -3015,8 +2657,8 @@ function AnsichtPflegekontrolle({ patient }: { patient: Patient }) {
         <Tagesansicht
           gesperrt={abgeschlossen !== null}
           tag={gewaehlt} monat={zeitraum.monat}
-          positionVon={positionVon} leistungenVon={leistungenVon}
-          hatSoll={!!blatt} istTaeglichePosition={istTaeglichePosition}
+          leistungenVon={leistungenVon}
+          hatSoll={false}
           vorheriger={nachbartag(-1)} naechster={nachbartag(1)}
           onBlaettern={setGewaehlterTag}
           onSchliessen={() => setGewaehlterTag(null)}
@@ -4340,7 +3982,6 @@ function AnsichtPflegeberichte({ patient }: { patient: Patient }) {
   const nav = useNavigate();
   const einsaetze = useEinsaetze();
   const leistungen = useErbrachteLeistungen();
-  const klvs = useKlvVerordnungen();
   const mandate = useMandate();
   const verordnungen = useVerordnungen();
   const [monate, setMonate] = useState(3);
@@ -4355,7 +3996,7 @@ function AnsichtPflegeberichte({ patient }: { patient: Patient }) {
   const ende = (austritt && austrittsMonat(austritt))
     ?? { jahr: EINSATZ_BEZUGSMONAT.getFullYear(), monat: EINSATZ_BEZUGSMONAT.getMonth() };
   const zeitraum = zeitraumMonate(ende.jahr, ende.monat, monate);
-  const quellen = { einsaetze, leistungen, klvs, mandate, verordnungen };
+  const quellen = { einsaetze, leistungen, mandate, verordnungen };
   /* Dieselbe Rechnung wie in Pflegekontrolle, Überblick und Controlling —
      die Abweichung eines Tages stammt nicht aus einer zweiten Quelle. */
   const jeMonat = zeitraum.monate.map(m => monatsKennzahlen(patient.id, m.jahr, m.monat, quellen));
@@ -4668,7 +4309,6 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
   const nav = useNavigate();
   const einsaetze = useEinsaetze();
   const leistungen = useErbrachteLeistungen();
-  const klvs = useKlvVerordnungen();
   const mandate = useMandate();
   const verordnungen = useVerordnungen();
   const kgs = useKostengutsprachen();
@@ -4684,12 +4324,10 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
     ?? { jahr: EINSATZ_BEZUGSMONAT.getFullYear(), monat: EINSATZ_BEZUGSMONAT.getMonth() };
   const zeitraum: Zeitraum = zeitraumMonate(ende.jahr, ende.monat, monate);
   const mandatIds = mandate.filter(m => m.patientId === patient.id).map(m => m.id);
-  const blatt = [...klvs].filter(k => k.patientId === patient.id && k.status !== "ersetzt")
-    .sort((a, b) => b.version - a.version)[0] ?? null;
 
   /* Eine Rechnung, drei Orte: dieselbe Funktion speist Pflegekontrolle,
      Überblick und diese Ansicht. */
-  const quellen = { einsaetze, leistungen, klvs, mandate, verordnungen };
+  const quellen = { einsaetze, leistungen, mandate, verordnungen };
   const jeMonat = zeitraum.monate.map(m => monatsKennzahlen(patient.id, m.jahr, m.monat, quellen));
 
   /* Über wen wurde im Zeitraum abgerechnet? Die Einsätze sagen es — sie
@@ -4717,7 +4355,7 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
   };
 
   const zeilen = pruefbereitschaft({
-    patientId: patient.id, zeitraum, blatt,
+    patientId: patient.id, zeitraum,
     verordnungen: verordnungen.filter(v => mandatIds.includes(v.mandatId)),
     kostengutsprachen: kgs.filter(k => mandatIds.includes(k.mandatId)),
     // Kein Pflegeplan mehr im Bestand — der Zustand «null = kein Pflegeplan»
@@ -4730,25 +4368,9 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
     },
   });
 
-  /* ── Teil 2: Massnahme gegen Dokumentation ──
-     Erwartete Anzahl im Zeitraum aus der verordneten Häufigkeit; erbrachte
-     aus den erfassten Leistungen. */
-  const positionen = (blatt?.leistungspositionen ?? []).filter(istPeriodisch);
-  const alleLeistungen = jeMonat.flatMap(k => k.tage).flatMap(t => t.einsaetze)
-    .filter(e => e.zustand === "erbracht")
-    .flatMap(e => leistungen.filter(l => l.einsatzId === e.id && l.erbracht));
-  const abgleich = positionen.map(pos => {
-    const erwartet = zeitraum.monate.reduce(
-      (s, m) => s + erwarteteAnzahlImMonat(pos, new Date(m.jahr, m.monat + 1, 0).getDate()), 0);
-    const erbracht = alleLeistungen.filter(l => l.positionId === pos.id).length;
-    return { pos, erwartet, erbracht, fehlend: Math.max(0, erwartet - erbracht) };
-  });
-  const einsaetzeImZeitraum = jeMonat.reduce((s, k) => s + k.einsaetzeGesamt, 0);
-  const leereMonate = jeMonat
-    .map((k, i) => ({ k, m: zeitraum.monate[i] }))
-    .filter(x => x.k.einsaetzeGesamt === 0)
-    .map(x => `${MONATE[x.m.monat]} ${x.m.jahr}`);
-
+  /* Teil 2 (Massnahme gegen Dokumentation) braucht die verordneten
+     Häufigkeiten des Blattes — mit dem LPB-Modul abgerissen (Lauf 0b);
+     der Abschnitt zeigt bis Lauf 6 seinen Leertext. */
   const vollstaendig = zaehleVollstaendig(zeilen);
   const farbe = (z: Zustand) => z === "vollstaendig"
     ? { bg: "var(--status-success-bg)", fg: "var(--status-success-text)", text: "vollständig" }
@@ -4756,17 +4378,14 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
       ? { bg: "var(--status-warning-bg)", fg: "var(--status-warning-text)", text: "lückenhaft" }
       : { bg: "var(--status-danger-bg)", fg: "var(--status-danger)", text: "fehlt" };
 
-  /* Ohne Mandat oder ohne Blatt fehlt die Abrechnungsgrundlage — dann sieben
-     rote Zeilen zu zeigen, behauptete Versäumnisse, wo nur nichts angelegt
-     ist. Eine Kasse prüft, was abgerechnet wurde; ohne Grundlage wurde
-     nichts abgerechnet. */
-  if (mandatIds.length === 0 || !blatt) {
+  /* Ohne Mandat fehlt die Abrechnungsgrundlage — dann sieben rote Zeilen zu
+     zeigen, behauptete Versäumnisse, wo nur nichts angelegt ist. Eine Kasse
+     prüft, was abgerechnet wurde; ohne Grundlage wurde nichts abgerechnet. */
+  if (mandatIds.length === 0) {
     return (
       <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "16px 18px" }}>
         <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch", lineHeight: 1.6 }}>
-          {mandatIds.length === 0
-            ? "Für diesen Patienten besteht kein Mandat. "
-            : "Für diesen Patienten besteht kein aktives Leistungsplanungsblatt. "}
+          Für diesen Patienten besteht kein Mandat.
           Ohne Abrechnungsgrundlage gibt es nichts, was eine Kasse prüfen könnte — und nichts, was
           hier als fehlend zu melden wäre.
         </p>
@@ -4852,50 +4471,10 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
           Zeitraum, nicht der einzelne Tag — das Blatt verordnet Häufigkeiten und keinen
           Wochentagsplan.
         </p>
-        {!blatt ? (
-          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0 }}>
-            Kein aktives Leistungsplanungsblatt — es gibt keine verordnete Position, gegen die sich
-            etwas abgleichen liesse.
-          </p>
-        ) : einsaetzeImZeitraum === 0 ? (
-          <p style={{ fontSize: "var(--text-small)", color: "var(--status-warning-text)", margin: 0, maxWidth: "74ch" }}>
-            Im Zeitraum ist kein einziger Einsatz erfasst. Damit ist keine der {positionen.length} verordneten
-            Positionen dokumentiert — das ist ein Befund über die Erfassung, nicht über einzelne Positionen.
-          </p>
-        ) : (
-          <div className="flex flex-col" style={{ gap: 2 }}>
-            {/* Monate ganz ohne Erfassung erklären die Unterschreitungen
-                darunter — ohne diesen Satz läse sich jede Zeile als Lücke in
-                der einzelnen Position statt als fehlende Erfassung. */}
-            {leereMonate.length > 0 && (
-              <p style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", margin: "0 0 10px", maxWidth: "74ch", lineHeight: 1.55 }}>
-                In {leereMonate.join(", ")} ist kein Einsatz erfasst. Die Unterschreitungen unten
-                folgen daraus und betreffen nicht die einzelne Position.
-              </p>
-            )}
-            <div className="flex items-baseline" style={{ gap: 10, paddingBottom: 5 }}>
-              <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-micro)", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Position</span>
-              <span style={{ width: 92, textAlign: "right", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Verordnet</span>
-              <span style={{ width: 68, textAlign: "right", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Erwartet</span>
-              <span style={{ width: 68, textAlign: "right", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Erbracht</span>
-              <span style={{ width: 140, fontSize: "var(--text-micro)", color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Zustand</span>
-            </div>
-            {abgleich.map(a => (
-              <div key={a.pos.id} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "7px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
-                <span style={{ flex: 1, minWidth: 200, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
-                  <span style={{ color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums", marginRight: 7 }}>{a.pos.klvNummer}</span>
-                  {a.pos.bezeichnung}
-                </span>
-                <span style={{ width: 92, textAlign: "right", fontSize: "var(--text-meta)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{haeufigkeitText(a.pos)}</span>
-                <span style={{ width: 68, textAlign: "right", fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums", color: "var(--text-secondary)" }}>{a.erwartet}</span>
-                <span style={{ width: 68, textAlign: "right", fontSize: "var(--text-small)", fontVariantNumeric: "tabular-nums" }}>{a.erbracht}</span>
-                <span style={{ width: 140, fontSize: "var(--text-meta)", color: a.fehlend > 0 ? "var(--status-warning-text)" : "var(--status-success-text)", whiteSpace: "nowrap" }}>
-                  {a.fehlend > 0 ? `unterschritten um ${a.fehlend}` : "gedeckt"}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0 }}>
+          Kein Leistungsplanungsblatt — es gibt keine verordnete Position, gegen die sich
+          etwas abgleichen liesse. Der Abgleich kommt mit dem neuen Pflegeplan-Modul zurück.
+        </p>
       </PSectionCard>
 
       {/* ── Teil 3: Was nicht beurteilbar ist ── */}
@@ -4923,7 +4502,6 @@ function AnnaLagebild({ patient }: { patient: Patient }) {
   const nav = useNavigate();
   const einsaetze = useEinsaetze();
   const leistungen = useErbrachteLeistungen();
-  const klvs = useKlvVerordnungen();
   const mandate = useMandate();
   const verordnungen = useVerordnungen();
   const kgs = useKostengutsprachen();
@@ -4933,7 +4511,7 @@ function AnnaLagebild({ patient }: { patient: Patient }) {
   const monat = { jahr: EINSATZ_BEZUGSMONAT.getFullYear(), monat: EINSATZ_BEZUGSMONAT.getMonth() };
   const mandatIds = mandate.filter(m => m.patientId === patient.id).map(m => m.id);
   const kennzahlen = monatsKennzahlen(patient.id, monat.jahr, monat.monat, {
-    einsaetze, leistungen, klvs, mandate, verordnungen,
+    einsaetze, leistungen, mandate, verordnungen,
   });
   /* Pendenzen der Person aus dem gemeinsamen Bestand — dieselbe Quelle, die
      der Service Desk liest. */
@@ -4949,7 +4527,7 @@ function AnnaLagebild({ patient }: { patient: Patient }) {
   };
 
   const befunde = lagebild({
-    patientId: patient.id, klvs, kostengutsprachen: kgs, mandatIds,
+    patientId: patient.id, kostengutsprachen: kgs, mandatIds,
     kennzahlen, monat, pendenzen, stichtag: MANDAT_STICHTAG,
     austritt: austrittVon(patient),
   });
@@ -5655,17 +5233,15 @@ function Tageskachel({ tag: t, monat, hatSoll, gewaehlt, onWaehlen }: {
  * der Bericht braucht eine Zeilenlänge, in der er lesbar bleibt.
  */
 function Tagesansicht({
-  tag, monat, positionVon, leistungenVon, hatSoll, istTaeglichePosition, gesperrt,
+  tag, monat, leistungenVon, hatSoll, gesperrt,
   vorheriger, naechster, onBlaettern, onSchliessen,
   onBestaetigen, onRueckfrage, onBericht,
 }: {
   tag: Monatstag; monat: number;
   /** Monat abgeschlossen — dann wird nichts mehr angeboten, was nicht ginge. */
   gesperrt: boolean;
-  positionVon: (id: string) => KLVLeistung | null;
   leistungenVon: (id: string) => ErbrachteLeistung[];
   hatSoll: boolean;
-  istTaeglichePosition: (positionId: string) => boolean;
   vorheriger: Monatstag | null; naechster: Monatstag | null;
   onBlaettern: (datum: string) => void;
   onSchliessen: () => void;
@@ -5782,29 +5358,20 @@ function Tagesansicht({
             <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>Verordnete Leistungen</div>
             <div className="flex flex-col" style={{ gap: 6 }}>
               {tag.einsaetze.flatMap(e => leistungenVon(e.id)).map(l => {
-                const pos = positionVon(l.positionId);
-                const taeglich = istTaeglichePosition(l.positionId);
+                /* Ohne Blatt keine Positionsauflösung — angezeigt wird die
+                   erfasste Positionsnummer; Bezeichnung und Häufigkeit kommen
+                   mit dem neuen Modul zurück (Lauf 6). */
                 return (
                   <div key={l.id}>
                     <div className="flex items-baseline" style={{ gap: 8 }}>
                       <span style={{ flex: 1, minWidth: 0, fontSize: "var(--text-meta)", color: l.erbracht ? "var(--text-primary)" : "var(--text-tertiary)" }}>
-                        {pos ? pos.bezeichnung : l.positionId}
+                        {l.positionId}
                       </span>
-                      {!taeglich && pos && (
-                        <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
-                          periodisch · {haeufigkeitText(pos)}
-                        </span>
-                      )}
                       <span style={{ fontSize: "var(--text-meta)", whiteSpace: "nowrap",
                         color: l.erbracht ? "var(--status-success-text)" : "var(--status-warning-text)" }}>
                         {l.erbracht ? "erbracht" : "nicht erbracht"}
                       </span>
                     </div>
-                    {!l.erbracht && pos && (
-                      <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
-                        {pos.anzahl * pos.zeitMin} Min. verordnet
-                      </div>
-                    )}
                     {l.grund.trim() && (
                       <div style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)", marginTop: 3, maxWidth: 560 }}>{l.grund}</div>
                     )}
@@ -6223,368 +5790,23 @@ function TabPflegeplanung() {
   );
 }
 
-/* ══════════════════════════════════════════
-   TAB: KLV-VERORDNUNG
-   ══════════════════════════════════════════ */
 
 /* ══════════════════════════════════════════
-   Kopf des Leistungsplanungsblatts — Zustandskette, Wartezeit, Sperre.
-
-   Zwei der Zustände warten auf jemanden ausserhalb des Hauses. Wie lange
-   schon, steht im Protokoll: der Zeitpunkt des Wechsels IN diesen Zustand.
+   TAB: LEISTUNGSPLANUNGSBLATT — Leerzustand
+   Das KLV-/LPB-Modul ist abgerissen (Lauf 0b); das Fachmodell ist in
+   docs/lpb-fachmodell.md gesichert. Der Neubau kommt in Lauf 6 aus dem
+   Pflegeplan-Vertrag. Kein Start-Knopf — die Arbeitsfläche existiert nicht.
    ══════════════════════════════════════════ */
-
-const WARTET_AUF: Record<string, string> = { arzt: "der Ärztin", kasse: "der Kasse" };
-
-function LpbKopf({ v, onNeueVersion }: { v: KLVVerordnung; onNeueVersion: () => void }) {
-  const gesperrt = istGesperrt(v);
-  const naechster = lpbNaechster(v.status);
-  const amZug = lpbAmZug(v.status);
-  const tage = wartetSeitTagen(v, gegenwart());
-  const [meldung, setMeldung] = useState("");
-
-  const weiter = () => {
-    if (!naechster) return;
-    const grund = statusWechseln(v.id, naechster, "Maria Keller", jetztAnzeige());
-    setMeldung(grund);
-    if (!grund) toast(`Zustand: ${lpbStatusLabel(naechster)}`);
-  };
-
+function TabKLV() {
   return (
-    <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "14px 18px", marginBottom: 16 }}>
-      <div className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: 12 }}>
-        <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-          Version {v.version}
-        </span>
-        <span style={{ padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--bg-secondary)", color: "var(--text-secondary)" }}>
-          {v.art === "erst" ? "Erstabklärung" : "Folgeabklärung"}
-        </span>
-        <span style={{ padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--brand-primary-light)", color: "var(--brand-primary)" }}>
-          {lpbStatusLabel(v.status)}
-        </span>
-        {(amZug === "arzt" || amZug === "kasse") && tage !== null && (
-          <span className="inline-flex items-center" style={{ gap: 4, padding: "1px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-warning-bg)", color: "var(--status-warning-text)" }}>
-            <Clock style={{ width: 11, height: 11 }} />
-            Seit {tage} {tage === 1 ? "Tag" : "Tagen"} bei {WARTET_AUF[amZug]}
-          </span>
-        )}
-        <span style={{ marginLeft: "auto", fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
-          {v.beginnDatum || "—"} – {v.endDatum || "offen"}
-        </span>
+    <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+      <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
+        Das Leistungsplanungsblatt wird neu gebaut
       </div>
-
-      {/* Zustandskette */}
-      <div className="flex items-center overflow-x-auto" style={{ gap: 0, marginBottom: gesperrt || naechster ? 12 : 0 }}>
-        {LPB_ABLAUF.map((step, i) => {
-          const ist = v.status === step.code;
-          const vorbei = lpbRang(v.status) > i;
-          return (
-            <div key={step.code} className="flex items-center shrink-0">
-              {i > 0 && <div style={{ width: 16, height: 2, background: vorbei ? "var(--brand-primary)" : "var(--border-default)" }} />}
-              <div className="flex flex-col items-center" style={{ gap: 3, minWidth: 64 }}>
-                <div style={{ width: 18, height: 18, borderRadius: "var(--radius-pill)", background: vorbei || ist ? "var(--brand-primary)" : "var(--bg-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {(vorbei || ist) && <Check style={{ width: 10, height: 10, color: "var(--text-on-dark)" }} />}
-                </div>
-                <span style={{ fontSize: 9, color: ist ? "var(--brand-primary)" : "var(--text-tertiary)", fontWeight: ist ? "var(--weight-medium)" : "var(--weight-regular)", textAlign: "center" }}>{step.label}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {gesperrt && (
-        <div className="flex items-start" style={{ gap: 8, padding: "10px 12px", borderRadius: 10, background: "var(--status-warning-bg)", marginBottom: naechster ? 10 : 0 }}>
-          <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
-          <span className="flex-1" style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>{sperrGrund(v)}</span>
-          <AppButton variant="sekundaer" icon={Plus} onClick={onNeueVersion}>Neue Version erstellen</AppButton>
-        </div>
-      )}
-      {/* Der Zustand läuft weiter, auch wenn der Inhalt gesperrt ist — sonst
-          liesse sich der Entscheid der Kasse nie eintragen. */}
-      {naechster && (
-        <div className="flex items-center flex-wrap" style={{ gap: 10 }}>
-          <AppButton variant="sekundaer" onClick={weiter}>Weiter zu „{lpbStatusLabel(naechster)}“</AppButton>
-          {meldung && <span style={{ fontSize: "var(--text-meta)", color: "var(--status-danger)" }}>{meldung}</span>}
-        </div>
-      )}
-
-      {v.statusProtokoll.length > 0 && (
-        <div style={{ marginTop: 12, paddingTop: 10, borderTop: "var(--border-thin) solid var(--border-default)" }}>
-          <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1" style={{ fontWeight: 500 }}>Protokoll</div>
-          <div className="flex flex-col" style={{ gap: 3 }}>
-            {v.statusProtokoll.map((e, i) => (
-              <div key={i} style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-                {lpbStatusLabel(e.status)} · {e.person} · {e.zeitpunkt}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ══════════════════════════════════════════
-   Abgleich geplant gegen bewilligt.
-
-   Das Blatt wird bei einer Kürzung NICHT angepasst — die Differenz bleibt
-   stehen und sichtbar. Wer anpasst, erzeugt eine neue Version.
-   ══════════════════════════════════════════ */
-function LpbAbgleich({ v }: { v: KLVVerordnung }) {
-  const kgs = useKostengutsprachen();
-  const a = abgleichen(v, kgs, MANDAT_STICHTAG);
-
-  const zeile = (label: string, wert: string, betont = false, farbe?: string) => (
-    <div className="flex items-center justify-between" style={{ padding: "6px 0" }}>
-      <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{label}</span>
-      <span style={{ fontSize: "var(--text-small)", fontWeight: betont ? "var(--weight-medium)" : "var(--weight-regular)", fontVariantNumeric: "tabular-nums", color: farbe ?? "var(--text-primary)" }}>{wert}</span>
-    </div>
-  );
-
-  return (
-    <PSectionCard title="Geplant gegen bewilligt" icon={Shield}>
-      {a.lage === "keine" || a.lage === "abgelaufen" ? (
-        <>
-          {zeile("Geplant", stunden(a.geplant), true)}
-          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 8, maxWidth: 560 }}>
-            {a.lage === "abgelaufen"
-              ? `Die Kostengutsprache dieses Mandats war bis ${a.abgelaufenAm} gültig. Ohne gültige Zusicherung gibt es keine bewilligte Menge — verglichen wird deshalb nichts.`
-              : "Für dieses Mandat besteht keine gültige Kostengutsprache mit bewilligter Menge. Verglichen wird deshalb nichts."}
-          </p>
-        </>
-      ) : (
-        <>
-          {zeile("Geplant", stunden(a.geplant), true)}
-          {zeile("Bewilligt", stunden(a.bewilligt!), true)}
-          <div style={{ borderTop: "var(--border-thin) solid var(--border-default)", marginTop: 4 }} />
-          {zeile(
-            "Differenz",
-            `${a.differenz! >= 0 ? "+" : "−"}${Math.abs(a.differenz!).toFixed(2)} h/Wo.`,
-            true,
-            a.lage === "ueber" ? "var(--status-warning-text)" : "var(--text-primary)",
-          )}
-          {a.lage === "ueber" && (
-            <div className="flex items-start" style={{ gap: 8, marginTop: 8, padding: "10px 12px", borderRadius: 10, background: "var(--status-warning-bg)" }}>
-              <AlertTriangle style={{ width: 14, height: 14, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 1 }} />
-              <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
-                Das Blatt plant {Math.abs(a.differenz!).toFixed(2)} h/Wo. mehr, als die Kasse bewilligt hat. Diese Zeit zahlt niemand. Das Blatt wird deshalb nicht angepasst — wer es anpasst, erzeugt eine neue Version.
-              </span>
-            </div>
-          )}
-        </>
-      )}
-    </PSectionCard>
-  );
-}
-
-function TabKLV({ patientId }: { patientId: string }) {
-  const navigate = useNavigate();
-  const klvs = useKlvVerordnungen().filter(k => k.patientId === patientId);
-  /* Aktiv ist die nicht ersetzte Fassung mit der höchsten Version. */
-  const current = [...klvs].filter(k => k.status !== "ersetzt").sort((a, b) => b.version - a.version)[0] || klvs[0];
-  const daysUntil = current?.endDatum ? (() => { const [d, m, y] = current.endDatum!.split("."); return Math.round((new Date(+y, +m - 1, +d).getTime() - GEGENWART.getTime()) / 86400000); })() : null;
-  const katBg = (k: string) => k === "a" ? "var(--status-info-bg)" : k === "b" ? "var(--status-warning-bg)" : "var(--status-success-bg)";
-  const katColor = (k: string) => k === "a" ? "var(--status-info)" : k === "b" ? "var(--status-warning-text)" : "var(--status-success-text)";
-  type KlvPos = NonNullable<typeof current>["leistungspositionen"][number];
-  const [klvSort, setKlvSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
-  const klvToggle = (key: string) => setKlvSort(s => s?.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
-  const sortKlv = (list: KlvPos[], key: string, dir: "asc" | "desc") => {
-    const f = dir === "asc" ? 1 : -1;
-    return [...list].sort((a, b) => {
-      switch (key) {
-        case "kat": return f * a.kategorie.localeCompare(b.kategorie, "de");
-        case "nr": return f * a.klvNummer.localeCompare(b.klvNummer, "de");
-        case "bezeichnung": return f * a.bezeichnung.localeCompare(b.bezeichnung, "de");
-        case "min": return f * (a.zeitMin - b.zeitMin);
-        case "haeufigkeit": return f * (a.anzahl - b.anzahl);
-        case "hwo": return f * (hProWoche(a) - hProWoche(b));
-        default: return 0;
-      }
-    });
-  };
-  const klvSpalten: SpalteDef<KlvPos>[] = [
-    { id: "kat", label: "Kat.", minCh: 4, maxSpur: "5ch", align: "left", sortierbar: true, ausKarte: true,
-      render: lp => <span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: katBg(lp.kategorie), color: katColor(lp.kategorie) }}>{lp.kategorie}</span> },
-    { id: "nr", label: "Nr.", minCh: 5, maxSpur: "8ch", align: "left", sortierbar: true,
-      render: lp => <span style={{ fontFamily: "monospace", fontSize: "var(--text-small)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>{lp.klvNummer}</span> },
-    { id: "bezeichnung", label: "Bezeichnung", minCh: 12, maxSpur: "56ch", align: "left", sortierbar: true, ausKarte: true,
-      render: lp => <span style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{lp.bezeichnung}</span> },
-    { id: "min", label: "Min.", minCh: 5, maxSpur: "6ch", align: "right", sortierbar: true, abwerfRang: 2,
-      render: lp => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>{lp.zeitMin}′</span> },
-    { id: "haeufigkeit", label: "Häufigkeit", minCh: 10, maxSpur: "14ch", align: "left", sortierbar: true, abwerfRang: 1,
-      render: lp => <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{lp.anzahl}× {einheitLabel(lp.einheit)}</span> },
-    { id: "hwo", label: "h/Wo.", minCh: 5, maxSpur: "6ch", align: "right", sortierbar: true,
-      render: lp => <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", fontVariantNumeric: "tabular-nums" }}>{hProWoche(lp).toFixed(2)}</span> },
-  ];
-
-  const deleteKLV = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    verordnungEntfernen(id);
-    toast("KLV-Entwurf gelöscht");
-  };
-
-  const [showNeueKLV, setShowNeueKLV] = useState(false);
-  const [neuBeginn, setNeuBeginn] = useState("");
-  const [neuEnde, setNeuEnde] = useState("");
-  const [neuVorlage, setNeuVorlage] = useState(true);
-
-  const handleCreateKLV = () => {
-    const newId = `KLV-${Date.now()}`;
-    const patientName = current?.patientName || klvs[0]?.patientName || "Patient";
-    const heute = formatAnzeige(gegenwart());
-
-    // Format dates from ISO to dd.mm.yyyy for display
-    const formatDate = (iso: string) => { if (!iso) return null; const [y, m, d] = iso.split("-"); return `${d}.${m}.${y}`; };
-
-    const neueKLV: KLVVerordnung = {
-      id: newId,
-      onboardingId: null,
-      patientId,
-      // Der Bestand setzt das aktive Mandat des Patienten ein.
-      mandatId: null,
-      patientName,
-      status: "entwurf",
-      version: klvs.reduce((m, k) => Math.max(m, k.version), 0) + 1,
-      art: klvs.length === 0 ? "erst" : "folge",
-      statusProtokoll: [{ status: "entwurf", person: "Maria Keller", zeitpunkt: jetztAnzeige() }],
-      erstelltVon: "Maria Keller",
-      erstellDatum: heute,
-      beginnDatum: neuBeginn ? formatDate(neuBeginn) : null,
-      endDatum: neuEnde ? formatDate(neuEnde) : null,
-      diagnosen: current && neuVorlage ? current.diagnosen.map(d => ({ ...d, id: `${d.id}-${newId}` })) : [],
-      leistungspositionen: current && neuVorlage
-        ? current.leistungspositionen.map(lp => ({ ...lp, id: `${lp.id}-${newId}`, validiert: false }))
-        : [],
-      zielformulierungen: current && neuVorlage ? [...current.zielformulierungen] : [],
-      arztAngeordnetAm: null,
-      krankenkasseGutspracheAm: null,
-      ablehnungsgrund: null,
-    };
-
-    // Push into the shared mock array so KLVArbeitsbereich can find it
-    verordnungAnlegen(neueKLV);
-
-    const leistungenText = neuVorlage && current ? ` — ${neueKLV.leistungspositionen.length} Leistungen übernommen` : "";
-    toast(`Neue KLV erstellt${leistungenText}`);
-    setShowNeueKLV(false);
-    setNeuBeginn("");
-    setNeuEnde("");
-
-    // Navigate to the new KLV Arbeitsbereich
-    navigate(`/klv/${newId}`);
-  };
-
-  return (
-    <div>
-      {current ? (
-        <>
-          <div className="flex items-center justify-between flex-wrap" style={{ gap: 8, marginBottom: 16 }}>
-            <div>
-              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Aktuelle KLV vom {current.erstellDatum}</div>
-              {current.onboardingId && <div style={{ fontSize: "var(--text-micro)", color: "var(--status-info)", marginTop: 2 }}>aus Onboarding</div>}
-            </div>
-            <div className="flex items-center" style={{ gap: 8 }}>
-              <button onClick={() => navigate(`/klv/${current.id}`)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "8px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>KLV-Arbeitsbereich öffnen</button>
-              <AppButton variant="primaer" icon={Plus} onClick={() => setShowNeueKLV(true)}>Neue KLV</AppButton>
-            </div>
-          </div>
-
-          {/* Neue KLV erstellen — inline dialog */}
-          {showNeueKLV && (
-            <div style={{ padding: "16px 20px", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--brand-primary)", borderRadius: "var(--radius-card)", marginBottom: 16 }}>
-              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12 }}>Neue KLV-Verordnung erstellen</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Beginn</label>
-                  <input type="date" value={neuBeginn} onChange={e => setNeuBeginn(e.target.value)} style={{ width: "100%", padding: "8px 12px", fontSize: "var(--text-small)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Ende</label>
-                  <input type="date" value={neuEnde} onChange={e => setNeuEnde(e.target.value)} style={{ width: "100%", padding: "8px 12px", fontSize: "var(--text-small)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
-                </div>
-              </div>
-              {current && (
-                <label className="flex items-center cursor-pointer" style={{ gap: 8, fontSize: "var(--text-small)", color: "var(--text-primary)", marginBottom: 12 }}>
-                  <input type="checkbox" checked={neuVorlage} onChange={e => setNeuVorlage(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--brand-primary)" }} />
-                  Leistungen aus aktueller KLV ({current.leistungspositionen.length} Positionen, {berechneSummen(current.leistungspositionen).total.toFixed(2)} h/Wo.) übernehmen
-                </label>
-              )}
-              <div className="flex items-center" style={{ gap: 8 }}>
-                <AppButton variant="primaer" icon={Plus} onClick={handleCreateKLV}>KLV erstellen</AppButton>
-                <button onClick={() => setShowNeueKLV(false)} className="cursor-pointer" style={{ padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Abbrechen</button>
-              </div>
-            </div>
-          )}
-          <LpbKopf v={current} onNeueVersion={() => {
-            const neu = neueVersionErstellen(current.id, "Maria Keller", jetztAnzeige());
-            if (neu) toast(`Version ${neu.version} als Entwurf erstellt`);
-          }} />
-          <LpbAbgleich v={current} />
-          {current.beginnDatum && <div className="flex flex-wrap" style={{ gap: 8, marginBottom: 12, fontSize: "var(--text-small)" }}>
-            <span style={{ padding: "6px 12px", background: "var(--bg-secondary)", borderRadius: "var(--radius-card)" }}>Beginn: <b>{current.beginnDatum}</b></span>
-            {current.endDatum && <span style={{ padding: "6px 12px", background: daysUntil !== null && daysUntil < 30 ? "var(--status-warning-bg)" : "var(--bg-secondary)", borderRadius: "var(--radius-card)", color: daysUntil !== null && daysUntil < 30 ? "var(--status-warning-text)" : "var(--text-primary)" }}>Ende: <b>{current.endDatum}</b>{daysUntil !== null && daysUntil < 30 && ` (${daysUntil < 0 ? "abgelaufen" : `${daysUntil}d`})`}</span>}
-          </div>}
-          {current.leistungspositionen.length > 0 && <div style={{ marginBottom: 16 }}>
-            <DataTable<KlvPos>
-              spalten={klvSpalten}
-              zeilen={klvSort ? sortKlv(current.leistungspositionen, klvSort.key, klvSort.dir) : current.leistungspositionen}
-              zeilenKey={lp => lp.id}
-              sort={klvSort ?? undefined}
-              onSort={klvToggle}
-              containerHaltepunkte
-              karteAbPx={520}
-              karteTitel={lp => (
-                <span className="flex items-center" style={{ gap: 8, minWidth: 0 }}>
-                  <span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: katBg(lp.kategorie), color: katColor(lp.kategorie), flexShrink: 0 }}>{lp.kategorie}</span>
-                  <span style={{ minWidth: 0, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{lp.bezeichnung}</span>
-                </span>
-              )}
-              fusszeile={<div className="flex items-center justify-between flex-wrap" style={{ gap: 10, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-                <div className="flex flex-wrap" style={{ gap: 10 }}>{(["a", "b", "c"] as const).map(k => { const sum = current.leistungspositionen.filter(l => l.kategorie === k).reduce((s, l) => s + hProWoche(l), 0); return sum > 0 ? <span key={k}><span style={{ padding: "1px 5px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: katBg(k), color: katColor(k), marginRight: 3 }}>{k}</span>{sum.toFixed(2)}h</span> : null; })}</div>
-                <span style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Total: {berechneSummen(current.leistungspositionen).total.toFixed(2)} h/Wo.</span>
-              </div>}
-            />
-          </div>}
-        </>
-      ) : (
-        <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", marginBottom: 20 }}>
-          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>Noch keine KLV-Verordnung</div>
-          <AppButton variant="primaer" icon={Plus} onClick={() => setShowNeueKLV(true)}>KLV erstellen</AppButton>
-          {showNeueKLV && (
-            <div style={{ padding: "16px 20px", background: "var(--bg-primary)", border: "var(--border-thin) solid var(--brand-primary)", borderRadius: "var(--radius-card)", marginTop: 12, textAlign: "left" }}>
-              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12 }}>Neue KLV-Verordnung erstellen</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Beginn</label>
-                  <input type="date" value={neuBeginn} onChange={e => setNeuBeginn(e.target.value)} style={{ width: "100%", padding: "8px 12px", fontSize: "var(--text-small)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: 4 }}>Ende</label>
-                  <input type="date" value={neuEnde} onChange={e => setNeuEnde(e.target.value)} style={{ width: "100%", padding: "8px 12px", fontSize: "var(--text-small)", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", color: "var(--text-primary)", fontFamily: "inherit" }} />
-                </div>
-              </div>
-              <div className="flex items-center" style={{ gap: 8 }}>
-                <AppButton variant="primaer" icon={Plus} onClick={handleCreateKLV}>KLV erstellen</AppButton>
-                <button onClick={() => setShowNeueKLV(false)} className="cursor-pointer" style={{ padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>Abbrechen</button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-      <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12, marginTop: 20 }}>Verlauf</div>
-      {klvs.length === 0 ? <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Keine Einträge</div> : klvs.map(k => (
-        <div key={k.id} onClick={() => navigate(`/klv/${k.id}`)} className="flex items-center cursor-pointer transition-colors" style={{ padding: "10px 14px", borderRadius: "var(--radius-card)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", marginBottom: 6 }} onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "var(--bg-elevated)"}>
-          <div className="flex-1 flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
-            <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)" }}>{k.beginnDatum || k.erstellDatum}</span>
-            <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: k.status === "entscheid_erhalten" ? "var(--status-success-bg)" : k.status === "ersetzt" ? "var(--bg-secondary)" : "var(--status-warning-bg)", color: k.status === "entscheid_erhalten" ? "var(--status-success-text)" : k.status === "ersetzt" ? "var(--text-tertiary)" : "var(--status-warning-text)" }}>V{k.version} · {lpbStatusLabel(k.status)}</span>
-            {k.onboardingId && <span style={{ fontSize: "var(--text-micro)", color: "var(--status-info)" }}>aus Onboarding</span>}
-            <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>{berechneSummen(k.leistungspositionen).total.toFixed(2)} h/Wo.</span>
-          </div>
-          {k.status === "entwurf" && (
-            <button onClick={e => deleteKLV(k.id, e)} className="cursor-pointer" title="Entwurf löschen" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 4, marginRight: 4 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 14, height: 14 }} /></button>
-          )}
-        </div>
-      ))}
+      <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 auto", maxWidth: "48ch", lineHeight: 1.6 }}>
+        Hier erscheinen künftig die geplanten Leistungen mit ihrer Ableitung
+        aus dem neuen Pflegeplan-Modul — vom Entwurf bis zum Kassenentscheid.
+      </p>
     </div>
   );
 }

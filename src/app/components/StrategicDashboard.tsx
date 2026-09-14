@@ -18,7 +18,6 @@ import {
 import {
   MOCK_ASSESSMENTS,
 } from "../../lib/mocks/klinische-artefakte-mock";
-import { useKlvVerordnungen } from "../../lib/klv/store";
 import { ComplianceRisikoSection } from "./ComplianceRisikoSection";
 
 /* ── Derived data ────────────────────────── */
