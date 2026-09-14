@@ -74,3 +74,20 @@ export function datumAnzeige(iso: string): string {
   const [j, m, t] = iso.split("-");
   return j && m && t ? `${t}.${m}.${j}` : iso;
 }
+
+/* ── Wochensumme — EINE Rechnung für Aufbau und Struktur ─────────────────
+   Zwei Rechnungen für dieselbe Zahl liefen auseinander. PLANUNGSNÄHERUNG
+   (siehe wochenMinuten in planung.ts), keine Abrechnungsgrösse. */
+import type { PlanMassnahme } from "../../../lib/pflegeplan/plan-store";
+import { wochenMinuten } from "../../../lib/pflegeplan/planung";
+
+export function massnahmenDauerMin(m: PlanMassnahme): number | null {
+  return m.planung.dauerMin ?? positionFuer(m.interventionId, m.planung.detailAuswahl)?.vorgabeMinuten ?? null;
+}
+
+/** Geplante Minuten je Woche über Massnahmen mit Erbringer S. */
+export function planWochenSummeMin(massnahmen: PlanMassnahme[]): number {
+  return massnahmen
+    .filter(m => m.planung.erbringer === "S")
+    .reduce((s, m) => s + wochenMinuten(m.planung, massnahmenDauerMin(m)), 0);
+}

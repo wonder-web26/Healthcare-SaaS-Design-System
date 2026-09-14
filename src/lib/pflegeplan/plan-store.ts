@@ -28,7 +28,10 @@ export interface PlanDiagnose {
 export interface PlanZiel {
   /** Katalog-Zielkennung — oder eigene Kennung bei selbst formulierten Zielen. */
   zielId: ZielId;
-  diagnoseCode: DiagnoseCode;
+  /** null = ungebunden (Zone der Unverbundenen): die letzte
+   *  Diagnose-Verbindung wurde in der Struktur-Ansicht gelöst. Das Ziel
+   *  verschwindet nicht — Verschwinden wäre selbst eine Aussage. */
+  diagnoseCode: DiagnoseCode | null;
   titel: string;
   /** Selbst formuliert statt aus der hergeleiteten Liste übernommen. */
   eigenes: boolean;
@@ -182,6 +185,44 @@ export function zielEntfernen(diagnoseCode: DiagnoseCode, zielId: ZielId): void 
   zustand = {
     ...zustand,
     ziele: zustand.ziele.filter(z => !(z.diagnoseCode === diagnoseCode && z.zielId === zielId)),
+    massnahmen: zustand.massnahmen.map(m => ({
+      ...m,
+      zielBezuege: m.zielBezuege.filter(b => !(b.diagnoseCode === diagnoseCode && b.zielId === zielId)),
+    })),
+  };
+  melden();
+}
+
+/* ── Verknüpfen und Lösen (Struktur-Ansicht, Lauf 4) ────────────────────
+   Anders als zielEntfernen (Aufbau-✕: der Eintrag verschwindet) LÖST die
+   Struktur nur die Verbindung: das letzte gelöste Ziel bleibt ungebunden
+   stehen. Massnahmen-Bezüge auf das gelöste Paar werden mitgelöst und
+   fallen gegebenenfalls in «Ohne Zuordnung». */
+
+export function zielVerbindungHerstellen(diagnoseCode: DiagnoseCode, zielId: ZielId): void {
+  const eintraege = zustand.ziele.filter(z => z.zielId === zielId);
+  if (eintraege.length === 0) return;
+  if (eintraege.some(z => z.diagnoseCode === diagnoseCode)) return;
+  const ungebunden = eintraege.find(z => z.diagnoseCode === null);
+  zustand = {
+    ...zustand,
+    ziele: ungebunden
+      ? zustand.ziele.map(z => (z.zielId === zielId && z.diagnoseCode === null) ? { ...z, diagnoseCode } : z)
+      : [...zustand.ziele, { ...eintraege[0], diagnoseCode }],
+  };
+  melden();
+}
+
+export function zielVerbindungLoesen(diagnoseCode: DiagnoseCode, zielId: ZielId): void {
+  const eintraege = zustand.ziele.filter(z => z.zielId === zielId);
+  const betroffen = eintraege.find(z => z.diagnoseCode === diagnoseCode);
+  if (!betroffen) return;
+  const letzte = eintraege.filter(z => z.diagnoseCode !== null).length === 1;
+  zustand = {
+    ...zustand,
+    ziele: letzte
+      ? zustand.ziele.map(z => (z.zielId === zielId && z.diagnoseCode === diagnoseCode) ? { ...z, diagnoseCode: null } : z)
+      : zustand.ziele.filter(z => !(z.zielId === zielId && z.diagnoseCode === diagnoseCode)),
     massnahmen: zustand.massnahmen.map(m => ({
       ...m,
       zielBezuege: m.zielBezuege.filter(b => !(b.diagnoseCode === diagnoseCode && b.zielId === zielId)),

@@ -102,8 +102,9 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
   const dauerWeicht = p.dauerMin !== null && position?.vorgabeMinuten !== null && p.dauerMin !== position?.vorgabeMinuten;
   const wochenMin = wochenMinuten(p, dauerEffektiv);
 
-  const zielTitel = m.zielBezuege.map(b =>
-    plan.ziele.find(z => z.diagnoseCode === b.diagnoseCode && z.zielId === b.zielId)?.titel ?? b.zielId);
+  /* Eindeutige Ziele — zwei Bezüge auf dasselbe Ziel sind EIN Ziel. */
+  const zielTitel = [...new Set(m.zielBezuege.map(b => b.zielId))].map(zielId =>
+    plan.ziele.find(z => z.zielId === zielId)?.titel ?? zielId);
 
   /* Herleitung aus dem Vertragstyp — über den ersten Zielbezug. */
   const ersterBezug = m.zielBezuege[0] ?? null;

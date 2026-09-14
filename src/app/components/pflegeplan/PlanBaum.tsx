@@ -97,6 +97,9 @@ export function PlanBaum({ plan, mandate, onFokus }: {
     plan.ziele.find(z => z.diagnoseCode === code && z.zielId === zielId)?.titel ?? zielId;
 
   const ohneZuordnung = plan.massnahmen.filter(m => m.zielBezuege.length === 0);
+  /* Ungebundene Ziele: die letzte Diagnose-Verbindung wurde in der Struktur
+     gelöst — sie bleiben sichtbar, statt zu verschwinden. */
+  const freieZiele = plan.ziele.filter(z => z.diagnoseCode === null);
   const [belegOffen, setBelegOffen] = useState<Set<string>>(new Set());
 
   if (plan.diagnosen.length === 0 && ohneZuordnung.length === 0) {
@@ -214,6 +217,21 @@ export function PlanBaum({ plan, mandate, onFokus }: {
       </div>
 
       {/* Ohne Zuordnung — Arbeitszustand, kein Fehler. */}
+      {freieZiele.length > 0 && (
+        <div style={{ ...KARTE, padding: "10px 14px", marginTop: 14, borderStyle: "dashed" }}>
+          <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+            Ziele ohne Diagnose
+          </div>
+          <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 1 }}>
+            Die letzte Verbindung wurde gelöst — in der Struktur-Ansicht wieder verknüpfen.
+          </div>
+          {freieZiele.map(z => (
+            <div key={z.zielId} data-baum-ziel-frei={z.zielId} style={{ padding: "6px 0", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
+              {z.titel}
+            </div>
+          ))}
+        </div>
+      )}
       {ohneZuordnung.length > 0 && (
         <div style={{ ...KARTE, padding: "10px 14px", marginTop: 14, borderStyle: "dashed" }}>
           <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>

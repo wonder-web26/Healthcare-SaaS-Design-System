@@ -14,15 +14,16 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowRight, ClipboardList } from "lucide-react";
 import { MOCK_ASSESSMENTS } from "../../../lib/mocks/klinische-artefakte-mock";
-import { zieleZuDiagnose, interventionenZuZiel, positionFuer } from "../../../lib/pflegeplan/mock-adapter";
+import { zieleZuDiagnose, interventionenZuZiel } from "../../../lib/pflegeplan/mock-adapter";
 import { usePlan } from "../../../lib/pflegeplan/plan-store";
-import { wochenMinuten, type MandatKurz } from "../../../lib/pflegeplan/planung";
+import { type MandatKurz } from "../../../lib/pflegeplan/planung";
 import { getPatient } from "../../../lib/patienten/store";
 import { useMandate } from "../../../lib/mandate/store";
 import { GESETZESGRUNDLAGE } from "../../../lib/stammdaten/mandat";
 import { PlanBaum } from "./PlanBaum";
 import { AuswahlBereich } from "./AuswahlBereich";
-import type { Fokus } from "./gemeinsam";
+import { StrukturAnsicht } from "./StrukturAnsicht";
+import { planWochenSummeMin, type Fokus } from "./gemeinsam";
 
 /**
  * Der geführte Einstieg: rechnet sich aus dem Planzustand und sagt immer, was
@@ -55,6 +56,7 @@ function naechsterSchritt(plan: ReturnType<typeof usePlan>): BalkenZustand {
     }
   }
   for (const z of plan.ziele) {
+    if (z.diagnoseCode === null) continue; /* ungebunden: unten «ohne Anschluss» */
     const hatMassnahme = plan.massnahmen.some(m => m.zielBezuege.some(b => b.diagnoseCode === z.diagnoseCode && b.zielId === z.zielId));
     if (!hatMassnahme && interventionenZuZiel(z.diagnoseCode, z.zielId).length > 0) {
       return {
@@ -74,6 +76,7 @@ function naechsterSchritt(plan: ReturnType<typeof usePlan>): BalkenZustand {
       continue;
     }
     for (const z of planZiele) {
+      if (z.diagnoseCode === null) continue;
       const hatMassnahme = plan.massnahmen.some(m => m.zielBezuege.some(b => b.diagnoseCode === z.diagnoseCode && b.zielId === z.zielId));
       if (!hatMassnahme) {
         offene.push({
@@ -82,6 +85,11 @@ function naechsterSchritt(plan: ReturnType<typeof usePlan>): BalkenZustand {
         });
       }
     }
+  }
+  /* Ungebundene Ziele (Struktur: letzte Verbindung gelöst) sind ebenfalls
+     Elemente ohne Anschluss — sie werden in Lauf 6 ein Wirksamkeitsbefund. */
+  for (const z of plan.ziele.filter(x => x.diagnoseCode === null)) {
+    offene.push({ fokus: { schritt: 1 }, baumZiel: `[data-baum-ziel-frei="${z.zielId}"]` });
   }
   if (offene.length > 0) {
     return {
@@ -94,11 +102,19 @@ function naechsterSchritt(plan: ReturnType<typeof usePlan>): BalkenZustand {
   return { art: "vollstaendig" };
 }
 
+type Ansicht = "aufbau" | "struktur";
+
+const ANSICHT_SATZ: Record<Ansicht, string> = {
+  aufbau: "Eine Entscheidung nach der anderen. Für die Erstplanung.",
+  struktur: "Was hängt woran. Zum Verstehen und Verknüpfen.",
+};
+
 export function PflegeplanAufbau() {
   const { patientId } = useParams();
   const navigate = useNavigate();
   const plan = usePlan();
   const [fokus, setFokus] = useState<Fokus>({ schritt: 1 });
+  const [ansicht, setAnsicht] = useState<Ansicht>("aufbau");
 
   const patient = patientId ? getPatient(patientId) : undefined;
 
@@ -121,26 +137,42 @@ export function PflegeplanAufbau() {
     .map(x => ({ id: x.id, label: GESETZESGRUNDLAGE.find(g => g.code === x.gesetzesgrundlage)?.label ?? x.gesetzesgrundlage })),
     [alleMandate, patientId]);
 
-  /* Wochensumme über alle Massnahmen mit Erbringer S — eine PLANUNGSNÄHERUNG
-     (siehe wochenMinuten), keine Abrechnungsgrösse. */
-  const dauerVon = (m: (typeof plan.massnahmen)[number]) =>
-    m.planung.dauerMin ?? positionFuer(m.interventionId, m.planung.detailAuswahl)?.vorgabeMinuten ?? null;
-  const summeMin = plan.massnahmen
-    .filter(m => m.planung.erbringer === "S")
-    .reduce((s, m) => s + wochenMinuten(m.planung, dauerVon(m)), 0);
+  /* EINE Summenrechnung für Aufbau und Struktur (gemeinsam.tsx). */
+  const summeMin = planWochenSummeMin(plan.massnahmen);
   const dritte = plan.massnahmen.filter(m => m.planung.erbringer !== "S").length;
 
   const schritt = naechsterSchritt(plan);
 
   return (
     <div className="h-full flex flex-col" style={{ background: "var(--bg-primary)" }}>
-      {/* Kopfzeile */}
-      <div style={{ padding: "16px var(--space-6) 12px", borderBottom: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)" }}>
+      {/* Kopfzeile mit Ansichtsumschalter */}
+      <div style={{ padding: "16px var(--space-6) 0", borderBottom: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)" }}>
         <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-          Pflegeplan — Aufbau
+          Pflegeplan
         </div>
         <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>
           {patient ? `${patient.nachname}, ${patient.vorname}` : patientId}
+        </div>
+        <div className="flex items-center flex-wrap" style={{ gap: 14, marginTop: 10 }}>
+          {(["aufbau", "struktur"] as Ansicht[]).map(a => (
+            <button key={a} type="button" onClick={() => setAnsicht(a)}
+              className="ui-fokusring cursor-pointer"
+              style={{
+                background: "none", border: "none", padding: "0 0 8px", fontFamily: "inherit",
+                fontSize: "var(--text-small)", fontWeight: 500,
+                color: ansicht === a ? "var(--brand-primary)" : "var(--text-secondary)",
+                borderBottom: ansicht === a ? "2px solid var(--brand-primary)" : "2px solid transparent",
+              }}>
+              {a === "aufbau" ? "Aufbau" : "Struktur"}
+            </button>
+          ))}
+          {/* Dokument entsteht in Lauf 5 — als kommend gekennzeichnet, keine tote Fläche. */}
+          <span title="Entsteht in Lauf 5" style={{ padding: "0 0 8px", fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>
+            Dokument <span style={{ fontSize: "var(--text-micro)" }}>(kommt)</span>
+          </span>
+          <span style={{ marginLeft: 6, paddingBottom: 8, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+            {ANSICHT_SATZ[ansicht]}
+          </span>
         </div>
       </div>
 
@@ -163,6 +195,9 @@ export function PflegeplanAufbau() {
             </button>
           </div>
         </div>
+      ) : ansicht === "struktur" ? (
+        <StrukturAnsicht plan={plan} mandate={mandate}
+          onEditor={interventionId => { setAnsicht("aufbau"); setFokus({ schritt: "editor", interventionId }); }} />
       ) : (
         <div className="flex-1 flex min-h-0">
           {/* Links: der Plan */}
