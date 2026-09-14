@@ -29,27 +29,66 @@ import type { Fokus } from "./gemeinsam";
  * der Normalfall, kein offener Schritt) und Ziele ohne verfügbare
  * Interventionen (selbst formulierte) — sonst zeigte der Balken dauerhaft
  * einen Schritt, der ins Leere führt.
+ *
+ * Übersprungen heisst aber nicht erledigt: eine Diagnose ohne Ziel bleibt im
+ * Plan und wird in Lauf 6 ein Wirksamkeitsbefund. Sind alle bearbeitbaren
+ * Schritte erledigt und bleiben übersprungene Elemente, sagt der Balken das
+ * («ohne Anschluss») — «Alle Angaben vollständig» erscheint nur, wenn nichts
+ * übersprungen wurde.
  */
-function naechsterSchritt(plan: ReturnType<typeof usePlan>): { text: string; fokus: Fokus } | null {
+type BalkenZustand =
+  | { art: "schritt"; text: string; fokus: Fokus }
+  | { art: "ohne-anschluss"; text: string; fokus: Fokus; baumZiel: string }
+  | { art: "vollstaendig" };
+
+function naechsterSchritt(plan: ReturnType<typeof usePlan>): BalkenZustand {
   if (plan.diagnosen.length === 0) {
-    return { text: "Schritt 1 von 3: Pflegediagnose übernehmen", fokus: { schritt: 1 } };
+    return { art: "schritt", text: "Schritt 1 von 3: Pflegediagnose übernehmen", fokus: { schritt: 1 } };
   }
   for (const d of plan.diagnosen) {
     const hatPlanZiele = plan.ziele.some(z => z.diagnoseCode === d.code);
     if (!hatPlanZiele && zieleZuDiagnose(d.code).length > 0) {
-      return { text: `Schritt 2 von 3: Ziel wählen für ${d.titel}`, fokus: { schritt: 2, diagnoseCode: d.code } };
+      return { art: "schritt", text: `Schritt 2 von 3: Ziel wählen für ${d.titel}`, fokus: { schritt: 2, diagnoseCode: d.code } };
     }
   }
   for (const z of plan.ziele) {
     const hatMassnahme = plan.massnahmen.some(m => m.zielBezuege.some(b => b.diagnoseCode === z.diagnoseCode && b.zielId === z.zielId));
     if (!hatMassnahme && interventionenZuZiel(z.diagnoseCode, z.zielId).length > 0) {
       return {
+        art: "schritt",
         text: `Schritt 3 von 3: Massnahme wählen für ${z.titel}`,
         fokus: { schritt: 3, diagnoseCode: z.diagnoseCode, zielId: z.zielId, zielTitel: z.titel },
       };
     }
   }
-  return null;
+
+  /* Alles Bearbeitbare ist erledigt — was übersprungen wurde, in Baumreihenfolge. */
+  const offene: { fokus: Fokus; baumZiel: string }[] = [];
+  for (const d of plan.diagnosen) {
+    const planZiele = plan.ziele.filter(z => z.diagnoseCode === d.code);
+    if (planZiele.length === 0) {
+      offene.push({ fokus: { schritt: 2, diagnoseCode: d.code }, baumZiel: `[data-baum-diagnose="${d.code}"]` });
+      continue;
+    }
+    for (const z of planZiele) {
+      const hatMassnahme = plan.massnahmen.some(m => m.zielBezuege.some(b => b.diagnoseCode === z.diagnoseCode && b.zielId === z.zielId));
+      if (!hatMassnahme) {
+        offene.push({
+          fokus: { schritt: 3, diagnoseCode: z.diagnoseCode, zielId: z.zielId, zielTitel: z.titel },
+          baumZiel: `[data-baum-ziel="${z.diagnoseCode}|${z.zielId}"]`,
+        });
+      }
+    }
+  }
+  if (offene.length > 0) {
+    return {
+      art: "ohne-anschluss",
+      text: `Nichts weiter zu wählen — ${offene.length} ${offene.length === 1 ? "Element" : "Elemente"} ohne Anschluss`,
+      fokus: offene[0].fokus,
+      baumZiel: offene[0].baumZiel,
+    };
+  }
+  return { art: "vollstaendig" };
 }
 
 export function PflegeplanAufbau() {
@@ -108,20 +147,32 @@ export function PflegeplanAufbau() {
           {/* Links: der Plan */}
           <div className="flex-1 min-w-0" data-plan-bereich style={{ padding: "14px var(--space-6)", overflowY: "auto" }}>
             {/* Der nächste-Schritt-Balken: immer genau eine richtige nächste
-                Handlung — anklickbar, aber nie zwingend. */}
+                Handlung — anklickbar, aber nie zwingend. Der fünfte Zustand
+                («ohne Anschluss») verhindert, dass Übersprungenes als
+                vollständig gilt. */}
             <button type="button" data-naechster-schritt
-              onClick={() => schritt && setFokus(schritt.fokus)}
-              disabled={!schritt}
+              onClick={() => {
+                if (schritt.art === "vollstaendig") return;
+                setFokus(schritt.fokus);
+                if (schritt.art === "ohne-anschluss") {
+                  document.querySelector(schritt.baumZiel)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+              }}
+              disabled={schritt.art === "vollstaendig"}
               className="ui-fokusring w-full text-left flex items-center"
               style={{
                 gap: 8, padding: "9px 14px", marginBottom: 12, borderRadius: "var(--radius-card)",
-                cursor: schritt ? "pointer" : "default",
-                background: schritt ? "var(--brand-primary-light)" : "var(--status-success-bg)",
+                cursor: schritt.art !== "vollstaendig" ? "pointer" : "default",
+                background: schritt.art === "schritt" ? "var(--brand-primary-light)"
+                  : schritt.art === "ohne-anschluss" ? "var(--status-warning-bg)" : "var(--status-success-bg)",
                 border: "var(--border-thin) solid transparent",
-                color: schritt ? "var(--brand-primary)" : "var(--status-success-text)",
+                color: schritt.art === "schritt" ? "var(--brand-primary)"
+                  : schritt.art === "ohne-anschluss" ? "var(--status-warning-text)" : "var(--status-success-text)",
                 fontSize: "var(--text-small)", fontWeight: 500, fontFamily: "inherit",
               }}>
-              {schritt ? <>{schritt.text} <ArrowRight style={{ width: 13, height: 13, flexShrink: 0, marginLeft: "auto" }} /></> : "Alle Angaben vollständig"}
+              {schritt.art === "vollstaendig"
+                ? "Alle Angaben vollständig"
+                : <>{schritt.text} <ArrowRight style={{ width: 13, height: 13, flexShrink: 0, marginLeft: "auto" }} /></>}
             </button>
 
             <PlanBaum plan={plan} onFokus={setFokus} />

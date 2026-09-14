@@ -110,7 +110,7 @@ export function PlanBaum({ plan, onFokus }: {
           const ziele = zieleVon(d.code);
           const mAnzahl = massnahmenJeDiagnose(d.code);
           return (
-            <div key={d.code} style={{ ...KARTE, padding: "10px 14px" }}>
+            <div key={d.code} data-baum-diagnose={d.code} style={{ ...KARTE, padding: "10px 14px" }}>
               <div className="flex items-center" style={{ gap: 8 }}>
                 <FaltKnopf zu={dZu} onToggle={() => toggle(dKey)} label={`Diagnose ${d.code} auf- oder zuklappen`} />
                 <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{d.code}</span>
@@ -147,7 +147,7 @@ export function PlanBaum({ plan, onFokus }: {
                       const zZu = zugeklappt.has(zKey);
                       const massnahmen = massnahmenVon(z.diagnoseCode, z.zielId);
                       return (
-                        <div key={z.zielId} style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius-card)", padding: "7px 12px" }}>
+                        <div key={z.zielId} data-baum-ziel={`${z.diagnoseCode}|${z.zielId}`} style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius-card)", padding: "7px 12px" }}>
                           <div className="flex items-center" style={{ gap: 8 }}>
                             <FaltKnopf zu={zZu} onToggle={() => toggle(zKey)} label={`Ziel ${z.titel} auf- oder zuklappen`} />
                             <span className="flex-1 min-w-0 truncate" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
