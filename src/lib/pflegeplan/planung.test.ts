@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { LEERE_PLANUNG, type MassnahmenPlanung } from "./plan-store";
-import { wochenMinuten, mandatAuswahlSichtbar, mandatImSatz, massnahmenSatz, haeufigkeitsText } from "./planung";
+import { wochenMinuten, wochenVorkommen, mandatAuswahlSichtbar, mandatImSatz, massnahmenSatz, haeufigkeitsText } from "./planung";
 
 const p = (patch: Partial<MassnahmenPlanung>): MassnahmenPlanung => ({ ...LEERE_PLANUNG, ...patch });
 
@@ -42,6 +42,20 @@ const p = (patch: Partial<MassnahmenPlanung>): MassnahmenPlanung => ({ ...LEERE_
   assert.equal(Math.round(wochenMinuten(p({ wiederholung: "monatlich", anzahl: 2 }), 60)), 28, "monatlich ÷ 4.33");
   assert.equal(wochenMinuten(p({ wiederholung: "benutzerdefiniert", anzahl: 1, intervallN: 2, intervallEinheit: "tage" }), 30), 105, "alle 2 Tage → 3.5 Vorkommen");
   console.log("✓ WZ Wochenzeit-Umrechnung deckt alle sechs Formen");
+}
+
+/* ── Wochenvorkommen (Lauf 6): die Vergleichsbasis der Häufigkeitsprüfung ── */
+{
+  assert.equal(wochenVorkommen(p({ wiederholung: null })), 0, "ungeplant: keine Vorkommen");
+  assert.equal(wochenVorkommen(p({ wiederholung: "einmalig", einmalDatum: "2026-08-20" })), 0, "einmalig überschreitet keine Wochengrenze");
+  assert.equal(wochenVorkommen(p({ wiederholung: "werktage", anzahl: 3 })), 15, "«3× an Werktagen» sind 15 je Woche — der Fall, an dem ein Einheitenvergleich versagt");
+  assert.equal(wochenVorkommen(p({ wiederholung: "taeglich", anzahl: 2 })), 14, "2× täglich sind 14 je Woche");
+  assert.equal(wochenVorkommen(p({ wiederholung: "benutzerdefiniert", anzahl: 1, intervallN: 2, intervallEinheit: "tage" })), 3.5, "alle 2 Tage: 3.5 je Woche");
+  assert.equal(Math.round(wochenVorkommen(p({ wiederholung: "monatlich", anzahl: 2 })) * 100) / 100, 0.46, "2× monatlich: ~0.46 je Woche");
+  // Konsistenz: Minuten = Vorkommen × Dauer — eine Rechnung, zwei Sichten.
+  const q = p({ wiederholung: "woechentlich", anzahl: 2, wochentage: [0, 3] });
+  assert.equal(wochenMinuten(q, 30), wochenVorkommen(q) * 30, "wochenMinuten ist Vorkommen × Dauer");
+  console.log("✓ WV Wochenvorkommen: Wochenbasis, einmalig zählt null, konsistent mit der Minutenrechnung");
 }
 
 /* ── Satzzeile: fett nur Gesetztes, Warnteil bei Nicht-S ── */

@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { ableitungAlsText } from "./vertrag";
-import { diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer, ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala } from "./mock-adapter";
+import { diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer, ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala, qualifikationsStufen } from "./mock-adapter";
 import { leistungsposition } from "./positionen";
 import { MAS_ZIEL, PROB_MAS, PROB_ZIEL_HIDE } from "./mock-daten";
 
@@ -159,6 +159,27 @@ const VIER_CAPS = ["CAP-FALLS", "CAP-ADL", "CAP-PAIN", "CAP-MOOD"];
   ], "die fünf Bezeichnungen der Katalog-Lieferung");
   for (const s of skala) assert.equal(s.herkunft.stufe, "katalog", "Herkunft katalog — gelieferte Fachlichkeit");
   console.log("✓ 14 zielBewertungsSkala: fünf Stufen, Ordnung 5→1, Herkunft katalog");
+}
+
+/* ── Lauf-6-Ergänzung: die Qualifikationsleiter — Ordnung ist Vertragsbestandteil ── */
+{
+  const stufen = qualifikationsStufen();
+  assert.deepEqual(stufen.map(s => s.rang), [1, 2, 3], "aufsteigend geordnet: Rang 1 (niedrigste) zuerst");
+  assert.deepEqual(stufen.map(s => s.label), [
+    "Pflegehelfer/in SRK", "FaGe", "Dipl. Pflegefachperson HF",
+  ], "die drei Stufen in aufsteigender Ordnung");
+  for (const s of stufen) {
+    assert.equal(s.herkunft.rang, "mock", "Herkunft mock — die echte Quelle (Personalstamm) fehlt");
+    assert.equal(s.herkunft.label, "mock");
+  }
+  // Deckung mit der Positions-Anreicherung: jedes Katalogminimum ist rangierbar.
+  const bekannt = new Set(stufen.map(s => s.label));
+  for (const nr of ["10101", "10102", "10103", "10505"]) {
+    const p = leistungsposition(nr);
+    assert.ok(p?.mindestqualifikation && bekannt.has(p.mindestqualifikation),
+      `${nr}: Mindestqualifikation «${p?.mindestqualifikation}» liegt auf der Leiter`);
+  }
+  console.log("✓ 15 qualifikationsStufen: drei Stufen, Ordnung 1→3, Herkunft mock, deckt die Positionsminima");
 }
 
 console.log("\nAlle Vertragstests bestanden.");

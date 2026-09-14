@@ -138,6 +138,22 @@ export interface BewertungsStufe {
   label: string;
 }
 
+/* ── Qualifikationsleiter ───────────────────────────────────────────────── */
+/**
+ * Die geordneten Qualifikationsstufen — Grundlage für «zugewiesene
+ * Qualifikation über dem Katalogminimum» (WZW-Prüfung, Lauf 6) und für die
+ * Auswahlliste des Editors.
+ *
+ * DIE ORDNUNG IST TEIL DES VERTRAGS: aufsteigend geliefert, Rang 1 ist die
+ * niedrigste Stufe. Eine Ordnung, die nur als UI-Konstante lebt, ist bei der
+ * ersten Auswertung falsch — derselbe Fund wie bei der Bewertungsskala.
+ */
+export interface QualifikationsStufe {
+  /** 1 = niedrigste Stufe, aufsteigend. */
+  rang: number;
+  label: string;
+}
+
 /* ── Ableitung ──────────────────────────────────────────────────────────── */
 /**
  * Die Kette von CAP über Diagnose, Ziel und Intervention bis zur Position —
@@ -186,6 +202,11 @@ export function ableitungAlsText(a: Ableitung): string {
  * Zu (8) — Ergänzung aus Lauf 5: die Bewertungsskala der Zielerreichung,
  * absteigend geordnet (5 → 1). Mit echten Daten hängt die Skala je Ziel
  * (EnpGoalCatalog.evaluationScaleId), nicht global — siehe Delta.
+ *
+ * Zu (9) — Ergänzung aus Lauf 6: die Qualifikationsleiter, aufsteigend
+ * geordnet (Rang 1 = niedrigste). Die echte Quelle sind die
+ * Qualifikationsniveaus des Personalstamms und ihre Verknüpfung mit den
+ * Tarifstufen — beides liegt nicht vor, deshalb Herkunft mock. Siehe Delta.
  */
 export interface PflegeplanAbfragen {
   diagnoseVorschlaege(caps: CapCode[]): DiagnoseVorschlag[];
@@ -196,4 +217,5 @@ export interface PflegeplanAbfragen {
   ausgeschlosseneZiele(code: DiagnoseCode): MitHerkunft<Ziel>[];
   unbehandelteCaps(caps: CapCode[]): CapCode[];
   zielBewertungsSkala(): MitHerkunft<BewertungsStufe>[];
+  qualifikationsStufen(): MitHerkunft<QualifikationsStufe>[];
 }

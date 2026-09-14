@@ -13,6 +13,8 @@
  */
 import { useSyncExternalStore } from "react";
 import type { CapCode, DetailAuswahl, DiagnoseCode, DiagnoseTyp, InterventionId, ZielId } from "./vertrag";
+import type { UserRole } from "../../types/user";
+import { befundeErmitteln, planSignatur, type Befund } from "./wzw";
 
 export interface PlanDiagnose {
   code: DiagnoseCode;
@@ -153,6 +155,35 @@ export interface Fassung {
   autorin: string;
 }
 
+/* ── WZW-Prüfung (Lauf 6) ──────────────────────────────────────────────── */
+
+/** Eine Übergehung: der Befund bleibt bestehen, wird aber begründet nicht
+ *  aufgelöst. Text, Autorin und Datum wandern ins Dokument («Begründete
+ *  Abweichungen») und später ins Leistungsplanungsblatt. */
+export interface Uebergehung {
+  text: string;
+  autorin: string;
+  /** ISO-Datum. */
+  datum: string;
+}
+
+export interface PruefBefund extends Befund {
+  uebergehung: Uebergehung | null;
+}
+
+/**
+ * Das Prüfungsergebnis eines Knopfdrucks. `signatur` hält den Planinhalt
+ * zum Prüfzeitpunkt fest — weicht die aktuelle Signatur ab, ist die Prüfung
+ * «nicht mehr aktuell». Die Übergehungen hängen HIER, am Ergebnis, nicht am
+ * Planinhalt: sonst würde jede Übergehung die eigene Prüfung veralten lassen.
+ */
+export interface PlanPruefung {
+  /** ISO-Datum des Prüflaufs. */
+  datum: string;
+  signatur: string;
+  befunde: PruefBefund[];
+}
+
 export interface PlanZustand {
   diagnosen: PlanDiagnose[];
   ziele: PlanZiel[];
@@ -162,11 +193,14 @@ export interface PlanZustand {
   /** ZÄHLUNG, keine Historie: alte Stände werden im Prototyp nicht
    *  gespeichert und sind nicht lesbar — der Schemabedarf steht im Delta. */
   fassungen: Fassung[];
+  /** null = noch nie geprüft. META, nicht Inhalt — von der Signatur
+   *  ausgeschlossen (wzw.ts, planSignatur). */
+  pruefung: PlanPruefung | null;
 }
 
 const LEERER_PLAN: PlanZustand = {
   diagnosen: [], ziele: [], massnahmen: [], verwerfungen: [],
-  status: "in_arbeit", fassungen: [],
+  status: "in_arbeit", fassungen: [], pruefung: null,
 };
 
 let zustand: PlanZustand = { ...LEERER_PLAN };
@@ -178,6 +212,11 @@ const schnappschuss = () => zustand;
 
 export function usePlan(): PlanZustand {
   return useSyncExternalStore(subscribe, schnappschuss, schnappschuss);
+}
+
+/** Lesender Schnappschuss ausserhalb von React — für Tests und reine Logik. */
+export function planSchnappschuss(): PlanZustand {
+  return zustand;
 }
 
 /* ── Diagnosen ─────────────────────────────────────────────────────────── */
@@ -353,22 +392,86 @@ export function massnahmenBezugLoesen(interventionId: InterventionId, bezug: Zie
   melden();
 }
 
-/* ── Veröffentlichen und Ändern (Lauf 5) ───────────────────────────────── */
+/* ── WZW-Prüfung: durchführen, übergehen, Stand ablesen (Lauf 6) ───────── */
 
 /**
- * Vorbedingung des Veröffentlichens — HIER schiebt Lauf 6 die WZW-Prüfung
- * und die Rollenfrage davor. Heute gibt es keine Prüfung und jeder darf;
- * beides ist bewusst als eine Stelle gebaut, nicht verstreut.
+ * Die Prüfung läuft NUR auf Knopfdruck. Bestehende Übergehungen werden über
+ * die stabile Befund-Kennung an wiederkehrende Befunde angeheftet; eine
+ * Übergehung, deren Befund nicht mehr auftritt, entfällt — eine Begründung,
+ * die zu einem früheren Zustand gehörte, darf nicht stillschweigend auf
+ * einen neuen zutreffen (siehe wzw.test.ts, Wiederauftauchen-Test).
+ */
+export function pruefungDurchfuehren(datumIso: string): void {
+  const bisherige = zustand.pruefung?.befunde ?? [];
+  const befunde: PruefBefund[] = befundeErmitteln(zustand).map(b => ({
+    ...b,
+    uebergehung: bisherige.find(a => a.id === b.id)?.uebergehung ?? null,
+  }));
+  zustand = { ...zustand, pruefung: { datum: datumIso, signatur: planSignatur(zustand), befunde } };
+  melden();
+}
+
+export function befundUebergehen(befundId: string, uebergehung: Uebergehung): void {
+  if (!zustand.pruefung) return;
+  zustand = {
+    ...zustand,
+    pruefung: {
+      ...zustand.pruefung,
+      befunde: zustand.pruefung.befunde.map(b => b.id === befundId ? { ...b, uebergehung } : b),
+    },
+  };
+  melden();
+}
+
+export function uebergehungZuruecknehmen(befundId: string): void {
+  if (!zustand.pruefung) return;
+  zustand = {
+    ...zustand,
+    pruefung: {
+      ...zustand.pruefung,
+      befunde: zustand.pruefung.befunde.map(b => b.id === befundId ? { ...b, uebergehung: null } : b),
+    },
+  };
+  melden();
+}
+
+/** Passt die Prüfung noch zum Plan? Erkannt über die Inhalts-Signatur,
+ *  nicht über einen Zeitstempel. */
+export function pruefungAktuell(plan: PlanZustand): boolean {
+  return plan.pruefung !== null && plan.pruefung.signatur === planSignatur(plan);
+}
+
+/** Offen = weder aufgelöst noch übergangen. Der Zähler rechnet LIVE — eine
+ *  zurückgenommene Übergehung erhöht ihn sofort, ohne Neuprüfung. */
+export function offeneBefunde(plan: PlanZustand): PruefBefund[] {
+  return plan.pruefung?.befunde.filter(b => b.uebergehung === null) ?? [];
+}
+
+/* ── Veröffentlichen und Ändern (Lauf 5, verschärft in Lauf 6) ─────────── */
+
+/**
+ * Vorbedingung des Veröffentlichens — die eine Stelle, an der Rolle und
+ * WZW-Prüfung vor der Freigabe stehen. Die Prüfung blockiert nie inhaltlich
+ * (Übergehen ist immer möglich), sie erzwingt nur die Begründung.
  * Rückgabe: Ablehnungsgrund, oder leer.
  */
-function veroeffentlichungsVorbedingung(_plan: PlanZustand, _autorin: string): string {
+export function veroeffentlichungsVorbedingung(plan: PlanZustand, rolle: UserRole): string {
+  /* Ohne dieses Gate wäre die Nachweiskette wertlos: wenn jede Rolle
+     freigeben kann, belegt die Freigabe nichts. */
+  if (rolle !== "diplomiert") return "Nur die Pflegefachperson HF darf den Plan freigeben.";
+  if (plan.pruefung === null) return "Der Plan ist noch nicht geprüft — die WZW-Prüfung gehört vor die Freigabe.";
+  if (!pruefungAktuell(plan)) return "Die Prüfung ist nicht mehr aktuell — der Plan wurde seither geändert.";
+  const offene = offeneBefunde(plan);
+  if (offene.length > 0) {
+    return `${offene.length} ${offene.length === 1 ? "Befund ist" : "Befunde sind"} weder aufgelöst noch begründet übergangen.`;
+  }
   return "";
 }
 
 /** Veröffentlichen: Status setzen, Fassung zählen. Rückgabe: Grund einer
  *  Ablehnung, sonst leer. */
-export function veroeffentlichen(autorin: string, datumIso: string): string {
-  const grund = veroeffentlichungsVorbedingung(zustand, autorin);
+export function veroeffentlichen(autorin: string, rolle: UserRole, datumIso: string): string {
+  const grund = veroeffentlichungsVorbedingung(zustand, rolle);
   if (grund) return grund;
   zustand = {
     ...zustand,

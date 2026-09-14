@@ -7,7 +7,7 @@
 import type {
   Beleg, BewertungsStufe, CapCode, DetailAuswahl, Detaildialog, Diagnose, DiagnoseCode,
   DiagnoseVorschlag, FeldHerkunft, Intervention, InterventionId,
-  Leistungsposition, MitHerkunft, PflegeplanAbfragen, Ziel, ZielId,
+  Leistungsposition, MitHerkunft, PflegeplanAbfragen, QualifikationsStufe, Ziel, ZielId,
 } from "./vertrag";
 import {
   CAP_ZUORDNUNG, DETAILDIALOGE, MAS_ZIEL, MOCK_DIAGNOSEN,
@@ -195,8 +195,26 @@ export function zielBewertungsSkala(): MitHerkunft<BewertungsStufe>[] {
   return BEWERTUNGS_SKALA.map(s => ({ ...s, herkunft: HERKUNFT_STUFE }));
 }
 
+/**
+ * (9) Die Qualifikationsleiter — aufsteigend geordnet, Rang 1 ist die
+ * niedrigste Stufe; die Ordnung ist Teil des Vertrags. Die Werte decken
+ * sich mit der Mock-Anreicherung der Positionen (mindestqualifikation in
+ * positionen.ts); die echte Quelle (Personalstamm, Tarifstufen) fehlt —
+ * deshalb Herkunft «mock».
+ */
+const QUALIFIKATIONS_STUFEN: QualifikationsStufe[] = [
+  { rang: 1, label: "Pflegehelfer/in SRK" },
+  { rang: 2, label: "FaGe" },
+  { rang: 3, label: "Dipl. Pflegefachperson HF" },
+];
+const HERKUNFT_QUALIFIKATION: FeldHerkunft<QualifikationsStufe> = { rang: "mock", label: "mock" };
+
+export function qualifikationsStufen(): MitHerkunft<QualifikationsStufe>[] {
+  return QUALIFIKATIONS_STUFEN.map(s => ({ ...s, herkunft: HERKUNFT_QUALIFIKATION }));
+}
+
 /** Der Vertrag als ein Objekt — für Übergabe an Komponenten oder Tests. */
 export const mockPflegeplanKatalog: PflegeplanAbfragen = {
   diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer,
-  ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala,
+  ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala, qualifikationsStufen,
 };

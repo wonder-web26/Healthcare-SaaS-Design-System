@@ -134,19 +134,48 @@ dbml heute nicht vorsieht:
 4. Das Bezugsdatum für «überfällig» ist die feste Mock-Gegenwart
    (`GEGENWART_ISO`); produktiv ersetzt das Systemdatum die Konstante.
 
+## Abweichungen aus Lauf 6 (WZW-Prüfung und Freigabe)
+
+1. **`qualifikationsStufen()`** ist als neunte Vertragsabfrage dazugekommen —
+   die Qualifikationsleiter, aufsteigend geordnet (Rang 1 = niedrigste).
+   **Die Ordnung ist Teil des Vertrags** (per Test belegt), Herkunft `mock`:
+   die echte Quelle sind die **Qualifikationsniveaus des Personalstamms und
+   ihre Verknüpfung mit den Tarifstufen** — beides liegt nicht vor.
+   Dazu gehört: die **Mindestqualifikation je Position** stammt heute aus
+   der Mock-Anreicherung aus Lauf 1 (`positionen.ts`, `MOCK_ANREICHERUNG`)
+   und **nicht aus dem Leistungskatalog**, dessen Vollfassung fehlt. Die
+   Prüfung «Qualifikation über dem Katalogminimum» ist damit strukturell
+   richtig und inhaltlich ungedeckt.
+2. **Prüfläufe und Übergehungen sind im Prototyp ein lebender Zustand** —
+   dieselbe Schemafrage wie die Fassungen (Lauf 5, Punkt 3): am Plan hängt
+   genau ein aktuelles Prüfungsergebnis (Datum, Inhalts-Signatur, Befunde
+   mit Übergehungen samt Text/Autorin/Datum); frühere Prüfstände sind nicht
+   lesbar. Mit echten Daten braucht es **persistierte Prüfläufe je Fassung**,
+   damit «Begründete Abweichungen» einer freigegebenen Fassung unveränderlich
+   nachlesbar bleiben. Die dbml kennt heute weder Prüflauf noch Befund noch
+   Übergehung.
+3. **Freigabe-Nachweis:** Veröffentlichen ist an die Rolle Pflegefachperson
+   HF gebunden (Rollenkonzept des Repos, `UserRole` = `diplomiert`). Eine
+   Fassung speichert heute Autorin und Datum — für die Nachweiskette gehört
+   die **Rolle bzw. Qualifikation der freigebenden Person zur Fassung**.
+4. **Plausibilitätsgrenze der Gesamtwochenzeit — bewusst nicht gebaut:**
+   fachlich gehört eine Obergrenze je Woche zur Wirtschaftlichkeit, aber die
+   Schwellen kommen von Person B. Bis sie vorliegen, existiert diese Prüfung
+   nicht — kein geratener Wert. Offener Posten.
+
 ## Abweichungen aus Lauf 3 (Massnahmen-Editor)
 
-1. **Zweitmandat als Lauf-6-Bedarf:** Der Massnahmen-Editor trägt einen
-   Mandatsbezug; die Auswahl erscheint nur bei mehreren Mandaten (belegt per
-   Unit-Test, nicht per Browser). Der Mock kann den Mehrfach-Fall heute nicht
-   zeigen: `lib/mandate/store.ts:31` leitet **genau ein KVG-Mandat je
-   Patient** ab, und das Mandats-Modul ist bis Lauf 6 unberührbar. Die dbml
-   sieht den Fall ausdrücklich vor («a patient can be under KVG long-term
-   care AND UVG accident cover at the same time», `CareMandate` ohne
-   Unique-Constraint). **Lauf 6 braucht ein zweites aktives Mandat
-   (UVG-Unfall) für den Demo-Klienten** — zusammen mit der dortigen
-   Verifikation von Lagebild, Prüfbereitschaft, Monatsabschluss und
-   Einsatzkontrolle gegen den Mehrmandats-Fall.
+1. **Zweitmandat als offener Posten (aus Lauf 6 herausgehalten):** Der
+   Massnahmen-Editor trägt einen Mandatsbezug; die Auswahl erscheint nur bei
+   mehreren Mandaten (belegt per Unit-Test, nicht per Browser). Der Mock
+   kann den Mehrfach-Fall heute nicht zeigen: `lib/mandate/store.ts:31`
+   leitet **genau ein KVG-Mandat je Patient** ab. Lauf 6 (WZW-Prüfung) hat
+   Mandate ausdrücklich nicht berührt (Nicht-Ziel). Die dbml sieht den Fall
+   ausdrücklich vor («a patient can be under KVG long-term care AND UVG
+   accident cover at the same time», `CareMandate` ohne Unique-Constraint).
+   **Ein späterer Lauf braucht ein zweites aktives Mandat (UVG-Unfall) für
+   den Demo-Klienten** — zusammen mit der Verifikation der abhängigen
+   Flächen gegen den Mehrmandats-Fall.
 2. **I-STURZASSESS → 10901** (Herkunft mock): frei gewählte
    Prototyp-Zuordnung, damit eine Position ohne Teilhandlungen über die
    Oberfläche erreichbar ist.

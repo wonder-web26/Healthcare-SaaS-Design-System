@@ -28,30 +28,41 @@ export const ERBRINGER: { code: ErbringerCode; label: string; folge: string }[] 
 
 /* ── Wochenzeit ────────────────────────────────────────────────────────── */
 /**
- * Geplante Minuten je Woche einer Massnahme.
- *
- * PLANUNGSNÄHERUNG, keine Abrechnungsgrösse: Fünf-Minuten-Takt,
- * Mindesteinsatzdauer und Einsatzbündelung sind nicht berücksichtigt.
- * Wer diese Zahl später für eine Abrechnung hält, irrt.
+ * Geplante Ausführungen je Woche einer Massnahme — die Vergleichsbasis der
+ * Häufigkeitsprüfung (Lauf 6). Der Vergleich läuft auf Wochenbasis, nicht
+ * auf Einheitenbasis: «3× an Werktagen» sind 15 je Woche; ein
+ * Einheitenvergleich versagt bei «An Werktagen» und bei benutzerdefinierten
+ * Intervallen.
  *
  * Umrechnung: einmalig zählt null, täglich ×7, an Werktagen ×5, wöchentlich
  * × Anzahl gewählter Tage, monatlich ÷ 4.33, benutzerdefiniert entsprechend
  * («alle N Tage» → 7/N Vorkommen, «alle N Wochen» → gewählte Tage ÷ N).
  */
-export function wochenMinuten(p: MassnahmenPlanung, dauerMin: number | null): number {
-  if (p.wiederholung === null || dauerMin === null) return 0;
-  const je = p.anzahl * dauerMin;
+export function wochenVorkommen(p: MassnahmenPlanung): number {
+  if (p.wiederholung === null) return 0;
   switch (p.wiederholung) {
     case "einmalig": return 0;
-    case "taeglich": return je * 7;
-    case "werktage": return je * 5;
-    case "woechentlich": return je * Math.max(1, p.wochentage.length);
-    case "monatlich": return je / 4.33;
+    case "taeglich": return p.anzahl * 7;
+    case "werktage": return p.anzahl * 5;
+    case "woechentlich": return p.anzahl * Math.max(1, p.wochentage.length);
+    case "monatlich": return p.anzahl / 4.33;
     case "benutzerdefiniert":
       return p.intervallEinheit === "tage"
-        ? je * (7 / Math.max(1, p.intervallN))
-        : (je * Math.max(1, p.wochentage.length)) / Math.max(1, p.intervallN);
+        ? p.anzahl * (7 / Math.max(1, p.intervallN))
+        : (p.anzahl * Math.max(1, p.wochentage.length)) / Math.max(1, p.intervallN);
   }
+}
+
+/**
+ * Geplante Minuten je Woche einer Massnahme: Vorkommen × Dauer.
+ *
+ * PLANUNGSNÄHERUNG, keine Abrechnungsgrösse: Fünf-Minuten-Takt,
+ * Mindesteinsatzdauer und Einsatzbündelung sind nicht berücksichtigt.
+ * Wer diese Zahl später für eine Abrechnung hält, irrt.
+ */
+export function wochenMinuten(p: MassnahmenPlanung, dauerMin: number | null): number {
+  if (dauerMin === null) return 0;
+  return wochenVorkommen(p) * dauerMin;
 }
 
 /* ── Mandat: Sichtbarkeit und Satz-Regel ───────────────────────────────── */

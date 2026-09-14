@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
-import { detaildialog, positionFuer } from "../../../lib/pflegeplan/mock-adapter";
+import { detaildialog, positionFuer, qualifikationsStufen } from "../../../lib/pflegeplan/mock-adapter";
 import { ableitungAlsText } from "../../../lib/pflegeplan/vertrag";
 import {
   usePlan, massnahmePlanen, type MassnahmenPlanung, type Wiederholung, type ErbringerCode,
@@ -35,8 +35,9 @@ const WIEDERHOLUNGEN: { value: Wiederholung; label: string }[] = [
   { value: "benutzerdefiniert", label: "Benutzerdefinierte Wiederholung" },
 ];
 
-/** Prototyp-Werteliste der Qualifikationen — frei gewählt (mock). */
-const QUALIFIKATIONEN = ["Pflegehelfer/in SRK", "FaGe", "Dipl. Pflegefachperson HF"];
+/* Die Qualifikationsliste kommt aus dem Vertrag (Lauf 6) — die Ordnung der
+   Leiter ist Vertragsbestandteil, eine UI-Kopie davon wäre bei der ersten
+   Auswertung falsch. */
 
 function Abschnitt({ titel, kinder }: { titel: string; kinder: React.ReactNode }) {
   return (
@@ -339,7 +340,7 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
             <InlineSelect value={p.qualifikation ?? position?.mindestqualifikation ?? ""}
               platzhalter="Qualifikation wählen"
               onChange={v => setze({ qualifikation: v || null })}
-              options={QUALIFIKATIONEN.map(q => ({ value: q, label: q }))}
+              options={qualifikationsStufen().map(q => ({ value: q.label, label: q.label }))}
               style={{ width: 230 }} />
             {position?.mindestqualifikation && (
               <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Minimum: {position.mindestqualifikation}</span>

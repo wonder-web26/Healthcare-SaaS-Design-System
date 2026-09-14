@@ -15,7 +15,11 @@ import { useNavigate, useParams } from "react-router";
 import { ArrowRight, ClipboardList } from "lucide-react";
 import { MOCK_ASSESSMENTS } from "../../../lib/mocks/klinische-artefakte-mock";
 import { zieleZuDiagnose, interventionenZuZiel } from "../../../lib/pflegeplan/mock-adapter";
-import { usePlan, veroeffentlichen, planAendern } from "../../../lib/pflegeplan/plan-store";
+import {
+  usePlan, veroeffentlichen, planAendern,
+  pruefungDurchfuehren, pruefungAktuell, offeneBefunde, planSchnappschuss,
+  type PruefBefund,
+} from "../../../lib/pflegeplan/plan-store";
 import { type MandatKurz } from "../../../lib/pflegeplan/planung";
 import { getPatient } from "../../../lib/patienten/store";
 import { useMandate } from "../../../lib/mandate/store";
@@ -26,7 +30,8 @@ import { PlanBaum } from "./PlanBaum";
 import { AuswahlBereich } from "./AuswahlBereich";
 import { StrukturAnsicht } from "./StrukturAnsicht";
 import { DokumentAnsicht } from "./DokumentAnsicht";
-import { planWochenSummeMin, type Fokus } from "./gemeinsam";
+import { PruefungsPanel } from "./PruefungsPanel";
+import { planWochenSummeMin, datumAnzeige, type Fokus } from "./gemeinsam";
 
 /**
  * Der geführte Einstieg: rechnet sich aus dem Planzustand und sagt immer, was
@@ -123,7 +128,12 @@ export function PflegeplanAufbau() {
      bleiben erreichbar, aber der Einstieg ist das Dokument. */
   const [ansicht, setAnsicht] = useState<Ansicht>(() => plan.status === "veroeffentlicht" ? "dokument" : "aufbau");
 
+  const [pruefungOffen, setPruefungOffen] = useState(false);
+  const [pruefungsHinweis, setPruefungsHinweis] = useState<string | null>(null);
+
   const patient = patientId ? getPatient(patientId) : undefined;
+  const autorin = `${benutzer.vorname.charAt(0)}. ${benutzer.name}`;
+  const darfFreigeben = benutzer.role === "diplomiert";
 
   /* Das jüngste abgeschlossene Assessment mit getriggerten CAPs — die Quelle
      der Vorschläge. Ohne Assessment gibt es keine, und das ist kein Fehler. */
@@ -149,6 +159,71 @@ export function PflegeplanAufbau() {
   const dritte = plan.massnahmen.filter(m => m.planung.erbringer !== "S").length;
 
   const schritt = naechsterSchritt(plan);
+
+  /* Der Prüfstand — dauerhaft im Kopf sichtbar, auch bei geschlossenem
+     Panel: sonst wüsste niemand, dass die Prüfung veraltet ist. Erkannt
+     über die Inhalts-Signatur, nicht über einen Zeitstempel. */
+  const aktuell = pruefungAktuell(plan);
+  const offene = offeneBefunde(plan).length;
+
+  /** Prüfung ausführen — NUR auf Knopfdruck, nie im Hintergrund. */
+  const pruefen = (hinweis: string | null) => {
+    pruefungDurchfuehren(GEGENWART_ISO);
+    setPruefungsHinweis(hinweis);
+    setPruefungOffen(true);
+  };
+
+  const veroeffentlichenKlick = () => {
+    if (!pruefungAktuell(plan) || offeneBefunde(plan).length > 0) {
+      /* Der Umweg: Veröffentlichen führt zuerst in die Prüfung — mit dem
+         Hinweis, warum. Der Klick ist der Knopfdruck, der sie ausführt. */
+      const warUngeprueft = plan.pruefung === null;
+      const warVeraltet = plan.pruefung !== null && !pruefungAktuell(plan);
+      pruefungDurchfuehren(GEGENWART_ISO);
+      const offen = offeneBefunde(planSchnappschuss()).length;
+      const teile: string[] = [];
+      if (warUngeprueft) teile.push("Vor der Freigabe steht die WZW-Prüfung — sie wurde jetzt ausgeführt.");
+      if (warVeraltet) teile.push("Der Plan wurde seit der letzten Prüfung geändert — deshalb wurde neu geprüft.");
+      teile.push(offen > 0
+        ? `${offen} ${offen === 1 ? "Befund ist" : "Befunde sind"} offen: auflösen oder mit Begründung übergehen. Die Begründungen wandern ins Leistungsplanungsblatt.`
+        : "Keine offenen Befunde — Veröffentlichen ist jetzt frei.");
+      setPruefungsHinweis(teile.join(" "));
+      setPruefungOffen(true);
+      return;
+    }
+    const grund = veroeffentlichen(autorin, benutzer.role, GEGENWART_ISO);
+    if (!grund) setAnsicht("dokument");
+  };
+
+  /* Ein Befund verweist auf sein Element: Ansicht wechseln, Fokus setzen,
+     hinscrollen — dieselbe Mechanik wie beim «Ohne Anschluss»-Balken. */
+  const zumBefundElement = (b: PruefBefund) => {
+    setPruefungOffen(false);
+    setPruefungsHinweis(null);
+    setAnsicht("aufbau");
+    let selektor = "";
+    if (b.element.art === "diagnose") {
+      setFokus({ schritt: 2, diagnoseCode: b.element.code });
+      selektor = `[data-baum-diagnose="${b.element.code}"]`;
+    } else if (b.element.art === "ziel") {
+      const eintrag = (b.element.diagnoseCode
+        ? plan.ziele.find(z => z.zielId === b.element.code && z.diagnoseCode === b.element.diagnoseCode)
+        : plan.ziele.find(z => z.zielId === b.element.code && z.diagnoseCode !== null))
+        ?? plan.ziele.find(z => z.zielId === b.element.code);
+      if (eintrag?.diagnoseCode) {
+        setFokus({ schritt: 3, diagnoseCode: eintrag.diagnoseCode, zielId: eintrag.zielId, zielTitel: eintrag.titel });
+        selektor = `[data-baum-ziel="${eintrag.diagnoseCode}|${eintrag.zielId}"]`;
+      } else {
+        selektor = `[data-baum-ziel-frei="${b.element.code}"]`;
+      }
+    } else {
+      setFokus({ schritt: "editor", interventionId: b.element.code });
+      selektor = `[data-massnahme="${b.element.code}"]`;
+    }
+    window.setTimeout(() => {
+      document.querySelector(selektor)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+  };
 
   return (
     <div className="h-full flex flex-col" style={{ background: "var(--bg-primary)" }}>
@@ -176,21 +251,62 @@ export function PflegeplanAufbau() {
           <span style={{ marginLeft: 6, paddingBottom: 8, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
             {ANSICHT_SATZ[ansicht]}
           </span>
-          {plan.status !== "veroeffentlicht" && (
-            <button type="button" data-veroeffentlichen
-              onClick={() => {
-                /* Vorbedingung und Berechtigung sitzen im Store-Hook —
-                   Lauf 6 rüstet beides dort nach, nicht hier. */
-                const grund = veroeffentlichen(`${benutzer.vorname.charAt(0)}. ${benutzer.name}`, GEGENWART_ISO);
-                if (!grund) setAnsicht("dokument");
-              }}
+
+          {/* Rechts: Prüfstand, Prüfung, Veröffentlichen — in allen drei Ansichten. */}
+          <div className="flex items-center flex-wrap" style={{ gap: 10, marginLeft: "auto", marginBottom: 6 }}>
+            <span data-pruefstand style={{
+              fontSize: "var(--text-micro)",
+              color: plan.pruefung === null ? "var(--text-tertiary)"
+                : !aktuell ? "var(--status-warning-text)"
+                  : offene === 0 ? "var(--status-success-text)" : "var(--text-secondary)",
+            }}>
+              {plan.pruefung === null
+                ? "Noch nicht geprüft"
+                : !aktuell
+                  ? "Prüfung nicht mehr aktuell — Plan wurde seither geändert"
+                  : `Geprüft am ${datumAnzeige(plan.pruefung.datum)} · ${offene} offene ${offene === 1 ? "Befund" : "Befunde"}`}
+            </span>
+            <button type="button" data-wzw-pruefen onClick={() => pruefen(null)}
               className="ui-fokusring cursor-pointer"
-              style={{ marginLeft: "auto", marginBottom: 6, padding: "6px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", border: "none", fontSize: "var(--text-small)", fontWeight: 500 }}>
-              Veröffentlichen
+              style={{ padding: "6px 14px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", color: "var(--text-primary)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: 500 }}>
+              WZW-Prüfung durchführen
             </button>
-          )}
+            {plan.status !== "veroeffentlicht" && (
+              <>
+                {/* Deaktiviert MIT Begründung, nicht unsichtbar — unsichtbare
+                    Knöpfe erzeugen Rückfragen. Das Daten-Gate sitzt zusätzlich
+                    in veroeffentlichungsVorbedingung (plan-store). */}
+                {!darfFreigeben && (
+                  <span data-freigabe-grund style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", maxWidth: 220 }}>
+                    Nur die Pflegefachperson HF darf freigeben.
+                  </span>
+                )}
+                <button type="button" data-veroeffentlichen disabled={!darfFreigeben}
+                  onClick={veroeffentlichenKlick}
+                  title={darfFreigeben ? undefined : "Nur die Pflegefachperson HF darf den Plan freigeben."}
+                  className={darfFreigeben ? "ui-fokusring cursor-pointer" : ""}
+                  style={{
+                    padding: "6px 16px", borderRadius: "var(--radius-pill)",
+                    background: darfFreigeben ? "var(--brand-primary)" : "var(--bg-secondary)",
+                    color: darfFreigeben ? "var(--text-on-dark)" : "var(--text-tertiary)",
+                    border: darfFreigeben ? "none" : "var(--border-thin) solid var(--border-default)",
+                    fontSize: "var(--text-small)", fontWeight: 500,
+                    cursor: darfFreigeben ? "pointer" : "not-allowed",
+                  }}>
+                  Veröffentlichen
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
+
+      {pruefungOffen && plan.pruefung && (
+        <PruefungsPanel hinweis={pruefungsHinweis} autorin={autorin} datumIso={GEGENWART_ISO}
+          onNavigiere={zumBefundElement}
+          onErneutPruefen={() => pruefungDurchfuehren(GEGENWART_ISO)}
+          onSchliessen={() => { setPruefungOffen(false); setPruefungsHinweis(null); }} />
+      )}
 
       {!assessment ? (
         /* Kein Assessment: keine Vorschläge — kein Fehler. */

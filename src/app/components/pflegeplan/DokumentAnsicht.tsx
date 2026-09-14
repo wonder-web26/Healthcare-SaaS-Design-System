@@ -115,6 +115,7 @@ export function DokumentAnsicht({ mandate, onPlanAendern }: {
   const dritte = plan.massnahmen.filter(m => m.planung.erbringer !== "S");
   const ohneZuordnung = plan.massnahmen.filter(m => m.zielBezuege.length === 0);
   const eindeutigeZielZahl = new Set(plan.ziele.map(z => z.zielId)).size;
+  const uebergangene = plan.pruefung?.befunde.filter(b => b.uebergehung !== null) ?? [];
 
   const massnahmenVon = (code: string, zielId: string) =>
     plan.massnahmen.filter(m => m.zielBezuege.some(b => b.diagnoseCode === code && b.zielId === zielId));
@@ -150,8 +151,8 @@ export function DokumentAnsicht({ mandate, onPlanAendern }: {
                 style={{ padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", border: "none", fontSize: "var(--text-small)", fontWeight: 500 }}>
                 Plan ändern
               </button>
-              {/* Entsteht in Lauf 6 — als kommend markiert, keine tote Fläche. */}
-              <button type="button" disabled title="Entsteht in Lauf 6 — das Blatt wird aus diesem Plan abgeleitet"
+              {/* Entsteht in Lauf 6b — als kommend markiert, keine tote Fläche. */}
+              <button type="button" disabled title="Entsteht in Lauf 6b — das Blatt wird aus diesem Plan abgeleitet"
                 className="inline-flex items-center"
                 style={{ gap: 5, padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", color: "var(--text-tertiary)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: 500, cursor: "default" }}>
                 <FileText style={{ width: 12, height: 12 }} /> Leistungsplanungsblatt (kommt)
@@ -243,6 +244,41 @@ export function DokumentAnsicht({ mandate, onPlanAendern }: {
             ))}
           </div>
         )}
+
+        {/* ── Begründete Abweichungen: die übergangenen Befunde der
+              WZW-Prüfung — der Abschnitt, den eine Kontrolle als Erstes
+              liest. Vor Lauf 6 war er nach der Freigabe unsichtbar. ── */}
+        <div data-dok-abweichungen style={{ ...KARTE, padding: "12px 18px", marginBottom: 12 }}>
+          <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 2 }}>
+            Begründete Abweichungen
+          </div>
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginBottom: 4 }}>
+            Befunde der WZW-Prüfung, die mit Begründung übergangen wurden.
+          </div>
+          {uebergangene.length === 0 ? (
+            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+              {plan.status === "veroeffentlicht"
+                ? "Der Plan wurde ohne offene Befunde freigegeben — nichts wurde übergangen."
+                : "Nichts übergangen."}
+            </div>
+          ) : uebergangene.map(b => (
+            <div key={b.id} style={{ padding: "6px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+              <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{b.titel}</div>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", marginTop: 1, lineHeight: 1.5 }}>
+                {b.uebergehung!.text}
+              </div>
+              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 1 }}>
+                {b.uebergehung!.autorin} · {datumAnzeige(b.uebergehung!.datum)}
+              </div>
+            </div>
+          ))}
+          {uebergangene.length > 0 && (
+            <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 6 }}>
+              Wie die Fassungen zeigt der Prototyp den lebenden Stand der
+              aktuellen Prüfung — frühere Stände werden nicht gespeichert.
+            </div>
+          )}
+        </div>
 
         {/* ── Fassungen: eine Zählung, keine Historie ── */}
         <div data-dok-fassungen style={{ ...KARTE, padding: "12px 18px" }}>
