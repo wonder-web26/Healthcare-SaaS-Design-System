@@ -15,14 +15,17 @@ import { useNavigate, useParams } from "react-router";
 import { ArrowRight, ClipboardList } from "lucide-react";
 import { MOCK_ASSESSMENTS } from "../../../lib/mocks/klinische-artefakte-mock";
 import { zieleZuDiagnose, interventionenZuZiel } from "../../../lib/pflegeplan/mock-adapter";
-import { usePlan } from "../../../lib/pflegeplan/plan-store";
+import { usePlan, veroeffentlichen, planAendern } from "../../../lib/pflegeplan/plan-store";
 import { type MandatKurz } from "../../../lib/pflegeplan/planung";
 import { getPatient } from "../../../lib/patienten/store";
 import { useMandate } from "../../../lib/mandate/store";
 import { GESETZESGRUNDLAGE } from "../../../lib/stammdaten/mandat";
+import { GEGENWART_ISO } from "../../../lib/gegenwart";
+import { useCurrentUser } from "../../auth";
 import { PlanBaum } from "./PlanBaum";
 import { AuswahlBereich } from "./AuswahlBereich";
 import { StrukturAnsicht } from "./StrukturAnsicht";
+import { DokumentAnsicht } from "./DokumentAnsicht";
 import { planWochenSummeMin, type Fokus } from "./gemeinsam";
 
 /**
@@ -102,19 +105,23 @@ function naechsterSchritt(plan: ReturnType<typeof usePlan>): BalkenZustand {
   return { art: "vollstaendig" };
 }
 
-type Ansicht = "aufbau" | "struktur";
+type Ansicht = "aufbau" | "struktur" | "dokument";
 
 const ANSICHT_SATZ: Record<Ansicht, string> = {
   aufbau: "Eine Entscheidung nach der anderen. Für die Erstplanung.",
   struktur: "Was hängt woran. Zum Verstehen und Verknüpfen.",
+  dokument: "Lesen und erkennen, was ansteht. Für den veröffentlichten Plan.",
 };
 
 export function PflegeplanAufbau() {
   const { patientId } = useParams();
   const navigate = useNavigate();
   const plan = usePlan();
+  const benutzer = useCurrentUser();
   const [fokus, setFokus] = useState<Fokus>({ schritt: 1 });
-  const [ansicht, setAnsicht] = useState<Ansicht>("aufbau");
+  /* Ein veröffentlichter Plan öffnet im Dokument; Aufbau und Struktur
+     bleiben erreichbar, aber der Einstieg ist das Dokument. */
+  const [ansicht, setAnsicht] = useState<Ansicht>(() => plan.status === "veroeffentlicht" ? "dokument" : "aufbau");
 
   const patient = patientId ? getPatient(patientId) : undefined;
 
@@ -154,7 +161,7 @@ export function PflegeplanAufbau() {
           {patient ? `${patient.nachname}, ${patient.vorname}` : patientId}
         </div>
         <div className="flex items-center flex-wrap" style={{ gap: 14, marginTop: 10 }}>
-          {(["aufbau", "struktur"] as Ansicht[]).map(a => (
+          {(["aufbau", "struktur", "dokument"] as Ansicht[]).map(a => (
             <button key={a} type="button" onClick={() => setAnsicht(a)}
               className="ui-fokusring cursor-pointer"
               style={{
@@ -163,16 +170,25 @@ export function PflegeplanAufbau() {
                 color: ansicht === a ? "var(--brand-primary)" : "var(--text-secondary)",
                 borderBottom: ansicht === a ? "2px solid var(--brand-primary)" : "2px solid transparent",
               }}>
-              {a === "aufbau" ? "Aufbau" : "Struktur"}
+              {a === "aufbau" ? "Aufbau" : a === "struktur" ? "Struktur" : "Dokument"}
             </button>
           ))}
-          {/* Dokument entsteht in Lauf 5 — als kommend gekennzeichnet, keine tote Fläche. */}
-          <span title="Entsteht in Lauf 5" style={{ padding: "0 0 8px", fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>
-            Dokument <span style={{ fontSize: "var(--text-micro)" }}>(kommt)</span>
-          </span>
           <span style={{ marginLeft: 6, paddingBottom: 8, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
             {ANSICHT_SATZ[ansicht]}
           </span>
+          {plan.status !== "veroeffentlicht" && (
+            <button type="button" data-veroeffentlichen
+              onClick={() => {
+                /* Vorbedingung und Berechtigung sitzen im Store-Hook —
+                   Lauf 6 rüstet beides dort nach, nicht hier. */
+                const grund = veroeffentlichen(`${benutzer.vorname.charAt(0)}. ${benutzer.name}`, GEGENWART_ISO);
+                if (!grund) setAnsicht("dokument");
+              }}
+              className="ui-fokusring cursor-pointer"
+              style={{ marginLeft: "auto", marginBottom: 6, padding: "6px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", border: "none", fontSize: "var(--text-small)", fontWeight: 500 }}>
+              Veröffentlichen
+            </button>
+          )}
         </div>
       </div>
 
@@ -195,6 +211,9 @@ export function PflegeplanAufbau() {
             </button>
           </div>
         </div>
+      ) : ansicht === "dokument" ? (
+        <DokumentAnsicht mandate={mandate}
+          onPlanAendern={() => { planAendern(); setAnsicht("struktur"); }} />
       ) : ansicht === "struktur" ? (
         <StrukturAnsicht plan={plan} mandate={mandate}
           onEditor={interventionId => { setAnsicht("aufbau"); setFokus({ schritt: "editor", interventionId }); }} />

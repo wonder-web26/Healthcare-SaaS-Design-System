@@ -7,9 +7,9 @@
  */
 import { useState } from "react";
 import { ChevronDown, ChevronRight, ClipboardList } from "lucide-react";
-import type { PlanZustand, PlanMassnahme, PlanZiel } from "../../../lib/pflegeplan/plan-store";
+import { zielTerminieren, type PlanZustand, type PlanMassnahme, type PlanZiel } from "../../../lib/pflegeplan/plan-store";
 import { massnahmenSatz, type MandatKurz } from "../../../lib/pflegeplan/planung";
-import { type Fokus, TypMarke, positionsLage } from "./gemeinsam";
+import { type Fokus, TypMarke, positionsLage, datumAnzeige } from "./gemeinsam";
 
 const KARTE: React.CSSProperties = {
   background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
@@ -188,12 +188,22 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                           </div>
                           {zZu ? (
                             <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", padding: "1px 0 0 32px" }}>
-                              ohne Zieldatum · {massnahmen.length} {massnahmen.length === 1 ? "Massnahme" : "Massnahmen"}
+                              {z.zieldatum ? `Zieldatum ${datumAnzeige(z.zieldatum)}` : "ohne Zieldatum"} · {massnahmen.length} {massnahmen.length === 1 ? "Massnahme" : "Massnahmen"}
                             </div>
                           ) : (
                             <div>
-                              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", padding: "1px 0 0 32px" }}>
-                                ohne Zieldatum — es entsteht mit der Feinplanung
+                              {/* Zieldatum: hier setzbar, NIE vorbelegt — sein
+                                  Fehlen wird in Lauf 6 ein Wirksamkeitsbefund. */}
+                              <div className="flex items-center" style={{ gap: 6, padding: "2px 0 0 32px" }}>
+                                <label style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Zieldatum</label>
+                                <input type="date" value={z.zieldatum}
+                                  aria-label={`Zieldatum für ${z.titel}`}
+                                  onChange={e => zielTerminieren(z.zielId, { zieldatum: e.target.value })}
+                                  onClick={e => e.stopPropagation()}
+                                  style={{ height: 22, padding: "0 6px", borderRadius: 6, border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", fontSize: "var(--text-micro)", color: z.zieldatum ? "var(--text-primary)" : "var(--text-tertiary)", fontFamily: "inherit", outline: "none" }} />
+                                {!z.zieldatum && (
+                                  <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>— nicht vorbelegt</span>
+                                )}
                               </div>
                               {massnahmen.map(m => (
                                 <MassnahmenZeile key={m.interventionId} m={m} zielId={z.zielId} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />

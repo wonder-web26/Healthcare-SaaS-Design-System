@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { ableitungAlsText } from "./vertrag";
-import { diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer, ausgeschlosseneZiele, unbehandelteCaps } from "./mock-adapter";
+import { diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer, ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala } from "./mock-adapter";
 import { leistungsposition } from "./positionen";
 import { MAS_ZIEL, PROB_MAS, PROB_ZIEL_HIDE } from "./mock-daten";
 
@@ -148,6 +148,17 @@ const VIER_CAPS = ["CAP-FALLS", "CAP-ADL", "CAP-PAIN", "CAP-MOOD"];
   assert.deepEqual(unbehandelteCaps(["CAP-FALLS", "CAP-CARDIO"]), ["CAP-CARDIO"], "unbekannter CAP wird ausgewiesen");
   assert.deepEqual(unbehandelteCaps(["CAP-FALLS", "CAP-ADL", "CAP-PAIN", "CAP-MOOD"]), [], "bekannte CAPs: nichts unbehandelt");
   console.log("✓ 13 unbehandelteCaps: kein CAP verschwindet spurlos");
+}
+
+/* ── Lauf-5-Ergänzung: die Bewertungsskala — Ordnung ist Vertragsbestandteil ── */
+{
+  const skala = zielBewertungsSkala();
+  assert.deepEqual(skala.map(s => s.stufe), [5, 4, 3, 2, 1], "absteigend geordnet: 5 (bestes) zuerst, 1 (schlechtestes) zuletzt");
+  assert.deepEqual(skala.map(s => s.label), [
+    "vollständig erreicht", "weitgehend erreicht", "teilweise erreicht", "kaum erreicht", "nicht erreicht",
+  ], "die fünf Bezeichnungen der Katalog-Lieferung");
+  for (const s of skala) assert.equal(s.herkunft.stufe, "katalog", "Herkunft katalog — gelieferte Fachlichkeit");
+  console.log("✓ 14 zielBewertungsSkala: fünf Stufen, Ordnung 5→1, Herkunft katalog");
 }
 
 console.log("\nAlle Vertragstests bestanden.");

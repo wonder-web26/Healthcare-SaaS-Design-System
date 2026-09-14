@@ -122,6 +122,22 @@ export interface Leistungsposition {
   teilhandlungen: string[] | null;
 }
 
+/* ── Zielerreichung ─────────────────────────────────────────────────────── */
+/**
+ * Die fünfstufige Bewertungsskala der Zielerreichung — gelieferte
+ * Katalog-Fachlichkeit (EnpGoalCatalog führt je Ziel eine 5-Stufen-Skala),
+ * keine Setzung von uns.
+ *
+ * DIE ORDNUNG IST TEIL DES VERTRAGS: 5 ist das beste Ergebnis, 1 das
+ * schlechteste, geliefert absteigend. Wird die Reihenfolge irgendwo
+ * umgedreht, entstehen Auswertungen, die das Gegenteil aussagen — und das
+ * merkt niemand.
+ */
+export interface BewertungsStufe {
+  stufe: 1 | 2 | 3 | 4 | 5;
+  label: string;
+}
+
 /* ── Ableitung ──────────────────────────────────────────────────────────── */
 /**
  * Die Kette von CAP über Diagnose, Ziel und Intervention bis zur Position —
@@ -166,6 +182,10 @@ export function ableitungAlsText(a: Ableitung): string {
  * wird von (1) übersprungen, darf aber nicht spurlos verschwinden. Diese
  * Abfrage weist ihn aus; das UI sagt dann «ein ausgelöster CAP hat keine
  * Zuordnungsliste».
+ *
+ * Zu (8) — Ergänzung aus Lauf 5: die Bewertungsskala der Zielerreichung,
+ * absteigend geordnet (5 → 1). Mit echten Daten hängt die Skala je Ziel
+ * (EnpGoalCatalog.evaluationScaleId), nicht global — siehe Delta.
  */
 export interface PflegeplanAbfragen {
   diagnoseVorschlaege(caps: CapCode[]): DiagnoseVorschlag[];
@@ -175,4 +195,5 @@ export interface PflegeplanAbfragen {
   positionFuer(interventionId: InterventionId, detailauswahl: DetailAuswahl): MitHerkunft<Leistungsposition> | null;
   ausgeschlosseneZiele(code: DiagnoseCode): MitHerkunft<Ziel>[];
   unbehandelteCaps(caps: CapCode[]): CapCode[];
+  zielBewertungsSkala(): MitHerkunft<BewertungsStufe>[];
 }

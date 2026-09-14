@@ -25,6 +25,15 @@ export interface PlanDiagnose {
   ausloesendeCaps: CapCode[];
 }
 
+/** Die erfasste Zielerreichung — Stufe aus der Vertragsskala, mit Datum und
+ *  Autorin. Einmal je Ziel (nicht je Diagnose-Bindung). */
+export interface ZielEinschaetzung {
+  stufe: 1 | 2 | 3 | 4 | 5;
+  /** ISO-Datum. */
+  datum: string;
+  autorin: string;
+}
+
 export interface PlanZiel {
   /** Katalog-Zielkennung — oder eigene Kennung bei selbst formulierten Zielen. */
   zielId: ZielId;
@@ -35,6 +44,12 @@ export interface PlanZiel {
   titel: string;
   /** Selbst formuliert statt aus der hergeleiteten Liste übernommen. */
   eigenes: boolean;
+  /** ISO-Datum; "" = keines. NIE automatisch vorbelegt — ein Ziel ohne
+   *  Zieldatum ist ein Zustand, der in Lauf 6 zum Wirksamkeitsbefund wird. */
+  zieldatum: string;
+  /** Freitext, z.B. «alle 4 Wochen»; "" = keines. */
+  evaluationsIntervall: string;
+  einschaetzung: ZielEinschaetzung | null;
 }
 
 /** Ein Zielbezug einer Massnahme: unter welcher Diagnose, zu welchem Ziel. */
@@ -129,14 +144,32 @@ export interface Verwerfung {
   datum: string;
 }
 
+export type PlanStatus = "in_arbeit" | "veroeffentlicht" | "aenderung_in_arbeit";
+
+export interface Fassung {
+  nummer: number;
+  /** ISO-Datum. */
+  datum: string;
+  autorin: string;
+}
+
 export interface PlanZustand {
   diagnosen: PlanDiagnose[];
   ziele: PlanZiel[];
   massnahmen: PlanMassnahme[];
   verwerfungen: Verwerfung[];
+  status: PlanStatus;
+  /** ZÄHLUNG, keine Historie: alte Stände werden im Prototyp nicht
+   *  gespeichert und sind nicht lesbar — der Schemabedarf steht im Delta. */
+  fassungen: Fassung[];
 }
 
-let zustand: PlanZustand = { diagnosen: [], ziele: [], massnahmen: [], verwerfungen: [] };
+const LEERER_PLAN: PlanZustand = {
+  diagnosen: [], ziele: [], massnahmen: [], verwerfungen: [],
+  status: "in_arbeit", fassungen: [],
+};
+
+let zustand: PlanZustand = { ...LEERER_PLAN };
 
 const hoerer = new Set<() => void>();
 function melden(): void { hoerer.forEach(l => l()); }
@@ -170,9 +203,39 @@ export function verwerfungZuruecknehmen(code: DiagnoseCode): void {
 
 /* ── Ziele ─────────────────────────────────────────────────────────────── */
 
-export function zielUebernehmen(z: PlanZiel): void {
+/** Ziel übernehmen — OHNE Zieldatum: es wird nie automatisch vorbelegt. */
+export function zielUebernehmen(z: Omit<PlanZiel, "zieldatum" | "evaluationsIntervall" | "einschaetzung">): void {
   if (zustand.ziele.some(x => x.diagnoseCode === z.diagnoseCode && x.zielId === z.zielId)) return;
-  zustand = { ...zustand, ziele: [...zustand.ziele, z] };
+  /* Dient das Ziel bereits einer anderen Diagnose, teilen sich die Einträge
+     Zieldatum und Einschätzung — sie gehören zum Ziel, nicht zur Bindung. */
+  const bestehend = zustand.ziele.find(x => x.zielId === z.zielId);
+  zustand = {
+    ...zustand,
+    ziele: [...zustand.ziele, {
+      ...z,
+      zieldatum: bestehend?.zieldatum ?? "",
+      evaluationsIntervall: bestehend?.evaluationsIntervall ?? "",
+      einschaetzung: bestehend?.einschaetzung ?? null,
+    }],
+  };
+  melden();
+}
+
+/** Zieldatum und Intervall setzen — je Ziel, synchron über alle Bindungen. */
+export function zielTerminieren(zielId: ZielId, patch: { zieldatum?: string; evaluationsIntervall?: string }): void {
+  zustand = {
+    ...zustand,
+    ziele: zustand.ziele.map(z => z.zielId === zielId ? { ...z, ...patch } : z),
+  };
+  melden();
+}
+
+/** Zielerreichung einschätzen — je Ziel, synchron über alle Bindungen. */
+export function zielEinschaetzen(zielId: ZielId, einschaetzung: ZielEinschaetzung): void {
+  zustand = {
+    ...zustand,
+    ziele: zustand.ziele.map(z => z.zielId === zielId ? { ...z, einschaetzung } : z),
+  };
   melden();
 }
 
@@ -238,7 +301,10 @@ export function eigenesZielHinzufuegen(diagnoseCode: DiagnoseCode, titel: string
   eigeneZielNummer += 1;
   zustand = {
     ...zustand,
-    ziele: [...zustand.ziele, { zielId: `Z-EIGEN-${eigeneZielNummer}`, diagnoseCode, titel, eigenes: true }],
+    ziele: [...zustand.ziele, {
+      zielId: `Z-EIGEN-${eigeneZielNummer}`, diagnoseCode, titel, eigenes: true,
+      zieldatum: "", evaluationsIntervall: "", einschaetzung: null,
+    }],
   };
   melden();
 }
@@ -287,8 +353,41 @@ export function massnahmenBezugLoesen(interventionId: InterventionId, bezug: Zie
   melden();
 }
 
+/* ── Veröffentlichen und Ändern (Lauf 5) ───────────────────────────────── */
+
+/**
+ * Vorbedingung des Veröffentlichens — HIER schiebt Lauf 6 die WZW-Prüfung
+ * und die Rollenfrage davor. Heute gibt es keine Prüfung und jeder darf;
+ * beides ist bewusst als eine Stelle gebaut, nicht verstreut.
+ * Rückgabe: Ablehnungsgrund, oder leer.
+ */
+function veroeffentlichungsVorbedingung(_plan: PlanZustand, _autorin: string): string {
+  return "";
+}
+
+/** Veröffentlichen: Status setzen, Fassung zählen. Rückgabe: Grund einer
+ *  Ablehnung, sonst leer. */
+export function veroeffentlichen(autorin: string, datumIso: string): string {
+  const grund = veroeffentlichungsVorbedingung(zustand, autorin);
+  if (grund) return grund;
+  zustand = {
+    ...zustand,
+    status: "veroeffentlicht",
+    fassungen: [...zustand.fassungen, { nummer: zustand.fassungen.length + 1, datum: datumIso, autorin }],
+  };
+  melden();
+  return "";
+}
+
+/** Plan ändern: «Änderung in Arbeit» — der Einstieg ist die Struktur. */
+export function planAendern(): void {
+  if (zustand.status !== "veroeffentlicht") return;
+  zustand = { ...zustand, status: "aenderung_in_arbeit" };
+  melden();
+}
+
 /** Nur für Tests/Neustart der Demo. */
 export function planZuruecksetzen(): void {
-  zustand = { diagnosen: [], ziele: [], massnahmen: [], verwerfungen: [] };
+  zustand = { ...LEERER_PLAN };
   melden();
 }

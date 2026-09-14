@@ -112,6 +112,28 @@ dbml heute nicht vorsieht:
    Zuordnungsliste). Sichtbare Nebenwirkung: die interRAI-Ansichten dieses
    Assessments zeigen vier statt drei CAP-Karten.
 
+## Abweichungen aus Lauf 5 (Dokument-Ansicht)
+
+1. **`zielBewertungsSkala()`** ist als achte Vertragsabfrage dazugekommen —
+   die fünfstufige Zielerreichungs-Skala aus der Katalog-Lieferung, Herkunft
+   `katalog`. **Die Ordnung ist Teil des Vertrags** (5 bestes, 1
+   schlechtestes, absteigend geliefert; per Test belegt). Mit echten Daten
+   hängt die Skala **je Ziel** (`EnpGoalCatalog.evaluationScaleId`), nicht
+   global — verschiedene Ziele können verschiedene Skalen tragen. Der
+   Adapter darf nicht auf eine globale Skala festgelegt werden.
+2. **Zieldatum, Evaluationsintervall und Einschätzung** (Stufe, Datum,
+   Autorin) leben im Prototyp am Plan-Zustand je Ziel. In der dbml trägt
+   `TreatmentGoal` nur `status (active | achieved | cancelled)` — es fehlen
+   **Zieldatum**, **Evaluationsintervall** und die **skalierte Einschätzung
+   mit Datum und Person**.
+3. **Fassungen sind im Prototyp eine Zählung, keine Historie**: alte Stände
+   werden nicht gespeichert und sind nicht lesbar. Mit echten Daten braucht
+   der Plan **versionierte Stände** (Vorbild: die LPB-Versionierung im
+   Fachmodell — neue Fassung statt stiller Änderung, ersetzte Fassungen
+   bleiben lesbar).
+4. Das Bezugsdatum für «überfällig» ist die feste Mock-Gegenwart
+   (`GEGENWART_ISO`); produktiv ersetzt das Systemdatum die Konstante.
+
 ## Abweichungen aus Lauf 3 (Massnahmen-Editor)
 
 1. **Zweitmandat als Lauf-6-Bedarf:** Der Massnahmen-Editor trägt einen

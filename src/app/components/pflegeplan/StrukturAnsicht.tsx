@@ -22,7 +22,7 @@ import {
 } from "../../../lib/pflegeplan/plan-store";
 import { massnahmenSatz, type MandatKurz } from "../../../lib/pflegeplan/planung";
 import type { InterventionId, ZielId, DiagnoseCode } from "../../../lib/pflegeplan/vertrag";
-import { TypMarke, positionsLage, planWochenSummeMin, massnahmenDauerMin } from "./gemeinsam";
+import { TypMarke, positionsLage, planWochenSummeMin, massnahmenDauerMin, datumAnzeige } from "./gemeinsam";
 import { wochenMinuten } from "../../../lib/pflegeplan/planung";
 
 type Auswahl = { art: "d"; code: DiagnoseCode } | { art: "z"; zielId: ZielId } | { art: "m"; interventionId: InterventionId } | null;
@@ -48,9 +48,9 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor }: {
 
   /* ── Knotenmengen: jedes Element genau einmal ── */
   const zielKnoten = useMemo(() => {
-    const je = new Map<ZielId, { titel: string; diagnosen: DiagnoseCode[]; eigenes: boolean }>();
+    const je = new Map<ZielId, { titel: string; diagnosen: DiagnoseCode[]; eigenes: boolean; zieldatum: string }>();
     for (const z of plan.ziele) {
-      const e = je.get(z.zielId) ?? { titel: z.titel, diagnosen: [], eigenes: z.eigenes };
+      const e = je.get(z.zielId) ?? { titel: z.titel, diagnosen: [], eigenes: z.eigenes, zieldatum: z.zieldatum };
       if (z.diagnoseCode !== null) e.diagnosen.push(z.diagnoseCode);
       je.set(z.zielId, e);
     }
@@ -302,6 +302,7 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor }: {
                     <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 2 }}>
                       {z.zielId} · {massnahmen.length} {massnahmen.length === 1 ? "Massnahme" : "Massnahmen"}
                       {z.diagnosen.length > 1 && ` · dient ${z.diagnosen.length} Diagnosen`}
+                      {z.zieldatum && ` · Zieldatum ${datumAnzeige(z.zieldatum)}`}
                     </div>
                   </button>
                 );

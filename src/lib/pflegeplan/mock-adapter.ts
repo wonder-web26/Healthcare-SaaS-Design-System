@@ -5,7 +5,7 @@
  * hinter denselben Vertrag und tauscht die Datenquelle — nicht das UI.
  */
 import type {
-  Beleg, CapCode, DetailAuswahl, Detaildialog, Diagnose, DiagnoseCode,
+  Beleg, BewertungsStufe, CapCode, DetailAuswahl, Detaildialog, Diagnose, DiagnoseCode,
   DiagnoseVorschlag, FeldHerkunft, Intervention, InterventionId,
   Leistungsposition, MitHerkunft, PflegeplanAbfragen, Ziel, ZielId,
 } from "./vertrag";
@@ -176,8 +176,27 @@ export function unbehandelteCaps(caps: CapCode[]): CapCode[] {
   return caps.filter(cap => !(cap in CAP_ZUORDNUNG));
 }
 
+/**
+ * (8) Die Bewertungsskala der Zielerreichung — gelieferte
+ * Katalog-Fachlichkeit, deshalb Herkunft «katalog». Absteigend geordnet:
+ * 5 ist das beste Ergebnis, 1 das schlechteste; die Ordnung ist Teil des
+ * Vertrags.
+ */
+const BEWERTUNGS_SKALA: BewertungsStufe[] = [
+  { stufe: 5, label: "vollständig erreicht" },
+  { stufe: 4, label: "weitgehend erreicht" },
+  { stufe: 3, label: "teilweise erreicht" },
+  { stufe: 2, label: "kaum erreicht" },
+  { stufe: 1, label: "nicht erreicht" },
+];
+const HERKUNFT_STUFE: FeldHerkunft<BewertungsStufe> = { stufe: "katalog", label: "katalog" };
+
+export function zielBewertungsSkala(): MitHerkunft<BewertungsStufe>[] {
+  return BEWERTUNGS_SKALA.map(s => ({ ...s, herkunft: HERKUNFT_STUFE }));
+}
+
 /** Der Vertrag als ein Objekt — für Übergabe an Komponenten oder Tests. */
 export const mockPflegeplanKatalog: PflegeplanAbfragen = {
   diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer,
-  ausgeschlosseneZiele, unbehandelteCaps,
+  ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala,
 };
