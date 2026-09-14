@@ -8,7 +8,7 @@
  * Fallkennungen stammen aus lib/onboarding/faelle.ts. Artefakte an Kennungen
  * ausserhalb dieses Verzeichnisses wären über die Oberfläche nicht erreichbar.
  */
-import type { InterRAIAssessment, InterRAIItem, AnnaKonfidenz, CapResult, OutcomeScale, Pflegeplanung, Pflegediagnose, Massnahme, Pflegeziel, KLVVerordnung, KLVLeistung, KLVEinheit, WorkflowPlan, WorkflowSchritt, AerztlicheDiagnose } from "../../types/klinische-artefakte";
+import type { InterRAIAssessment, InterRAIItem, AnnaKonfidenz, CapResult, OutcomeScale, KLVVerordnung, KLVLeistung, KLVEinheit, WorkflowPlan, WorkflowSchritt, AerztlicheDiagnose } from "../../types/klinische-artefakte";
 import type { KlvWerCode } from "../stammdaten/klv-wer";
 import { GEGENWART } from "../gegenwart";
 
@@ -107,25 +107,9 @@ export const DEMO_SCALES: OutcomeScale[] = [
   { id: "PAIN", name: "Schmerzskala", abkuerzung: "PAIN", wert: 1, maxWert: 3, interpretation: "Gelegentlich", richtung: "hoeher-schlechter" },
 ];
 
-const STEINER_ALT_DIAGNOSEN: Pflegediagnose[] = [
-  { id: "PD1", nandaCode: "00155", titel: "Sturzgefahr", bezugCap: "CAP-FALLS", begruendung: "Sturz in letzten 30 Tagen, eingeschränkte Mobilität, Umgebungsrisiken Bad.", status: "akzeptiert", icdIds: ["AD-A1"] },
-  { id: "PD2", nandaCode: "00095", titel: "Schlafstörung", bezugCap: "CAP-MOOD", begruendung: "Einschlafprobleme bei mittelgradiger Depression.", status: "akzeptiert", icdIds: ["AD-A3"] },
-  { id: "PD3", nandaCode: "00241", titel: "Beeinträchtigte Stimmungsregulation", bezugCap: "CAP-MOOD", begruendung: "Anhaltende Traurigkeit, Interessenverlust, Rückzug.", status: "akzeptiert", icdIds: ["AD-A3"] },
-];
-
-const STEINER_ALT_MASSNAHMEN: Massnahme[] = [
-  { id: "MA1", titel: "Sturzprophylaxe-Beratung", bezugDiagnoseId: "PD1", beschreibung: "Sturzrisiken besprechen, Haltegriffe empfehlen.", haeufigkeit: "bei Bedarf", status: "akzeptiert" },
-  { id: "MA2", titel: "Wohnraum-Anpassung prüfen", bezugDiagnoseId: "PD1", beschreibung: "Ergotherapeutische Abklärung.", haeufigkeit: "einmalig", status: "akzeptiert" },
-  { id: "MA3", titel: "Schlafhygiene-Beratung", bezugDiagnoseId: "PD2", beschreibung: "Schlafrituale, Grübel-Strategien.", haeufigkeit: "wöchentlich", status: "akzeptiert" },
-  { id: "MA4", titel: "Aktivierung und Tagesstruktur", bezugDiagnoseId: "PD3", beschreibung: "Soziale Kontakte fördern.", haeufigkeit: "wöchentlich", status: "akzeptiert" },
-  { id: "MA5", titel: "Blutdruck-Monitoring", bezugDiagnoseId: "PD3", beschreibung: "Regelmässig messen, dokumentieren.", haeufigkeit: "täglich", status: "akzeptiert" },
-];
-
-const STEINER_ALT_ZIELE: Pflegeziel[] = [
-  { id: "Z1", titel: "Sturzfreiheit 3 Monate", bezugDiagnoseId: "PD1", zeithorizont: "3 Monate", messbar: "Kein Sturz bis Re-Assessment", status: "akzeptiert" },
-  { id: "Z2", titel: "Schlafqualität verbessern", bezugDiagnoseId: "PD2", zeithorizont: "6 Wochen", messbar: "Einschlafdauer < 30 Min.", status: "akzeptiert" },
-  { id: "Z3", titel: "Soziale Teilhabe", bezugDiagnoseId: "PD3", zeithorizont: "2 Monate", messbar: "1x/Woche soziale Aktivität", status: "akzeptiert" },
-];
+/* Die Pflegeplanungs-Bestände (Diagnosen, Massnahmen, Ziele, Planungen) sind
+   mit der alten Pflegeplanung abgerissen — das neue Pflegeplan-Modul bringt
+   eigene Mock-Daten. Siehe docs/schema-delta-pflegeplan.md. */
 
 /* ══════════════════════════════════════════
    SZENARIO 1: Steiner, Hans-Rudolf (konvertiert, Alt-Fall ONB-ALT-001)
@@ -146,17 +130,9 @@ const STEINER_ALT_RE: InterRAIAssessment = {
   getriggerteCaps: [], outcomeScales: [],
 };
 
-const STEINER_ALT_PP: Pflegeplanung = {
-  id: "PP-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041",
-  patientName: "Steiner, Hans-Rudolf", interRAIAssessmentId: "BA-2025-001",
-  status: "abgeschlossen", erstelltVon: "Sandra Weber",
-  erstellDatum: "16.08.2025", abschlussDatum: "16.08.2025",
-  pflegediagnosen: STEINER_ALT_DIAGNOSEN, massnahmen: STEINER_ALT_MASSNAHMEN, ziele: STEINER_ALT_ZIELE,
-};
-
 const STEINER_ALT_KLV: KLVVerordnung = {
   id: "KLV-2025-001", onboardingId: "ONB-ALT-001", patientId: "P-2026-0041", mandatId: null,
-  patientName: "Steiner, Hans-Rudolf", pflegeplanungId: "PP-2025-001",
+  patientName: "Steiner, Hans-Rudolf",
   status: "ersetzt",
   version: 1, art: "erst",
   statusProtokoll: [{ status: "ersetzt", person: "Sandra Weber", zeitpunkt: "17.08.2025 09:00" }],
@@ -169,19 +145,19 @@ const STEINER_ALT_KLV: KLVVerordnung = {
   ],
   leistungspositionen: [
     // Kat a – Abklärung und Beratung
-    { id: "LP1", klvNummer: "10901", bezeichnung: "Erstassessment", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 60, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP2", klvNummer: "10904", bezeichnung: "Pflegeplanung erstmalig im Rahmen der Bedarfsabklärung", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 30, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP3", klvNummer: "10907", bezeichnung: "Konsultation Arzt – Spitex zur Bedarfsabklärung", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 11, ausAnna: true, annaKonfidenz: "mittel", validiert: true, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP4", klvNummer: "10909", bezeichnung: "Pflegeanleitung/Beratung Klientin oder Angehörige", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "w", zeitMin: 15, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
+    { id: "LP1", klvNummer: "10901", bezeichnung: "Erstassessment", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 60, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null },
+    { id: "LP2", klvNummer: "10904", bezeichnung: "Pflegeplanung erstmalig im Rahmen der Bedarfsabklärung", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 30, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null },
+    { id: "LP3", klvNummer: "10907", bezeichnung: "Konsultation Arzt – Spitex zur Bedarfsabklärung", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 11, ausAnna: true, annaKonfidenz: "mittel", validiert: true, simultanGruppe: null },
+    { id: "LP4", klvNummer: "10909", bezeichnung: "Pflegeanleitung/Beratung Klientin oder Angehörige", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "w", zeitMin: 15, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null },
     // Kat b – Untersuchung und Behandlung
-    { id: "LP5", klvNummer: "10602", bezeichnung: "Verabreichung gerichtete Medikamente", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 6, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-1", bezugMassnahmeId: "MA5", diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP6", klvNummer: "10802", bezeichnung: "Blutdruckmessung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 5, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-1", bezugMassnahmeId: "MA5", diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP7", klvNummer: "10808", bezeichnung: "Kapillarblutentnahme inkl. Glucosebestimmung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 10, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-1", bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP8", klvNummer: "10110", bezeichnung: "Nägel schneiden Zehen bei Diabetikern", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "m", zeitMin: 20, ausAnna: true, annaKonfidenz: "mittel", validiert: true, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
+    { id: "LP5", klvNummer: "10602", bezeichnung: "Verabreichung gerichtete Medikamente", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 6, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-1" },
+    { id: "LP6", klvNummer: "10802", bezeichnung: "Blutdruckmessung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 5, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-1" },
+    { id: "LP7", klvNummer: "10808", bezeichnung: "Kapillarblutentnahme inkl. Glucosebestimmung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 10, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-1" },
+    { id: "LP8", klvNummer: "10110", bezeichnung: "Nägel schneiden Zehen bei Diabetikern", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "m", zeitMin: 20, ausAnna: true, annaKonfidenz: "mittel", validiert: true, simultanGruppe: null },
     // Kat c – Grundpflege
-    { id: "LP9", klvNummer: "10104", bezeichnung: "Teilwäsche am Lavabo (inkl. Intimpflege)", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t7", zeitMin: 26, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP10", klvNummer: "10114", bezeichnung: "Hilfe An-/Auskleiden", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t7", zeitMin: 15, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP11", klvNummer: "10505", bezeichnung: "Hilfe beim Gehen", kategorie: "c", wer: "I", training: "T", anzahl: 3, einheit: "t7", zeitMin: 8, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: "MA1", diagnoseIds: ["PD1"], wzwBegruendung: null },
+    { id: "LP9", klvNummer: "10104", bezeichnung: "Teilwäsche am Lavabo (inkl. Intimpflege)", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t7", zeitMin: 26, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null },
+    { id: "LP10", klvNummer: "10114", bezeichnung: "Hilfe An-/Auskleiden", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t7", zeitMin: 15, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null },
+    { id: "LP11", klvNummer: "10505", bezeichnung: "Hilfe beim Gehen", kategorie: "c", wer: "I", training: "T", anzahl: 3, einheit: "t7", zeitMin: 8, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null },
   ],
   zielformulierungen: ["Sturzprophylaxe", "ADL-Selbstständigkeit", "Medikamenten-Adhärenz"],
   arztAngeordnetAm: "20.08.2025", krankenkasseGutspracheAm: "28.08.2025", ablehnungsgrund: null,
@@ -202,46 +178,9 @@ const HUBER_BA: InterRAIAssessment = {
   getriggerteCaps: [], outcomeScales: [],
 };
 
-const HUBER_DIAGNOSEN: Pflegediagnose[] = [
-  { id: "PD-H1", nandaCode: "00085", titel: "Beeinträchtigte körperliche Mobilität", bezugCap: null, begruendung: "Chronische Kreuzschmerzen (M54.5) mit eingeschränkter Gehfähigkeit, Treppensteigen nur mit Hilfe, Sturzrisiko erhöht.", status: "vorschlag", icdIds: ["AD-H2"] },
-  { id: "PD-H2", nandaCode: "00132", titel: "Akuter Schmerz", bezugCap: null, begruendung: "Chronische lumbale Rückenschmerzen mit Belastungsabhängigkeit, VAS 5-6 bei Mobilisation, Analgetika-Bedarf.", status: "vorschlag", icdIds: ["AD-H2"] },
-  { id: "PD-H3", nandaCode: "00108", titel: "Selbstpflegedefizit Körperpflege", bezugCap: null, begruendung: "Eingeschränkte Rumpfbeweglichkeit durch Kreuzschmerzen, Hilfe bei Teilwäsche und An-/Auskleiden der unteren Körperhälfte nötig.", status: "vorschlag", icdIds: ["AD-H2"] },
-  { id: "PD-H4", nandaCode: "00078", titel: "Ineffektives Gesundheitsmanagement", bezugCap: null, begruendung: "Arterielle Hypertonie (I10) mit unregelmässiger Medikamenteneinnahme, BD-Werte schwankend, Wissensdefizit Ernährung.", status: "vorschlag", icdIds: ["AD-H1"] },
-];
-
-const HUBER_MASSNAHMEN: Massnahme[] = [
-  // Zu PD-H1: Mobilität
-  { id: "MA-H1", titel: "Mobilisationsförderung nach ENP", bezugDiagnoseId: "PD-H1", beschreibung: "Tägliche Gehübungen in der Wohnung mit Rollator, Steigerung der Gehstrecke von 50m auf 200m.", haeufigkeit: "2×/Tag", status: "vorschlag" },
-  { id: "MA-H2", titel: "Sturzprophylaxe-Assessment", bezugDiagnoseId: "PD-H1", beschreibung: "Wohnungsbegehung mit Ergotherapie, Haltegriffe im Bad, rutschfeste Matten, Beleuchtung prüfen.", haeufigkeit: "einmalig", status: "vorschlag" },
-  // Zu PD-H2: Schmerz
-  { id: "MA-H3", titel: "Schmerzmanagement nach ENP", bezugDiagnoseId: "PD-H2", beschreibung: "Schmerzerfassung mittels VAS vor und nach Mobilisation, Analgetika-Gabe 30 Min. vor geplanter Aktivität.", haeufigkeit: "täglich", status: "vorschlag" },
-  { id: "MA-H4", titel: "Wärmeapplikation lumbal", bezugDiagnoseId: "PD-H2", beschreibung: "Wärmekissen oder Kirschkernkissen auf LWS-Bereich, 20 Min., zur Schmerzlinderung und Muskelrelaxation.", haeufigkeit: "2×/Tag", status: "vorschlag" },
-  // Zu PD-H3: Selbstpflege
-  { id: "MA-H5", titel: "Unterstützung Körperpflege", bezugDiagnoseId: "PD-H3", beschreibung: "Teilwäsche am Lavabo mit Anleitung und Übernahme der unteren Körperhälfte, Förderung der Eigenaktivität.", haeufigkeit: "täglich", status: "vorschlag" },
-  { id: "MA-H6", titel: "Anleitung An-/Auskleiden", bezugDiagnoseId: "PD-H3", beschreibung: "Training energiesparender Techniken (Sitzen beim Ankleiden, Anziehhilfe für Strümpfe), Angehörige einbeziehen.", haeufigkeit: "täglich", status: "vorschlag" },
-  // Zu PD-H4: Gesundheitsmanagement
-  { id: "MA-H7", titel: "Blutdruck-Monitoring und Schulung", bezugDiagnoseId: "PD-H4", beschreibung: "Tägliche BD-Messung mit Dokumentation, Zielwert < 140/90, Beratung zu Salz-Reduktion und Bewegung.", haeufigkeit: "täglich", status: "vorschlag" },
-  { id: "MA-H8", titel: "Medikamenten-Management", bezugDiagnoseId: "PD-H4", beschreibung: "Wochendispenser richten, Einnahme-Kontrolle, Wechselwirkungen erklären, Hausarzt-Rückmeldung bei BD > 160.", haeufigkeit: "wöchentlich", status: "vorschlag" },
-];
-
-const HUBER_ZIELE: Pflegeziel[] = [
-  { id: "Z-H1", titel: "Gehstrecke auf 200m steigern", bezugDiagnoseId: "PD-H1", zeithorizont: "6 Wochen", messbar: "Gehstrecke ≥ 200m ohne Pause, gemessen mit Schrittzähler", status: "vorschlag" },
-  { id: "Z-H2", titel: "Schmerzreduktion unter VAS 3", bezugDiagnoseId: "PD-H2", zeithorizont: "4 Wochen", messbar: "VAS ≤ 3 in Ruhe und ≤ 5 bei Belastung an mind. 5 von 7 Tagen", status: "vorschlag" },
-  { id: "Z-H3", titel: "Selbstständigkeit Oberkörperpflege", bezugDiagnoseId: "PD-H3", zeithorizont: "3 Monate", messbar: "Oberkörper-Wäsche und -Ankleiden ohne Hilfe an 7/7 Tagen", status: "vorschlag" },
-  { id: "Z-H4", titel: "BD stabil unter 140/90", bezugDiagnoseId: "PD-H4", zeithorizont: "8 Wochen", messbar: "BD < 140/90 mmHg an mind. 5 von 7 Messtagen, keine Vergesslichkeit bei Einnahme", status: "vorschlag" },
-];
-
-const HUBER_PP: Pflegeplanung = {
-  id: "PP-2026-020", onboardingId: "OB-2026-105", patientId: null,
-  patientName: "Huber, Fritz", interRAIAssessmentId: null,
-  status: "entwurf", erstelltVon: "Maria Keller",
-  erstellDatum: "25.02.2026", abschlussDatum: null,
-  pflegediagnosen: HUBER_DIAGNOSEN, massnahmen: HUBER_MASSNAHMEN, ziele: HUBER_ZIELE,
-};
-
 const HUBER_KLV: KLVVerordnung = {
   id: "KLV-2026-020", onboardingId: "OB-2026-105", patientId: null, mandatId: null,
-  patientName: "Huber, Fritz", pflegeplanungId: null,
+  patientName: "Huber, Fritz",
   status: "an_arzt",
   version: 1, art: "erst",
   statusProtokoll: [
@@ -257,16 +196,16 @@ const HUBER_KLV: KLVVerordnung = {
   ],
   leistungspositionen: [
     // Kat a – Abklärung
-    { id: "LP-H1", klvNummer: "10901", bezeichnung: "Erstassessment", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 60, ausAnna: true, annaKonfidenz: "hoch", validiert: false, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP-H2", klvNummer: "10904", bezeichnung: "Pflegeplanung erstmalig im Rahmen der Bedarfsabklärung", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 30, ausAnna: true, annaKonfidenz: "hoch", validiert: false, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
+    { id: "LP-H1", klvNummer: "10901", bezeichnung: "Erstassessment", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 60, ausAnna: true, annaKonfidenz: "hoch", validiert: false, simultanGruppe: null },
+    { id: "LP-H2", klvNummer: "10904", bezeichnung: "Pflegeplanung erstmalig im Rahmen der Bedarfsabklärung", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 30, ausAnna: true, annaKonfidenz: "hoch", validiert: false, simultanGruppe: null },
     // Kat b – Untersuchung und Behandlung
-    { id: "LP-H3", klvNummer: "10602", bezeichnung: "Verabreichung gerichtete Medikamente", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 6, ausAnna: true, annaKonfidenz: "hoch", validiert: false, simultanGruppe: "SIM-H1", bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP-H4", klvNummer: "10802", bezeichnung: "Blutdruckmessung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 5, ausAnna: true, annaKonfidenz: "mittel", validiert: false, simultanGruppe: "SIM-H1", bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP-H5", klvNummer: "10801", bezeichnung: "Gesundheitskontrolle (Vitalparameter)", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "w", zeitMin: 5, ausAnna: true, annaKonfidenz: "mittel", validiert: false, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
+    { id: "LP-H3", klvNummer: "10602", bezeichnung: "Verabreichung gerichtete Medikamente", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 6, ausAnna: true, annaKonfidenz: "hoch", validiert: false, simultanGruppe: "SIM-H1" },
+    { id: "LP-H4", klvNummer: "10802", bezeichnung: "Blutdruckmessung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 5, ausAnna: true, annaKonfidenz: "mittel", validiert: false, simultanGruppe: "SIM-H1" },
+    { id: "LP-H5", klvNummer: "10801", bezeichnung: "Gesundheitskontrolle (Vitalparameter)", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "w", zeitMin: 5, ausAnna: true, annaKonfidenz: "mittel", validiert: false, simultanGruppe: null },
     // Kat c – Grundpflege
-    { id: "LP-H6", klvNummer: "10104", bezeichnung: "Teilwäsche am Lavabo (inkl. Intimpflege)", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t7", zeitMin: 26, ausAnna: true, annaKonfidenz: "hoch", validiert: false, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP-H7", klvNummer: "10114", bezeichnung: "Hilfe An-/Auskleiden", kategorie: "c", wer: "I", training: "N", anzahl: 1, einheit: "t7", zeitMin: 15, ausAnna: true, annaKonfidenz: "niedrig", validiert: false, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP-H8", klvNummer: "10505", bezeichnung: "Hilfe beim Gehen", kategorie: "c", wer: "I", training: "T", anzahl: 2, einheit: "t7", zeitMin: 8, ausAnna: true, annaKonfidenz: "hoch", validiert: false, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
+    { id: "LP-H6", klvNummer: "10104", bezeichnung: "Teilwäsche am Lavabo (inkl. Intimpflege)", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t7", zeitMin: 26, ausAnna: true, annaKonfidenz: "hoch", validiert: false, simultanGruppe: null },
+    { id: "LP-H7", klvNummer: "10114", bezeichnung: "Hilfe An-/Auskleiden", kategorie: "c", wer: "I", training: "N", anzahl: 1, einheit: "t7", zeitMin: 15, ausAnna: true, annaKonfidenz: "niedrig", validiert: false, simultanGruppe: null },
+    { id: "LP-H8", klvNummer: "10505", bezeichnung: "Hilfe beim Gehen", kategorie: "c", wer: "I", training: "T", anzahl: 2, einheit: "t7", zeitMin: 8, ausAnna: true, annaKonfidenz: "hoch", validiert: false, simultanGruppe: null },
   ],
   zielformulierungen: ["Selbstständigkeit im Alltag erhalten", "Sturzprävention"],
   arztAngeordnetAm: null, krankenkasseGutspracheAm: null, ablehnungsgrund: null,
@@ -430,39 +369,9 @@ const STEINER_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [
   { id: "AD-S3", onboardingId: "OB-2026-101", patientId: null, icdCode: "I50.1", bezeichnung: "Linksherzinsuffizienz (NYHA II)", quelle: "Arzt-Antwort Dr. R. Lüthi, 21.02.2026", status: "bestaetigt" },
 ];
 
-const STEINER_DIAGNOSEN: Pflegediagnose[] = [
-  { id: "PD-S1", nandaCode: "00085", titel: "Beeinträchtigte körperliche Mobilität", bezugCap: null, begruendung: "Zunehmende Gangunsicherheit bei Herzinsuffizienz (I50.1), Mobilität nur mit Rollator, Sturzrisiko erhöht.", status: "akzeptiert", icdIds: ["AD-S3"] },
-  { id: "PD-S2", nandaCode: "00155", titel: "Sturzgefahr", bezugCap: null, begruendung: "Zwei Stürze im Bad in den letzten 12 Monaten, eingeschränkte Standsicherheit, Wohnung mit Treppen.", status: "akzeptiert", icdIds: ["AD-S3"] },
-  { id: "PD-S3", nandaCode: "00108", titel: "Selbstpflegedefizit Körperpflege", bezugCap: null, begruendung: "Hilfe beim Duschen an drei Tagen pro Woche nötig, teilweise Unterstützung beim An-/Auskleiden der unteren Extremität.", status: "akzeptiert", icdIds: ["AD-S3"] },
-  { id: "PD-S4", nandaCode: "00078", titel: "Ineffektives Gesundheitsmanagement", bezugCap: null, begruendung: "Diabetes Typ 2 (E11) mit Insulinbedarf und Hypertonie (I10); benötigt Unterstützung bei Blutzucker-/Blutdruckkontrolle und Medikamentenmanagement.", status: "akzeptiert", icdIds: ["AD-S1", "AD-S2"] },
-];
-
-const STEINER_MASSNAHMEN: Massnahme[] = [
-  { id: "MA-S1", titel: "Mobilisationsförderung mit Rollator", bezugDiagnoseId: "PD-S1", beschreibung: "Tägliches Gehtraining in der Wohnung, Steigerung der Gehstrecke, Kontrolle der Rollator-Handhabung.", haeufigkeit: "täglich", status: "akzeptiert" },
-  { id: "MA-S2", titel: "Sturzprophylaxe im Wohnraum", bezugDiagnoseId: "PD-S2", beschreibung: "Wohnungsbegehung, Haltegriffe im Bad, rutschfeste Matten, Nachtbeleuchtung; Angehörige einbeziehen.", haeufigkeit: "einmalig", status: "akzeptiert" },
-  { id: "MA-S3", titel: "Unterstützung Körperpflege", bezugDiagnoseId: "PD-S3", beschreibung: "Hilfe beim Duschen an drei Tagen, Teilwäsche mit Anleitung, Förderung der Eigenaktivität am Oberkörper.", haeufigkeit: "3×/Woche", status: "akzeptiert" },
-  { id: "MA-S4", titel: "Insulin- und Blutzucker-Management", bezugDiagnoseId: "PD-S4", beschreibung: "Insulin-Gabe morgens, Kapillarblutzucker-Messung, Dokumentation, Schulung Hypoglykämie-Zeichen.", haeufigkeit: "täglich", status: "akzeptiert" },
-  { id: "MA-S5", titel: "Blutdruck-Monitoring und Medikamenten-Management", bezugDiagnoseId: "PD-S4", beschreibung: "Tägliche BD-Messung (Ziel < 140/90), Wochendispenser richten, Rückmeldung an Hausarzt bei BD > 160.", haeufigkeit: "täglich", status: "akzeptiert" },
-];
-
-const STEINER_ZIELE: Pflegeziel[] = [
-  { id: "Z-S1", titel: "Sichere Mobilität mit Rollator", bezugDiagnoseId: "PD-S1", zeithorizont: "6 Wochen", messbar: "Gehstrecke ≥ 150m mit Rollator ohne Pause, sichere Transfers an 7/7 Tagen", status: "akzeptiert" },
-  { id: "Z-S2", titel: "Keine Stürze", bezugDiagnoseId: "PD-S2", zeithorizont: "3 Monate", messbar: "Kein Sturzereignis im Beobachtungszeitraum, Sturzprophylaxe-Massnahmen umgesetzt", status: "akzeptiert" },
-  { id: "Z-S3", titel: "Selbstständigkeit Oberkörperpflege", bezugDiagnoseId: "PD-S3", zeithorizont: "8 Wochen", messbar: "Oberkörper-Wäsche selbstständig an 7/7 Tagen", status: "akzeptiert" },
-  { id: "Z-S4", titel: "Stabile Blutzucker- und Blutdruckwerte", bezugDiagnoseId: "PD-S4", zeithorizont: "8 Wochen", messbar: "BZ im Zielbereich und BD < 140/90 an mind. 5 von 7 Messtagen", status: "akzeptiert" },
-];
-
-const STEINER_PP: Pflegeplanung = {
-  id: "PP-2026-101", onboardingId: "OB-2026-101", patientId: null,
-  patientName: "Steiner, Hans-Rudolf", interRAIAssessmentId: "BA-2026-101",
-  status: "validiert", erstelltVon: "Maria Keller",
-  erstellDatum: "23.02.2026", abschlussDatum: "24.02.2026",
-  pflegediagnosen: STEINER_DIAGNOSEN, massnahmen: STEINER_MASSNAHMEN, ziele: STEINER_ZIELE,
-};
-
 const STEINER_KLV: KLVVerordnung = {
   id: "KLV-2026-101", onboardingId: "OB-2026-101", patientId: null, mandatId: null,
-  patientName: "Steiner, Hans-Rudolf", pflegeplanungId: "PP-2026-101",
+  patientName: "Steiner, Hans-Rudolf",
   status: "an_kasse",
   version: 2, art: "folge",
   statusProtokoll: [
@@ -480,14 +389,14 @@ const STEINER_KLV: KLVVerordnung = {
     { id: "KD-S3", icdCode: "I50.1", titel: "Linksherzinsuffizienz (NYHA II)", beschreibung: "Belastungsdyspnoe, Gangunsicherheit." },
   ],
   leistungspositionen: [
-    { id: "LP-S1", klvNummer: "10901", bezeichnung: "Erstassessment", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 60, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP-S2", klvNummer: "10904", bezeichnung: "Pflegeplanung erstmalig im Rahmen der Bedarfsabklärung", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 30, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null },
-    { id: "LP-S3", klvNummer: "10602", bezeichnung: "Verabreichung gerichtete Medikamente (Insulin)", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 6, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-S1", bezugMassnahmeId: "MA-S4", diagnoseIds: ["PD-S4"], wzwBegruendung: null },
-    { id: "LP-S4", klvNummer: "10808", bezeichnung: "Kapillarblutentnahme inkl. Glucosebestimmung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 10, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-S1", bezugMassnahmeId: "MA-S4", diagnoseIds: ["PD-S4"], wzwBegruendung: null },
-    { id: "LP-S5", klvNummer: "10802", bezeichnung: "Blutdruckmessung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 5, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-S1", bezugMassnahmeId: "MA-S5", diagnoseIds: ["PD-S4"], wzwBegruendung: null },
-    { id: "LP-S6", klvNummer: "10104", bezeichnung: "Teilwäsche am Lavabo (inkl. Intimpflege)", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t3", zeitMin: 26, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: "MA-S3", diagnoseIds: ["PD-S3"], wzwBegruendung: null },
-    { id: "LP-S7", klvNummer: "10114", bezeichnung: "Hilfe An-/Auskleiden", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t3", zeitMin: 15, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: "MA-S3", diagnoseIds: ["PD-S3"], wzwBegruendung: null },
-    { id: "LP-S8", klvNummer: "10505", bezeichnung: "Hilfe beim Gehen", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t7", zeitMin: 8, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null, bezugMassnahmeId: "MA-S1", diagnoseIds: ["PD-S1"], wzwBegruendung: null },
+    { id: "LP-S1", klvNummer: "10901", bezeichnung: "Erstassessment", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 60, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null },
+    { id: "LP-S2", klvNummer: "10904", bezeichnung: "Pflegeplanung erstmalig im Rahmen der Bedarfsabklärung", kategorie: "a", wer: "S", training: "N", anzahl: 1, einheit: "e", zeitMin: 30, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null },
+    { id: "LP-S3", klvNummer: "10602", bezeichnung: "Verabreichung gerichtete Medikamente (Insulin)", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 6, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-S1" },
+    { id: "LP-S4", klvNummer: "10808", bezeichnung: "Kapillarblutentnahme inkl. Glucosebestimmung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 10, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-S1" },
+    { id: "LP-S5", klvNummer: "10802", bezeichnung: "Blutdruckmessung", kategorie: "b", wer: "S", training: "N", anzahl: 1, einheit: "t7", zeitMin: 5, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: "SIM-S1" },
+    { id: "LP-S6", klvNummer: "10104", bezeichnung: "Teilwäsche am Lavabo (inkl. Intimpflege)", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t3", zeitMin: 26, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null },
+    { id: "LP-S7", klvNummer: "10114", bezeichnung: "Hilfe An-/Auskleiden", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t3", zeitMin: 15, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null },
+    { id: "LP-S8", klvNummer: "10505", bezeichnung: "Hilfe beim Gehen", kategorie: "c", wer: "I", training: "T", anzahl: 1, einheit: "t7", zeitMin: 8, ausAnna: true, annaKonfidenz: "hoch", validiert: true, simultanGruppe: null },
   ],
   zielformulierungen: ["Sturzprävention", "Erhalt der Selbstständigkeit", "Stabile Blutzucker- und Blutdruckwerte"],
   arztAngeordnetAm: "24.02.2026", krankenkasseGutspracheAm: "28.02.2026", ablehnungsgrund: null,
@@ -498,7 +407,6 @@ const STEINER_KLV: KLVVerordnung = {
    ══════════════════════════════════════════ */
 
 export const MOCK_ASSESSMENTS: InterRAIAssessment[] = [STEINER_ALT_BA, STEINER_ALT_RE, HUBER_BA, STEINER_BA];
-export const MOCK_PFLEGEPLANUNGEN: Pflegeplanung[] = [STEINER_ALT_PP, HUBER_PP, STEINER_PP];
 
 /* ══════════════════════════════════════════
    Weitere Leistungsplanungsblätter — je einer der Lagen, die die KLV-Liste
@@ -514,14 +422,14 @@ function katalogPosition(
   return {
     id, klvNummer: nr, bezeichnung, kategorie, wer, training: "N",
     anzahl, einheit, zeitMin, ausAnna: false, annaKonfidenz: null, validiert: true,
-    simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null,
+    simultanGruppe: null,
   };
 }
 
 /** Entwurf — Rexhepi, Mandat mit gültiger Kostengutsprache. */
 const REXHEPI_KLV: KLVVerordnung = {
   id: "KLV-2026-030", onboardingId: null, patientId: "P-2026-0043", mandatId: null,
-  patientName: "Rexhepi, Fatmire", pflegeplanungId: null,
+  patientName: "Rexhepi, Fatmire",
   status: "entwurf",
   version: 1, art: "erst",
   statusProtokoll: [{ status: "entwurf", person: "Laura Brunner", zeitpunkt: "28.07.2026 08:40" }],
@@ -539,7 +447,7 @@ const REXHEPI_KLV: KLVVerordnung = {
 /** Bei der Kasse — Ferrari, Mandat OHNE Kostengutsprache. */
 const FERRARI_KLV: KLVVerordnung = {
   id: "KLV-2026-031", onboardingId: null, patientId: "P-2026-0048", mandatId: null,
-  patientName: "Ferrari, Gino", pflegeplanungId: null,
+  patientName: "Ferrari, Gino",
   status: "an_kasse",
   version: 1, art: "erst",
   statusProtokoll: [
@@ -563,7 +471,7 @@ const FERRARI_KLV: KLVVerordnung = {
 /** Bei der Ärztin — Da Silva, zweite Zeile für die Sortierung. */
 const DASILVA_KLV: KLVVerordnung = {
   id: "KLV-2026-032", onboardingId: null, patientId: "P-2026-0046", mandatId: null,
-  patientName: "Da Silva, Joaquim", pflegeplanungId: null,
+  patientName: "Da Silva, Joaquim",
   status: "an_arzt",
   version: 1, art: "erst",
   statusProtokoll: [
@@ -584,7 +492,7 @@ const DASILVA_KLV: KLVVerordnung = {
 /** Ohne Wartezeit — Zimmermann, Blatt liegt wieder bei der Spitex. */
 const ZIMMERMANN_KLV: KLVVerordnung = {
   id: "KLV-2026-033", onboardingId: null, patientId: "P-2026-0049", mandatId: null,
-  patientName: "Zimmermann, Gertrud", pflegeplanungId: null,
+  patientName: "Zimmermann, Gertrud",
   status: "unterzeichnet",
   version: 1, art: "erst",
   statusProtokoll: [
@@ -611,4 +519,3 @@ export const MOCK_KLV_VERORDNUNGEN: KLVVerordnung[] = [
 export const MOCK_ARZT_DIAGNOSEN: AerztlicheDiagnose[] = [...STEINER_ALT_ARZT_DIAGNOSEN, ...HUBER_ARZT_DIAGNOSEN, ...STEINER_ARZT_DIAGNOSEN];
 /** @deprecated Ersetzt durch Rhythmus-Engine (src/lib/rhythmus/). Nur noch für Typ-Referenz behalten. */
 export const MOCK_WORKFLOWS: WorkflowPlan[] = [];
-export { STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE };

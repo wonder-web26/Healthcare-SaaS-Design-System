@@ -12,7 +12,6 @@ import { AngehoerigePage } from "./components/AngehoerigePage";
 import { Angehoerige360Page } from "./components/Angehoerige360Page";
 import { FormShowcase } from "./components/FormShowcase";
 import { InterRAIListPage } from "./components/interrai/InterRAIListPage";
-import { PflegeplanungArbeitsbereich } from "./components/PflegeplanungArbeitsbereich";
 import { KLVArbeitsbereich } from "./components/KLVArbeitsbereich";
 import { KlvListPage } from "./components/KlvListPage";
 import { AbschlussListPage } from "./components/AbschlussListPage";
@@ -30,7 +29,6 @@ export const router = createBrowserRouter([
       { index: true, Component: DashboardPage },
       { path: "dashboard", Component: StrategicDashboard },
       { path: "interrai", Component: InterRAIListPage },
-      { path: "pflegeplanung/:planungId", Component: PflegeplanungArbeitsbereich },
       { path: "klv", Component: KlvListPage },
       { path: "abschluss", Component: AbschlussListPage },
       { path: "klv/:klvId", Component: KLVArbeitsbereich },

@@ -7,7 +7,7 @@
  *
  * Currently a stub — will be called from the Onboarding-Abschluss-Dialog in Prompt B.
  */
-import type { InterRAIAssessment, Pflegeplanung, KLVVerordnung, WorkflowPlan } from "../../types/klinische-artefakte";
+import type { InterRAIAssessment, KLVVerordnung, WorkflowPlan } from "../../types/klinische-artefakte";
 import { verwalteQuellensteuerPendenz } from "../stammdaten/quellensteuer-automatik";
 import { workflowTasks } from "../mocks/workflow-tasks";
 import { konvertiereRhythmusSubjekt, generiereRhythmusTickets, getTicketsFuerSubjekt } from "../rhythmus/engine";
@@ -28,7 +28,8 @@ export interface KonvertierungsErgebnis {
   qualifikation: string | null;
   konvertierteArtefakte: {
     interRAIAssessments: string[];
-    pflegeplanungen: string[];
+    // Pflegeplanungen sind mit der alten Pflegeplanung abgerissen; der neue
+    // Bezug kommt in Lauf 6 aus dem neuen Pflegeplan-Modul.
     klvVerordnungen: string[];
     workflows: string[];
   };
@@ -49,7 +50,6 @@ export function konvertiereOnboarding(
   onboardingId: string,
   artefakte: {
     interRAIAssessments: InterRAIAssessment[];
-    pflegeplanungen: Pflegeplanung[];
     klvVerordnungen: KLVVerordnung[];
     workflows: WorkflowPlan[];
   },
@@ -85,14 +85,6 @@ export function konvertiereOnboarding(
   // their Fall by stable fallId; the Klient gains a patientId above, which
   // flips klientZustand to "aktiv". The forms remain unchanged.
   const konvertierteBA: string[] = [];
-
-  const konvertiertePP: string[] = [];
-  for (const pp of artefakte.pflegeplanungen) {
-    if (pp.onboardingId === onboardingId) {
-      pp.patientId = patientId;
-      konvertiertePP.push(pp.id);
-    }
-  }
 
   const konvertierteKLV: string[] = [];
   for (const klv of artefakte.klvVerordnungen) {
@@ -233,7 +225,6 @@ export function konvertiereOnboarding(
     qualifikation: angehoerigenDaten?.qualifikation ?? null,
     konvertierteArtefakte: {
       interRAIAssessments: konvertierteBA,
-      pflegeplanungen: konvertiertePP,
       klvVerordnungen: konvertierteKLV,
       workflows: konvertierteWF,
     },

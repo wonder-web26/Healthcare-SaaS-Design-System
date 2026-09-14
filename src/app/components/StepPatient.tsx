@@ -56,15 +56,14 @@ import { FORMULAR_MAX } from "./form/feldbreiten";
 import { TabAktivitaetenV2 } from "./form/MigratedPatientATL";
 import { Mic } from "lucide-react";
 import { jetztAnzeige } from "../../lib/datum";
-import { MOCK_PFLEGEPLANUNGEN, MOCK_ARZT_DIAGNOSEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import { MOCK_ARZT_DIAGNOSEN } from "../../lib/mocks/klinische-artefakte-mock";
 import {
   useKlvVerordnungen, positionHinzufuegen, positionAendern, positionEntfernen, positionenSetzen,
 } from "../../lib/klv/store";
 import { useRecording } from "../recording/RecordingContext";
 import { getPersonByOnboardingId, getOrCreatePersonForOnboarding, offenenFallSicherstellen, erstelleNaechstesFormular, registrierungFuerOnboarding, getOpenFieldCount } from "../../lib/interrai/store";
 import { AssessmentStatusView } from "./interrai-neu/AssessmentStatusView";
-import type { KLVLeistung, KLVEinheit, Pflegediagnose, Massnahme, Pflegeziel, AerztlicheDiagnose } from "../../types/klinische-artefakte";
-import { NANDA_KATALOG } from "../../lib/mocks/nanda-enp-katalog";
+import type { KLVLeistung, KLVEinheit } from "../../types/klinische-artefakte";
 import { ReviewBlock } from "./ui/ReviewBlock";
 import { InlineSelect } from "./ui/InlineSelect";
 import { TabHeader, HeaderMeta } from "./ui/TabHeader";
@@ -81,9 +80,7 @@ import { SPITEX_LEISTUNGSKATALOG_2025 } from "../../lib/klv/spitex-leistungskata
 import { toast } from "sonner";
 import { pruefeInklusiv } from "../../lib/klv/inklusiv-regeln";
 import { pruefeKassenregeln } from "../../lib/klv/kassenregeln";
-import { erzeugeWZWAuswertung, type WZWErgebnis } from "../../lib/klv/wzw-auswertung";
 import { useEinwilligung } from "./EinwilligungContext";
-import { useArztAnfrage, ArztAnfrageFlowInline } from "./ArztAnfrageContext";
 import { SectionAction } from "./ui/SectionAction";
 import { KONFESSION_OPTIONS } from "../../lib/stammdaten/konfession";
 import { Combobox } from "./form/Combobox";
@@ -497,7 +494,8 @@ const tabDefs = [
   { key: "medikamente", label: "Medikamente", icon: Pill },
   { key: "aktivitaeten", label: "ATL", icon: Activity },
   { key: "interrai", label: "Bedarfsabklärung", icon: ClipboardList },
-  { key: "pflegeplanung", label: "Pflegeplan", icon: ClipboardList },
+  // Der Reiter "Pflegeplan" ist mit der alten Pflegeplanung abgerissen und
+  // kommt mit dem neuen Pflegeplan-Modul zurück.
   { key: "klv", label: "KLV", icon: FileText },
   { key: "workflow", label: "Betreuung", icon: ClipboardList },
   { key: "dokumente", label: "Dokumente", icon: FileText },
@@ -788,9 +786,6 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           )}
           {activeTab === "interrai" && (onboardingId
             ? <OnboardingTabBA onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />
-            : <OhneFallkennung />)}
-          {activeTab === "pflegeplanung" && (onboardingId
-            ? <OnboardingTabPP onboardingId={onboardingId} />
             : <OhneFallkennung />)}
           {activeTab === "klv" && (onboardingId
             ? <OnboardingTabKLV onboardingId={onboardingId} />
@@ -1281,7 +1276,7 @@ function TabDokumente({ data, onChange }: { data: PatientFormData; onChange: (d:
                       {doc.label} {doc.pflicht && <span style={{ color: "var(--status-danger)" }}>*</span>}
                     </span>
                     {!istSigniert && (
-                      <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Erforderlich für die Arzt-Anfrage (Tab Pflegeplanung)</span>
+                      <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Erforderlich für die Arzt-Anfrage</span>
                     )}
                   </div>
                   {istSigniert ? (
@@ -1457,391 +1452,13 @@ function OnboardingTabBA({ onboardingId, patientVorname, patientNachname }: { on
   return <AssessmentStatusView person={person} returnTo={returnTo} kontext="onboarding" />;
 }
 
-function OnboardingTabPP({ onboardingId }: { onboardingId: string }) {
-  const navigate = useNavigate();
-  const pp = MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === onboardingId);
-  const [diagnosen, setDiagnosen] = useState<Pflegediagnose[]>([]);
-  const [massnahmen, setMassnahmen] = useState<Massnahme[]>([]);
-  const [ziele, setZiele] = useState<Pflegeziel[]>([]);
-  const [expandedDiag, setExpandedDiag] = useState<string | null>(null);
-  const [showAddDiagnose, setShowAddDiagnose] = useState(false);
-  const [addSearch, setAddSearch] = useState("");
-
-  // Ärztliche Diagnosen (eigenes Artefakt, nicht Kopie)
-  const [arztDiagnosen, setArztDiagnosen] = useState<AerztlicheDiagnose[]>([]);
-  const [showAddArztDiag, setShowAddArztDiag] = useState(false);
-  const [showArztAnfrage, setShowArztAnfrage] = useState(false);
-  const [addArztIcd, setAddArztIcd] = useState("");
-  const [addArztBez, setAddArztBez] = useState("");
-  const arztAnfrage = useArztAnfrage();
-
-  useEffect(() => {
-    if (pp) {
-      setDiagnosen(pp.pflegediagnosen.map(d => ({ ...d })));
-      setMassnahmen(pp.massnahmen.map(m => ({ ...m })));
-      setZiele(pp.ziele.map(z => ({ ...z })));
-    }
-    // Load ärztliche Diagnosen for this onboarding
-    const ad = MOCK_ARZT_DIAGNOSEN.filter(d => d.onboardingId === onboardingId);
-    setArztDiagnosen(ad.map(d => ({ ...d })));
-  }, [pp?.id, onboardingId]);
-
-  // §B: einheitlicher Leerzustand; Aktion ergänzt (Text sagte "manuell erstellt", Knopf fehlte).
-  if (!pp) return (
-    <LeerZustand
-      icon={ClipboardList}
-      titel="Noch keine Pflegeplanung"
-      untertitel="Wird aus dem Gespräch oder manuell erstellt."
-      aktion={{ label: "Pflegeplanung erstellen", onClick: () => navigate("/pflegeplanung/neu"), icon: Plus }}
-    />
-  );
-
-  const statusLabel = pp.status === "entwurf" ? "Entwurf" : pp.status === "in-bearbeitung" ? "In Bearbeitung" : pp.status === "validiert" ? "Validiert" : "Abgeschlossen";
-
-  const deleteDiagnose = (id: string) => {
-    setDiagnosen(prev => prev.filter(d => d.id !== id));
-    setMassnahmen(prev => prev.filter(m => m.bezugDiagnoseId !== id));
-    setZiele(prev => prev.filter(z => z.bezugDiagnoseId !== id));
-    if (expandedDiag === id) setExpandedDiag(null);
-    toast("Diagnose entfernt");
-  };
-
-  const addMassnahme = (diagId: string, m: { titel: string; beschreibung: string; haeufigkeit: string }) => {
-    setMassnahmen(prev => [...prev, { id: `MA-new-${Date.now()}`, titel: m.titel, bezugDiagnoseId: diagId, beschreibung: m.beschreibung, haeufigkeit: m.haeufigkeit, status: "vorschlag" }]);
-  };
-
-  const removeMassnahme = (id: string) => setMassnahmen(prev => prev.filter(m => m.id !== id));
-
-  const addZiel = (diagId: string, z: { titel: string; zeithorizont: string; messbar: string }) => {
-    setZiele(prev => [...prev, { id: `Z-new-${Date.now()}`, titel: z.titel, bezugDiagnoseId: diagId, zeithorizont: z.zeithorizont, messbar: z.messbar, status: "vorschlag" }]);
-  };
-
-  const removeZiel = (id: string) => setZiele(prev => prev.filter(z => z.id !== id));
-
-  const addDiagnoseFromKatalog = (opt: typeof NANDA_KATALOG[number]) => {
-    const diagId = `PD-new-${Date.now()}`;
-    setDiagnosen(prev => [...prev, { id: diagId, nandaCode: opt.nandaCode, titel: opt.titel, bezugCap: null, begruendung: "", status: "vorschlag", icdIds: [] }]);
-    // Auto-add first suggested massnahme + ziel
-    if (opt.massnahmenVorschlaege[0]) addMassnahme(diagId, opt.massnahmenVorschlaege[0]);
-    if (opt.zieleVorschlaege[0]) addZiel(diagId, opt.zieleVorschlaege[0]);
-    setShowAddDiagnose(false);
-    setAddSearch("");
-    setExpandedDiag(diagId);
-  };
-
-  const filteredKatalog = addSearch.trim()
-    ? NANDA_KATALOG.filter(k => k.titel.toLowerCase().includes(addSearch.toLowerCase()) || k.nandaCode.includes(addSearch) || k.domäne.toLowerCase().includes(addSearch.toLowerCase()))
-    : NANDA_KATALOG;
-
-  // Already used codes
-  const usedCodes = new Set(diagnosen.map(d => d.nandaCode));
-
-  // Count all unbestätigte Anna-Entwürfe (ärztliche + pflege)
-  const vorschlaegeCount = arztDiagnosen.filter(d => d.status === "entwurf").length + diagnosen.filter(d => d.status === "vorschlag").length;
-  const ppContainerRef = React.useRef<HTMLDivElement>(null);
-
-  /** Scroll to first ungeprüfter Vorschlag and expand it if needed */
-  const scrollToFirstVorschlag = useCallback(() => {
-    if (!ppContainerRef.current) return;
-    // Ärztliche Entwürfe come first in DOM order
-    const firstEntwurf = ppContainerRef.current.querySelector("[data-vorschlag]") as HTMLElement | null;
-    if (firstEntwurf) {
-      firstEntwurf.scrollIntoView({ behavior: "smooth", block: "center" });
-      // If it's a Pflegediagnose ReviewBlock, expand it
-      const diagId = firstEntwurf.dataset.vorschlag;
-      if (diagId && diagId.startsWith("PD")) setExpandedDiag(diagId);
-      // If it's an ärztliche Diagnose, open the anfrage panel for visibility
-      if (diagId && diagId.startsWith("AD")) setShowArztAnfrage(false);
-    }
-  }, []);
-
-  return (
-    <div ref={ppContainerRef} style={{ padding: "var(--space-4)" }}>
-
-      {/* Aufzeichnung verschoben in den Onboarding-Kopfbereich (OnboardingPage.tsx) */}
-
-      {/* ═══ Kopfzeile: nur Titel + Zustände als Text ═══ */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)" }}>Pflegeplanung</div>
-        <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-          {statusLabel}
-          {vorschlaegeCount > 0 && (
-            <span onClick={scrollToFirstVorschlag} className="cursor-pointer" style={{ marginLeft: 8, color: "var(--text-tertiary)" }}>
-              · {vorschlaegeCount} {vorschlaegeCount === 1 ? "Vorschlag" : "Vorschläge"} zu prüfen
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* ═══ Sektion: Ärztliche Diagnosen ═══ */}
-      <div style={{ marginBottom: 16 }}>
-        <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-          <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>Ärztliche Diagnosen</span>
-          <div className="flex items-center" style={{ gap: 8 }}>
-            {/* Primäraktion */}
-            <button
-              onClick={() => { setShowArztAnfrage(!showArztAnfrage); setShowAddArztDiag(false); }}
-              className="inline-flex items-center cursor-pointer"
-              style={{ gap: 5, padding: "7px 16px", borderRadius: 999, background: showArztAnfrage ? "var(--brand-primary)" : "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, border: "none" }}
-            >
-              <Stethoscope style={{ width: 12, height: 12 }} /> Beim Arzt anfragen
-            </button>
-            {/* Sekundäraktion */}
-            <button
-              onClick={() => { setShowAddArztDiag(!showAddArztDiag); setShowArztAnfrage(false); }}
-              className="inline-flex items-center cursor-pointer"
-              style={{ gap: 5, padding: "7px 16px", borderRadius: 999, background: "transparent", color: "var(--text-primary)", fontSize: "var(--text-small)", fontWeight: 500, border: "0.5px solid var(--border-default)" }}
-            >
-              Manuell erfassen
-            </button>
-          </div>
-        </div>
-
-        {/* Arzt-Anfrage-Status als Zustandsband (kein Button) */}
-        {arztAnfrage && arztAnfrage.anfrage.status === "gesendet" && !showArztAnfrage && (
-          <div style={{ padding: "6px 12px", background: "var(--bg-secondary)", borderRadius: 8, marginBottom: 6, fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-            Angefragt bei {arztAnfrage.anfrage.empfaengerName} · wartet seit {arztAnfrage.tageSeitVersand} Tagen
-          </div>
-        )}
-
-        {/* Arzt-Anfrage-Flow (kanonisches Zuhause).
-           antwort_erhalten: immer sichtbar (Handlungsbedarf → ReviewBlock-Prominenz).
-           Andere Zustände: nur wenn explizit aufgeklappt. */}
-        {(showArztAnfrage || arztAnfrage?.anfrage.status === "antwort_erhalten") && (
-          <div style={{ padding: arztAnfrage?.anfrage.status === "antwort_erhalten" ? "0" : "8px 12px", background: arztAnfrage?.anfrage.status === "antwort_erhalten" ? "transparent" : "var(--bg-secondary)", borderRadius: 8, marginBottom: 6 }}>
-            <ArztAnfrageFlowInline />
-          </div>
-        )}
-
-        {/* Inline manual entry */}
-        {showAddArztDiag && (
-          <div style={{ padding: "8px 12px", background: "var(--bg-secondary)", borderRadius: 8, marginBottom: 6 }}>
-            <div className="flex items-end" style={{ gap: 8 }}>
-              <div style={{ flex: "0 0 80px" }}>
-                <label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>ICD-Code</label>
-                <input value={addArztIcd} onChange={e => setAddArztIcd(e.target.value)} placeholder="I10" style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "monospace" }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Bezeichnung</label>
-                <input value={addArztBez} onChange={e => setAddArztBez(e.target.value)} placeholder="Arterielle Hypertonie" style={{ width: "100%", padding: "6px 10px", fontSize: "var(--text-small)", borderRadius: 8, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "inherit" }} />
-              </div>
-              <button
-                onClick={() => {
-                  if (!addArztIcd.trim() || !addArztBez.trim()) return;
-                  setArztDiagnosen(prev => [...prev, {
-                    id: `AD-manual-${Date.now()}`,
-                    onboardingId,
-                    patientId: null,
-                    icdCode: addArztIcd.trim(),
-                    bezeichnung: addArztBez.trim(),
-                    quelle: "Manuell erfasst, " + new Date().toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" }),
-                    status: "bestaetigt",
-                  }]);
-                  setAddArztIcd(""); setAddArztBez(""); setShowAddArztDiag(false);
-                  toast("Ärztliche Diagnose erfasst");
-                }}
-                className="inline-flex items-center cursor-pointer"
-                style={{ gap: 4, padding: "6px 14px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-meta)", fontWeight: 500, border: "none", whiteSpace: "nowrap" }}
-              >
-                <Plus style={{ width: 10, height: 10 }} /> Erfassen
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Alle Diagnosen als kompakte einzeilige Zeilen — Entwürfe mit Ocker-Akzent + Aktionen, Bestätigte still */}
-        {arztDiagnosen.map(ad => (
-          <div
-            key={ad.id}
-            {...(ad.status === "entwurf" ? { "data-vorschlag": ad.id } : {})}
-            className="flex items-center"
-            style={{
-              gap: 8,
-              padding: "5px 8px 5px 0",
-              borderBottom: "0.5px solid var(--border-default)",
-              borderLeft: ad.status === "entwurf" ? "3px solid var(--status-warning)" : "3px solid transparent",
-              paddingLeft: 10,
-            }}
-          >
-            {/* Anna-Provenienz (nur Entwürfe) */}
-            {ad.status === "entwurf" && <Sparkles style={{ width: 11, height: 11, color: "var(--brand-primary)", flexShrink: 0 }} />}
-            {/* ICD-Code */}
-            <span style={{ fontFamily: "monospace", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-tertiary)", minWidth: 44, flexShrink: 0 }}>{ad.icdCode}</span>
-            {/* Bezeichnung */}
-            <span className="flex-1 min-w-0 truncate" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{ad.bezeichnung}</span>
-            {/* Quelle (Desktop, gekürzt einzeilig, vollständig als Tooltip) */}
-            <span className="hidden sm:inline shrink-0" title={ad.quelle} style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
-              {ad.quelle.replace(/^Arzt-Antwort\s+/, "").replace(/^Manuell erfasst,\s*/, "Manuell · ")}
-            </span>
-            {/* Status-Pill + Aktionen */}
-            {ad.status === "entwurf" ? (
-              <div className="flex items-center shrink-0" style={{ gap: 2 }}>
-                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Vorschlag</span>
-                <button
-                  onClick={() => setArztDiagnosen(prev => prev.map(d => d.id === ad.id ? { ...d, status: "bestaetigt" as const } : d))}
-                  className="cursor-pointer"
-                  title="Bestätigen"
-                  style={{ background: "none", border: "none", color: "var(--status-success-text)", padding: 6, minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center" }}
-                >
-                  <Check style={{ width: 14, height: 14 }} />
-                </button>
-                <button
-                  onClick={() => setArztDiagnosen(prev => prev.filter(d => d.id !== ad.id))}
-                  className="cursor-pointer"
-                  title="Verwerfen"
-                  style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 6, minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center", marginRight: 4 }}
-                  onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")}
-                  onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}
-                >
-                  <X style={{ width: 14, height: 14 }} />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setArztDiagnosen(prev => prev.filter(d => d.id !== ad.id))}
-                className="cursor-pointer shrink-0"
-                title="Löschen"
-                style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 6, minWidth: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}
-              >
-                <Trash2 style={{ width: 12, height: 12 }} />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* ═══ Sektion: Pflegediagnosen ═══ */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-        <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>Pflegediagnosen</span>
-        <button onClick={() => setShowAddDiagnose(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "7px 16px", borderRadius: 999, background: "transparent", color: "var(--text-primary)", fontSize: "var(--text-small)", fontWeight: 500, border: "0.5px solid var(--border-default)" }}>
-          Pflegediagnose hinzufügen
-        </button>
-      </div>
-
-      {/* Pflegediagnosen — ReviewBlock per styleguide 8.10 */}
-      {diagnosen.map(d => {
-        const dMassnahmen = massnahmen.filter(m => m.bezugDiagnoseId === d.id);
-        const dZiele = ziele.filter(z => z.bezugDiagnoseId === d.id);
-        const katalogEntry = NANDA_KATALOG.find(k => k.nandaCode === d.nandaCode);
-        return (
-          <div key={d.id} {...(d.status === "vorschlag" ? { "data-vorschlag": d.id } : {})}>
-          <ReviewBlock
-            titel={<><span style={{ color: "var(--brand-primary)" }}>{d.nandaCode}</span> {d.titel}</>}
-            untertitel={`${dMassnahmen.length} Massnahmen · ${dZiele.length} Ziele`}
-            status={d.status === "akzeptiert" ? "bestaetigt" : "vorschlag"}
-            herkunft="anna"
-            defaultOffen={d.status === "vorschlag"}
-            onBestaetigen={() => setDiagnosen(prev => prev.map(x => x.id === d.id ? { ...x, status: "akzeptiert" as const } : x))}
-            onLoeschen={() => deleteDiagnose(d.id)}
-          >
-            {/* Begründung */}
-            <div style={{ marginBottom: 10 }}>
-              <label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Begründung</label>
-              <textarea value={d.begruendung} onChange={e => setDiagnosen(prev => prev.map(x => x.id === d.id ? { ...x, begruendung: e.target.value } : x))} rows={2} style={{ width: "100%", padding: "11px 16px", fontSize: 14, borderRadius: 12, border: "0.5px solid var(--border-default)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontFamily: "inherit", resize: "vertical" }} />
-            </div>
-
-            {/* Massnahmen */}
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, color: "var(--text-tertiary)", letterSpacing: "0.05em", textTransform: "uppercase" as const, marginBottom: 4 }}>Massnahmen</div>
-              {dMassnahmen.map(m => (
-                <div key={m.id} className="flex items-start" style={{ gap: 6, padding: "5px 8px", background: "var(--bg-secondary)", borderRadius: 12, marginBottom: 3, fontSize: "var(--text-small)" }}>
-                  <div className="flex-1">
-                    <span style={{ fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{m.titel}</span>
-                    <span style={{ color: "var(--text-tertiary)" }}> · {m.haeufigkeit}</span>
-                    <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 1 }}>{m.beschreibung}</div>
-                  </div>
-                  <button onClick={() => removeMassnahme(m.id)} className="cursor-pointer" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 2, flexShrink: 0 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 12, height: 12 }} /></button>
-                </div>
-              ))}
-              {katalogEntry && katalogEntry.massnahmenVorschlaege.filter(mv => !dMassnahmen.some(m => m.titel === mv.titel)).length > 0 && (
-                <div className="flex flex-wrap" style={{ gap: 4, marginTop: 4 }}>
-                  {katalogEntry.massnahmenVorschlaege.filter(mv => !dMassnahmen.some(m => m.titel === mv.titel)).map(mv => (
-                    <button key={mv.titel} onClick={() => addMassnahme(d.id, mv)} className="inline-flex items-center cursor-pointer" style={{ gap: 3, padding: "3px 8px", borderRadius: 999, background: "transparent", border: "0.5px dashed var(--border-default)", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-                      <Plus style={{ width: 10, height: 10 }} /> {mv.titel}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Ziele */}
-            <div>
-              <div style={{ fontSize: 9, color: "var(--text-tertiary)", letterSpacing: "0.05em", textTransform: "uppercase" as const, marginBottom: 4 }}>Ziele</div>
-              {dZiele.map(z => (
-                <div key={z.id} className="flex items-start" style={{ gap: 6, padding: "5px 8px", background: "var(--brand-primary-light)", borderRadius: 12, marginBottom: 3, fontSize: "var(--text-small)" }}>
-                  <div className="flex-1">
-                    <span style={{ fontWeight: "var(--weight-medium)", color: "var(--brand-primary)" }}>{z.titel}</span>
-                    <span style={{ color: "var(--text-secondary)" }}> · {z.zeithorizont}</span>
-                    <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 1 }}>{z.messbar}</div>
-                  </div>
-                  <button onClick={() => removeZiel(z.id)} className="cursor-pointer" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 2, flexShrink: 0 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 12, height: 12 }} /></button>
-                </div>
-              ))}
-              {katalogEntry && katalogEntry.zieleVorschlaege.filter(zv => !dZiele.some(z => z.titel === zv.titel)).length > 0 && (
-                <div className="flex flex-wrap" style={{ gap: 4, marginTop: 4 }}>
-                  {katalogEntry.zieleVorschlaege.filter(zv => !dZiele.some(z => z.titel === zv.titel)).map(zv => (
-                    <button key={zv.titel} onClick={() => addZiel(d.id, zv)} className="inline-flex items-center cursor-pointer" style={{ gap: 3, padding: "3px 8px", borderRadius: 999, background: "transparent", border: "0.5px dashed var(--border-default)", fontSize: "var(--text-meta)", color: "var(--brand-primary)" }}>
-                      <Plus style={{ width: 10, height: 10 }} /> {zv.titel}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </ReviewBlock>
-          </div>
-        );
-      })}
-
-      {diagnosen.length === 0 && !showAddDiagnose && (
-        <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)", padding: "12px 0" }}>Noch keine Diagnosen — starte ein Gespräch oder füge manuell hinzu.</div>
-      )}
-
-      {/* Diagnose-Suche — Overlay, triggered from TabHeader */}
-      {showAddDiagnose && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center" style={{ background: "rgba(19,19,20,0.3)", paddingTop: 80 }} onClick={() => { setShowAddDiagnose(false); setAddSearch(""); }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-elevated)", borderRadius: 12, border: "0.5px solid var(--border-default)", boxShadow: "0 8px 32px rgba(0,0,0,0.12)", width: "92%", maxWidth: 520, maxHeight: "60vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            <div className="flex items-center" style={{ padding: "12px 16px", gap: 8, borderBottom: "0.5px solid var(--border-default)" }}>
-              <Search style={{ width: 16, height: 16, color: "var(--text-tertiary)", flexShrink: 0 }} />
-              <input type="text" value={addSearch} onChange={e => setAddSearch(e.target.value)} placeholder="NANDA-Code, Titel oder Domäne…" autoFocus style={{ flex: 1, border: "none", outline: "none", fontSize: 14, background: "transparent", color: "var(--text-primary)", fontFamily: "inherit" }} />
-              <button onClick={() => { setShowAddDiagnose(false); setAddSearch(""); }} className="cursor-pointer" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 2 }}><X style={{ width: 16, height: 16 }} /></button>
-            </div>
-            <div style={{ overflowY: "auto", flex: 1 }}>
-              {filteredKatalog.filter(k => !usedCodes.has(k.nandaCode)).map(opt => (
-                <div key={opt.nandaCode} onClick={() => addDiagnoseFromKatalog(opt)} className="cursor-pointer" style={{ padding: "10px 16px", borderBottom: "0.5px solid var(--border-default)" }} onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-secondary)")} onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                  <div className="flex items-center" style={{ gap: 6 }}>
-                    <span style={{ fontSize: 14, fontWeight: 500, color: "var(--brand-primary)", flexShrink: 0 }}>{opt.nandaCode}</span>
-                    <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>{opt.titel}</span>
-                  </div>
-                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 2 }}>{opt.domäne} · {opt.massnahmenVorschlaege.length} Massnahmen · {opt.zieleVorschlaege.length} Ziele</div>
-                </div>
-              ))}
-              {filteredKatalog.filter(k => !usedCodes.has(k.nandaCode)).length === 0 && (
-                <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 14, color: "var(--text-tertiary)" }}>Keine weiteren Diagnosen verfügbar</div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   const navigate = useNavigate();
   /* Der Bestand ist die Quelle — kein lokaler Abzug mehr. */
   const klv = useKlvVerordnungen().find(k => k.onboardingId === onboardingId);
-  const pp = MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === onboardingId);
-  const verfuegbareDiagnosen = pp?.pflegediagnosen || [];
   // Krankenkasse: Name des aktiven KVG-Versicherers (Zahlerseite), sonst Demo-Default.
   const patient = klv?.patientId ? getPatient(klv.patientId) : null;
   const krankenkasse = (patient ? aktiverVersichererName(patient.id, "kvg") : "") || "Groupe Mutuel";
-
-  // Pflegeplanung data for WZW
-  const ppDiagnosen = pp?.pflegediagnosen || [];
-  const ppMassnahmen = pp?.massnahmen || [];
-  const ppZiele = pp?.ziele || [];
 
   /* Positionen kommen aus dem Bestand; nur die Bedienzustände bleiben lokal. */
   const leistungen = klv?.leistungspositionen ?? [];
@@ -1851,8 +1468,6 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [katalogOpen, setKatalogOpen] = useState(false);
   const [katalogSuche, setKatalogSuche] = useState("");
-  const [showWZW, setShowWZW] = useState(false);
-  const [wzwErgebnisse, setWzwErgebnisse] = useState<WZWErgebnis[]>([]);
 
   // Initialize leistungen from KLV mock data
   useEffect(() => {
@@ -1903,40 +1518,9 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
     });
   };
 
-  // ─── WZW-Auswertung ─────────────────────────────────
-  const startWZWAuswertung = () => {
-    if (showWZW) { setShowWZW(false); return; }
-    const ergebnisse = erzeugeWZWAuswertung(leistungen, ppDiagnosen, ppMassnahmen, ppZiele, krankenkasse);
-    setWzwErgebnisse(ergebnisse);
-    setShowWZW(true);
-  };
-
-  /** Bestätigen: setzt diagnoseIds (falls Vorschlag) + wzwBegruendung */
-  const wzwBestaetigen = (erg: WZWErgebnis) => {
-    const text = erg.status === "vorschlag" ? erg.vorschlagWzwText : erg.wzwText;
-    const diagIds = erg.status === "vorschlag" && erg.vorschlagDiagnose
-      ? [erg.vorschlagDiagnose.diagnoseId]
-      : undefined;
-
-    setLeistungen(prev => prev.map(l => {
-      if (l.id !== erg.leistungId) return l;
-      return {
-        ...l,
-        wzwBegruendung: text,
-        ...(diagIds ? { diagnoseIds: diagIds } : {}),
-      };
-    }));
-    // Update local WZW results to reflect confirmation
-    setWzwErgebnisse(prev => prev.map(e =>
-      e.leistungId === erg.leistungId ? { ...e, status: "begruendbar" as const, wzwText: text } : e
-    ));
-    toast("Begründung bestätigt");
-  };
-
-  /** Verwerfen: entfernt den WZW-Entwurf aus der Auswertungs-Liste */
-  const wzwVerwerfen = (leistungId: string) => {
-    setWzwErgebnisse(prev => prev.filter(e => e.leistungId !== leistungId));
-  };
+  /* Die WZW-Auswertung ist mit der alten Pflegeplanung entfernt — eine
+     Zweckmässigkeits-Begründung ohne Diagnosebezug wäre eine halbe Prüfung.
+     Sie kommt mit dem neuen Pflegeplan-Modul (Lauf 6) zurück. */
 
   const addFromKatalog = (pos: typeof SPITEX_LEISTUNGSKATALOG_2025[number]) => {
     const newId = `klv-new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -1954,9 +1538,6 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
       annaKonfidenz: null,
       validiert: false,
       simultanGruppe: null,
-      bezugMassnahmeId: null,
-      diagnoseIds: [],
-      wzwBegruendung: null,
     };
     if (klv) positionHinzufuegen(klv.id, newLeistung);
     setExpandedIds(prev => new Set(prev).add(newId));
@@ -2002,23 +1583,6 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
         meta={<HeaderMeta modus="zusammenfassung" text={`${summen.total.toFixed(1)} h/Woche`} />}
         aktion={
           <div className="flex items-center flex-wrap" style={{ gap: 8 }}>
-            <button
-              onClick={startWZWAuswertung}
-              className="inline-flex items-center cursor-pointer"
-              style={{
-                gap: 5,
-                padding: "7px 14px",
-                borderRadius: "var(--radius-pill)",
-                background: showWZW ? "var(--brand-primary)" : "var(--bg-elevated)",
-                border: showWZW ? "none" : "0.5px solid var(--border-default)",
-                color: showWZW ? "var(--text-on-dark)" : "var(--text-primary)",
-                fontSize: "var(--text-small)",
-                fontWeight: 500,
-                minHeight: 34,
-              }}
-            >
-              <Sparkles style={{ width: 13, height: 13 }} /> {showWZW ? "WZW schliessen" : "WZW-Auswertung"}
-            </button>
             <button onClick={() => navigate(`/klv/${klv.id}`)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "9.5px 22px", borderRadius: 999, background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: 14, fontWeight: 500, border: "0.5px solid var(--text-primary)" }}><Send style={{ width: 13, height: 13 }} /> Verordnung &amp; Versand</button>
             <button onClick={() => setKatalogOpen(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 6, padding: "10px 22px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}><Plus style={{ width: 14, height: 14 }} /> Leistung hinzufügen</button>
           </div>
@@ -2073,7 +1637,7 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
                       key={l.id}
                       marker={<span style={{ fontSize: "var(--text-meta)", fontFamily: "monospace", fontWeight: 500, color: "var(--text-tertiary)", minWidth: 40, display: "inline-block" }}>{l.klvNummer}</span>}
                       titel={l.bezeichnung}
-                      hilfstext={`${werLabel(l.wer)} · ${l.anzahl}× ${einheitLabel(l.einheit)}${partners.length > 0 ? " · ⟂ simultan" : ""}${l.diagnoseIds.length > 0 ? ` · ${verfuegbareDiagnosen.find(d => d.id === l.diagnoseIds[0])?.nandaCode || ""}` : ""}`}
+                      hilfstext={`${werLabel(l.wer)} · ${l.anzahl}× ${einheitLabel(l.einheit)}${partners.length > 0 ? " · ⟂ simultan" : ""}`}
                       last={idx === items.length - 1}
                       onClick={() => toggleExpand(l.id)}
                     >
@@ -2153,20 +1717,8 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
                               <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Anzahl</label><input type="number" min={1} value={l.anzahl} onChange={e => updateLeistung(l.id, { anzahl: Math.max(1, parseInt(e.target.value) || 1) })} disabled={anzahlDisabled} style={anzahlDisabled ? ssDis : ss} /></div>
                               <div><label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Zeit pro Einsatz</label><div className="flex items-center" style={{ gap: 4 }}><input type="number" min={1} value={l.zeitMin} onChange={e => updateLeistung(l.id, { zeitMin: Math.max(1, parseInt(e.target.value) || 1) })} style={{ ...ss, flex: 1 }} /><span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>min</span></div></div>
                             </div>
-                            {/* Pflegediagnose-Zuordnung */}
-                            {verfuegbareDiagnosen.length > 0 && (
-                              <div style={{ marginBottom: 10 }}>
-                                <label style={{ display: "block", fontSize: 9, color: "var(--text-tertiary)", marginBottom: 2 }}>Pflegediagnose</label>
-                                <InlineSelect
-                                  value={l.diagnoseIds[0] || ""}
-                                  onChange={v => updateLeistung(l.id, { diagnoseIds: v ? [v] : [] })}
-                                  options={[
-                                    { value: "", label: "Keine Diagnose zugeordnet" },
-                                    ...verfuegbareDiagnosen.map(d => ({ value: d.id, label: `${d.nandaCode} – ${d.titel}` })),
-                                  ]}
-                                />
-                              </div>
-                            )}
+                            {/* Der Pflegediagnose-Bezug je Position kommt in Lauf 6
+                                aus dem neuen Pflegeplan-Modul. */}
                             {!l.validiert && (
                               <div className="flex items-center" style={{ gap: 8 }}>
                                 <button onClick={e => { e.stopPropagation(); validateLeistung(l.id); }} className="inline-flex items-center cursor-pointer" style={{ gap: 5, padding: "10px 22px", borderRadius: 999, background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: 14, fontWeight: 500, border: "none" }}><Check style={{ width: 14, height: 14 }} /> Bestätigen</button>
@@ -2213,167 +1765,6 @@ function OnboardingTabKLV({ onboardingId }: { onboardingId: string }) {
       ) : (
         <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)", padding: "12px 0" }}>
           Noch keine Leistungspositionen – starte ein Gespräch oder öffne den KLV-Arbeitsbereich.
-        </div>
-      )}
-
-      {/* ── WZW-Auswertung — Overlay (Pattern: InterRAI Auswerten) ── */}
-      {showWZW && (
-        <div className="fixed inset-0 z-[55] flex items-end sm:items-center justify-center" style={{ background: "rgba(19,19,20,0.4)" }}>
-          <div style={{ background: "var(--bg-primary)", borderRadius: "12px 12px 0 0", maxWidth: 680, width: "100%", maxHeight: "85vh", overflow: "auto", boxShadow: "var(--shadow-overlay)" }} className="sm:rounded-2xl">
-            {/* Header */}
-            <div className="flex items-center justify-between" style={{ padding: "16px 20px", borderBottom: "0.5px solid var(--border-default)", position: "sticky", top: 0, background: "var(--bg-primary)", zIndex: 1 }}>
-              <div className="flex items-center" style={{ gap: 8 }}>
-                <Sparkles style={{ width: 16, height: 16, color: "var(--brand-primary)" }} />
-                <span style={{ fontSize: "var(--text-h3)", fontWeight: 500, color: "var(--text-primary)" }}>WZW-Auswertung</span>
-                <span style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Begründung (Entwurf)</span>
-              </div>
-              <button onClick={() => setShowWZW(false)} className="cursor-pointer" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 4 }}><X style={{ width: 16, height: 16 }} /></button>
-            </div>
-
-            {/* Zusammenfassung */}
-            <div style={{ padding: "12px 20px", borderBottom: "0.5px solid var(--border-default)", background: "var(--bg-secondary)" }}>
-              <div className="flex items-center flex-wrap" style={{ gap: 12, fontSize: "var(--text-small)" }}>
-                <span style={{ color: "var(--text-secondary)" }}>{wzwErgebnisse.length} Positionen</span>
-                <span style={{ color: "var(--status-success-text)" }}>{wzwErgebnisse.filter(e => e.status === "begruendbar").length} begründbar</span>
-                <span style={{ color: "var(--status-warning-text)" }}>{wzwErgebnisse.filter(e => e.status === "vorschlag").length} mit Vorschlag</span>
-                {wzwErgebnisse.filter(e => e.status === "luecke").length > 0 && (
-                  <span style={{ color: "var(--status-danger)" }}>{wzwErgebnisse.filter(e => e.status === "luecke").length} Lücken</span>
-                )}
-              </div>
-            </div>
-
-            {/* Positionen als ReviewBlock-Liste */}
-            <div style={{ padding: "12px 20px" }}>
-              {wzwErgebnisse.length === 0 ? (
-                <div style={{ padding: "24px 0", textAlign: "center", fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>
-                  Keine Leistungspositionen vorhanden.
-                </div>
-              ) : wzwErgebnisse.map(erg => {
-                const istBestaetigt = leistungen.find(l => l.id === erg.leistungId)?.wzwBegruendung != null;
-
-                // Fall C: Lücke — kein ReviewBlock, sondern Warn-Hinweis
-                if (erg.status === "luecke") {
-                  return (
-                    <div key={erg.leistungId} style={{ marginBottom: 6 }}>
-                      <div style={{
-                        display: "flex",
-                        background: "var(--bg-elevated)",
-                        border: "0.5px solid var(--border-default)",
-                        borderRadius: 12,
-                        overflow: "hidden",
-                      }}>
-                        <div style={{ width: 4, flexShrink: 0, background: "var(--status-danger)", borderRadius: "2px 0 0 2px" }} />
-                        <div style={{ flex: 1, padding: "12px 16px" }}>
-                          <div className="flex items-center" style={{ gap: 6, marginBottom: 6 }}>
-                            <span style={{ fontSize: "var(--text-meta)", fontFamily: "monospace", fontWeight: 500, color: "var(--text-tertiary)" }}>{erg.klvNummer}</span>
-                            <span style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-primary)" }}>{erg.bezeichnung}</span>
-                          </div>
-                          <div className="flex items-start" style={{ gap: 6, padding: "8px 10px", background: "rgba(168,50,31,0.04)", borderRadius: 8 }}>
-                            <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-danger)", flexShrink: 0, marginTop: 1 }} />
-                            <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                              Keine passende Pflegediagnose vorhanden – Zweckmässigkeit nicht begründbar. Pflegeplanung ergänzen.
-                            </div>
-                          </div>
-                          {erg.zeitAbweichung && (
-                            <div style={{ marginTop: 6, fontSize: "var(--text-meta)", color: "var(--status-warning-text)" }}>
-                              {erg.zeitMin} min statt Richtwert {erg.katalogZeitMin} min
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // Fall A & B: ReviewBlock
-                const wzwTextAnzeige = erg.status === "vorschlag"
-                  ? erg.vorschlagWzwText
-                  : erg.wzwText;
-
-                return (
-                  <ReviewBlock
-                    key={erg.leistungId}
-                    titel={<><span style={{ fontFamily: "monospace", color: "var(--text-tertiary)", marginRight: 6 }}>{erg.klvNummer}</span> {erg.bezeichnung}</>}
-                    untertitel={
-                      erg.status === "vorschlag" && erg.vorschlagDiagnose
-                        ? `Vorschlag: über ${erg.vorschlagDiagnose.nandaCode} ${erg.vorschlagDiagnose.titel} begründen`
-                        : erg.diagnose
-                          ? `${erg.diagnose.nandaCode} ${erg.diagnose.titel}`
-                          : undefined
-                    }
-                    status={istBestaetigt ? "bestaetigt" : "vorschlag"}
-                    herkunft="anna"
-                    defaultOffen={erg.status === "vorschlag" || !istBestaetigt}
-                    aktionen={!istBestaetigt}
-                    onBestaetigen={() => wzwBestaetigen(erg)}
-                    onVerwerfen={() => wzwVerwerfen(erg.leistungId)}
-                  >
-                    {/* WZW-Dreisatz */}
-                    {wzwTextAnzeige && (
-                      <div style={{ whiteSpace: "pre-line", fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 8 }}>
-                        {wzwTextAnzeige}
-                      </div>
-                    )}
-
-                    {/* Hinweise */}
-                    {erg.zeitAbweichung && (
-                      <div className="flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginBottom: 4 }}>
-                        <AlertTriangle style={{ width: 10, height: 10 }} />
-                        Zeitabweichung: {erg.zeitMin} min statt Richtwert {erg.katalogZeitMin} min
-                      </div>
-                    )}
-                    {erg.inklusivHinweis && (
-                      <div className="flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginBottom: 4 }}>
-                        <AlertTriangle style={{ width: 10, height: 10 }} />
-                        {erg.inklusivHinweis}
-                      </div>
-                    )}
-                    {erg.kassenregelTreffer.map((t, i) => (
-                      <div key={i} className="flex items-center" style={{ gap: 5, fontSize: "var(--text-meta)", color: "var(--status-warning-text)", marginBottom: 4 }}>
-                        <AlertTriangle style={{ width: 10, height: 10 }} />
-                        {t.hinweis}
-                      </div>
-                    ))}
-
-                    {/* Zugeordnete Massnahmen + Ziele (Kontext) */}
-                    {(erg.massnahmen.length > 0 || (erg.status === "vorschlag" && erg.vorschlagDiagnose)) && (() => {
-                      const relevanteMassnahmen = erg.status === "vorschlag" && erg.vorschlagDiagnose
-                        ? ppMassnahmen.filter(m => m.bezugDiagnoseId === erg.vorschlagDiagnose!.diagnoseId)
-                        : erg.massnahmen;
-                      const relevanteZiele = erg.status === "vorschlag" && erg.vorschlagDiagnose
-                        ? ppZiele.filter(z => z.bezugDiagnoseId === erg.vorschlagDiagnose!.diagnoseId)
-                        : erg.ziele;
-                      return (
-                        <div style={{ marginTop: 6, paddingTop: 6, borderTop: "0.5px solid var(--border-default)" }}>
-                          {relevanteMassnahmen.length > 0 && (
-                            <div style={{ marginBottom: 4 }}>
-                              <span style={{ fontSize: 9, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Massnahmen</span>
-                              {relevanteMassnahmen.map(m => (
-                                <div key={m.id} style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", padding: "1px 0" }}>· {m.titel}</div>
-                              ))}
-                            </div>
-                          )}
-                          {relevanteZiele.length > 0 && (
-                            <div>
-                              <span style={{ fontSize: 9, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Ziele</span>
-                              {relevanteZiele.map(z => (
-                                <div key={z.id} style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", padding: "1px 0" }}>· {z.titel} ({z.zeithorizont})</div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </ReviewBlock>
-                );
-              })}
-
-              {/* Haftungs-Hinweis (Footer) */}
-              <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--bg-secondary)", borderRadius: 8, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
-                Diese Auswertung stellt Begründungs-Entwürfe bereit und zeigt Lücken. Sie bescheinigt keine Konformität und ersetzt nicht die fachliche Prüfung.
-              </div>
-            </div>
-          </div>
         </div>
       )}
 

@@ -5,7 +5,6 @@
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { ArrowLeft, Check, ChevronDown, ChevronUp, Plus, Edit3, X, Mic, Send, FileText, AlertTriangle, Search, Calendar, Trash2, CheckCircle2 } from "lucide-react";
-import { MOCK_PFLEGEPLANUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
 import {
   useKlvVerordnungen, positionHinzufuegen, positionAendern, positionEntfernen,
   diagnosenSetzen, verordnungAendern, statusWechseln,
@@ -33,8 +32,8 @@ export function KLVArbeitsbereich() {
   const klvData = useKlvVerordnungen().find(k => k.id === klvId);
   if (!klvData) return <div style={{ padding: "64px 32px", textAlign: "center" }}><div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>KLV nicht gefunden</div><button onClick={() => navigate(-1)} className="inline-flex items-center cursor-pointer" style={{ marginTop: 16, gap: 8, padding: "10px 20px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", border: "none" }}><ArrowLeft style={{ width: 16, height: 16 }} /> Zurück</button></div>;
 
-  const ppRef = klvData.pflegeplanungId ? MOCK_PFLEGEPLANUNGEN.find(p => p.id === klvData.pflegeplanungId) : null;
-
+  /* Der Pflegeplanungs-Bezug (ppRef, «Aus Pflegeplanung übernehmen») ist mit
+     der alten Pflegeplanung entfernt und kommt in Lauf 6 aus dem neuen Modul. */
   const status = klvData.status;
   const diagnosen = klvData.diagnosen;
   const positionen = klvData.leistungspositionen;
@@ -78,7 +77,6 @@ export function KLVArbeitsbereich() {
             <span style={{ padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: status === "entscheid_erhalten" ? "var(--status-success-bg)" : status === "ersetzt" ? "var(--status-danger-bg)" : "var(--status-warning-bg)", color: status === "entscheid_erhalten" ? "var(--status-success-text)" : status === "ersetzt" ? "var(--status-danger)" : "var(--status-warning-text)" }}>{lpbStatusLabel(status) || status}</span>
           </div>
         </div>
-        {ppRef && <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 4 }}>Aus Pflegeplanung vom {ppRef.erstellDatum}</div>}
         <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>{diagnosen.length} Diagnosen · {positionen.length} Positionen · {totalH.toFixed(1)} h/Wo.</div>
       </div>
 
@@ -303,7 +301,6 @@ export function KLVArbeitsbereich() {
           {isEditable && (
             <div className="flex flex-wrap" style={{ gap: 6, marginTop: 8 }}>
               <button onClick={() => setShowKatalog(true)} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", border: "none" }}><Plus style={{ width: 12, height: 12 }} /> Aus Katalog</button>
-              {ppRef && <button onClick={() => alert("Aus Pflegeplanung übernehmen – Stub")} className="inline-flex items-center cursor-pointer" style={{ gap: 4, padding: "6px 12px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Aus Pflegeplanung</button>}
             </div>
           )}
         </Section>
@@ -444,7 +441,7 @@ function KatalogDialog({ onAdd, onClose }: { onAdd: (pos: Omit<KLVLeistung, "id"
           {filtered.slice(0, 40).map(p => {
             const kc = KAT_COLORS[p.klvKategorie as "a" | "b" | "c"];
             return (
-              <button key={p.nr} onClick={() => onAdd({ klvNummer: p.nr, bezeichnung: p.bezeichnung, kategorie: p.klvKategorie as "a" | "b" | "c", wer: KLV_WER_STANDARD, training: "N", anzahl: 1, einheit: "w", zeitMin: p.zeitMin || 15, ausAnna: false, annaKonfidenz: null, validiert: false, simultanGruppe: null, bezugMassnahmeId: null, diagnoseIds: [], wzwBegruendung: null })}
+              <button key={p.nr} onClick={() => onAdd({ klvNummer: p.nr, bezeichnung: p.bezeichnung, kategorie: p.klvKategorie as "a" | "b" | "c", wer: KLV_WER_STANDARD, training: "N", anzahl: 1, einheit: "w", zeitMin: p.zeitMin || 15, ausAnna: false, annaKonfidenz: null, validiert: false, simultanGruppe: null })}
                 className="w-full flex items-center text-left cursor-pointer transition-colors" style={{ padding: "8px 10px", borderRadius: "var(--radius-card)", border: "none", background: "transparent", gap: 8 }}
                 onMouseEnter={e => e.currentTarget.style.background = "var(--bg-secondary)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <span style={{ padding: "1px 5px", borderRadius: 4, fontSize: 9, fontWeight: "var(--weight-semibold)", background: kc.bg, color: kc.color }}>{p.klvKategorie}</span>

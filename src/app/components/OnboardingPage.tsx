@@ -61,7 +61,7 @@ import { erfassePatientImOnboarding, patientFuerOnboarding } from "../../lib/pat
 import { erfasseAngehoerigenImOnboarding, angehoerigerFuerOnboarding, type AngehoerigenEingabe } from "../../lib/angehoerige/store";
 import { sichereGepflegteAngehoerige } from "../../lib/beziehungen/store";
 import { GEGENWART, GEGENWART_ISO } from "../../lib/gegenwart";
-import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN } from "../../lib/mocks/klinische-artefakte-mock";
+import { MOCK_ASSESSMENTS } from "../../lib/mocks/klinische-artefakte-mock";
 import { getKlvVerordnungen, getKlvFuerOnboarding } from "../../lib/klv/store";
 import { lpbStatusLabel } from "../../lib/stammdaten/lpb-status";
 import { getTicketsFuerSubjekt, aktualisiereUeberfaellige } from "../../lib/rhythmus/engine";
@@ -151,61 +151,9 @@ function phasenZustand(f: { isCompleted: boolean; isInProgress: boolean; isBlock
 /* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
-/**
- * Anna-Hinweis-Zeile — deterministische Hinweis-Fläche im Vorgangs-Header.
- * Genau eine Aktion, regelbasiert (erweiterbare Prioritäts-Struktur).
- * Weist hin und springt — führt die Aktion nie selbst aus.
- *
- * Prioritäten (max. 1 wird angezeigt):
- * 1. ArztAnfrage.status == antwort_erhalten → Diagnosen bereit
- * 2. ArztAnfrage.status == versandbereit → Anfrage versandbereit
- * 3. (künftig erweiterbar: unbestätigte Vorschläge, etc.)
- */
-function AnnaHinweisZeile({ onJumpToPflegeplanung }: { onJumpToPflegeplanung: () => void }) {
-  const arztAnfrage = useArztAnfrage();
-  const s = arztAnfrage?.anfrage.status ?? null;
-
-  // Priorität 1: Antwort erhalten
-  if (s === "antwort_erhalten") {
-    return (
-      <div className="flex items-center" style={{ gap: 6, marginTop: 8 }}>
-        <Sparkles style={{ width: 12, height: 12, color: "var(--brand-primary)", flexShrink: 0 }} />
-        <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-          Antwort von {arztAnfrage!.anfrage.empfaengerName} erhalten – Diagnosen bereit zur Extraktion
-        </span>
-        <button
-          onClick={onJumpToPflegeplanung}
-          className="cursor-pointer shrink-0"
-          style={{ background: "none", border: "none", fontSize: "var(--text-small)", fontWeight: 500, color: "var(--brand-primary)", padding: 0 }}
-        >
-          Zur Pflegeplanung →
-        </button>
-      </div>
-    );
-  }
-
-  // Priorität 2: Versandbereit
-  if (s === "versandbereit") {
-    return (
-      <div className="flex items-center" style={{ gap: 6, marginTop: 8 }}>
-        <Sparkles style={{ width: 12, height: 12, color: "var(--brand-primary)", flexShrink: 0 }} />
-        <span style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)" }}>
-          Die Arzt-Anfrage ist bereit zum Versand
-        </span>
-        <button
-          onClick={onJumpToPflegeplanung}
-          className="cursor-pointer shrink-0"
-          style={{ background: "none", border: "none", fontSize: "var(--text-small)", fontWeight: 500, color: "var(--brand-primary)", padding: 0 }}
-        >
-          Zur Pflegeplanung →
-        </button>
-      </div>
-    );
-  }
-
-  // Sonst: keine Zeile
-  return null;
-}
+/* Die AnnaHinweisZeile (Sprung zur Pflegeplanung bei Arzt-Anfrage-Zuständen)
+   ist mit der alten Pflegeplanung entfernt — sie wurde nirgends mehr gerendert
+   und ihr Sprungziel existiert nicht mehr. */
 
 /** Ein Name zählt erst, wenn beide Teile erfasst sind — sonst Platzhalter. */
 function vollerName(nachname: string, vorname: string): boolean {
@@ -1392,7 +1340,6 @@ export function OnboardingPage() {
               // wird ihr Fehlen nicht als Lücke gemeldet.
               const chbb16Hint = registrierungFuerOnboarding(wirksameFallKennung)?.answers["CHBB16"] ?? "";
               if (chbb16Hint !== "" && sdaVerlangtInterrai(chbb16Hint) && (!ba || ba.status !== "abgeschlossen")) hints.push("Das InterRAI ist noch nicht abgeschlossen. Es wird mitkonvertiert und kann später vervollständigt werden.");
-              if (!MOCK_PFLEGEPLANUNGEN.find(p => p.onboardingId === wirksameFallKennung)) hints.push("Es wurde noch keine Pflegeplanung erstellt.");
               const klv = getKlvFuerOnboarding(wirksameFallKennung);
               // Hinweistext, keine Bedingung: der Abschluss hängt nicht am KLV-Zustand.
               // Gezeigt wird die Beschriftung, nie der gespeicherte Code.
@@ -1424,7 +1371,7 @@ export function OnboardingPage() {
                       setAbschlussAuditLog(auditNote);
                       console.info("[Audit] Abschluss mit Override:", auditNote);
                     }
-                    const ergebnis = konvertiereOnboarding(wirksameFallKennung, { interRAIAssessments: MOCK_ASSESSMENTS, pflegeplanungen: MOCK_PFLEGEPLANUNGEN, klvVerordnungen: getKlvVerordnungen(), workflows: [] }, {
+                    const ergebnis = konvertiereOnboarding(wirksameFallKennung, { interRAIAssessments: MOCK_ASSESSMENTS, klvVerordnungen: getKlvVerordnungen(), workflows: [] }, {
                       name: `${angehoerigerData.vorname || ""} ${angehoerigerData.name || ""}`.trim(),
                       quellensteuerpflichtig: angehoerigerData.quellensteuer === "ja",
                       aufenthaltsstatus: angehoerigerData.aufenthaltsstatus,
@@ -1457,7 +1404,6 @@ export function OnboardingPage() {
                     const a = ergebnis.konvertierteArtefakte;
                     const uebernommen: string[] = [];
                     if (a.interRAIAssessments.length > 0) uebernommen.push(`${a.interRAIAssessments.length} InterRAI`);
-                    if (a.pflegeplanungen.length > 0) uebernommen.push(`${a.pflegeplanungen.length} Pflegeplanung`);
                     if (a.klvVerordnungen.length > 0) uebernommen.push(`${a.klvVerordnungen.length} KLV`);
                     const artefaktInfo = uebernommen.length > 0 ? ` (${uebernommen.join(", ")})` : "";
                     console.info("[Konvertierung]", ergebnis);

@@ -153,56 +153,10 @@ export interface AerztlicheDiagnose {
   status: ArztDiagnoseStatus;
 }
 
-/* ══════════════════════════════════════════
-   PFLEGEPLANUNG (NANDA)
-   ══════════════════════════════════════════ */
-
-export type PflegeplanungStatus = "entwurf" | "in-bearbeitung" | "validiert" | "abgeschlossen";
-export type VorschlagStatus = "vorschlag" | "akzeptiert" | "abgelehnt";
-
-export interface Pflegediagnose {
-  id: string;
-  nandaCode: string;
-  titel: string;
-  bezugCap: string | null;
-  begruendung: string;
-  status: VorschlagStatus;
-  /** Referenz auf ärztliche Diagnosen (ICD-IDs). Array für spätere n:m, UI wählt vorerst eine. */
-  icdIds: string[];
-}
-
-export interface Massnahme {
-  id: string;
-  titel: string;
-  bezugDiagnoseId: string;
-  beschreibung: string;
-  haeufigkeit: string;
-  status: VorschlagStatus;
-}
-
-export interface Pflegeziel {
-  id: string;
-  titel: string;
-  bezugDiagnoseId: string;
-  zeithorizont: string;
-  messbar: string;
-  status: VorschlagStatus;
-}
-
-export interface Pflegeplanung {
-  id: string;
-  onboardingId: string | null;
-  patientId: string | null;
-  patientName: string;
-  interRAIAssessmentId: string | null;
-  status: PflegeplanungStatus;
-  erstelltVon: string;
-  erstellDatum: string;
-  abschlussDatum: string | null;
-  pflegediagnosen: Pflegediagnose[];
-  massnahmen: Massnahme[];
-  ziele: Pflegeziel[];
-}
+/* Die Pflegeplanungs-Typen (Pflegediagnose, Pflegeziel, Massnahme,
+   Pflegeplanung) sind mit der alten Pflegeplanung abgerissen — die neue
+   Typwelt entsteht als eigenes Modul (Kette Diagnose → Ziel → Massnahme →
+   Detailintervention → Leistungsposition). Siehe docs/schema-delta-pflegeplan.md. */
 
 /* ══════════════════════════════════════════
    KLV-VERORDNUNG
@@ -262,16 +216,9 @@ export interface KLVLeistung {
   annaKonfidenz: "hoch" | "mittel" | "niedrig" | null;
   validiert: boolean;
   simultanGruppe: string | null;
-  bezugMassnahmeId: string | null;
-  /** Zugeordnete Pflegediagnosen (IDs). Array für spätere n:m, UI wählt vorerst eine. */
-  diagnoseIds: string[];
-  /**
-   * WZW-Begründung (Entwurf oder bestätigt).
-   * Enthält Zweckmässigkeit, Wirtschaftlichkeit, Wirksamkeit als kompakten Dreisatz.
-   * Wird bei WZW-Auswertung gesetzt und bei Bestätigung finalisiert.
-   * ⚠️ Stellt Begründungen bereit, bescheinigt keine Konformität.
-   */
-  wzwBegruendung: string | null;
+  /* Diagnose- und Massnahmenbezug (bezugMassnahmeId, diagnoseIds) sowie die
+     WZW-Begründung sind mit der alten Pflegeplanung entfernt. Der Bezug kommt
+     in Lauf 6 aus dem neuen Pflegeplan-Modul (siehe docs/schema-delta-pflegeplan.md). */
 }
 
 export interface KLVVerordnung {
@@ -286,7 +233,6 @@ export interface KLVVerordnung {
    */
   mandatId: string | null;
   patientName: string;
-  pflegeplanungId: string | null;
   status: KLVStatus;
   /** Fortlaufend je Patient, aufsteigend. */
   version: number;

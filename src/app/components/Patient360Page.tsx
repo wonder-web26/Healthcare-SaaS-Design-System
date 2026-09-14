@@ -115,7 +115,7 @@ import { austrittVon, austrittText, monatNachAustritt, austrittsMonat } from "..
 import { GEGENWART, gegenwart } from "../../lib/gegenwart";
 import { StatusModal } from "./StatusModal";
 import { DetailNavigation } from "./DetailNavigation";
-import { MOCK_ASSESSMENTS, MOCK_PFLEGEPLANUNGEN, STEINER_ALT_DIAGNOSEN, STEINER_ALT_MASSNAHMEN, STEINER_ALT_ZIELE } from "../../lib/mocks/klinische-artefakte-mock";
+import { MOCK_ASSESSMENTS } from "../../lib/mocks/klinische-artefakte-mock";
 import {
   useKlvVerordnungen, verordnungAnlegen, verordnungEntfernen,
   statusWechseln, neueVersionErstellen, istGesperrt, sperrGrund,
@@ -133,7 +133,7 @@ import {
   useEinsaetze, useErbrachteLeistungen, einsatzBestaetigen, einsatzRueckfrage, berichtSchreiben,
   EINSATZ_BEZUGSMONAT,
 } from "../../lib/einsaetze/store";
-import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung, type AerztlicheDiagnose, type ArztDiagnoseStatus, type VorschlagStatus } from "../../types/klinische-artefakte";
+import { getArtefaktContainer, type KLVVerordnung, type KLVStatus, type KLVLeistung, type AerztlicheDiagnose, type ArztDiagnoseStatus } from "../../types/klinische-artefakte";
 import { TAKT_MINUTEN, MINDESTWERT_EINSATZ, type Monatsabrechnung } from "../../lib/abrechnung/leistungsarten";
 import { monatsKennzahlen } from "../../lib/einsaetze/kontrolle";
 import { lagebild, NICHT_BEURTEILBAR, GEPRUEFT_WURDE } from "../../lib/lagebild/lagebild";
@@ -161,10 +161,7 @@ import {
   type Spitalaufenthalt, type FruehererEingriff,
 } from "../../lib/patienten/vorgeschichte";
 import { patientfeldLabel } from "../../lib/stammdaten/patientfelder";
-import {
-  useArztDiagnosen, usePflegediagnosen, arztDiagnoseSichern, pflegediagnoseSichern,
-  type PflegediagnoseEintrag,
-} from "../../lib/diagnosen/store";
+import { useArztDiagnosen, arztDiagnoseSichern } from "../../lib/diagnosen/store";
 import {
   dokumenteVon, ordnerStand, ordnerZustand, ordnerDes, pflichtluecken,
   geprueftePflichttypen, gueltigBisText, istAbgelaufen, HERKUNFT_TEXT,
@@ -804,7 +801,7 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "interrai-hc": return <TabInterRAI patientId={patient.id} patientName={`${patient.nachname}, ${patient.vorname}`} navigate={navigate} />;
     case "atl": return <TabATL patient={patient} />;
     case "anamnese": return <TabAnamnese patient={patient} />;
-    case "pflegeplan": return <TabPflegeplanung patientId={patient.id} navigate={navigate} />;
+    case "pflegeplan": return <TabPflegeplanung />;
     case "vitalwerte": return <VitalzeichenAbschnitt patientId={patient.id} />;
     case "unvertraeglichkeiten": return <AllergienAbschnitt patientId={patient.id} />;
     case "betreuungsrhythmus": return <TabWorkflow patient={patient} />;
@@ -4007,10 +4004,7 @@ function AnsichtAustritt({ patient }: { patient: Patient }) {
 
 function AnsichtDiagnosen({ patient }: { patient: Patient }) {
   const arzt = useArztDiagnosen().filter(d => d.patientId === patient.id);
-  const pflege = usePflegediagnosen().filter(d => d.patientId === patient.id);
-  const plan = MOCK_PFLEGEPLANUNGEN.find(p => p.patientId === patient.id) ?? null;
   const [aOffen, setAOffen] = useState<string | null>(null);
-  const [pOffen, setPOffen] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
@@ -4056,46 +4050,18 @@ function AnsichtDiagnosen({ patient }: { patient: Patient }) {
         )}
       </PSectionCard>
 
+      {/* Leerzustand statt Bestand: die alte Pflegeplanung ist abgerissen,
+          die Pflegediagnosen entstehen künftig im neuen Pflegeplan-Modul. */}
       <PSectionCard title="Pflegediagnosen" icon={ClipboardList}>
-        {pOffen === null && (
-          <button type="button" onClick={() => setPOffen("")} className="ui-fokusring cursor-pointer inline-flex items-center"
-            style={{ gap: 5, marginBottom: 12, background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--brand-primary)" }}>
-            <Plus style={{ width: 13, height: 13 }} /> Diagnose erfassen
-          </button>
-        )}
-        {pOffen === "" && <PflegediagnoseFormular patientId={patient.id} eintrag={null} hatPlan={plan !== null} onFertig={() => setPOffen(null)} />}
-        {pflege.length === 0 && pOffen === null ? (
-          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch" }}>
-            {plan
-              ? "Der Pflegeplan besteht, trägt aber keine Pflegediagnose."
-              : "Kein Pflegeplan angelegt — Pflegediagnosen entstehen dort."}
-          </p>
-        ) : (
-          <div className="flex flex-col" style={{ gap: 2 }}>
-            {pflege.map(d => pOffen === d.id ? (
-              <div key={d.id} style={{ paddingTop: 8, borderTop: "var(--border-thin) solid var(--border-default)" }}>
-                <PflegediagnoseFormular patientId={patient.id} eintrag={d} hatPlan={plan !== null} onFertig={() => setPOffen(null)} />
-              </div>
-            ) : (
-              <div key={d.id} style={{ padding: "9px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
-                <div className="flex items-baseline flex-wrap" style={{ gap: 10 }}>
-                  <span style={{ width: 74, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{d.nandaCode || "—"}</span>
-                  <span style={{ flex: 1, minWidth: 180, fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{d.titel}</span>
-                  <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-                    {d.ohnePlanVermerk || (plan ? `Pflegeplan ${plan.id}` : "")}
-                  </span>
-                  <button type="button" onClick={() => setPOffen(d.id)} className="ui-fokusring cursor-pointer"
-                    style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>
-                    Bearbeiten
-                  </button>
-                </div>
-                {d.begruendung && (
-                  <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: "4px 0 0", maxWidth: "74ch", lineHeight: 1.55 }}>{d.begruendung}</p>
-                )}
-              </div>
-            ))}
+        <div style={{ padding: "var(--space-6) var(--space-4)", textAlign: "center" }}>
+          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
+            Die Pflegeplanung wird neu gebaut
           </div>
-        )}
+          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 auto", maxWidth: "48ch", lineHeight: 1.6 }}>
+            Die Pflegediagnosen entstehen künftig im neuen Pflegeplan-Modul und
+            erscheinen dann an dieser Stelle.
+          </p>
+        </div>
       </PSectionCard>
     </div>
   );
@@ -4160,67 +4126,8 @@ function ArztDiagnoseFormular({ patientId, eintrag, onFertig }: {
   );
 }
 
-function PflegediagnoseFormular({ patientId, eintrag, hatPlan, onFertig }: {
-  patientId: string; eintrag: PflegediagnoseEintrag | null; hatPlan: boolean; onFertig: () => void;
-}) {
-  const [nanda, setNanda] = useState(eintrag?.nandaCode ?? "");
-  const [titel, setTitel] = useState(eintrag?.titel ?? "");
-  const [begruendung, setBegruendung] = useState(eintrag?.begruendung ?? "");
-  const [status, setStatus] = useState<VorschlagStatus>(eintrag?.status ?? "vorschlag");
-
-  return (
-    <div style={{ padding: "12px 14px", borderRadius: 12, background: "var(--bg-secondary)", marginBottom: 12 }}>
-      {/* Die Pflegediagnose entsteht eigentlich im Pflegeplan. Ohne Plan wird
-          sie trotzdem erfasst — mit einem Vermerk, damit später erkennbar
-          bleibt, dass sie ausserhalb entstanden ist. */}
-      {!hatPlan && (
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "9px 11px", borderRadius: 10, background: "var(--status-warning-bg)", marginBottom: 10 }}>
-          <AlertTriangle style={{ width: 13, height: 13, color: "var(--status-warning-text)", flexShrink: 0, marginTop: 2 }} />
-          <span style={{ fontSize: "var(--text-meta)", color: "var(--status-warning-text)", maxWidth: "74ch", lineHeight: 1.55 }}>
-            Für diesen Patienten besteht kein Pflegeplan. Pflegediagnosen entstehen dort — diese
-            wird trotzdem erfasst und trägt den Vermerk „ausserhalb des Pflegeplans erfasst".
-          </span>
-        </div>
-      )}
-      <div className="grid grid-cols-1 sm:grid-cols-4" style={{ gap: 12, marginBottom: 10 }}>
-        <FormFeld label="NANDA-Nummer" wert={nanda} platzhalter="z. B. 00155" onAendern={setNanda} />
-        <div className="sm:col-span-3">
-          <FormFeld label="Bezeichnung" wert={titel} platzhalter="z. B. Sturzgefahr" onAendern={setTitel} />
-        </div>
-      </div>
-      <FormFeld label="Begründung" wert={begruendung} platzhalter="Woran die Diagnose festgemacht wird" onAendern={setBegruendung} />
-      <div style={{ marginTop: 10 }}>
-        <div className="text-[11px] text-muted-foreground uppercase tracking-wider" style={{ fontWeight: 500, marginBottom: 3 }}>Status</div>
-        <div className="flex items-center" style={{ gap: 6 }}>
-          {(["vorschlag", "akzeptiert", "abgelehnt"] as VorschlagStatus[]).map(w => (
-            <button key={w} type="button" onClick={() => setStatus(w)} className="ui-fokusring cursor-pointer"
-              style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)",
-                background: status === w ? "var(--brand-primary-light)" : "var(--bg-elevated)",
-                border: status === w ? "var(--border-thin) solid var(--brand-primary)" : "var(--border-thin) solid var(--border-default)",
-                color: status === w ? "var(--brand-primary)" : "var(--text-primary)" }}>
-              {w === "vorschlag" ? "Vorschlag" : w === "akzeptiert" ? "Akzeptiert" : "Abgelehnt"}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex items-center" style={{ gap: 12, marginTop: 12 }}>
-        <AppButton variant="sekundaer" onClick={() => {
-          if (!titel.trim()) return;
-          pflegediagnoseSichern(patientId, {
-            id: eintrag?.id ?? "", nandaCode: nanda, titel, begruendung, status,
-            bezugCap: eintrag?.bezugCap ?? null, icdIds: eintrag?.icdIds ?? [],
-            ohnePlanVermerk: eintrag?.ohnePlanVermerk || (hatPlan ? "" : "Ausserhalb des Pflegeplans erfasst"),
-          });
-          onFertig();
-        }}>Sichern</AppButton>
-        <button type="button" onClick={onFertig} className="ui-fokusring cursor-pointer"
-          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-          Abbrechen
-        </button>
-      </div>
-    </div>
-  );
-}
+/* Das PflegediagnoseFormular ist mit der alten Pflegeplanung entfernt —
+   Pflegediagnosen entstehen künftig im neuen Pflegeplan-Modul. */
 
 /* ══════════════════════════════════════════
    GRUPPE DOSSIER — Ordnerstruktur, Dokumente, Pflichtlücken
@@ -4809,12 +4716,13 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
     }).length,
   };
 
-  const plan = MOCK_PFLEGEPLANUNGEN.find(p => p.patientId === patient.id) ?? null;
   const zeilen = pruefbereitschaft({
     patientId: patient.id, zeitraum, blatt,
     verordnungen: verordnungen.filter(v => mandatIds.includes(v.mandatId)),
     kostengutsprachen: kgs.filter(k => mandatIds.includes(k.mandatId)),
-    pflegediagnosen: plan ? plan.pflegediagnosen.length : null,
+    // Kein Pflegeplan mehr im Bestand — der Zustand «null = kein Pflegeplan»
+    // ist im Prüfmodell vorgesehen; die Karte zeigt ihren Fehltext.
+    pflegediagnosen: null,
     jeMonat, abgerechnete, rhythmus,
     dokumentluecken: {
       fehlend: pflichtluecken(alleDokumente, DOK_REF(patient.id), PATIENT_DOK_KONTEXT_360, MANDAT_STICHTAG).map(l => l.label),
@@ -6297,58 +6205,20 @@ function TabInterRAI({ patientId }: { patientId: string; patientName: string; na
 /* ══════════════════════════════════════════
    TAB: PFLEGEPLANUNG
    ══════════════════════════════════════════ */
-function TabPflegeplanung({ patientId, navigate }: { patientId: string; navigate: (p: string) => void }) {
-  const [, forceUpdate] = useState(0);
-  const plans = MOCK_PFLEGEPLANUNGEN.filter(p => p.patientId === patientId);
-
-  const deletePlan = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const idx = MOCK_PFLEGEPLANUNGEN.findIndex(p => p.id === id);
-    if (idx >= 0) { MOCK_PFLEGEPLANUNGEN.splice(idx, 1); forceUpdate(n => n + 1); toast("Pflegeplanungs-Entwurf gelöscht"); }
-  };
-  const current = plans.find(p => p.status === "abgeschlossen" || p.status === "validiert") || plans[0];
-  const baRef = current?.interRAIAssessmentId ? MOCK_ASSESSMENTS.find(a => a.id === current.interRAIAssessmentId) : null;
-
+function TabPflegeplanung() {
+  /* Leerzustand statt Bestand: die alte Pflegeplanung ist abgerissen, das
+     neue Pflegeplan-Modul (Kette Diagnose → Ziel → Massnahme → Position)
+     entsteht als eigener Lauf. Kein Start-Knopf — die Arbeitsfläche existiert
+     noch nicht. */
   return (
-    <div>
-      {current ? (
-        <>
-          <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
-            <div>
-              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Aktuelle Pflegeplanung vom {current.erstellDatum}</div>
-              {baRef && <button onClick={() => navigate(`/interrai/${baRef.id}`)} className="cursor-pointer" style={{ fontSize: "var(--text-small)", color: "var(--brand-primary)", background: "transparent", border: "none", padding: 0, marginTop: 2 }}>Aus InterRAI vom {baRef.startDatum} →</button>}
-              {current.onboardingId && <div style={{ fontSize: "var(--text-micro)", color: "var(--status-info)", marginTop: 2 }}>aus Onboarding</div>}
-            </div>
-            <AppButton variant="primaer" icon={Plus} onClick={() => navigate(`/pflegeplanung/${current?.id || "neu"}`)}>Neue Planung</AppButton>
-          </div>
-          {current.pflegediagnosen.filter(d => d.status === "akzeptiert").map(d => (
-            <div key={d.id} style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "14px 18px", marginBottom: 8 }}>
-              <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--brand-primary)", marginBottom: 4 }}>NANDA {d.nandaCode} – {d.titel}</div>
-              <div style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginBottom: 6 }}>{d.begruendung}</div>
-              {current.massnahmen.filter(m => m.bezugDiagnoseId === d.id && m.status === "akzeptiert").map(m => (<div key={m.id} style={{ padding: "5px 10px", background: "var(--bg-secondary)", borderRadius: "var(--radius-card)", fontSize: "var(--text-small)", marginBottom: 3 }}><span style={{ fontWeight: "var(--weight-medium)" }}>{m.titel}</span> · {m.haeufigkeit}</div>))}
-              {current.ziele.filter(z => z.bezugDiagnoseId === d.id && z.status === "akzeptiert").map(z => (<div key={z.id} style={{ padding: "5px 10px", background: "var(--brand-primary-light)", borderRadius: "var(--radius-card)", fontSize: "var(--text-small)", color: "var(--brand-primary)", marginTop: 3 }}>{z.titel} ({z.zeithorizont})</div>))}
-            </div>
-          ))}
-        </>
-      ) : (
-        <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", marginBottom: 20 }}>
-          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 8 }}>Noch keine Pflegeplanung</div>
-          <AppButton variant="primaer" icon={Plus} onClick={() => navigate("/pflegeplanung/neu")}>Pflegeplanung starten</AppButton>
-        </div>
-      )}
-      <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12, marginTop: 20 }}>Verlauf</div>
-      {plans.length === 0 ? <div style={{ fontSize: "var(--text-small)", color: "var(--text-tertiary)" }}>Keine Einträge</div> : plans.map(p => (
-        <div key={p.id} className="flex items-center" style={{ padding: "10px 14px", borderRadius: "var(--radius-card)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", marginBottom: 6 }}>
-          <div className="flex-1 flex items-center flex-wrap" style={{ gap: "var(--space-2)" }}>
-            <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{p.erstellDatum}</span>
-            <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: "var(--weight-medium)", background: p.status === "abgeschlossen" ? "var(--status-success-bg)" : "var(--status-warning-bg)", color: p.status === "abgeschlossen" ? "var(--status-success-text)" : "var(--status-warning-text)" }}>{p.status}</span>
-            {p.onboardingId && <span style={{ fontSize: "var(--text-micro)", color: "var(--status-info)" }}>aus Onboarding</span>}
-          </div>
-          {p.status !== "abgeschlossen" && (
-            <button onClick={e => deletePlan(p.id, e)} className="cursor-pointer" title="Entwurf löschen" style={{ background: "none", border: "none", color: "var(--text-tertiary)", padding: 4 }} onMouseEnter={e => (e.currentTarget.style.color = "var(--status-danger)")} onMouseLeave={e => (e.currentTarget.style.color = "var(--text-tertiary)")}><Trash2 style={{ width: 14, height: 14 }} /></button>
-          )}
-        </div>
-      ))}
+    <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+      <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
+        Die Pflegeplanung wird neu gebaut
+      </div>
+      <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 auto", maxWidth: "48ch", lineHeight: 1.6 }}>
+        Hier erscheinen künftig die Pflegediagnosen mit ihren Zielen und
+        Massnahmen aus dem neuen Pflegeplan-Modul.
+      </p>
     </div>
   );
 }
@@ -6573,7 +6443,6 @@ function TabKLV({ patientId }: { patientId: string }) {
       // Der Bestand setzt das aktive Mandat des Patienten ein.
       mandatId: null,
       patientName,
-      pflegeplanungId: current?.pflegeplanungId || null,
       status: "entwurf",
       version: klvs.reduce((m, k) => Math.max(m, k.version), 0) + 1,
       art: klvs.length === 0 ? "erst" : "folge",
