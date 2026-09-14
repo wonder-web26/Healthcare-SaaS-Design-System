@@ -104,9 +104,10 @@ function MassnahmenSatzZeile({ m, zielId, plan, mandate }: {
   );
 }
 
-export function DokumentAnsicht({ mandate, onPlanAendern }: {
+export function DokumentAnsicht({ mandate, onPlanAendern, onBlatt }: {
   mandate: MandatKurz[];
   onPlanAendern: () => void;
+  onBlatt: () => void;
 }) {
   const plan = usePlan();
   const summeMin = planWochenSummeMin(plan.massnahmen);
@@ -151,12 +152,22 @@ export function DokumentAnsicht({ mandate, onPlanAendern }: {
                 style={{ padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", border: "none", fontSize: "var(--text-small)", fontWeight: 500 }}>
                 Plan ändern
               </button>
-              {/* Entsteht in Lauf 6b — als kommend markiert, keine tote Fläche. */}
-              <button type="button" disabled title="Entsteht in Lauf 6b — das Blatt wird aus diesem Plan abgeleitet"
-                className="inline-flex items-center"
-                style={{ gap: 5, padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", color: "var(--text-tertiary)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: 500, cursor: "default" }}>
-                <FileText style={{ width: 12, height: 12 }} /> Leistungsplanungsblatt (kommt)
-              </button>
+              {/* Das Blatt entsteht mit dem Veröffentlichen (Lauf 6b):
+                  ein freigegebener Plan trägt eines, ein Entwurf nicht. */}
+              {plan.status === "veroeffentlicht" ? (
+                <button type="button" data-blatt-knopf onClick={onBlatt}
+                  className="ui-fokusring cursor-pointer inline-flex items-center"
+                  style={{ gap: 5, padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", color: "var(--text-primary)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: 500 }}>
+                  <FileText style={{ width: 12, height: 12 }} /> Leistungsplanungsblatt
+                </button>
+              ) : (
+                <button type="button" data-blatt-knopf disabled
+                  title="Ein freigegebener Plan trägt ein Blatt — ein Entwurf nicht."
+                  className="inline-flex items-center"
+                  style={{ gap: 5, padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--bg-secondary)", color: "var(--text-tertiary)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", fontWeight: 500, cursor: "not-allowed" }}>
+                  <FileText style={{ width: 12, height: 12 }} /> Leistungsplanungsblatt
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -14,6 +14,7 @@ import { FormShowcase } from "./components/FormShowcase";
 import { InterRAIListPage } from "./components/interrai/InterRAIListPage";
 import { AbschlussListPage } from "./components/AbschlussListPage";
 import { PflegeplanAufbau } from "./components/pflegeplan/PflegeplanAufbau";
+import { BlattAnsicht } from "./components/pflegeplan/BlattAnsicht";
 import { KontaktePage } from "./components/KontaktePage";
 import { SchulungsnachweisPage } from "./components/schulung/SchulungsnachweisPage";
 import { ArbeitskontrollePage } from "./components/arbeitskontrolle/ArbeitskontrollePage";
@@ -21,6 +22,10 @@ import { InterraiNeuPage } from "./components/interrai-neu/InterraiNeuPage";
 import { DevAbklaerungPage } from "./components/interrai-neu/abklaerung/DevAbklaerungPage";
 
 export const router = createBrowserRouter([
+  /* Das Leistungsplanungsblatt (Lauf 6b) steht AUSSERHALB der App-Schale:
+     es ist ein druckbares Dokument — der Druck darf keine
+     Navigationselemente enthalten. */
+  { path: "/pflegeplan/:patientId/blatt", Component: BlattAnsicht },
   {
     path: "/",
     Component: AppShell,

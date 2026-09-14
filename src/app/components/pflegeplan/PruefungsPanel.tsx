@@ -12,12 +12,12 @@
  * widerspruchsfrei ist — nie, dass ein Versicherer den Plan akzeptiert.
  */
 import { useEffect, useState } from "react";
-import { ArrowRight, RefreshCw, X } from "lucide-react";
+import { ArrowRight, ChevronDown, RefreshCw, X } from "lucide-react";
 import {
-  usePlan, befundUebergehen, uebergehungZuruecknehmen,
-  pruefungAktuell, offeneBefunde, type PruefBefund,
+  usePlan, befundUebergehen, uebergehungZuruecknehmen, zielTerminieren,
+  pruefungDurchfuehren, pruefungAktuell, offeneBefunde, type PruefBefund,
 } from "../../../lib/pflegeplan/plan-store";
-import { KRITERIUM_LABEL, type PruefKriterium } from "../../../lib/pflegeplan/wzw";
+import { KRITERIUM_LABEL, PRUEFUNG_GRUPPE, type PruefKriterium } from "../../../lib/pflegeplan/wzw";
 import { datumAnzeige } from "./gemeinsam";
 
 const KRITERIEN: PruefKriterium[] = ["wirksamkeit", "zweckmaessigkeit", "wirtschaftlichkeit"];
@@ -120,6 +120,136 @@ function BefundKarte({ b, autorin, datumIso, onNavigiere }: {
   );
 }
 
+/**
+ * Ein Bündel gleichartiger Befunde (Lauf 6b): elf Ziele ohne Zieldatum sind
+ * EIN Problem, nicht elf. Zugeklappt eine Zeile, aufgeklappt die Einzelnen
+ * mit ihrem Verweis — plus Sammelbehandlung, wo sie möglich ist. Die
+ * Sammelübergehung ist keine Abkürzung um die Begründungspflicht: sie
+ * erzeugt an jedem Befund dieselbe Dokumentation, nur einmal geschrieben.
+ */
+function GruppenKarte({ code, befunde, autorin, datumIso, onNavigiere }: {
+  code: string;
+  befunde: PruefBefund[];
+  autorin: string;
+  datumIso: string;
+  onNavigiere: (b: PruefBefund) => void;
+}) {
+  const [offen, setOffen] = useState(false);
+  const [uebergehenOffen, setUebergehenOffen] = useState(false);
+  const [begruendung, setBegruendung] = useState("");
+  const [daten, setDaten] = useState<Record<string, string>>({});
+  const offene = befunde.filter(b => b.uebergehung === null);
+  const label = PRUEFUNG_GRUPPE[code] ?? code;
+  const sammelDaten = code === "W-ZIEL-OHNE-DATUM" && offene.length > 0;
+
+  return (
+    <div data-befund-buendel={code} style={{
+      marginBottom: 8, borderRadius: "var(--radius-card)",
+      border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)",
+    }}>
+      <button type="button" onClick={() => setOffen(o => !o)} aria-expanded={offen}
+        className="ui-fokusring cursor-pointer w-full flex items-center text-left"
+        style={{ gap: 8, padding: "9px 12px", background: "none", border: "none", fontFamily: "inherit" }}>
+        <span className="flex-1" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: offene.length > 0 ? "var(--text-primary)" : "var(--text-tertiary)" }}>
+          {befunde.length} {label}
+        </span>
+        <span style={{ fontSize: "var(--text-micro)", fontVariantNumeric: "tabular-nums", color: offene.length > 0 ? "var(--status-warning-text)" : "var(--text-tertiary)" }}>
+          {offene.length} offen
+        </span>
+        <ChevronDown style={{ width: 13, height: 13, color: "var(--text-tertiary)", transform: offen ? "rotate(180deg)" : "none", transition: "transform 0.15s", flexShrink: 0 }} />
+      </button>
+
+      {offen && (
+        <div style={{ padding: "0 12px 10px" }}>
+          {/* Sammelbehandlung: Zieldaten an einem Ort. Der Knopf wendet an
+              UND prüft neu — Zieldaten ändern den Planinhalt, die Prüfung
+              wäre sonst mitten in der Sammelaktion veraltet. */}
+          {sammelDaten && (
+            <div data-sammel-zieldaten style={{ padding: "8px 10px", marginBottom: 8, borderRadius: "var(--radius-card)", background: "var(--bg-secondary)" }}>
+              <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>
+                Zieldaten für alle betroffenen Ziele setzen
+              </div>
+              {offene.map(b => (
+                <div key={b.id} className="flex items-center" style={{ gap: 8, padding: "3px 0" }}>
+                  <span className="flex-1 min-w-0 truncate" style={{ fontSize: "var(--text-micro)", color: "var(--text-primary)" }}>
+                    {b.element.titel}
+                  </span>
+                  <input type="date" value={daten[b.element.code] ?? ""}
+                    onChange={e => setDaten(d => ({ ...d, [b.element.code]: e.target.value }))}
+                    aria-label={`Zieldatum für ${b.element.titel}`}
+                    style={{ height: 26, padding: "0 6px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", fontSize: "var(--text-micro)", color: "var(--text-primary)", fontFamily: "inherit" }} />
+                </div>
+              ))}
+              <button type="button" disabled={!Object.values(daten).some(v => v)}
+                onClick={() => {
+                  for (const [zielId, datum] of Object.entries(daten)) {
+                    if (datum) zielTerminieren(zielId, { zieldatum: datum });
+                  }
+                  setDaten({});
+                  pruefungDurchfuehren(datumIso);
+                }}
+                className="ui-fokusring cursor-pointer"
+                style={{
+                  marginTop: 6, padding: "4px 14px", borderRadius: "var(--radius-pill)",
+                  background: Object.values(daten).some(v => v) ? "var(--brand-primary)" : "var(--bg-elevated)",
+                  color: Object.values(daten).some(v => v) ? "var(--text-on-dark)" : "var(--text-tertiary)",
+                  border: "none", fontSize: "var(--text-micro)", fontWeight: 500,
+                }}>
+                Übernehmen und neu prüfen
+              </button>
+            </div>
+          )}
+
+          {/* Sammelübergehung: eine Begründung, an jedem Befund dieselbe Kennung. */}
+          {offene.length > 1 && (
+            <div data-sammel-uebergehen style={{ marginBottom: 8 }}>
+              <button type="button" onClick={() => setUebergehenOffen(o => !o)}
+                className="ui-fokusring cursor-pointer"
+                style={{ background: "none", border: "none", padding: 0, fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)", fontFamily: "inherit" }}>
+                {uebergehenOffen ? "Doch nicht übergehen" : `Alle ${offene.length} offenen mit einer Begründung übergehen`}
+              </button>
+              {uebergehenOffen && (
+                <div style={{ marginTop: 6 }}>
+                  <textarea value={begruendung} onChange={e => setBegruendung(e.target.value)}
+                    placeholder="Warum bleiben diese Befunde fachlich gewollt bestehen?"
+                    rows={2} aria-label={`Begründung für alle offenen: ${label}`}
+                    style={{
+                      width: "100%", padding: "7px 10px", borderRadius: "var(--radius-card)",
+                      border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)",
+                      fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit",
+                      resize: "vertical", outline: "none",
+                    }} />
+                  <button type="button" disabled={begruendung.trim() === ""}
+                    onClick={() => {
+                      const u = { text: begruendung.trim(), autorin, datum: datumIso };
+                      for (const b of offene) befundUebergehen(b.id, u);
+                      setUebergehenOffen(false);
+                      setBegruendung("");
+                    }}
+                    className="ui-fokusring cursor-pointer"
+                    style={{
+                      marginTop: 5, padding: "4px 14px", borderRadius: "var(--radius-pill)",
+                      background: begruendung.trim() ? "var(--brand-primary)" : "var(--bg-secondary)",
+                      color: begruendung.trim() ? "var(--text-on-dark)" : "var(--text-tertiary)",
+                      border: "none", fontSize: "var(--text-micro)", fontWeight: 500,
+                      cursor: begruendung.trim() ? "pointer" : "default",
+                    }}>
+                    Alle übergehen
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {befunde.map(b => (
+            <BefundKarte key={b.id} b={b} autorin={autorin} datumIso={datumIso} onNavigiere={onNavigiere} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PruefungsPanel({ hinweis, autorin, datumIso, onNavigiere, onErneutPruefen, onSchliessen }: {
   /** Kontext des Veröffentlichen-Umwegs — null beim freiwilligen Öffnen. */
   hinweis: string | null;
@@ -198,6 +328,14 @@ export function PruefungsPanel({ hinweis, autorin, datumIso, onNavigiere, onErne
           {KRITERIEN.map(k => {
             const gruppe = pruefung.befunde.filter(b => b.kriterium === k);
             const offen = gruppe.filter(b => b.uebergehung === null).length;
+            /* Gleichartige Befunde bündeln (Lauf 6b) — der Zähler oben bleibt
+               ehrlich die Zahl der EINZELBEFUNDE, nicht der Bündel. */
+            const buendel: { code: string; befunde: PruefBefund[] }[] = [];
+            for (const b of gruppe) {
+              const eintrag = buendel.find(x => x.code === b.pruefCode);
+              if (eintrag) eintrag.befunde.push(b);
+              else buendel.push({ code: b.pruefCode, befunde: [b] });
+            }
             return (
               <section key={k} data-befund-gruppe={k} style={{ marginBottom: 16 }}>
                 <div className="flex items-baseline" style={{ gap: 8, marginBottom: 6 }}>
@@ -215,8 +353,11 @@ export function PruefungsPanel({ hinweis, autorin, datumIso, onNavigiere, onErne
                   <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", padding: "2px 0 4px" }}>
                     Keine Befunde in dieser Gruppe.
                   </div>
-                ) : gruppe.map(b => (
-                  <BefundKarte key={b.id} b={b} autorin={autorin} datumIso={datumIso} onNavigiere={onNavigiere} />
+                ) : buendel.map(bd => bd.befunde.length === 1 ? (
+                  <BefundKarte key={bd.befunde[0].id} b={bd.befunde[0]} autorin={autorin} datumIso={datumIso} onNavigiere={onNavigiere} />
+                ) : (
+                  <GruppenKarte key={bd.code} code={bd.code} befunde={bd.befunde}
+                    autorin={autorin} datumIso={datumIso} onNavigiere={onNavigiere} />
                 ))}
               </section>
             );

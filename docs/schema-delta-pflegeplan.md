@@ -134,6 +134,33 @@ dbml heute nicht vorsieht:
 4. Das Bezugsdatum für «überfällig» ist die feste Mock-Gegenwart
    (`GEGENWART_ISO`); produktiv ersetzt das Systemdatum die Konstante.
 
+## Abweichungen aus Lauf 6b (Leistungsplanungsblatt)
+
+1. **Das Blatt ist eine Ableitung, kein gespeichertes Objekt:** Im Prototyp
+   fällt das Leistungsplanungsblatt deterministisch aus dem freigegebenen
+   Plan (`blatt.ts`) und wird nirgends persistiert. Mit echten Daten braucht
+   es das Blatt als **eigenes versioniertes Objekt** mit Zustandskette,
+   Protokoll und Sperre ab «An Kasse übermittelt» — das vollständige Modell
+   steht in `docs/lpb-fachmodell.md` und wird in eigenen Läufen gebaut
+   (Kassenstrecke).
+2. **Blattart vorläufig aus der Fassungsnummer:** Erstabklärung bei
+   Fassung 1, sonst Folgeabklärung — als vorläufig gekennzeichnet, weil das
+   fachliche Unterscheidungsmerkmal offen ist (Fachmodell, offene Frage).
+3. **Gültigkeitsende als Platzhalter:** Der Blatt-Kopf trägt «gültig ab»
+   (Freigabedatum); das Ende entsteht mit der ärztlichen Anordnung
+   (Kassenstrecke). Bewusst kein geratener Sechs-Monats-Wert — ein
+   plausibler falscher Wert ist schlechter als ein sichtbar fehlender.
+4. **Ein Blatt gehört einem Mandat:** Kostengutsprache und Zuständigkeit
+   hängen am Mandat (Fachmodell). Der Mock-Klient trägt eines; im
+   Mehrmandats-Fall (siehe UVG-Posten unter Lauf 3) braucht es **getrennte
+   Blätter je Mandat** und eine Mandats-Filterung der Massnahmen.
+5. **Doppelbelegung 10506 (mock):** `I-BEWEGUNG` und `I-GLEICHGEWICHT`
+   lösen beide auf Position 10506 auf — die bewusste Mehrfachbelegung, an
+   der die Blatt-Zusammenfassung nachweisbar ist (Zeit summiert, Häufigkeit/
+   Dauer/Qualifikation gestapelt, zugewiesene Qualifikation als Leitgrösse
+   mit genanntem Katalogminimum). Mit echten Daten kommt die Zuordnung
+   Intervention → Position aus dem Katalog.
+
 ## Abweichungen aus Lauf 6 (WZW-Prüfung und Freigabe)
 
 1. **`qualifikationsStufen()`** ist als neunte Vertragsabfrage dazugekommen —

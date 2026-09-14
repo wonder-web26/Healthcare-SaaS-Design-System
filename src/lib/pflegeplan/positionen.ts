@@ -31,6 +31,9 @@ const MOCK_ANREICHERUNG: Record<PositionsNummer, {
   "10102": { mindestqualifikation: "Pflegehelfer/in SRK", maxAnzahl: 1, maxEinheit: "tag" },
   "10103": { mindestqualifikation: "Pflegehelfer/in SRK", maxAnzahl: 2, maxEinheit: "tag" },
   "10505": { mindestqualifikation: "Pflegehelfer/in SRK", maxAnzahl: 3, maxEinheit: "tag" },
+  // Lauf 6b: Mindestqualifikation für die doppelt belegte Position, damit
+  // das Blatt Zuweisung gegen Katalogminimum zeigen kann (V18).
+  "10506": { mindestqualifikation: "Pflegehelfer/in SRK" },
   "10602": { mindestqualifikation: "FaGe", maxAnzahl: 7, maxEinheit: "woche" },
   "10802": { mindestqualifikation: "FaGe", maxAnzahl: 1, maxEinheit: "tag" },
 };

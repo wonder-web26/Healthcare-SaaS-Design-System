@@ -1,7 +1,7 @@
 # Pflegeplan — der Mock-Datensatz
 
 Aus dem Code extrahiert (über die Vertragsabfragen aus `src/lib/pflegeplan/`),
-nicht aus dem Gedächtnis. Stand: Lauf 5, Branch `feature/pflegeplanung`.
+nicht aus dem Gedächtnis. Stand: Lauf 6b, Branch `feature/pflegeplanung`.
 
 Herkunfts-Legende je Eintrag:
 - **katalog** — echter Katalog (Spitex-Leistungskatalog 2025 bzw. belegte
@@ -82,13 +82,13 @@ je zwei Diagnosen).
 |---|---|---|
 | I-STURZASSESS «Sturzrisiko-Assessment durchführen» | nein | **10901** (mock — bewusst ohne Teilhandlungen) |
 | I-WOHNUMFELD «Wohnumfeld anpassen …» | nein | — (planerisch) |
-| I-GLEICHGEWICHT «Gleichgewichts- und Kraftübungen anleiten» | nein | — |
+| I-GLEICHGEWICHT «Gleichgewichts- und Kraftübungen anleiten» | nein | **10506** (mock, Lauf 6b — Doppelbelegung mit I-BEWEGUNG) |
 | I-HILFSMITTEL «Gebrauch der Gehhilfe schulen» | nein | — |
 | I-STURZBERATUNG «Beratungsgespräch zur Sturzprophylaxe führen» | nein | — |
 | I-ZIELGESPRAECH «Pflegeziele … besprechen» | nein | — |
 | I-GEHTRAINING «Gehtraining durchführen» | nein | 10505 |
 | I-TRANSFER «Transfer üben und sichern» | nein | — |
-| I-BEWEGUNG «Aktive und passive Bewegungsübungen …» | nein | — |
+| I-BEWEGUNG «Aktive und passive Bewegungsübungen …» | nein | **10506** (mock, Lauf 6b — fast wortgleich zum Katalogtext) |
 | I-LAGERUNG «Lagern und positionieren» | nein | — |
 | I-GANZWASCHUNG «Ganzkörperwaschung durchführen» | **ja** (Ort: Im Bett → 10101, In Dusche oder Bad → 10102; zweite Gruppe «Haarwäsche einschliessen» ohne Positionswirkung) | — (Position nur über den Dialog) |
 | I-TEILWAESCHE «Teilwäsche durchführen» | nein | 10103 |
@@ -105,6 +105,7 @@ je zwei Diagnosen).
 | 10103 | Teilwäsche im Bett (inkl. Intimpflege) | c | 20 min | max 2×/Tag (mock) | Pflegehelfer/in SRK (mock) | 7 (kuratiert) |
 | 10107 | Haare waschen | c | 15 min | — | — | 6 (kuratiert) |
 | 10505 | Hilfe beim Gehen | c | 8 min | max 3×/Tag (mock) | Pflegehelfer/in SRK (mock) | 7 (kuratiert) |
+| 10506 | Aktive/passive Bewegungsunterstützung | c | 17 min | — | Pflegehelfer/in SRK (mock) | 1 (kuratiert) |
 | 10901 | Erstassessment | a | 60 min | — | — | **keine** |
 
 Nummer, Bezeichnung, KLV-Kategorie und Vorgabezeit: **katalog**
@@ -116,6 +117,7 @@ Nummer, Bezeichnung, KLV-Kategorie und Vorgabezeit: **katalog**
 |---|---|
 | Ziel dient zwei Diagnosen | Z-BALANCE, Z-STURZFREI, Z-HAUT (je 00155/00085 bzw. 00085/00108) |
 | Massnahme dient zwei Zielen | I-GLEICHGEWICHT (Z-BALANCE + Z-STURZFREI), I-GANZWASCHUNG (Z-SELBSTPFLEGE + Z-WOHLBEFINDEN), I-LAGERUNG (Z-BEWEGLICH + Z-HAUT) |
+| Zwei Interventionen auf derselben Position (Blatt-Zusammenfassung, Lauf 6b) | I-BEWEGUNG + I-GLEICHGEWICHT → 10506 — eine Blattzeile, getragen von bis zu drei Zielen unter zwei Diagnosen |
 | Intervention ohne Position (planerisch) | I-ZIELGESPRAECH, I-WOHNUMFELD, I-GLEICHGEWICHT u. a. |
 | Position ohne Teilhandlungen | 10901 (über I-STURZASSESS) |
 | Positionsumschaltung über Detaildialog | I-GANZWASCHUNG (10101 ↔ 10102) |

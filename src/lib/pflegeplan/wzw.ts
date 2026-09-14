@@ -65,11 +65,32 @@ export interface Befund {
   /** STABILE KENNUNG aus Prüfcode und Elementbezug — daran hängen die
    *  Übergehungen über Neuprüfungen hinweg. */
   id: string;
+  /** Die Prüfung, die den Befund erzeugt hat — Gruppierschlüssel der
+   *  Befundliste (Lauf 6b): gleichartige Befunde sind EIN Problem, nicht N. */
+  pruefCode: string;
   kriterium: PruefKriterium;
   titel: string;
   detail: string;
   element: BefundElement;
 }
+
+/** Gruppenüberschrift je Prüfcode — Mehrzahl, denn die Gruppe erscheint nur
+ *  bei mehreren gleichartigen Befunden («11 Ziele ohne Zieldatum»). */
+export const PRUEFUNG_GRUPPE: Record<string, string> = {
+  "W-DIAGNOSE-OHNE-ZIEL": "Diagnosen ohne Ziel",
+  "W-ZIEL-OHNE-MASSNAHME": "Ziele ohne Massnahme",
+  "W-MASSNAHME-OHNE-ZIEL": "Massnahmen ohne Zielbezug",
+  "W-ZIEL-OHNE-DATUM": "Ziele ohne Zieldatum",
+  "W-ZIEL-UEBERFAELLIG": "Zieldaten überschritten ohne Einschätzung",
+  "W-EINMALIG-OHNE-DATUM": "Einmalige Leistungen ohne Datum",
+  "W-VERWEIGERUNG-OHNE-GRUND": "Verweigerungen ohne Begründung",
+  "Z-OHNE-POSITION": "Massnahmen ohne Leistungsposition",
+  "Z-QUALIFIKATION-UEBER-MINIMUM": "Qualifikationen über dem Katalogminimum",
+  "Z-ERBRINGER-OHNE-ANGABE": "Erbringer ohne Angabe",
+  "Z-ZEIT-VERBINDLICH": "Verbindliche Zeitfenster",
+  "WI-DAUER-OHNE-GRUND": "Dauerabweichungen ohne Begründung",
+  "WI-HAEUFIGKEIT-UEBER-GRENZE": "Häufigkeiten über der Kataloggrenze",
+};
 
 /* ── Die dreizehn Prüfungen ─────────────────────────────────────────────── */
 
@@ -78,7 +99,7 @@ function element(art: BefundElement["art"], code: string, titel: string, diagnos
 }
 
 function befund(pruefCode: string, kriterium: PruefKriterium, el: BefundElement, titel: string, detail: string): Befund {
-  return { id: `${pruefCode}:${el.art === "ziel" && el.diagnoseCode ? `${el.diagnoseCode}|` : ""}${el.code}`, kriterium, titel, detail, element: el };
+  return { id: `${pruefCode}:${el.art === "ziel" && el.diagnoseCode ? `${el.diagnoseCode}|` : ""}${el.code}`, pruefCode, kriterium, titel, detail, element: el };
 }
 
 function positionVon(m: PlanMassnahme) {

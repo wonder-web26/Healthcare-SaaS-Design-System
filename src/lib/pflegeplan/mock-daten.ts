@@ -240,4 +240,11 @@ export const STANDARD_POSITION: Readonly<Record<InterventionId, PositionsNummer>
   "I-GEHTRAINING": "10505",
   "I-HAARWAESCHE": "10107",
   "I-STURZASSESS": "10901",
+  /* Lauf 6b: die bewusste DOPPELBELEGUNG — zwei Interventionen auf derselben
+     Position (10506 «Aktive/passive Bewegungsunterstützung», fast wortgleich
+     zum Katalogtext). Sie beweist die Zusammenfassung auf dem
+     Leistungsplanungsblatt: eine Position, getragen von zwei Massnahmen,
+     die drei Ziele unter zwei Diagnosen bedienen. */
+  "I-BEWEGUNG": "10506",
+  "I-GLEICHGEWICHT": "10506",
 };

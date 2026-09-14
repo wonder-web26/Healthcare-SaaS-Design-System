@@ -329,7 +329,8 @@ export function PflegeplanAufbau() {
         </div>
       ) : ansicht === "dokument" ? (
         <DokumentAnsicht mandate={mandate}
-          onPlanAendern={() => { planAendern(); setAnsicht("struktur"); }} />
+          onPlanAendern={() => { planAendern(); setAnsicht("struktur"); }}
+          onBlatt={() => navigate(`/pflegeplan/${patientId}/blatt`)} />
       ) : ansicht === "struktur" ? (
         <StrukturAnsicht plan={plan} mandate={mandate}
           onEditor={interventionId => { setAnsicht("aufbau"); setFokus({ schritt: "editor", interventionId }); }} />
