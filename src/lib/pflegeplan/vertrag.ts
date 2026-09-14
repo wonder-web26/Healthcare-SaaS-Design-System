@@ -143,7 +143,7 @@ export function ableitungAlsText(a: Ableitung): string {
   return [a.cap, a.diagnoseCode, a.zielId, a.interventionId, a.positionsNummer ?? "ohne Position"].join(" → ");
 }
 
-/* ── Die fünf Abfragen ──────────────────────────────────────────────────── */
+/* ── Die Abfragen ───────────────────────────────────────────────────────── */
 /**
  * Alles, was das UI braucht — und nur das. Alle Abfragen sind lesend.
  *
@@ -156,6 +156,16 @@ export function ableitungAlsText(a: Ableitung): string {
  *
  * Zu (5): null ist ein gültiger Zustand, kein Fehler. Interventionen ohne
  * hinterlegte Regel bleiben planerisch und werden nicht verrechnet.
+ *
+ * Zu (6) — Ergänzung aus Lauf 2: die Gegenliste zur Zusicherung aus (2).
+ * Nicht als Zahl, sondern als Liste — «welche Ziele unterdrückt ihr bei
+ * dieser Diagnose» muss beantwortbar bleiben; die Kontextkarte nutzt nur
+ * die Länge, der Rest ist Vorrat für die fachliche Freigabe.
+ *
+ * Zu (7) — Ergänzung aus Lauf 2: ein ausgelöster CAP ohne Zuordnungsliste
+ * wird von (1) übersprungen, darf aber nicht spurlos verschwinden. Diese
+ * Abfrage weist ihn aus; das UI sagt dann «ein ausgelöster CAP hat keine
+ * Zuordnungsliste».
  */
 export interface PflegeplanAbfragen {
   diagnoseVorschlaege(caps: CapCode[]): DiagnoseVorschlag[];
@@ -163,4 +173,6 @@ export interface PflegeplanAbfragen {
   interventionenZuZiel(code: DiagnoseCode, zielId: ZielId): MitHerkunft<Intervention>[];
   detaildialog(interventionId: InterventionId): MitHerkunft<Detaildialog> | null;
   positionFuer(interventionId: InterventionId, detailauswahl: DetailAuswahl): MitHerkunft<Leistungsposition> | null;
+  ausgeschlosseneZiele(code: DiagnoseCode): MitHerkunft<Ziel>[];
+  unbehandelteCaps(caps: CapCode[]): CapCode[];
 }

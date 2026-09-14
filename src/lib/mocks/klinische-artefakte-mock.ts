@@ -92,10 +92,15 @@ export const DEMO_ITEMS: InterRAIItem[] = [
    CAPs, SCALES, PFLEGEPLANUNG
    ══════════════════════════════════════════ */
 
+/* Lauf 2: auf die vier CAPs der CAP-NANDA-Zuordnung des Pflegeplan-Vertrags
+   gestellt (FALLS, ADL, PAIN, MOOD); CAP-CARDIO entfiel — er hatte keine
+   Zuordnungsliste. Sichtbare Nebenwirkung: die interRAI-Ansichten dieses
+   Alt-Assessments zeigen vier statt drei CAP-Karten. */
 export const DEMO_CAPS: CapResult[] = [
-  { id: "CAP-MOOD", name: "Stimmung (Mood)", getriggert: true, triggerItems: ["E1a", "E2a", "E2c", "F2"], prioritaet: "hoch", beschreibung: "Depressive Symptome: Traurigkeit, Interessenverlust, Schlafprobleme, Rückzug." },
   { id: "CAP-FALLS", name: "Sturzgefahr (Falls)", getriggert: true, triggerItems: ["G1fa", "J1a", "Q3a"], prioritaet: "hoch", beschreibung: "Sturz in letzten 30 Tagen, eingeschränkte Mobilität, Umgebungsrisiken." },
-  { id: "CAP-CARDIO", name: "Herz-Kreislauf", getriggert: true, triggerItems: ["I2k", "J6b", "M1"], prioritaet: "mittel", beschreibung: "Hypertonie mit Belastungsdyspnoe und Polypharmazie." },
+  { id: "CAP-ADL", name: "Aktivitäten des täglichen Lebens (ADL)", getriggert: true, triggerItems: ["G1a", "G1b", "G1c"], prioritaet: "hoch", beschreibung: "Hilfebedarf bei Körperpflege und Ankleiden, eingeschränkte Selbstversorgung." },
+  { id: "CAP-PAIN", name: "Schmerz (Pain)", getriggert: true, triggerItems: ["J5a", "J5b"], prioritaet: "mittel", beschreibung: "Wiederkehrende Schmerzen mit Auswirkung auf Aktivität und Schlaf." },
+  { id: "CAP-MOOD", name: "Stimmung (Mood)", getriggert: true, triggerItems: ["E1a", "E2a", "E2c", "F2"], prioritaet: "hoch", beschreibung: "Depressive Symptome: Traurigkeit, Interessenverlust, Schlafprobleme, Rückzug." },
 ];
 
 export const DEMO_SCALES: OutcomeScale[] = [

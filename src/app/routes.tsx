@@ -13,6 +13,7 @@ import { Angehoerige360Page } from "./components/Angehoerige360Page";
 import { FormShowcase } from "./components/FormShowcase";
 import { InterRAIListPage } from "./components/interrai/InterRAIListPage";
 import { AbschlussListPage } from "./components/AbschlussListPage";
+import { PflegeplanAufbau } from "./components/pflegeplan/PflegeplanAufbau";
 import { KontaktePage } from "./components/KontaktePage";
 import { SchulungsnachweisPage } from "./components/schulung/SchulungsnachweisPage";
 import { ArbeitskontrollePage } from "./components/arbeitskontrolle/ArbeitskontrollePage";
@@ -28,6 +29,9 @@ export const router = createBrowserRouter([
       { path: "dashboard", Component: StrategicDashboard },
       { path: "interrai", Component: InterRAIListPage },
       { path: "abschluss", Component: AbschlussListPage },
+      /* Aufbau-Ansicht des neuen Pflegeplans (Lauf 2) — eigene Route, bewusst
+         ohne Menü- oder Dossier-Einbindung; die kommt in einem späteren Lauf. */
+      { path: "pflegeplan/:patientId", Component: PflegeplanAufbau },
       { path: "schulungsnachweis/:nachweisId", Component: SchulungsnachweisPage },
       { path: "arbeitskontrolle/:kontrolleId", Component: ArbeitskontrollePage },
       { path: "patienten", Component: PatientenPage },

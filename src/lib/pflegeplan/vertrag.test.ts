@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { ableitungAlsText } from "./vertrag";
-import { diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer } from "./mock-adapter";
+import { diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer, ausgeschlosseneZiele, unbehandelteCaps } from "./mock-adapter";
 import { leistungsposition } from "./positionen";
 import { MAS_ZIEL, PROB_MAS, PROB_ZIEL_HIDE } from "./mock-daten";
 
@@ -134,6 +134,20 @@ const VIER_CAPS = ["CAP-FALLS", "CAP-ADL", "CAP-PAIN", "CAP-MOOD"];
   const interventionen = interventionenZuZiel("00108", "Z-SELBSTPFLEGE").map(i => i.id);
   assert.deepEqual(interventionen.sort(), ["I-ANLEITUNG-SELBSTPFLEGE", "I-GANZWASCHUNG"], "Schnittmenge Diagnose ∩ Ziel");
   console.log("✓ +  Detaildialog und interventionenZuZiel konsistent");
+}
+
+/* ── Lauf-2-Ergänzungen: die Gegenliste und die unbehandelten CAPs ── */
+{
+  const bei00155 = ausgeschlosseneZiele("00155");
+  assert.equal(bei00155.length, 1, "00155: genau ein unterdrücktes Ziel");
+  assert.equal(bei00155[0].id, "Z-WOHLBEFINDEN", "… und zwar das erreichbare, das die Ausschlussliste verschluckt");
+  assert.deepEqual(ausgeschlosseneZiele("00108"), [], "Diagnose ohne Unterdrückung: leere Liste");
+  console.log("✓ 12 ausgeschlosseneZiele: 00155 → [Z-WOHLBEFINDEN], 00108 → []");
+}
+{
+  assert.deepEqual(unbehandelteCaps(["CAP-FALLS", "CAP-CARDIO"]), ["CAP-CARDIO"], "unbekannter CAP wird ausgewiesen");
+  assert.deepEqual(unbehandelteCaps(["CAP-FALLS", "CAP-ADL", "CAP-PAIN", "CAP-MOOD"]), [], "bekannte CAPs: nichts unbehandelt");
+  console.log("✓ 13 unbehandelteCaps: kein CAP verschwindet spurlos");
 }
 
 console.log("\nAlle Vertragstests bestanden.");

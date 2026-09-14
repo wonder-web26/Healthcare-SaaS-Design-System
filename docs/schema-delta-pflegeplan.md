@@ -93,6 +93,25 @@ dbml heute nicht vorsieht:
    Objekt gelöst; produktiv wäre das eine Quellenangabe je Anreicherungs-
    tabelle, nicht je Zelle.
 
+## Abweichungen aus Lauf 2 (Aufbau-Ansicht)
+
+1. **`ausgeschlosseneZiele(code)`** ist als sechste Vertragsabfrage
+   dazugekommen — die Gegenliste zur Zusicherung von `zieleZuDiagnose`
+   (nicht als Zahl, sondern als Liste: «welche Ziele unterdrückt ihr bei
+   dieser Diagnose» muss beantwortbar bleiben). **`NandaDiagnosisGoalHidden`
+   muss diese Abfrage auch mit echten Daten tragen**: die Unterdrückungen
+   je Diagnose müssen als Zielmenge auflösbar sein, nicht nur als Filter
+   beim Herleiten.
+2. **`unbehandelteCaps(caps)`**: ein ausgelöster CAP ohne Zuordnungsliste
+   wird von `diagnoseVorschlaege` übersprungen und hier ausgewiesen — kein
+   CAP verschwindet spurlos. Mit echten Daten heisst das: die
+   CAP-NANDA-Zuordnungsliste braucht eine nachschlagbare Menge der
+   abgedeckten CAPs.
+3. **DEMO_CAPS des Alt-Assessments** wurden auf die vier Vertrags-CAPs
+   gestellt (FALLS, ADL, PAIN, MOOD; CAP-CARDIO entfiel — keine
+   Zuordnungsliste). Sichtbare Nebenwirkung: die interRAI-Ansichten dieses
+   Assessments zeigen vier statt drei CAP-Karten.
+
 ## Abweichungen aus Lauf 0b (Abriss des KLV-/LPB-Moduls)
 
 Das KLV-/LPB-Modul ist vollständig entfernt; das Fachmodell ist in

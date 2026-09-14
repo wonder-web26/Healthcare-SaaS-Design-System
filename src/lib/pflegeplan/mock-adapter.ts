@@ -146,7 +146,38 @@ export function positionFuer(interventionId: InterventionId, detailauswahl: Deta
   return standard ? leistungsposition(standard) : null;
 }
 
+/**
+ * (6) Die Gegenliste zur Zusicherung aus (2): Ziele, die über eine
+ * Intervention dieser Diagnose erreichbar wären, aber durch die
+ * Ausschlussliste (PROB_ZIEL_HIDE) unterdrückt sind. Die Kontextkarte
+ * nutzt nur die Länge; die Liste selbst beantwortet später die Frage
+ * «welche Ziele unterdrückt ihr bei dieser Diagnose».
+ */
+export function ausgeschlosseneZiele(code: DiagnoseCode): MitHerkunft<Ziel>[] {
+  const gesehen = new Set<ZielId>();
+  const ergebnis: MitHerkunft<Ziel>[] = [];
+  for (const interventionId of PROB_MAS[code] ?? []) {
+    for (const zielId of MAS_ZIEL[interventionId] ?? []) {
+      if (gesehen.has(zielId)) continue;
+      gesehen.add(zielId);
+      if (!PROB_ZIEL_HIDE.has(`${code}|${zielId}`)) continue;
+      const ziel = MOCK_ZIELE[zielId];
+      if (ziel) ergebnis.push({ id: zielId, titel: ziel.titel, herkunft: HERKUNFT_ZIEL });
+    }
+  }
+  return ergebnis;
+}
+
+/**
+ * (7) Ausgelöste CAPs ohne Zuordnungsliste. diagnoseVorschlaege überspringt
+ * sie — hier werden sie ausgewiesen, damit keiner spurlos verschwindet.
+ */
+export function unbehandelteCaps(caps: CapCode[]): CapCode[] {
+  return caps.filter(cap => !(cap in CAP_ZUORDNUNG));
+}
+
 /** Der Vertrag als ein Objekt — für Übergabe an Komponenten oder Tests. */
 export const mockPflegeplanKatalog: PflegeplanAbfragen = {
   diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer,
+  ausgeschlosseneZiele, unbehandelteCaps,
 };
