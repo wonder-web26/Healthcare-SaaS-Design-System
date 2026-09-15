@@ -123,12 +123,6 @@ function naechsterSchritt(plan: ReturnType<typeof usePlan>): BalkenZustand {
 
 type Ansicht = "aufbau" | "struktur" | "dokument";
 
-const ANSICHT_SATZ: Record<Ansicht, string> = {
-  aufbau: "Eine Entscheidung nach der anderen. Für die Erstplanung.",
-  struktur: "Was hängt woran. Zum Verstehen und Verknüpfen.",
-  dokument: "Lesen und erkennen, was ansteht. Für den veröffentlichten Plan.",
-};
-
 /**
  * Einstiegspunkte (Lauf 6c): eigenständig unter /pflegeplan/:patientId ODER
  * eingebettet (Onboarding-Tab, Patient360) mit patientId als Prop. Eingebettet
@@ -204,11 +198,11 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
       pruefungDurchfuehren(GEGENWART_ISO);
       const offen = offeneBefunde(planSchnappschuss()).length;
       const teile: string[] = [];
-      if (warUngeprueft) teile.push("Vor der Freigabe steht die WZW-Prüfung — sie wurde jetzt ausgeführt.");
-      if (warVeraltet) teile.push("Der Plan wurde seit der letzten Prüfung geändert — deshalb wurde neu geprüft.");
+      if (warUngeprueft) teile.push("Noch nicht geprüft — jetzt geprüft.");
+      if (warVeraltet) teile.push("Seit der letzten Prüfung geändert — neu geprüft.");
       teile.push(offen > 0
-        ? `${offen} ${offen === 1 ? "Befund ist" : "Befunde sind"} offen: auflösen oder mit Begründung übergehen. Die Begründungen wandern ins Leistungsplanungsblatt.`
-        : "Keine offenen Befunde — Veröffentlichen ist jetzt frei.");
+        ? `${offen} ${offen === 1 ? "Befund" : "Befunde"} offen. Übergangene Begründungen stehen auf dem Leistungsplanungsblatt.`
+        : "Keine offenen Befunde.");
       setPruefungsHinweis(teile.join(" "));
       setPruefungOffen(true);
       return;
@@ -275,10 +269,6 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
               {a === "aufbau" ? "Aufbau" : a === "struktur" ? "Struktur" : "Dokument"}
             </button>
           ))}
-          <span style={{ marginLeft: 6, paddingBottom: 8, fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-            {ANSICHT_SATZ[ansicht]}
-          </span>
-
           {/* Rechts: Prüfstand, Prüfung, Veröffentlichen — in allen drei
               Ansichten, aber NUR wenn dieser Klient überhaupt planfähig ist:
               ohne Assessment gehört der (eine) Plan-Zustand nicht zu ihm,
@@ -346,14 +336,9 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
         <div style={{ padding: "var(--space-8) var(--space-6)", maxWidth: 560 }}>
           <div style={{ background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", padding: "var(--space-6)", textAlign: "center" }}>
             <ClipboardList style={{ width: 22, height: 22, color: "var(--text-tertiary)", margin: "0 auto 8px" }} />
-            <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
+            <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 12 }}>
               Kein abgeschlossenes Assessment
             </div>
-            <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 auto 12px", maxWidth: "46ch", lineHeight: 1.6 }}>
-              Die Diagnosevorschläge entstehen aus den getriggerten CAPs der
-              Bedarfsabklärung. Ohne Assessment gibt es keine Vorschläge — das
-              ist kein Fehler, sondern die Reihenfolge des Verfahrens.
-            </p>
             <button type="button" onClick={() => navigate("/interrai")} className="ui-fokusring cursor-pointer inline-flex items-center"
               style={{ gap: 6, padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", border: "none", fontSize: "var(--text-small)", fontWeight: 500 }}>
               Zur Bedarfsabklärung <ArrowRight style={{ width: 13, height: 13 }} />

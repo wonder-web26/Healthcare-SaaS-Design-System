@@ -189,10 +189,7 @@ export function DokumentAnsicht({ mandate, onPlanAendern, onBlatt }: {
                 <span style={{ color: "var(--status-warning-text)", whiteSpace: "nowrap" }}>Zieldatum {datumAnzeige(z.zieldatum)} überschritten</span>
               </div>
             ))}
-            <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 4 }}>
-              Die Einschätzung wird unten am Ziel erfasst — fünf Stufen, ein Klick.
-            </div>
-          </div>
+</div>
         )}
 
         {/* ── Der Plan — in Prioritätsreihenfolge: wichtige zuerst (Lauf 6d) ── */}
@@ -234,10 +231,7 @@ export function DokumentAnsicht({ mandate, onPlanAendern, onBlatt }: {
             <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 2 }}>
               Nicht durch uns erbracht
             </div>
-            <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginBottom: 4 }}>
-              Bedarf, der ausserhalb unserer Verrechnung gedeckt ist oder abgelehnt wurde.
-            </div>
-            {dritte.map(m => (
+{dritte.map(m => (
               <div key={m.interventionId} style={{ padding: "5px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
                 <div className="flex items-center" style={{ gap: 8 }}>
                   <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{m.titel}</span>
@@ -272,10 +266,7 @@ export function DokumentAnsicht({ mandate, onPlanAendern, onBlatt }: {
           <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 2 }}>
             Begründete Abweichungen
           </div>
-          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginBottom: 4 }}>
-            Befunde der WZW-Prüfung, die mit Begründung übergangen wurden.
-          </div>
-          {uebergangene.length === 0 ? (
+{uebergangene.length === 0 ? (
             <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
               {plan.status === "veroeffentlicht"
                 ? "Der Plan wurde ohne offene Befunde freigegeben — nichts wurde übergangen."
@@ -318,8 +309,7 @@ export function DokumentAnsicht({ mandate, onPlanAendern, onBlatt }: {
             </div>
           ))}
           <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 6 }}>
-            Eine Änderung erzeugt eine neue Fassung. Frühere Stände werden im
-            Prototyp nicht gespeichert — lesbar ist nur die aktuelle Fassung.
+Frühere Stände werden im Prototyp nicht gespeichert — lesbar ist nur die aktuelle Fassung.
           </div>
         </div>
       </div>

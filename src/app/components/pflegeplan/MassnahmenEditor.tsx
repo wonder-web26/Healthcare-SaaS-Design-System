@@ -138,7 +138,7 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
             <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{m.titel}</div>
             <div style={{ fontSize: "var(--text-meta)", color: positionOffen ? "var(--status-warning-text)" : "var(--text-secondary)", marginTop: 2 }}>
               {positionOffen
-                ? "Position offen — die erste Gruppe des Detaildialogs entscheidet sie"
+                ? "Position offen"
                 : position
                   ? `KLV ${position.klv} · ${position.nummer} ${position.bezeichnung}`
                   : "Keine Position hinterlegt — bleibt planerisch"}
@@ -161,11 +161,6 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
       {dialog && dialog.gruppen.map((g, gi) => (
         <Abschnitt key={g.label} titel={g.label} kinder={
           <div>
-            {gi === 0 && !ersteGruppeBeantwortet && (
-              <div style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)", marginBottom: 6 }}>
-                Diese Wahl entscheidet die Position.
-              </div>
-            )}
             <div className="flex flex-wrap" style={{ gap: 6 }}>
               {g.items.map(item => (
                 <Chip key={item.label} label={item.label}
@@ -264,7 +259,7 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
             <label className="flex items-center cursor-pointer" style={{ gap: 7, marginTop: 8, fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
               <input type="checkbox" checked={p.zeitVerbindlich}
                 onChange={e => setze({ zeitVerbindlich: e.target.checked })} />
-              Zeitfenster ist verbindlich, nicht nur bevorzugt
+              Zeitfenster ist verbindlich
             </label>
           )}
         </div>
@@ -285,10 +280,7 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
                   : "Wer erbringt es, und wie ist es abgesichert?"}
                 rows={2}
                 style={{ ...feldStil, height: "auto", width: "100%", padding: "8px 10px", resize: "vertical" }} />
-              <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 3 }}>
-                Die Leistung bleibt im Plan, wird aber nicht von uns verrechnet.
-              </div>
-            </div>
+</div>
           )}
         </div>
       } />
@@ -330,7 +322,7 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
                 }} />
               {!p.dauerBegruendung.trim() && (
                 <div style={{ fontSize: "var(--text-micro)", color: "var(--status-danger)", marginTop: 3 }}>
-                  Die Abweichung braucht eine Begründung — so erwartet es eine Kontrolle.
+                  Die Abweichung braucht eine Begründung.
                 </div>
               )}
             </div>
@@ -360,7 +352,7 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
             <div style={{ marginTop: 8 }}>
               {!position ? (
                 <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-                  Keine Position — ohne Position keine Teilhandlungen.
+                  Keine Position hinterlegt.
                 </div>
               ) : position.teilhandlungen === null ? (
                 <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
@@ -401,7 +393,7 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
           </div>
         ) : (
           <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-            Ohne Zielbezug ist die Herleitung unvollständig — die Massnahme steht unter «Ohne Zuordnung».
+            Ohne Zielbezug — keine Herleitung.
           </div>
         )
       } />

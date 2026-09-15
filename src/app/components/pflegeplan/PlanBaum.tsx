@@ -111,13 +111,9 @@ export function PlanBaum({ plan, mandate, onFokus }: {
     return (
       <div style={{ ...KARTE, padding: "var(--space-8)", textAlign: "center" }}>
         <ClipboardList style={{ width: 22, height: 22, color: "var(--text-tertiary)", margin: "0 auto 8px" }} />
-        <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
+        <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
           Der Plan ist leer
         </div>
-        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 auto", maxWidth: "44ch", lineHeight: 1.6 }}>
-          Rechts stehen die Diagnosevorschläge aus dem Assessment. Mit der ersten
-          Übernahme wächst hier der Plan — Diagnose, dann Ziele, dann Massnahmen.
-        </p>
       </div>
     );
   }
@@ -152,7 +148,7 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                     wichtig zuerst, keine Berechnung (Lauf 6d). */}
                 <button type="button" data-prioritaet={d.code} aria-pressed={wichtig}
                   onClick={() => diagnosePriorisieren(d.code, wichtig ? "normal" : "wichtig")}
-                  title={wichtig ? "Als normal einstufen" : "Als wichtig einstufen — steht dann zuerst"}
+                  title={wichtig ? "Als normal einstufen" : "Als wichtig einstufen"}
                   className="ui-fokusring cursor-pointer shrink-0"
                   style={{
                     padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: 500,
@@ -199,7 +195,7 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                         erscheint erst in der Planung. */}
                     {ziele.length === 0 && plan.diagnostikAbgeschlossen && (
                       <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", paddingLeft: 8 }}>
-                        Noch kein Ziel — rechts wählen oder selbst formulieren.
+                        Noch kein Ziel
                       </div>
                     )}
                     {ziele.map(z => {
@@ -239,9 +235,6 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                                   onChange={e => zielTerminieren(z.zielId, { zieldatum: e.target.value })}
                                   onClick={e => e.stopPropagation()}
                                   style={{ height: 22, padding: "0 6px", borderRadius: 6, border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", fontSize: "var(--text-micro)", color: z.zieldatum ? "var(--text-primary)" : "var(--text-tertiary)", fontFamily: "inherit", outline: "none" }} />
-                                {!z.zieldatum && (
-                                  <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>— nicht vorbelegt</span>
-                                )}
                               </div>
                               {massnahmen.map(m => (
                                 <MassnahmenZeile key={m.interventionId} m={m} diagnoseCode={z.diagnoseCode} zielId={z.zielId} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
@@ -270,9 +263,6 @@ export function PlanBaum({ plan, mandate, onFokus }: {
           <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
             Ziele ohne Diagnose
           </div>
-          <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 1 }}>
-            Die letzte Verbindung wurde gelöst — in der Struktur-Ansicht wieder verknüpfen.
-          </div>
           {freieZiele.map(z => (
             <div key={z.zielId} data-baum-ziel-frei={z.zielId} style={{ padding: "6px 0", borderTop: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-small)", color: "var(--text-primary)" }}>
               {z.titel}
@@ -286,8 +276,7 @@ export function PlanBaum({ plan, mandate, onFokus }: {
             Ohne Zuordnung
           </div>
           <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 1 }}>
-            Massnahmen ohne Zielbezug — ein Arbeitszustand, kein Fehler. Zuordnen über
-            «Mit diesem Ziel verknüpfen» in der Massnahmenauswahl.
+            Massnahmen ohne Zielbezug
           </div>
           {ohneZuordnung.map(m => (
             <MassnahmenZeile key={m.interventionId} m={m} diagnoseCode={null} zielId={null} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />

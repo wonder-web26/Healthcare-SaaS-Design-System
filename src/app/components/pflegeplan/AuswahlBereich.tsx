@@ -93,13 +93,13 @@ function NavigationsPfad({ fokus, onFokus, kontext }: {
   const aktiv = fokus.schritt === 1 || fokus.schritt === 2 || fokus.schritt === 3 ? fokus.schritt : 3;
 
   const grund2 = phase1
-    ? "In der Diagnostik noch nicht begehbar — erst alle Diagnosen beurteilen, dann abschliessen."
+    ? "In der Diagnostik nicht begehbar."
     : kontextDiagnose === null ? "Noch keine Diagnose im Plan." : undefined;
   const grund3 = phase1
-    ? "In der Diagnostik noch nicht begehbar — erst alle Diagnosen beurteilen, dann abschliessen."
+    ? "In der Diagnostik nicht begehbar."
     : kontextDiagnose === null
       ? "Noch keine Diagnose im Plan."
-      : kontextZiel === null ? `${kontextDiagnose.titel} trägt keine Ziele — Stufe 3 hat nichts zu zeigen.` : undefined;
+      : kontextZiel === null ? `${kontextDiagnose.titel} trägt keine Ziele.` : undefined;
 
   const zuStufe = (nr: 1 | 2 | 3) => {
     setOffenesMenue(null);
@@ -356,7 +356,7 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
       {!plan.diagnostikAbgeschlossen ? (
         <div data-diagnostik-kopf className="flex items-center flex-wrap" style={{ gap: 10, padding: "8px 12px", marginBottom: 10, borderRadius: "var(--radius-card)", background: "var(--brand-primary-light)" }}>
           <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-meta)", color: "var(--brand-primary)", fontWeight: 500 }}>
-            Diagnostik: erst alle Diagnosen beurteilen, dann planen.
+            Diagnostik offen
           </span>
           <button type="button" data-diagnostik-abschliessen-liste
             disabled={plan.diagnosen.length === 0}
@@ -375,7 +375,7 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
       ) : (
         <div data-diagnostik-kopf className="flex items-center flex-wrap" style={{ gap: 10, padding: "8px 12px", marginBottom: 10, borderRadius: "var(--radius-card)", background: "var(--bg-secondary)" }}>
           <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-            Die Diagnostik ist abgeschlossen — Ziele und Massnahmen sind dran.
+            Diagnostik abgeschlossen
           </span>
           <button type="button" data-diagnostik-oeffnen onClick={() => diagnostikOeffnen()}
             className="ui-fokusring cursor-pointer shrink-0"
@@ -385,9 +385,9 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
         </div>
       )}
       <KontextKarte zeilen={[
-        <><strong>{vorschlaege.length} Vorschläge</strong> aus {caps.length - unbehandelt.length} ausgelösten CAPs, Assessment vom {assessmentDatum}. Gerankt, nie gefiltert.</>,
+        <><strong>{vorschlaege.length} Vorschläge</strong> · {caps.length - unbehandelt.length} CAPs · Assessment {assessmentDatum}</>,
         ...(unbehandelt.length > 0
-          ? [<span style={{ color: "var(--status-warning-text)" }}>{unbehandelt.length} ausgelöster CAP hat keine Zuordnungsliste: {unbehandelt.join(", ")}</span>]
+          ? [<span style={{ color: "var(--status-warning-text)" }}>{unbehandelt.length} ausgelöster CAP ohne Zuordnungsliste: {unbehandelt.join(", ")}</span>]
           : []),
       ]} />
       <SuchFeld wert={suche} onChange={setSuche} platzhalter="Diagnose suchen (Titel oder Code)…" />
@@ -415,7 +415,7 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
 
               {ohneZiele.has(code) && !verworfen && (
                 <div style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)", marginTop: 2 }}>
-                  Keine Ziele hinterlegt — bei Risiko- und Bereitschaftsdiagnosen der Normalfall.
+                  Keine Ziele hinterlegt
                 </div>
               )}
 
@@ -441,7 +441,7 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
                         return (
                           <button type="button" data-prioritaet-liste={code} aria-pressed={wichtig}
                             onClick={() => diagnosePriorisieren(code, wichtig ? "normal" : "wichtig")}
-                            title={wichtig ? "Als normal einstufen" : "Als wichtig einstufen — steht dann zuerst"}
+                            title={wichtig ? "Als normal einstufen" : "Als wichtig einstufen"}
                             className="ui-fokusring cursor-pointer shrink-0"
                             style={{
                               padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: 500,
@@ -523,24 +523,19 @@ function ZielAuswahl({ diagnoseCode, onMassnahmen }: {
 
   return (
     <div>
+      {/* Eine Kennzahlenzeile (Lauf 6f): die Zahl der Ausgeschlossenen ist
+          der Beleg, dass die Ausschlussliste gegriffen hat. */}
       <KontextKarte
         zeilen={[
-          <>Ziele für <strong>{diagnose?.titel ?? diagnoseCode}</strong> ({diagnoseCode})</>,
-          <>Hergeleitet über die Interventionen der Diagnose. <strong>{ziele.length} Ziele gefunden</strong>, {entfernt} durch die Ausschlussliste entfernt.</>,
-          <>{imPlanHier.length} im Plan für diese Diagnose — mehrere Ziele sind der Normalfall.</>,
+          <><strong>{diagnose?.titel ?? diagnoseCode}</strong> ({diagnoseCode}) · {ziele.length} {ziele.length === 1 ? "Ziel" : "Ziele"} · {entfernt} ausgeschlossen · {imPlanHier.length} im Plan</>,
         ]}
       />
 
       {ziele.length === 0 ? (
         <div style={{ ...KARTE, padding: "var(--space-6)", textAlign: "center" }}>
-          <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
-            Keine hinterlegten Ziele
+          <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 10 }}>
+            Keine Ziele im Katalog
           </div>
-          <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: "0 auto 10px", maxWidth: "44ch", lineHeight: 1.6 }}>
-            Bei Risiko- und Bereitschaftsdiagnosen ist das der Normalfall — der Katalog
-            leitet Ziele über Interventionen her, und hier sind keine verknüpft.
-            Ein eigenes Ziel lässt sich trotzdem formulieren.
-          </p>
           <div className="flex items-center" style={{ gap: 8, maxWidth: 420, margin: "0 auto" }}>
             <input value={eigenerTitel} onChange={e => setEigenerTitel(e.target.value)} placeholder="Eigenes Ziel formulieren…"
               style={{ flex: 1, height: 34, padding: "0 12px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit", outline: "none" }} />
@@ -633,21 +628,15 @@ function MassnahmenAuswahl({ diagnoseCode, zielId, zielTitel }: {
     <div>
       <KontextKarte
         zeilen={[
-          <>Massnahmen für das Ziel <strong>{zielTitel}</strong></>,
-          <>Verknüpft mit diesem Ziel und zugleich mit der Diagnose <strong>{diagnoseCode}</strong>.</>,
+          <><strong>{zielTitel}</strong> · Diagnose {diagnoseCode} · {interventionen.length} {interventionen.length === 1 ? "Intervention" : "Interventionen"}</>,
         ]}
       />
 
       {interventionen.length === 0 ? (
         <div style={{ ...KARTE, padding: "var(--space-6)", textAlign: "center" }}>
-          <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
-            Keine hinterlegten Interventionen
+          <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+            Keine Interventionen im Katalog
           </div>
-          <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", margin: "0 auto", maxWidth: "44ch", lineHeight: 1.6 }}>
-            Für dieses Ziel führt der Katalog im Kontext dieser Diagnose keine
-            Interventionen — bei selbst formulierten Zielen der Normalfall. Die
-            Massnahme entsteht dann mit der Feinplanung.
-          </p>
         </div>
       ) : gruppen.map(([gruppe, liste]) => (
         <div key={gruppe} style={{ marginBottom: 12 }}>

@@ -147,7 +147,7 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor }: {
       const verbunden = plan.ziele.some(z => z.zielId === auswahl.zielId && z.diagnoseCode === code);
       if (verbunden) { zielVerbindungLoesen(code, auswahl.zielId); return; }
       if (ausgeschlosseneZiele(code).some(z => z.id === auswahl.zielId)) {
-        setMeldung(`Dieses Ziel ist für ${code} durch die Ausschlussliste unterdrückt — die Verknüpfung wäre klinisch unsinnig und bleibt gesperrt.`);
+        setMeldung(`Für ${code} durch die Ausschlussliste unterdrückt — Verknüpfung gesperrt.`);
         return;
       }
       zielVerbindungHerstellen(code, auswahl.zielId);
@@ -163,7 +163,7 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor }: {
       const verbunden = plan.ziele.some(z => z.zielId === zielId && z.diagnoseCode === auswahl.code);
       if (verbunden) { zielVerbindungLoesen(auswahl.code, zielId); return; }
       if (ausgeschlosseneZiele(auswahl.code).some(z => z.id === zielId)) {
-        setMeldung(`Dieses Ziel ist für ${auswahl.code} durch die Ausschlussliste unterdrückt — die Verknüpfung wäre klinisch unsinnig und bleibt gesperrt.`);
+        setMeldung(`Für ${auswahl.code} durch die Ausschlussliste unterdrückt — Verknüpfung gesperrt.`);
         return;
       }
       zielVerbindungHerstellen(auswahl.code, zielId);
@@ -176,7 +176,7 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor }: {
       if (bezuege.length > 0) { bezuege.forEach(b => massnahmenBezugLoesen(m.interventionId, b)); return; }
       const traeger = plan.ziele.find(z => z.zielId === zielId && z.diagnoseCode !== null);
       if (!traeger || traeger.diagnoseCode === null) {
-        setMeldung("Das Ziel ist mit keiner Diagnose verbunden — zuerst das Ziel verknüpfen.");
+        setMeldung("Das Ziel ist mit keiner Diagnose verbunden.");
         return;
       }
       massnahmeVerknuepfen(m.interventionId, m.titel, { diagnoseCode: traeger.diagnoseCode, zielId });
@@ -195,7 +195,7 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor }: {
       if (bezuege.length > 0) { bezuege.forEach(b => massnahmenBezugLoesen(interventionId, b)); return; }
       const traeger = plan.ziele.find(z => z.zielId === auswahl.zielId && z.diagnoseCode !== null);
       if (!traeger || traeger.diagnoseCode === null) {
-        setMeldung("Das Ziel ist mit keiner Diagnose verbunden — zuerst das Ziel verknüpfen.");
+        setMeldung("Das Ziel ist mit keiner Diagnose verbunden.");
         return;
       }
       massnahmeVerknuepfen(interventionId, m.titel, { diagnoseCode: traeger.diagnoseCode, zielId: auswahl.zielId });
@@ -222,9 +222,9 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor }: {
     .filter(m => m.planung.erbringer === "S" && m.zielBezuege.some(b => b.diagnoseCode === code))
     .reduce((s, m) => s + wochenMinuten(m.planung, massnahmenDauerMin(m)), 0);
 
-  const modusText = meldung ?? (auswahl === null
-    ? "Klick wählt aus — der zugehörige Teilgraph wird hervorgehoben."
-    : "Klick in der Nachbarspalte verknüpft oder löst · Klick auf das gewählte Element hebt die Auswahl auf · Doppelklick auf eine Massnahme öffnet den Editor im Aufbau.");
+  /* Die Zeile trägt nur noch DATEN-Meldungen (Ausschlussliste, unverbundenes
+     Ziel) — die Bedienungserklärung ist mit Lauf 6f entfernt. */
+  const modusText = meldung ?? "";
 
   const knopfStil = (key: string, imTeil: boolean, gewaehlt: boolean, verknuepfbar: boolean): React.CSSProperties => ({
     ...KARTE,

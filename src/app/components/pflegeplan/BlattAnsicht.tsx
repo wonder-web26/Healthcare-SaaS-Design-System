@@ -74,8 +74,7 @@ export function BlattAnsicht() {
           Ein Entwurf trägt kein Blatt
         </div>
         <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 14 }}>
-          Das Leistungsplanungsblatt entsteht mit dem Veröffentlichen — es wird
-          nicht getippt, es fällt aus dem freigegebenen Plan.
+          Es entsteht mit dem Veröffentlichen.
         </p>
         <Link to={zurueck} className="ui-fokusring inline-flex items-center"
           style={{ gap: 6, padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, textDecoration: "none" }}>
