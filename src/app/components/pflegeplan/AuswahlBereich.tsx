@@ -320,8 +320,10 @@ function ImPlanMarke() {
 /* ══════════════════════════════════════════
    SCHRITT 1 — Diagnoseauswahl
    ══════════════════════════════════════════ */
-function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
+function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen, breit = false }: {
   caps: CapCode[]; assessmentDatum: string; onUebernommen: (code: DiagnoseCode) => void;
+  /** A/B-Experiment Variante B: Kandidaten mehrspaltig in voller Breite. */
+  breit?: boolean;
 }) {
   const plan = usePlan();
   const benutzer = useCurrentUser();
@@ -392,7 +394,9 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
       ]} />
       <SuchFeld wert={suche} onChange={setSuche} platzhalter="Diagnose suchen (Titel oder Code)…" />
 
-      <div className="flex flex-col" style={{ gap: 8 }}>
+      <div style={breit
+        ? { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 8, alignItems: "start" }
+        : { display: "flex", flexDirection: "column", gap: 8 }}>
         {sichtbar.map(v => {
           const code = v.diagnose.code;
           const imPlan = plan.diagnosen.some(d => d.code === code);
@@ -686,12 +690,14 @@ function MassnahmenAuswahl({ diagnoseCode, zielId, zielTitel }: {
 /* ══════════════════════════════════════════
    DER RECHTE BEREICH
    ══════════════════════════════════════════ */
-export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum, mandate }: {
+export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum, mandate, breit = false }: {
   fokus: Fokus;
   onFokus: (f: Fokus) => void;
   caps: CapCode[];
   assessmentDatum: string;
   mandate: MandatKurz[];
+  /** A/B-Experiment Variante B: Diagnoseliste mehrspaltig in voller Breite. */
+  breit?: boolean;
 }) {
   const plan = usePlan();
 
@@ -727,7 +733,7 @@ export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum, mandate 
     <div>
       <NavigationsPfad fokus={fokus} onFokus={onFokus} kontext={pfadKontext} />
       {fokus.schritt === 1 && (
-        <DiagnoseAuswahl caps={caps} assessmentDatum={assessmentDatum}
+        <DiagnoseAuswahl caps={caps} assessmentDatum={assessmentDatum} breit={breit}
           onUebernommen={code => onFokus({ schritt: 2, diagnoseCode: code })} />
       )}
       {fokus.schritt === 2 && (
