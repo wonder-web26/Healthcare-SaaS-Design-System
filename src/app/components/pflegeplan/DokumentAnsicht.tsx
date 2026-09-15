@@ -9,7 +9,7 @@
 import { Check, FileText } from "lucide-react";
 import { zielBewertungsSkala } from "../../../lib/pflegeplan/mock-adapter";
 import {
-  usePlan, zielEinschaetzen,
+  usePlan, zielEinschaetzen, nachPrioritaet,
   type PlanZustand, type PlanZiel, type PlanMassnahme,
 } from "../../../lib/pflegeplan/plan-store";
 import { massnahmenSatz, ERBRINGER, type MandatKurz } from "../../../lib/pflegeplan/planung";
@@ -84,11 +84,15 @@ function ZielErreichung({ z }: { z: PlanZiel }) {
   );
 }
 
-function MassnahmenSatzZeile({ m, zielId, plan, mandate }: {
-  m: PlanMassnahme; zielId: string | null; plan: PlanZustand; mandate: MandatKurz[];
+function MassnahmenSatzZeile({ m, diagnoseCode, zielId, plan, mandate }: {
+  m: PlanMassnahme; diagnoseCode: string | null; zielId: string | null; plan: PlanZustand; mandate: MandatKurz[];
 }) {
   const erster = m.zielBezuege[0] ?? null;
-  const istErster = zielId === null || (erster !== null && erster.zielId === zielId);
+  /* «Erster» ist das PAAR aus Diagnose und Ziel — nur die Ziel-Kennung
+     genügt nicht: dient das erste Bezugsziel zwei Diagnosen, erschiene die
+     Zeit sonst unter beiden voll (Lauf-6d-Fund). */
+  const istErster = zielId === null
+    || (erster !== null && erster.zielId === zielId && erster.diagnoseCode === diagnoseCode);
   const lage = positionsLage(m.interventionId, m.planung.detailAuswahl);
   const ersterTitel = erster ? (plan.ziele.find(z => z.zielId === erster.zielId)?.titel ?? erster.zielId) : "";
   return (
@@ -193,14 +197,19 @@ export function DokumentAnsicht({ mandate, onPlanAendern, onBlatt }: {
           </div>
         )}
 
-        {/* ── Der Plan ── */}
-        {plan.diagnosen.map(d => {
+        {/* ── Der Plan — in Prioritätsreihenfolge: wichtige zuerst (Lauf 6d) ── */}
+        {nachPrioritaet(plan.diagnosen).map(d => {
           const ziele = plan.ziele.filter(z => z.diagnoseCode === d.code);
           return (
             <div key={d.code} style={{ ...KARTE, padding: "12px 18px", marginBottom: 12 }}>
               <div className="flex items-center" style={{ gap: 8 }}>
                 <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: "var(--brand-primary)", fontWeight: 500 }}>{d.code}</span>
                 <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{d.titel}</span>
+                {d.prioritaet === "wichtig" && (
+                  <span style={{ padding: "1px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--brand-primary-light)", color: "var(--brand-primary)" }}>
+                    wichtig
+                  </span>
+                )}
                 <TypMarke typ={d.typ} />
               </div>
               {ziele.length === 0 && (
@@ -213,7 +222,7 @@ export function DokumentAnsicht({ mandate, onPlanAendern, onBlatt }: {
                   </div>
                   <div style={{ marginTop: 3 }}><ZielErreichung z={z} /></div>
                   {massnahmenVon(d.code, z.zielId).map(m => (
-                    <MassnahmenSatzZeile key={m.interventionId} m={m} zielId={z.zielId} plan={plan} mandate={mandate} />
+                    <MassnahmenSatzZeile key={m.interventionId} m={m} diagnoseCode={d.code} zielId={z.zielId} plan={plan} mandate={mandate} />
                   ))}
                 </div>
               ))}
@@ -253,7 +262,7 @@ export function DokumentAnsicht({ mandate, onPlanAendern, onBlatt }: {
               Ohne Zielbezug
             </div>
             {ohneZuordnung.map(m => (
-              <MassnahmenSatzZeile key={m.interventionId} m={m} zielId={null} plan={plan} mandate={mandate} />
+              <MassnahmenSatzZeile key={m.interventionId} m={m} diagnoseCode={null} zielId={null} plan={plan} mandate={mandate} />
             ))}
           </div>
         )}

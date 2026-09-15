@@ -18,6 +18,7 @@ import { zieleZuDiagnose, interventionenZuZiel } from "../../../lib/pflegeplan/m
 import {
   usePlan, veroeffentlichen, planAendern,
   pruefungDurchfuehren, pruefungAktuell, offeneBefunde, planSchnappschuss,
+  diagnostikAbschliessen, nachPrioritaet,
   type PruefBefund,
 } from "../../../lib/pflegeplan/plan-store";
 import { type MandatKurz } from "../../../lib/pflegeplan/planung";
@@ -49,35 +50,45 @@ import { planWochenSummeMin, datumAnzeige, type Fokus } from "./gemeinsam";
  * übersprungen wurde.
  */
 type BalkenZustand =
+  | { art: "diagnostik"; text: string }
   | { art: "schritt"; text: string; fokus: Fokus }
   | { art: "ohne-anschluss"; text: string; fokus: Fokus; baumZiel: string }
   | { art: "vollstaendig" };
 
 function naechsterSchritt(plan: ReturnType<typeof usePlan>): BalkenZustand {
+  /* Phase 1 (Lauf 6d): die Diagnostik ist eine GESAMTBEURTEILUNG, kein
+     Vorspann je Diagnose — der Balken führt nicht in die Tiefe, sondern
+     hält die Auswahl offen und bietet den Abschluss an. */
+  if (!plan.diagnostikAbgeschlossen) {
+    return { art: "diagnostik", text: "Weitere Diagnose übernehmen — oder Diagnostik abschliessen" };
+  }
   if (plan.diagnosen.length === 0) {
     return { art: "schritt", text: "Schritt 1 von 3: Pflegediagnose übernehmen", fokus: { schritt: 1 } };
   }
-  for (const d of plan.diagnosen) {
+  /* Phase 2: in PRIORITÄTSREIHENFOLGE abarbeiten — die wichtigen zuerst. */
+  const sortiert = nachPrioritaet(plan.diagnosen);
+  for (const d of sortiert) {
     const hatPlanZiele = plan.ziele.some(z => z.diagnoseCode === d.code);
     if (!hatPlanZiele && zieleZuDiagnose(d.code).length > 0) {
       return { art: "schritt", text: `Schritt 2 von 3: Ziel wählen für ${d.titel}`, fokus: { schritt: 2, diagnoseCode: d.code } };
     }
   }
-  for (const z of plan.ziele) {
-    if (z.diagnoseCode === null) continue; /* ungebunden: unten «ohne Anschluss» */
-    const hatMassnahme = plan.massnahmen.some(m => m.zielBezuege.some(b => b.diagnoseCode === z.diagnoseCode && b.zielId === z.zielId));
-    if (!hatMassnahme && interventionenZuZiel(z.diagnoseCode, z.zielId).length > 0) {
-      return {
-        art: "schritt",
-        text: `Schritt 3 von 3: Massnahme wählen für ${z.titel}`,
-        fokus: { schritt: 3, diagnoseCode: z.diagnoseCode, zielId: z.zielId, zielTitel: z.titel },
-      };
+  for (const d of sortiert) {
+    for (const z of plan.ziele.filter(x => x.diagnoseCode === d.code)) {
+      const hatMassnahme = plan.massnahmen.some(m => m.zielBezuege.some(b => b.diagnoseCode === z.diagnoseCode && b.zielId === z.zielId));
+      if (!hatMassnahme && z.diagnoseCode !== null && interventionenZuZiel(z.diagnoseCode, z.zielId).length > 0) {
+        return {
+          art: "schritt",
+          text: `Schritt 3 von 3: Massnahme wählen für ${z.titel}`,
+          fokus: { schritt: 3, diagnoseCode: z.diagnoseCode, zielId: z.zielId, zielTitel: z.titel },
+        };
+      }
     }
   }
 
   /* Alles Bearbeitbare ist erledigt — was übersprungen wurde, in Baumreihenfolge. */
   const offene: { fokus: Fokus; baumZiel: string }[] = [];
-  for (const d of plan.diagnosen) {
+  for (const d of sortiert) {
     const planZiele = plan.ziele.filter(z => z.diagnoseCode === d.code);
     if (planZiele.length === 0) {
       offene.push({ fokus: { schritt: 2, diagnoseCode: d.code }, baumZiel: `[data-baum-diagnose="${d.code}"]` });
@@ -361,9 +372,32 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
           {/* Links: der Plan */}
           <div className="flex-1 min-w-0" data-plan-bereich style={{ padding: "14px var(--space-6)", overflowY: "auto" }}>
             {/* Der nächste-Schritt-Balken: immer genau eine richtige nächste
-                Handlung — anklickbar, aber nie zwingend. Der fünfte Zustand
-                («ohne Anschluss») verhindert, dass Übersprungenes als
-                vollständig gilt. */}
+                Handlung — anklickbar, aber nie zwingend. In der Diagnostik
+                (Lauf 6d) führt er NICHT in die Tiefe: er hält die Auswahl
+                offen und trägt den Abschluss als Wegmarke. */}
+            {schritt.art === "diagnostik" ? (
+              <div data-naechster-schritt data-diagnostik className="w-full flex items-center"
+                style={{ gap: 8, padding: "5px 5px 5px 14px", marginBottom: 12, borderRadius: "var(--radius-card)", background: "var(--brand-primary-light)", border: "var(--border-thin) solid transparent" }}>
+                <button type="button" onClick={() => setFokus({ schritt: 1 })}
+                  className="ui-fokusring cursor-pointer flex-1 text-left"
+                  style={{ background: "none", border: "none", padding: "4px 0", fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: 500, color: "var(--brand-primary)" }}>
+                  {schritt.text}
+                </button>
+                <button type="button" data-diagnostik-abschliessen
+                  disabled={plan.diagnosen.length === 0}
+                  title={plan.diagnosen.length === 0 ? "Ohne übernommene Diagnose gibt es nichts abzuschliessen." : undefined}
+                  onClick={() => diagnostikAbschliessen()}
+                  className={plan.diagnosen.length > 0 ? "ui-fokusring cursor-pointer shrink-0" : "shrink-0"}
+                  style={{
+                    padding: "5px 14px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: 500,
+                    background: plan.diagnosen.length > 0 ? "var(--brand-primary)" : "var(--bg-secondary)",
+                    color: plan.diagnosen.length > 0 ? "var(--text-on-dark)" : "var(--text-tertiary)",
+                    border: "none", cursor: plan.diagnosen.length > 0 ? "pointer" : "not-allowed",
+                  }}>
+                  Diagnostik abschliessen
+                </button>
+              </div>
+            ) : (
             <button type="button" data-naechster-schritt
               onClick={() => {
                 if (schritt.art === "vollstaendig") return;
@@ -388,6 +422,7 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
                 ? "Alle Angaben vollständig"
                 : <>{schritt.text} <ArrowRight style={{ width: 13, height: 13, flexShrink: 0, marginLeft: "auto" }} /></>}
             </button>
+            )}
 
             {/* Wochensummen-Kopfzeile: Mandate und geplante Zeit (nur S). */}
             <div data-wochensumme className="flex items-center flex-wrap" style={{ gap: 12, padding: "7px 14px", marginBottom: 12, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>

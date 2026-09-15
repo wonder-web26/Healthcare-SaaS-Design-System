@@ -14,7 +14,7 @@ import { wochenMinuten } from "./planung";
 import { positionFuer } from "./mock-adapter";
 import {
   planZuruecksetzen, planSchnappschuss,
-  diagnoseUebernehmen, zielUebernehmen,
+  diagnoseUebernehmen, diagnosePriorisieren, zielUebernehmen,
   massnahmeVerknuepfen, massnahmePlanen,
 } from "./plan-store";
 
@@ -77,7 +77,16 @@ const blatt = blattAbleiten(plan);
   assert.deepEqual(paare, ["00085|Z-BALANCE", "00085|Z-BEWEGLICH", "00155|Z-STURZFREI"],
     "drei Ziele unter zwei Diagnosen tragen die Position");
   assert.equal(zeile.traeger.find(t => t.zielId === "Z-STURZFREI")?.diagnoseTitel, "Sturzgefahr", "Titel aufgelöst");
-  console.log("✓ 3  Begründungskette: 10506 wird von drei Zielen unter zwei Diagnosen getragen");
+
+  /* Priorität (Lauf 6d): ändert am Blatt NUR die Reihenfolge, nie die Zahlen. */
+  diagnosePriorisieren("00085", "wichtig");
+  const blatt2 = blattAbleiten(planSchnappschuss());
+  const zeile2 = blatt2.abschnitte.find(a => a.klv === "c")!.zeilen.find(z => z.nummer === "10506")!;
+  assert.equal(zeile2.traeger[0].diagnoseCode, "00085", "wichtige Diagnose trägt zuerst");
+  assert.equal(zeile2.traeger[zeile2.traeger.length - 1].diagnoseCode, "00155", "normale danach");
+  assert.equal(zeile2.wochenMin, zeile.wochenMin, "…und nur die Reihenfolge ändert sich, nie die Zahlen");
+  diagnosePriorisieren("00085", "normal");
+  console.log("✓ 3  Begründungskette: 10506 von drei Zielen unter zwei Diagnosen getragen; Priorität ordnet, rechnet nicht");
 }
 
 /* ── 4: Einmalige und I/A/V ausserhalb der Summen; Planerische ausgewiesen ── */

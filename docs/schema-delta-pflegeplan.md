@@ -134,6 +134,24 @@ dbml heute nicht vorsieht:
 4. Das Bezugsdatum für «überfällig» ist die feste Mock-Gegenwart
    (`GEGENWART_ISO`); produktiv ersetzt das Systemdatum die Konstante.
 
+## Abweichungen aus Lauf 6d (Diagnostik als Phase)
+
+1. **Prioritätsfeld an der Plan-Diagnose:** Jede übernommene Diagnose trägt
+   eine Priorität (**wichtig | normal**, Standard normal) — eine fachliche
+   Aussage der Fachperson bei der Beurteilung, keine Berechnung und nicht
+   aus dem Vorschlagsrang ableitbar. Sie lebt im Plan-Zustand, nicht im
+   Vertrag (der Katalog liefert keine Priorität). **Das Schema braucht ein
+   Prioritätsfeld an der Pflegediagnose-Instanz**; die dbml kennt heute
+   keines. Die Priorität ordnet Baum, Balken, Dokument und Blatt-Träger —
+   am Blatt ändert sie nur die Reihenfolge, nie die Zahlen.
+2. **Die Diagnostik-Phase ist eine Wegmarke im Aufbau, kein Planstatus:**
+   `diagnostikAbgeschlossen` ist Meta (von der Inhalts-Signatur
+   ausgeschlossen — Abschliessen/Wiederöffnen veralten die Prüfung nicht)
+   und ohne Schemabedarf im Prototyp. Inhalt jenseits der Diagnosen
+   schliesst die Diagnostik automatisch ab — ein bestehender Plan mit
+   Zielen ist eindeutig in der Planung. Mit persistierten Plänen gehört
+   die Marke zur Arbeitskopie, nicht zur Fassung.
+
 ## Abweichungen aus Lauf 6c (Einbindung)
 
 1. **Der Plan-Zustand ist nicht je Klient adressiert:** es gibt EINEN

@@ -15,6 +15,7 @@ import {
 import type { CapCode, DiagnoseCode, DiagnoseVorschlag } from "../../../lib/pflegeplan/vertrag";
 import {
   usePlan, diagnoseUebernehmen, diagnoseVerwerfen, verwerfungZuruecknehmen,
+  diagnosePriorisieren, diagnostikAbschliessen, diagnostikOeffnen,
   zielUebernehmen, zielEntfernen, eigenesZielHinzufuegen, massnahmeVerknuepfen,
   massnahmenBezugLoesen, type VerwerfGrund,
 } from "../../../lib/pflegeplan/plan-store";
@@ -151,6 +152,39 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
 
   return (
     <div>
+      {/* Die Diagnostik-Phase (Lauf 6d): Abschluss und Rückweg über der
+          Liste — eine Wegmarke, kein Tor. */}
+      {!plan.diagnostikAbgeschlossen ? (
+        <div data-diagnostik-kopf className="flex items-center flex-wrap" style={{ gap: 10, padding: "8px 12px", marginBottom: 10, borderRadius: "var(--radius-card)", background: "var(--brand-primary-light)" }}>
+          <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-meta)", color: "var(--brand-primary)", fontWeight: 500 }}>
+            Diagnostik: erst alle Diagnosen beurteilen, dann planen.
+          </span>
+          <button type="button" data-diagnostik-abschliessen-liste
+            disabled={plan.diagnosen.length === 0}
+            title={plan.diagnosen.length === 0 ? "Ohne übernommene Diagnose gibt es nichts abzuschliessen." : undefined}
+            onClick={() => diagnostikAbschliessen()}
+            className={plan.diagnosen.length > 0 ? "ui-fokusring cursor-pointer shrink-0" : "shrink-0"}
+            style={{
+              padding: "4px 12px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: 500,
+              background: plan.diagnosen.length > 0 ? "var(--brand-primary)" : "var(--bg-secondary)",
+              color: plan.diagnosen.length > 0 ? "var(--text-on-dark)" : "var(--text-tertiary)",
+              border: "none", cursor: plan.diagnosen.length > 0 ? "pointer" : "not-allowed",
+            }}>
+            Diagnostik abschliessen
+          </button>
+        </div>
+      ) : (
+        <div data-diagnostik-kopf className="flex items-center flex-wrap" style={{ gap: 10, padding: "8px 12px", marginBottom: 10, borderRadius: "var(--radius-card)", background: "var(--bg-secondary)" }}>
+          <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+            Die Diagnostik ist abgeschlossen — Ziele und Massnahmen sind dran.
+          </span>
+          <button type="button" data-diagnostik-oeffnen onClick={() => diagnostikOeffnen()}
+            className="ui-fokusring cursor-pointer shrink-0"
+            style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
+            Diagnostik wieder öffnen
+          </button>
+        </div>
+      )}
       <KontextKarte zeilen={[
         <><strong>{vorschlaege.length} Vorschläge</strong> aus {caps.length - unbehandelt.length} ausgelösten CAPs, Assessment vom {assessmentDatum}. Gerankt, nie gefiltert.</>,
         ...(unbehandelt.length > 0
@@ -198,10 +232,35 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
                 </div>
               ) : (
                 <div className="flex items-center" style={{ gap: 8, marginTop: 6 }}>
-                  {imPlan ? <ImPlanMarke /> : (
+                  {imPlan ? (
+                    <>
+                      <ImPlanMarke />
+                      {/* Priorität — setzbar auch in der Liste (Lauf 6d). */}
+                      {(() => {
+                        const planD = plan.diagnosen.find(d => d.code === code)!;
+                        const wichtig = planD.prioritaet === "wichtig";
+                        return (
+                          <button type="button" data-prioritaet-liste={code} aria-pressed={wichtig}
+                            onClick={() => diagnosePriorisieren(code, wichtig ? "normal" : "wichtig")}
+                            title={wichtig ? "Als normal einstufen" : "Als wichtig einstufen — steht dann zuerst"}
+                            className="ui-fokusring cursor-pointer shrink-0"
+                            style={{
+                              padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: 500,
+                              background: wichtig ? "var(--brand-primary)" : "var(--bg-elevated)",
+                              color: wichtig ? "var(--text-on-dark)" : "var(--text-tertiary)",
+                              border: wichtig ? "var(--border-thin) solid transparent" : "var(--border-thin) solid var(--border-default)",
+                            }}>
+                            wichtig
+                          </button>
+                        );
+                      })()}
+                    </>
+                  ) : (
                     <PillKnopf primaer label="Übernehmen" onClick={() => {
                       diagnoseUebernehmen({ code, titel: v.diagnose.titel, typ: v.diagnose.typ, belegZeile: belegZeile(v), ausloesendeCaps: v.ausloesendeCaps });
-                      onUebernommen(code);
+                      /* In der Diagnostik bleibt die Liste offen — die
+                         Übernahme springt nicht zu den Zielen (Lauf 6d). */
+                      if (plan.diagnostikAbgeschlossen) onUebernommen(code);
                     }} />
                   )}
                   {!imPlan && (

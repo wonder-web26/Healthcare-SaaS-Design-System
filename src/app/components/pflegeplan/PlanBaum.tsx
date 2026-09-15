@@ -6,8 +6,11 @@
  * nicht anklickbar; der Editor kommt in Lauf 3.
  */
 import { useState } from "react";
-import { ChevronDown, ChevronRight, ClipboardList } from "lucide-react";
-import { zielTerminieren, type PlanZustand, type PlanMassnahme, type PlanZiel } from "../../../lib/pflegeplan/plan-store";
+import { ChevronDown, ChevronRight, ClipboardList, X } from "lucide-react";
+import {
+  zielTerminieren, nachPrioritaet, diagnosePriorisieren, diagnoseEntfernen,
+  type PlanZustand, type PlanMassnahme, type PlanZiel,
+} from "../../../lib/pflegeplan/plan-store";
 import { massnahmenSatz, type MandatKurz } from "../../../lib/pflegeplan/planung";
 import { type Fokus, TypMarke, positionsLage, datumAnzeige } from "./gemeinsam";
 
@@ -31,14 +34,18 @@ function FaltKnopf({ zu, onToggle, label }: { zu: boolean; onToggle: () => void;
  *  erste Zielbezug trägt Position und Zeit; unter weiteren Zielen wird nicht
  *  doppelt gezählt. Die Zeile öffnet den Editor rechts (Lauf 3); der Baum
  *  bleibt dabei stehen. */
-function MassnahmenZeile({ m, zielId, zielTitelVon, mandate, onFokus }: {
-  m: PlanMassnahme; zielId: string | null;
+function MassnahmenZeile({ m, diagnoseCode, zielId, zielTitelVon, mandate, onFokus }: {
+  m: PlanMassnahme; diagnoseCode: string | null; zielId: string | null;
   zielTitelVon: (diagnoseCode: string, zielId: string) => string;
   mandate: MandatKurz[];
   onFokus: (f: Fokus) => void;
 }) {
   const erster = m.zielBezuege[0] ?? null;
-  const istErster = zielId === null || (erster !== null && erster.zielId === zielId);
+  /* «Erster» ist das PAAR aus Diagnose und Ziel — nur die Ziel-Kennung
+     genügt nicht: dient das erste Bezugsziel zwei Diagnosen, erschiene die
+     Zeit sonst unter beiden voll (Lauf-6d-Fund). */
+  const istErster = zielId === null
+    || (erster !== null && erster.zielId === zielId && erster.diagnoseCode === diagnoseCode);
   return (
     <button type="button" data-massnahme={istErster ? m.interventionId : undefined}
       onClick={() => onFokus({ schritt: "editor", interventionId: m.interventionId })}
@@ -130,18 +137,44 @@ export function PlanBaum({ plan, mandate, onFokus }: {
       </div>
 
       <div className="flex flex-col" style={{ gap: 10 }}>
-        {plan.diagnosen.map(d => {
+        {/* Prioritätsreihenfolge (Lauf 6d): wichtige zuerst. */}
+        {nachPrioritaet(plan.diagnosen).map(d => {
           const dKey = `d:${d.code}`;
           const dZu = zugeklappt.has(dKey);
           const ziele = zieleVon(d.code);
           const mAnzahl = massnahmenJeDiagnose(d.code);
+          const wichtig = d.prioritaet === "wichtig";
           return (
             <div key={d.code} data-baum-diagnose={d.code} style={{ ...KARTE, padding: "10px 14px" }}>
               <div className="flex items-center" style={{ gap: 8 }}>
                 <FaltKnopf zu={dZu} onToggle={() => toggle(dKey)} label={`Diagnose ${d.code} auf- oder zuklappen`} />
                 <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{d.code}</span>
                 <span className="flex-1 min-w-0 truncate" style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{d.titel}</span>
+                {/* Die Priorität: eine fachliche Aussage der Fachperson —
+                    wichtig zuerst, keine Berechnung (Lauf 6d). */}
+                <button type="button" data-prioritaet={d.code} aria-pressed={wichtig}
+                  onClick={() => diagnosePriorisieren(d.code, wichtig ? "normal" : "wichtig")}
+                  title={wichtig ? "Als normal einstufen" : "Als wichtig einstufen — steht dann zuerst"}
+                  className="ui-fokusring cursor-pointer shrink-0"
+                  style={{
+                    padding: "2px 10px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: 500,
+                    background: wichtig ? "var(--brand-primary)" : "var(--bg-elevated)",
+                    color: wichtig ? "var(--text-on-dark)" : "var(--text-tertiary)",
+                    border: wichtig ? "var(--border-thin) solid transparent" : "var(--border-thin) solid var(--border-default)",
+                  }}>
+                  wichtig
+                </button>
                 <TypMarke typ={d.typ} />
+                {/* Entfernen gehört zur Diagnostik (Phase 1) — später löst
+                    die Struktur Verbindungen, statt Diagnosen zu löschen. */}
+                {!plan.diagnostikAbgeschlossen && (
+                  <button type="button" aria-label={`Diagnose ${d.titel} entfernen`}
+                    onClick={() => diagnoseEntfernen(d.code)}
+                    className="ui-fokusring cursor-pointer flex items-center justify-center shrink-0"
+                    style={{ width: 24, height: 24, borderRadius: "var(--radius-pill)", background: "none", border: "var(--border-thin) solid var(--border-default)", color: "var(--text-tertiary)" }}>
+                    <X style={{ width: 12, height: 12 }} />
+                  </button>
+                )}
               </div>
 
               {dZu ? (
@@ -163,7 +196,10 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                   </div>
 
                   <div style={{ marginTop: 6, marginLeft: 24, display: "flex", flexDirection: "column", gap: 6 }}>
-                    {ziele.length === 0 && (
+                    {/* In der Diagnostik (Phase 1) ist «kein Ziel» kein
+                        Mangel, sondern der Zustand der Phase — der Hinweis
+                        erscheint erst in der Planung. */}
+                    {ziele.length === 0 && plan.diagnostikAbgeschlossen && (
                       <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", paddingLeft: 8 }}>
                         Noch kein Ziel — rechts wählen oder selbst formulieren.
                       </div>
@@ -179,12 +215,14 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                             <span className="flex-1 min-w-0 truncate" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
                               {z.titel}{z.eigenes && <span style={{ fontWeight: "var(--weight-regular)", color: "var(--text-tertiary)" }}> · selbst formuliert</span>}
                             </span>
-                            <button type="button"
-                              onClick={() => onFokus({ schritt: 3, diagnoseCode: z.diagnoseCode, zielId: z.zielId, zielTitel: z.titel })}
-                              className="ui-fokusring cursor-pointer shrink-0"
-                              style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
-                              Massnahmen wählen
-                            </button>
+                            {plan.diagnostikAbgeschlossen && (
+                              <button type="button"
+                                onClick={() => onFokus({ schritt: 3, diagnoseCode: z.diagnoseCode, zielId: z.zielId, zielTitel: z.titel })}
+                                className="ui-fokusring cursor-pointer shrink-0"
+                                style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
+                                Massnahmen wählen
+                              </button>
+                            )}
                           </div>
                           {zZu ? (
                             <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", padding: "1px 0 0 32px" }}>
@@ -208,7 +246,7 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                                 )}
                               </div>
                               {massnahmen.map(m => (
-                                <MassnahmenZeile key={m.interventionId} m={m} zielId={z.zielId} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
+                                <MassnahmenZeile key={m.interventionId} m={m} diagnoseCode={z.diagnoseCode} zielId={z.zielId} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
                               ))}
                               {massnahmen.length === 0 && (
                                 <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", padding: "4px 0 2px 30px" }}>
@@ -254,7 +292,7 @@ export function PlanBaum({ plan, mandate, onFokus }: {
             «Mit diesem Ziel verknüpfen» in der Massnahmenauswahl.
           </div>
           {ohneZuordnung.map(m => (
-            <MassnahmenZeile key={m.interventionId} m={m} zielId={null} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
+            <MassnahmenZeile key={m.interventionId} m={m} diagnoseCode={null} zielId={null} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
           ))}
         </div>
       )}

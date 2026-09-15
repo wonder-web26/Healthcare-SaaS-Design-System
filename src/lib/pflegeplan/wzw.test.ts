@@ -13,7 +13,8 @@ import { leistungsposition } from "./positionen";
 import { GEGENWART_ISO } from "../gegenwart";
 import {
   planZuruecksetzen, planSchnappschuss,
-  diagnoseUebernehmen, diagnoseVerwerfen,
+  diagnoseUebernehmen, diagnoseVerwerfen, diagnosePriorisieren,
+  diagnostikAbschliessen, diagnostikOeffnen,
   zielUebernehmen, zielTerminieren, zielEntfernen, eigenesZielHinzufuegen,
   massnahmeVerknuepfen, massnahmenBezugLoesen, massnahmePlanen,
   pruefungDurchfuehren, befundUebergehen, uebergehungZuruecknehmen,
@@ -38,13 +39,43 @@ function befundIds(): string[] {
   pruefungDurchfuehren(GEGENWART_ISO);
   assert.equal(planSignatur(planSchnappschuss()), sig1, "Prüfung selbst (Meta) ändert die Signatur nicht");
 
+  /* Die Diagnostik-Phase (Lauf 6d) ist eine Wegmarke im Aufbau — Meta:
+     Abschliessen und Wiederöffnen dürfen die Prüfung nicht veralten. */
+  diagnostikOeffnen();
+  diagnostikAbschliessen();
+  assert.equal(planSignatur(planSchnappschuss()), sig1, "die Diagnostik-Wegmarke (Phase) veraltet die Prüfung nicht");
+
   zielTerminieren("Z-HAUT", { zieldatum: "2026-09-30" });
   const sig2 = planSignatur(planSchnappschuss());
   assert.notEqual(sig2, sig1, "Inhaltsänderung (Zieldatum) ändert die Signatur");
 
   diagnoseVerwerfen("00201", "Nicht zutreffend", "M. Keller", GEGENWART_ISO);
-  assert.notEqual(planSignatur(planSchnappschuss()), sig2, "Verwerfungen (Lauf 2) liegen im Inhalt und damit in der Signatur");
-  console.log("✓ 1  planSignatur: Meta ausgeschlossen, Inhalt samt Verwerfungen eingeschlossen");
+  const sig3 = planSignatur(planSchnappschuss());
+  assert.notEqual(sig3, sig2, "Verwerfungen (Lauf 2) liegen im Inhalt und damit in der Signatur");
+
+  /* Die PRIORITÄT ist Inhalt: sie steht auf Dokument und Blatt — ihre
+     Änderung veraltet die Prüfung bewusst (feldweises Herauslösen wäre die
+     handverlesene Aufzählung, vor der planSignatur warnt). */
+  diagnosePriorisieren("00108", "wichtig");
+  assert.notEqual(planSignatur(planSchnappschuss()), sig3, "die Priorität (Inhalt) ändert die Signatur");
+  console.log("✓ 1  planSignatur: Meta (Prüfung, Phase) ausgeschlossen; Inhalt (Verwerfungen, Priorität) eingeschlossen");
+}
+
+/* ── 1b: Die Phase — Wegmarke mit Wache und automatischem Übergang ── */
+{
+  planZuruecksetzen();
+  diagnostikAbschliessen();
+  assert.equal(planSchnappschuss().diagnostikAbgeschlossen, false, "ohne übernommene Diagnose nicht abschliessbar");
+  diagnoseUebernehmen(DIAGNOSE_STURZ);
+  diagnostikAbschliessen();
+  assert.equal(planSchnappschuss().diagnostikAbgeschlossen, true, "mit Diagnose abschliessbar");
+  diagnostikOeffnen();
+  assert.equal(planSchnappschuss().diagnostikAbgeschlossen, false, "jederzeit wieder öffenbar — Wegmarke, kein Tor");
+  /* Ein Plan, der Ziele trägt, IST in der Planung: Inhalt jenseits der
+     Diagnosen schliesst die Diagnostik automatisch (V11). */
+  eigenesZielHinzufuegen("00155", "Testziel");
+  assert.equal(planSchnappschuss().diagnostikAbgeschlossen, true, "ein Ziel schliesst die Diagnostik automatisch ab");
+  console.log("✓ 1b Phase: Wache ohne Diagnose, rücknehmbar, Inhalt schliesst automatisch ab");
 }
 
 /* ── 2: Die sieben Wirksamkeits-Prüfungen ── */

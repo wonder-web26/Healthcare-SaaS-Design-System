@@ -16,6 +16,11 @@ import type { CapCode, DetailAuswahl, DiagnoseCode, DiagnoseTyp, InterventionId,
 import type { UserRole } from "../../types/user";
 import { befundeErmitteln, planSignatur, type Befund } from "./wzw";
 
+/** Die Priorität ist eine FACHLICHE AUSSAGE der Fachperson bei der
+ *  Beurteilung — keine Berechnung, nicht aus dem Vorschlagsrang ableitbar,
+ *  und deshalb Plan-Zustand, nicht Vertrag (Lauf 6d). */
+export type DiagnosePrioritaet = "wichtig" | "normal";
+
 export interface PlanDiagnose {
   code: DiagnoseCode;
   titel: string;
@@ -25,6 +30,15 @@ export interface PlanDiagnose {
   /** Die auslösenden CAPs, strukturiert — als Text wären sie für die
    *  Herleitung und die spätere Prüfung (Lauf 6) nicht auswertbar. */
   ausloesendeCaps: CapCode[];
+  /** Standard «normal». INHALT, nicht Meta: die Priorität steht auf
+   *  Dokument und Blatt — ihre Änderung veraltet die Prüfung bewusst. */
+  prioritaet: DiagnosePrioritaet;
+}
+
+/** Wichtige zuerst, innerhalb der Gruppen stabil in Übernahme-Reihenfolge —
+ *  die eine Sortierung für Baum, Balken, Dokument und Blatt-Träger. */
+export function nachPrioritaet(diagnosen: PlanDiagnose[]): PlanDiagnose[] {
+  return [...diagnosen.filter(d => d.prioritaet === "wichtig"), ...diagnosen.filter(d => d.prioritaet !== "wichtig")];
 }
 
 /** Die erfasste Zielerreichung — Stufe aus der Vertragsskala, mit Datum und
@@ -198,11 +212,19 @@ export interface PlanZustand {
   /** null = noch nie geprüft. META, nicht Inhalt — von der Signatur
    *  ausgeschlossen (wzw.ts, planSignatur). */
   pruefung: PlanPruefung | null;
+  /** Die Diagnostik-Phase (Lauf 6d): eine WEGMARKE im Aufbau, kein
+   *  Zustandswechsel des Plans — META, von der Signatur ausgeschlossen;
+   *  Abschliessen und Wiederöffnen veralten die Prüfung nicht. Jeder
+   *  Inhalt jenseits der Diagnosen schliesst die Diagnostik automatisch
+   *  ab: ein Plan mit Zielen IST in der Planung, niemand wird
+   *  zurückgeworfen. */
+  diagnostikAbgeschlossen: boolean;
 }
 
 const LEERER_PLAN: PlanZustand = {
   diagnosen: [], ziele: [], massnahmen: [], verwerfungen: [],
   status: "in_arbeit", fassungen: [], pruefung: null,
+  diagnostikAbgeschlossen: false,
 };
 
 let zustand: PlanZustand = { ...LEERER_PLAN };
@@ -223,9 +245,52 @@ export function planSchnappschuss(): PlanZustand {
 
 /* ── Diagnosen ─────────────────────────────────────────────────────────── */
 
-export function diagnoseUebernehmen(d: PlanDiagnose): void {
+export function diagnoseUebernehmen(d: Omit<PlanDiagnose, "prioritaet"> & { prioritaet?: DiagnosePrioritaet }): void {
   if (zustand.diagnosen.some(x => x.code === d.code)) return;
-  zustand = { ...zustand, diagnosen: [...zustand.diagnosen, d] };
+  zustand = { ...zustand, diagnosen: [...zustand.diagnosen, { ...d, prioritaet: d.prioritaet ?? "normal" }] };
+  melden();
+}
+
+/**
+ * Diagnose entfernen (Lauf 6d, Phase 1 der Diagnostik). Bindungen und
+ * Bezüge werden mitgelöst — nach dem Muster von zielEntfernen: Massnahmen
+ * ohne verbleibenden Bezug fallen in «Ohne Zuordnung», statt still zu
+ * verschwinden; anderweitig gebundene Ziele behalten ihre übrigen Einträge.
+ */
+export function diagnoseEntfernen(code: DiagnoseCode): void {
+  zustand = {
+    ...zustand,
+    diagnosen: zustand.diagnosen.filter(d => d.code !== code),
+    ziele: zustand.ziele.filter(z => z.diagnoseCode !== code),
+    massnahmen: zustand.massnahmen.map(m => ({
+      ...m,
+      zielBezuege: m.zielBezuege.filter(b => b.diagnoseCode !== code),
+    })),
+  };
+  melden();
+}
+
+/** Die Priorität setzen — die Frage «welche zuerst» nach der Diagnostik. */
+export function diagnosePriorisieren(code: DiagnoseCode, prioritaet: DiagnosePrioritaet): void {
+  zustand = {
+    ...zustand,
+    diagnosen: zustand.diagnosen.map(d => d.code === code ? { ...d, prioritaet } : d),
+  };
+  melden();
+}
+
+/* ── Die Diagnostik-Phase (Lauf 6d): Wegmarke, kein Tor ────────────────── */
+
+/** Abschliessen — ohne übernommene Diagnose nicht setzbar. Blockiert
+ *  nichts und lässt sich jederzeit zurücknehmen. */
+export function diagnostikAbschliessen(): void {
+  if (zustand.diagnosen.length === 0) return;
+  zustand = { ...zustand, diagnostikAbgeschlossen: true };
+  melden();
+}
+
+export function diagnostikOeffnen(): void {
+  zustand = { ...zustand, diagnostikAbgeschlossen: false };
   melden();
 }
 
@@ -252,6 +317,9 @@ export function zielUebernehmen(z: Omit<PlanZiel, "zieldatum" | "evaluationsInte
   const bestehend = zustand.ziele.find(x => x.zielId === z.zielId);
   zustand = {
     ...zustand,
+    /* Ein Ziel ist Inhalt jenseits der Diagnosen — die Diagnostik gilt
+       damit als abgeschlossen (Lauf 6d: faktisch hinter sich). */
+    diagnostikAbgeschlossen: true,
     ziele: [...zustand.ziele, {
       ...z,
       zieldatum: bestehend?.zieldatum ?? "",
@@ -310,6 +378,7 @@ export function zielVerbindungHerstellen(diagnoseCode: DiagnoseCode, zielId: Zie
   const ungebunden = eintraege.find(z => z.diagnoseCode === null);
   zustand = {
     ...zustand,
+    diagnostikAbgeschlossen: true,
     ziele: ungebunden
       ? zustand.ziele.map(z => (z.zielId === zielId && z.diagnoseCode === null) ? { ...z, diagnoseCode } : z)
       : [...zustand.ziele, { ...eintraege[0], diagnoseCode }],
@@ -342,6 +411,7 @@ export function eigenesZielHinzufuegen(diagnoseCode: DiagnoseCode, titel: string
   eigeneZielNummer += 1;
   zustand = {
     ...zustand,
+    diagnostikAbgeschlossen: true,
     ziele: [...zustand.ziele, {
       zielId: `Z-EIGEN-${eigeneZielNummer}`, diagnoseCode, titel, eigenes: true,
       zieldatum: "", evaluationsIntervall: "", einschaetzung: null,
@@ -367,7 +437,7 @@ export function massnahmeVerknuepfen(interventionId: InterventionId, titel: stri
         : m),
     };
   } else {
-    zustand = { ...zustand, massnahmen: [...zustand.massnahmen, { interventionId, titel, zielBezuege: [bezug], planung: { ...LEERE_PLANUNG } }] };
+    zustand = { ...zustand, diagnostikAbgeschlossen: true, massnahmen: [...zustand.massnahmen, { interventionId, titel, zielBezuege: [bezug], planung: { ...LEERE_PLANUNG } }] };
   }
   melden();
 }

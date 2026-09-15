@@ -118,6 +118,15 @@ function traegerVon(plan: PlanZustand, m: PlanMassnahme): BlattTraeger[] {
   return aus;
 }
 
+/** Prioritätsreihenfolge (Lauf 6d): wichtige Diagnosen zuerst — die
+ *  Priorität ändert am Blatt NUR die Reihenfolge, nie die Zahlen. Läuft
+ *  als letzter Schritt, weil zusammengefasste Zeilen ihre Träger über
+ *  mehrere Massnahmen vereinigen. */
+function traegerNachPrioritaet(plan: PlanZustand, traeger: BlattTraeger[]): BlattTraeger[] {
+  const wichtig = new Set(plan.diagnosen.filter(d => d.prioritaet === "wichtig").map(d => d.code));
+  return [...traeger.filter(t => wichtig.has(t.diagnoseCode)), ...traeger.filter(t => !wichtig.has(t.diagnoseCode))];
+}
+
 function positionVon(m: PlanMassnahme): MitHerkunft<Leistungsposition> | null {
   return positionFuer(m.interventionId, m.planung.detailAuswahl);
 }
@@ -210,15 +219,16 @@ export function blattAbleiten(plan: PlanZustand): Blatt {
     .map(klv => {
       const zeilen = [...zeilenJeNummer.values()]
         .filter(z => z.klv === klv)
-        .sort((a, b) => a.nummer.localeCompare(b.nummer));
+        .sort((a, b) => a.nummer.localeCompare(b.nummer))
+        .map(z => ({ ...z, traeger: traegerNachPrioritaet(plan, z.traeger) }));
       return { klv, zeilen, summeMin: zeilen.reduce((s, z) => s + z.wochenMin, 0) };
     })
     .filter(a => a.zeilen.length > 0);
 
   return {
     abschnitte,
-    einmalige,
-    nichtErbracht,
+    einmalige: einmalige.map(e => ({ ...e, traeger: traegerNachPrioritaet(plan, e.traeger) })),
+    nichtErbracht: nichtErbracht.map(n => ({ ...n, traeger: traegerNachPrioritaet(plan, n.traeger) })),
     ohnePosition,
     gesamtWochenMin: abschnitte.reduce((s, a) => s + a.summeMin, 0),
   };
