@@ -135,8 +135,9 @@ Dokument-Ansicht setzt das Durchspielen über die Oberfläche:
   Einschätzung → erscheint unter «Was ansteht» (V4) und wird dort mit
   Stufe 4 «weitgehend erreicht» eingeschätzt (V5).
 - **Z-SELBSTPFLEGE: Zieldatum 30.09.2026** — in der Zukunft, nichts fällig.
-- Alle übrigen Ziele bleiben ohne Zieldatum — der Zustand, der in Lauf 6 zum
-  Wirksamkeitsbefund wird.
+- Alle übrigen Ziele bleiben ohne Zieldatum — das Zieldatum ist bewusst
+  optional, ohne Datum entsteht kein Befund. Geprüft wird nur ein gesetztes,
+  verstrichenes Datum ohne Einschätzung.
 
 ## Prüfung
 

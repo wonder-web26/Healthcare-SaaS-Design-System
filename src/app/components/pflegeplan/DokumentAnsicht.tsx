@@ -62,14 +62,16 @@ function ZielErreichung({ z }: { z: PlanZiel }) {
       </div>
     );
   }
+  /* Die Einschätzung braucht KEIN Zieldatum — das Datum ist bewusst
+     optional; wer einschätzen will, kann es jederzeit. */
   return (
     <div className="flex items-center flex-wrap" style={{ gap: 6 }}>
       <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
         {z.zieldatum
           ? `Zieldatum ${datumAnzeige(z.zieldatum)}${istFaellig(z) ? " — überschritten, Einschätzung fällig:" : ""}`
-          : "Ohne Zieldatum — die Terminierung fehlt."}
+          : "Einschätzung:"}
       </span>
-      {z.zieldatum && skala.map(s => (
+      {skala.map(s => (
         <button key={s.stufe} type="button"
           onClick={() => zielEinschaetzen(z.zielId, { stufe: s.stufe, datum: GEGENWART_ISO, autorin: `${benutzer.vorname.charAt(0)}. ${benutzer.name}` })}
           className="ui-fokusring cursor-pointer"

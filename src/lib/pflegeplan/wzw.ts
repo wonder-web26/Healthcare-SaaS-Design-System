@@ -75,12 +75,11 @@ export interface Befund {
 }
 
 /** Gruppenüberschrift je Prüfcode — Mehrzahl, denn die Gruppe erscheint nur
- *  bei mehreren gleichartigen Befunden («11 Ziele ohne Zieldatum»). */
+ *  bei mehreren gleichartigen Befunden («8 Massnahmen ohne Leistungsposition»). */
 export const PRUEFUNG_GRUPPE: Record<string, string> = {
   "W-DIAGNOSE-OHNE-ZIEL": "Diagnosen ohne Ziel",
   "W-ZIEL-OHNE-MASSNAHME": "Ziele ohne Massnahme",
   "W-MASSNAHME-OHNE-ZIEL": "Massnahmen ohne Zielbezug",
-  "W-ZIEL-OHNE-DATUM": "Ziele ohne Zieldatum",
   "W-ZIEL-UEBERFAELLIG": "Zieldaten überschritten ohne Einschätzung",
   "W-EINMALIG-OHNE-DATUM": "Einmalige Leistungen ohne Datum",
   "W-VERWEIGERUNG-OHNE-GRUND": "Verweigerungen ohne Begründung",
@@ -92,7 +91,7 @@ export const PRUEFUNG_GRUPPE: Record<string, string> = {
   "WI-HAEUFIGKEIT-UEBER-GRENZE": "Häufigkeiten über der Kataloggrenze",
 };
 
-/* ── Die dreizehn Prüfungen ─────────────────────────────────────────────── */
+/* ── Die zwölf Prüfungen ────────────────────────────────────────────────── */
 
 function element(art: BefundElement["art"], code: string, titel: string, diagnoseCode: string | null = null): BefundElement {
   return { art, code, titel, diagnoseCode };
@@ -153,20 +152,17 @@ export function befundeErmitteln(plan: PlanZustand): Befund[] {
     }
   }
 
-  // Ziel ohne Zieldatum / überschritten ohne Einschätzung — je Ziel, nicht je
-  // Bindung: deshalb OHNE diagnoseCode im Element, sonst hinge die
-  // Befund-Kennung (und damit die Übergehung) an einer austauschbaren Bindung.
+  // Zieldatum überschritten ohne Einschätzung — je Ziel, nicht je Bindung:
+  // deshalb OHNE diagnoseCode im Element, sonst hinge die Befund-Kennung
+  // (und damit die Übergehung) an einer austauschbaren Bindung.
+  // Ein Ziel OHNE Zieldatum ist KEIN Befund: das Zieldatum ist bewusst
+  // optional — geprüft wird nur ein gesetztes, verstrichenes Datum.
   const gesehen = new Set<string>();
   for (const z of plan.ziele) {
     if (gesehen.has(z.zielId)) continue;
     gesehen.add(z.zielId);
-    const el = element("ziel", z.zielId, z.titel);
-    if (z.zieldatum === "") {
-      aus.push(befund("W-ZIEL-OHNE-DATUM", "wirksamkeit", el,
-        `Ziel ohne Zieldatum: ${z.titel}`,
-        "Ohne Zieldatum ist die Wirksamkeit nicht überprüfbar — im Aufbau terminieren."));
-    } else if (z.zieldatum < GEGENWART_ISO && z.einschaetzung === null) {
-      aus.push(befund("W-ZIEL-UEBERFAELLIG", "wirksamkeit", el,
+    if (z.zieldatum !== "" && z.zieldatum < GEGENWART_ISO && z.einschaetzung === null) {
+      aus.push(befund("W-ZIEL-UEBERFAELLIG", "wirksamkeit", element("ziel", z.zielId, z.titel),
         `Zieldatum überschritten, keine Einschätzung: ${z.titel}`,
         "Das Zieldatum ist vorbei, die Zielerreichung wurde nicht eingeschätzt — im Dokument einschätzen."));
     }

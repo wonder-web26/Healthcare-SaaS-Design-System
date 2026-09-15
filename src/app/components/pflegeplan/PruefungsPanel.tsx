@@ -14,8 +14,8 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, ChevronDown, RefreshCw, X } from "lucide-react";
 import {
-  usePlan, befundUebergehen, uebergehungZuruecknehmen, zielTerminieren,
-  pruefungDurchfuehren, pruefungAktuell, offeneBefunde, type PruefBefund,
+  usePlan, befundUebergehen, uebergehungZuruecknehmen,
+  pruefungAktuell, offeneBefunde, type PruefBefund,
 } from "../../../lib/pflegeplan/plan-store";
 import { KRITERIUM_LABEL, PRUEFUNG_GRUPPE, type PruefKriterium } from "../../../lib/pflegeplan/wzw";
 import { datumAnzeige } from "./gemeinsam";
@@ -121,11 +121,11 @@ function BefundKarte({ b, autorin, datumIso, onNavigiere }: {
 }
 
 /**
- * Ein Bündel gleichartiger Befunde (Lauf 6b): elf Ziele ohne Zieldatum sind
- * EIN Problem, nicht elf. Zugeklappt eine Zeile, aufgeklappt die Einzelnen
- * mit ihrem Verweis — plus Sammelbehandlung, wo sie möglich ist. Die
- * Sammelübergehung ist keine Abkürzung um die Begründungspflicht: sie
- * erzeugt an jedem Befund dieselbe Dokumentation, nur einmal geschrieben.
+ * Ein Bündel gleichartiger Befunde (Lauf 6b): acht Massnahmen ohne Position
+ * sind EIN Problem, nicht acht. Zugeklappt eine Zeile, aufgeklappt die
+ * Einzelnen mit ihrem Verweis — plus Sammelübergehung: keine Abkürzung um
+ * die Begründungspflicht, sondern dieselbe Dokumentation an jedem Befund,
+ * nur einmal geschrieben.
  */
 function GruppenKarte({ code, befunde, autorin, datumIso, onNavigiere }: {
   code: string;
@@ -137,10 +137,8 @@ function GruppenKarte({ code, befunde, autorin, datumIso, onNavigiere }: {
   const [offen, setOffen] = useState(false);
   const [uebergehenOffen, setUebergehenOffen] = useState(false);
   const [begruendung, setBegruendung] = useState("");
-  const [daten, setDaten] = useState<Record<string, string>>({});
   const offene = befunde.filter(b => b.uebergehung === null);
   const label = PRUEFUNG_GRUPPE[code] ?? code;
-  const sammelDaten = code === "W-ZIEL-OHNE-DATUM" && offene.length > 0;
 
   return (
     <div data-befund-buendel={code} style={{
@@ -161,45 +159,6 @@ function GruppenKarte({ code, befunde, autorin, datumIso, onNavigiere }: {
 
       {offen && (
         <div style={{ padding: "0 12px 10px" }}>
-          {/* Sammelbehandlung: Zieldaten an einem Ort. Der Knopf wendet an
-              UND prüft neu — Zieldaten ändern den Planinhalt, die Prüfung
-              wäre sonst mitten in der Sammelaktion veraltet. */}
-          {sammelDaten && (
-            <div data-sammel-zieldaten style={{ padding: "8px 10px", marginBottom: 8, borderRadius: "var(--radius-card)", background: "var(--bg-secondary)" }}>
-              <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-secondary)", marginBottom: 6 }}>
-                Zieldaten für alle betroffenen Ziele setzen
-              </div>
-              {offene.map(b => (
-                <div key={b.id} className="flex items-center" style={{ gap: 8, padding: "3px 0" }}>
-                  <span className="flex-1 min-w-0 truncate" style={{ fontSize: "var(--text-micro)", color: "var(--text-primary)" }}>
-                    {b.element.titel}
-                  </span>
-                  <input type="date" value={daten[b.element.code] ?? ""}
-                    onChange={e => setDaten(d => ({ ...d, [b.element.code]: e.target.value }))}
-                    aria-label={`Zieldatum für ${b.element.titel}`}
-                    style={{ height: 26, padding: "0 6px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", fontSize: "var(--text-micro)", color: "var(--text-primary)", fontFamily: "inherit" }} />
-                </div>
-              ))}
-              <button type="button" disabled={!Object.values(daten).some(v => v)}
-                onClick={() => {
-                  for (const [zielId, datum] of Object.entries(daten)) {
-                    if (datum) zielTerminieren(zielId, { zieldatum: datum });
-                  }
-                  setDaten({});
-                  pruefungDurchfuehren(datumIso);
-                }}
-                className="ui-fokusring cursor-pointer"
-                style={{
-                  marginTop: 6, padding: "4px 14px", borderRadius: "var(--radius-pill)",
-                  background: Object.values(daten).some(v => v) ? "var(--brand-primary)" : "var(--bg-elevated)",
-                  color: Object.values(daten).some(v => v) ? "var(--text-on-dark)" : "var(--text-tertiary)",
-                  border: "none", fontSize: "var(--text-micro)", fontWeight: 500,
-                }}>
-                Übernehmen und neu prüfen
-              </button>
-            </div>
-          )}
-
           {/* Sammelübergehung: eine Begründung, an jedem Befund dieselbe Kennung. */}
           {offene.length > 1 && (
             <div data-sammel-uebergehen style={{ marginBottom: 8 }}>

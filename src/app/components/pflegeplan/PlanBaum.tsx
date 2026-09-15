@@ -192,8 +192,10 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                             </div>
                           ) : (
                             <div>
-                              {/* Zieldatum: hier setzbar, NIE vorbelegt — sein
-                                  Fehlen wird in Lauf 6 ein Wirksamkeitsbefund. */}
+                              {/* Zieldatum: hier setzbar, NIE vorbelegt und
+                                  BEWUSST optional — sein Fehlen ist kein
+                                  Befund; geprüft wird nur ein verstrichenes
+                                  Datum ohne Einschätzung. */}
                               <div className="flex items-center" style={{ gap: 6, padding: "2px 0 0 32px" }}>
                                 <label style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Zieldatum</label>
                                 <input type="date" value={z.zieldatum}

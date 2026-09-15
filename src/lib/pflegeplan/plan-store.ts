@@ -46,8 +46,10 @@ export interface PlanZiel {
   titel: string;
   /** Selbst formuliert statt aus der hergeleiteten Liste übernommen. */
   eigenes: boolean;
-  /** ISO-Datum; "" = keines. NIE automatisch vorbelegt — ein Ziel ohne
-   *  Zieldatum ist ein Zustand, der in Lauf 6 zum Wirksamkeitsbefund wird. */
+  /** ISO-Datum; "" = keines. NIE automatisch vorbelegt und BEWUSST
+   *  optional — ein Ziel ohne Zieldatum ist kein Befund. Geprüft wird nur
+   *  ein gesetztes, verstrichenes Datum ohne Einschätzung (wzw.ts,
+   *  W-ZIEL-UEBERFAELLIG). */
   zieldatum: string;
   /** Freitext, z.B. «alle 4 Wochen»; "" = keines. */
   evaluationsIntervall: string;

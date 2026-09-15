@@ -3,7 +3,7 @@
  *   npx tsx src/lib/pflegeplan/wzw.test.ts
  *
  * Geprüft werden: die Signatur (abgeleitet, Meta ausgeschlossen), alle
- * dreizehn Prüfungen, die Aktualitätserkennung, das Überleben und Entfallen
+ * zwölf Prüfungen, die Aktualitätserkennung, das Überleben und Entfallen
  * von Übergehungen (inkl. Verifikationspunkt 19: Wiederauftauchen) und die
  * Veröffentlichungs-Vorbedingung mit Rollen-Gate.
  */
@@ -69,24 +69,24 @@ function befundIds(): string[] {
     "W-DIAGNOSE-OHNE-ZIEL:00155",
     `W-ZIEL-OHNE-MASSNAHME:00108|Z-HAUT`,
     "W-MASSNAHME-OHNE-ZIEL:I-HAUTPFLEGE",
-    "W-ZIEL-OHNE-DATUM:Z-HAUT",
     `W-ZIEL-UEBERFAELLIG:${ueberfaellig.zielId}`,
     "W-EINMALIG-OHNE-DATUM:I-HAUTPFLEGE",
     "W-VERWEIGERUNG-OHNE-GRUND:I-GEHTRAINING",
   ]) {
     assert.ok(ids.includes(erwartet), `Befund ${erwartet} wird erkannt`);
   }
+  /* Z-HAUT trägt kein Zieldatum — und das ist KEIN Befund: das Zieldatum
+     ist bewusst optional. */
+  assert.ok(!ids.some(id => id.startsWith("W-ZIEL-OHNE-DATUM")), "ein Ziel ohne Zieldatum löst keinen Befund aus");
   const befunde = befundeErmitteln(planSchnappschuss());
   for (const b of befunde.filter(x => x.id.startsWith("W-"))) {
     assert.equal(b.kriterium, "wirksamkeit", `${b.id} liegt in der Gruppe Wirksamkeit`);
   }
-  console.log("✓ 2  Wirksamkeit: alle sieben Prüfungen lösen aus, richtige Gruppe");
+  console.log("✓ 2  Wirksamkeit: alle sechs Prüfungen lösen aus; ohne Zieldatum ist kein Befund");
 }
 
 /* ── 3: Auflösen lässt Befunde verschwinden — die Prüfung meldet nur ── */
 {
-  zielTerminieren("Z-HAUT", { zieldatum: "2026-10-15" });
-  assert.ok(!befundIds().includes("W-ZIEL-OHNE-DATUM:Z-HAUT"), "terminiertes Ziel: Befund entfällt");
   massnahmePlanen("I-HAUTPFLEGE", { einmalDatum: "2026-08-20" });
   assert.ok(!befundIds().includes("W-EINMALIG-OHNE-DATUM:I-HAUTPFLEGE"), "datierte Einmal-Leistung: Befund entfällt");
   massnahmePlanen("I-GEHTRAINING", { erbringerNotiz: "Klientin lehnt Gehtraining ab — Angst vor Überlastung, dokumentiert am 04.08." });
