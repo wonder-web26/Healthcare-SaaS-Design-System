@@ -146,13 +146,13 @@ dbml heute nicht vorsieht:
    Prioritätsfeld an der Pflegediagnose-Instanz**; die dbml kennt heute
    keines. Die Priorität ordnet Baum, Balken, Dokument und Blatt-Träger —
    am Blatt ändert sie nur die Reihenfolge, nie die Zahlen.
-2. **Die Diagnostik-Phase ist eine Wegmarke im Aufbau, kein Planstatus:**
-   `diagnostikAbgeschlossen` ist Meta (von der Inhalts-Signatur
-   ausgeschlossen — Abschliessen/Wiederöffnen veralten die Prüfung nicht)
-   und ohne Schemabedarf im Prototyp. Inhalt jenseits der Diagnosen
-   schliesst die Diagnostik automatisch ab — ein bestehender Plan mit
-   Zielen ist eindeutig in der Planung. Mit persistierten Plänen gehört
-   die Marke zur Arbeitskopie, nicht zur Fassung.
+2. **Die Diagnostik-Phase — NACHTRAG: wieder entfernt.** Die explizite
+   Wegmarke (`diagnostikAbgeschlossen`, «Diagnostik abschliessen») wurde
+   nach dem A/B-Entscheid zugunsten von Kategorie-Reitern
+   (Diagnosen · Ziele · Massnahmen) zurückgebaut: blockiert ist nur, was
+   leer liefe — «Ziele» ohne Diagnose, «Massnahmen» ohne Ziel an der
+   Kontext-Diagnose. Kein Schemabedarf. Die **Priorität** (Punkt 1) bleibt
+   unverändert bestehen.
 
 ## Abweichungen aus Lauf 6c (Einbindung)
 

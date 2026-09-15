@@ -16,7 +16,7 @@ import { zieleZuDiagnose, interventionenZuZiel } from "../../../lib/pflegeplan/m
 import {
   usePlan, veroeffentlichen, planAendern,
   pruefungDurchfuehren, pruefungAktuell, offeneBefunde, planSchnappschuss,
-  diagnostikAbschliessen, nachPrioritaet,
+  nachPrioritaet,
   type PruefBefund,
 } from "../../../lib/pflegeplan/plan-store";
 import { type MandatKurz } from "../../../lib/pflegeplan/planung";
@@ -48,18 +48,11 @@ import { planWochenSummeMin, datumAnzeige, type Fokus } from "./gemeinsam";
  * übersprungen wurde.
  */
 type BalkenZustand =
-  | { art: "diagnostik"; text: string }
   | { art: "schritt"; text: string; fokus: Fokus }
   | { art: "ohne-anschluss"; text: string; fokus: Fokus; baumZiel: string }
   | { art: "vollstaendig" };
 
 function naechsterSchritt(plan: ReturnType<typeof usePlan>): BalkenZustand {
-  /* Phase 1 (Lauf 6d): die Diagnostik ist eine GESAMTBEURTEILUNG, kein
-     Vorspann je Diagnose — der Balken führt nicht in die Tiefe, sondern
-     hält die Auswahl offen und bietet den Abschluss an. */
-  if (!plan.diagnostikAbgeschlossen) {
-    return { art: "diagnostik", text: "Weitere Diagnose übernehmen — oder Diagnostik abschliessen" };
-  }
   if (plan.diagnosen.length === 0) {
     return { art: "schritt", text: "Schritt 1 von 3: Pflegediagnose übernehmen", fokus: { schritt: 1 } };
   }
@@ -244,32 +237,8 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
   const planBereichInhalt = (
     <>
       {/* Der nächste-Schritt-Balken: immer genau eine richtige nächste
-          Handlung — anklickbar, aber nie zwingend. In der Diagnostik
-          (Lauf 6d) führt er NICHT in die Tiefe. */}
-      {schritt.art === "diagnostik" ? (
-        <div data-naechster-schritt data-diagnostik className="w-full flex items-center"
-          style={{ gap: 8, padding: "5px 5px 5px 14px", marginBottom: 12, borderRadius: "var(--radius-card)", background: "var(--brand-primary-light)", border: "var(--border-thin) solid transparent" }}>
-          <button type="button" onClick={() => setFokus({ schritt: 1 })}
-            className="ui-fokusring cursor-pointer flex-1 text-left"
-            style={{ background: "none", border: "none", padding: "4px 0", fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: 500, color: "var(--brand-primary)" }}>
-            {schritt.text}
-          </button>
-          <button type="button" data-diagnostik-abschliessen
-            disabled={plan.diagnosen.length === 0}
-            title={plan.diagnosen.length === 0 ? "Ohne übernommene Diagnose gibt es nichts abzuschliessen." : undefined}
-            onClick={() => diagnostikAbschliessen()}
-            className={plan.diagnosen.length > 0 ? "ui-fokusring cursor-pointer shrink-0" : "shrink-0"}
-            style={{
-              padding: "5px 14px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: 500,
-              background: plan.diagnosen.length > 0 ? "var(--brand-primary)" : "var(--bg-secondary)",
-              color: plan.diagnosen.length > 0 ? "var(--text-on-dark)" : "var(--text-tertiary)",
-              border: "none", cursor: plan.diagnosen.length > 0 ? "pointer" : "not-allowed",
-            }}>
-            Diagnostik abschliessen
-          </button>
-        </div>
-      ) : (
-        <button type="button" data-naechster-schritt
+          Handlung — anklickbar, aber nie zwingend. */}
+      <button type="button" data-naechster-schritt
           onClick={() => {
             if (schritt.art === "vollstaendig") return;
             setFokus(schritt.fokus);
@@ -292,8 +261,7 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
           {schritt.art === "vollstaendig"
             ? "Alle Angaben vollständig"
             : <>{schritt.text} <ArrowRight style={{ width: 13, height: 13, flexShrink: 0, marginLeft: "auto" }} /></>}
-        </button>
-      )}
+      </button>
 
       {/* Wochensummen-Kopfzeile: Mandate und geplante Zeit (nur S). */}
       <div data-wochensumme className="flex items-center flex-wrap" style={{ gap: 12, padding: "7px 14px", marginBottom: 12, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>

@@ -1,15 +1,15 @@
 /**
  * Der Auswahlbereich (links seit dem A/B-Entscheid — Übernehmen in
  * Leserichtung, der Plan wächst rechts): die Auswahl zum aktuellen Fokus.
- * Oben der NAVIGATIONSPFAD (Lauf 6e: bedienbar, mit Kontextwechsel je
- * Stufe), darunter die Kontextkarte (woher kommt die Liste), dann die
- * Liste des Schritts.
+ * Oben die KATEGORIE-REITER (Diagnosen · Ziele · Massnahmen, blockiert nur
+ * was leer liefe) mit beschrifteten Kontext-Auswahlfeldern, darunter die
+ * Kontextkarte (woher kommt die Liste), dann die Liste der Kategorie.
  *
  * Alle Daten kommen über die Vertragsabfragen aus src/lib/pflegeplan/ —
  * kein Zugriff unter dem Vertrag vorbei; der Pfad selbst liest nur den
  * Plan-Zustand.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Search, X } from "lucide-react";
 import {
   diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel,
@@ -18,7 +18,7 @@ import {
 import type { CapCode, DiagnoseCode, DiagnoseVorschlag } from "../../../lib/pflegeplan/vertrag";
 import {
   usePlan, diagnoseUebernehmen, diagnoseVerwerfen, verwerfungZuruecknehmen, nachPrioritaet,
-  diagnosePriorisieren, diagnostikAbschliessen, diagnostikOeffnen,
+  diagnosePriorisieren,
   zielUebernehmen, zielEntfernen, eigenesZielHinzufuegen, massnahmeVerknuepfen,
   massnahmenBezugLoesen, type VerwerfGrund,
 } from "../../../lib/pflegeplan/plan-store";
@@ -26,6 +26,7 @@ import { useCurrentUser } from "../../auth";
 import { GEGENWART_ISO } from "../../../lib/gegenwart";
 import type { MandatKurz } from "../../../lib/pflegeplan/planung";
 import { MassnahmenEditor } from "./MassnahmenEditor";
+import { InlineSelect } from "../ui/InlineSelect";
 import { type Fokus, TypMarke, positionsVorschau, katalogGruppe, datumAnzeige } from "./gemeinsam";
 
 const KARTE: React.CSSProperties = {
@@ -39,48 +40,31 @@ const VERWERF_GRUENDE: VerwerfGrund[] = [
 
 const TOP_SICHTBAR = 4;
 
-/* ── Navigationspfad (Lauf 6e) ─────────────────────────────────────────────
-   Ersetzt Schrittanzeige und Zurück-Knöpfe: eine Zeile, die zeigt, wo man
-   ist, welchen Weg der Kontext genommen hat — und an jeder Stufe bedienbar
-   ist. Zwei Klickflächen je Stufe: der NAME wechselt die Liste, das ▾
-   wechselt den Kontext, ohne den Weg zurückzugehen. So ist Vergleichen zwei
-   Klicks statt vier.
+/* ── Kategorie-Reiter: Diagnosen · Ziele · Massnahmen ─────────────────────
+   Drei echte Reiter statt Pfad und Diagnostik-Zeremonie. Blockiert ist
+   nur, was leer liefe — «Ziele» ohne Diagnose im Plan, «Massnahmen» ohne
+   Ziel an der Kontext-Diagnose — mit Grund am Reiter. Der Kontext (welche
+   Diagnose, welches Ziel) wechselt über beschriftete Auswahlfelder unter
+   den Reitern; die Ziffern 1/2/3 springen weiterhin.
 
    DIE KENNUNG IST DAS PAAR: ein Ziel, das zwei Diagnosen dient, gehört im
    Kontext zur aktuellen Diagnose — gemerkt wird (diagnoseCode, zielId),
    nie die Ziel-Kennung allein (istErsterBezug-Regel, planung.ts). */
-
-/** Gekürzter Titel im Pfad — voller Titel als Tooltip. Keine geratene
- *  Festbreite: der Titel SCHRUMPFT im Flex-Layout, bis die Zeile passt —
- *  im Browser mit den längsten Mock-Titeln gemessen (eine feste Breite von
- *  96px lief bei zwei langen Titeln 36px über die 447px des Bereichs). */
-function PfadTitel({ titel }: { titel: string }) {
-  return (
-    <span title={titel} style={{
-      minWidth: 0, overflow: "hidden",
-      textOverflow: "ellipsis", whiteSpace: "nowrap",
-    }}>
-      {titel}
-    </span>
-  );
-}
 
 interface PfadKontext {
   diagnoseCode: DiagnoseCode | null;
   zielId: string | null;
 }
 
-function NavigationsPfad({ fokus, onFokus, kontext }: {
+function KategorieLeiste({ fokus, onFokus, kontext }: {
   fokus: Fokus;
   onFokus: (f: Fokus) => void;
   kontext: PfadKontext;
 }) {
   const plan = usePlan();
-  const [offenesMenue, setOffenesMenue] = useState<2 | 3 | null>(null);
-  const wurzel = useRef<HTMLDivElement>(null);
 
   /* Kontext auflösen — ausschliesslich aus dem Plan-Zustand, keine
-     Katalogabfragen: der Pfad darf beim Rendern nichts abfragen. */
+     Katalogabfragen. */
   const sortiert = nachPrioritaet(plan.diagnosen);
   const kontextDiagnose = plan.diagnosen.find(d => d.code === kontext.diagnoseCode) ?? sortiert[0] ?? null;
   const zieleHier = kontextDiagnose ? plan.ziele.filter(z => z.diagnoseCode === kontextDiagnose.code) : [];
@@ -88,34 +72,22 @@ function NavigationsPfad({ fokus, onFokus, kontext }: {
   const massnahmenZahl = (diagnoseCode: string, zielId: string) =>
     plan.massnahmen.filter(m => m.zielBezuege.some(b => b.diagnoseCode === diagnoseCode && b.zielId === zielId)).length;
 
-  const phase1 = !plan.diagnostikAbgeschlossen;
-  const stufe2Begehbar = !phase1 && kontextDiagnose !== null;
-  const stufe3Begehbar = stufe2Begehbar && kontextZiel !== null;
+  const zieleBegehbar = kontextDiagnose !== null;
+  const massnahmenBegehbar = zieleBegehbar && kontextZiel !== null;
   const aktiv = fokus.schritt === 1 || fokus.schritt === 2 || fokus.schritt === 3 ? fokus.schritt : 3;
 
-  const grund2 = phase1
-    ? "In der Diagnostik nicht begehbar."
-    : kontextDiagnose === null ? "Noch keine Diagnose im Plan." : undefined;
-  const grund3 = phase1
-    ? "In der Diagnostik nicht begehbar."
-    : kontextDiagnose === null
-      ? "Noch keine Diagnose im Plan."
-      : kontextZiel === null ? `${kontextDiagnose.titel} trägt keine Ziele.` : undefined;
-
   const zuStufe = (nr: 1 | 2 | 3) => {
-    setOffenesMenue(null);
     if (nr === 1) onFokus({ schritt: 1 });
-    else if (nr === 2 && stufe2Begehbar && kontextDiagnose) onFokus({ schritt: 2, diagnoseCode: kontextDiagnose.code });
-    else if (nr === 3 && stufe3Begehbar && kontextDiagnose && kontextZiel) {
+    else if (nr === 2 && zieleBegehbar && kontextDiagnose) onFokus({ schritt: 2, diagnoseCode: kontextDiagnose.code });
+    else if (nr === 3 && massnahmenBegehbar && kontextDiagnose && kontextZiel) {
       onFokus({ schritt: 3, diagnoseCode: kontextDiagnose.code, zielId: kontextZiel.zielId, zielTitel: kontextZiel.titel });
     }
   };
 
-  /* Kontextwechsel über das ▾: die Stufe bleibt, die Liste tauscht sich
-     aus. Nur wenn die neue Diagnose keine Ziele trägt, fällt die Ansicht
-     auf Stufe 2 zurück (kein toter Klick auf Stufe 3). */
+  /* Diagnosewechsel: der Reiter bleibt, die Liste tauscht sich aus. Nur
+     wenn die neue Diagnose kein Ziel trägt, fällt die Ansicht auf «Ziele»
+     zurück (kein toter Reiter «Massnahmen»). */
   const diagnoseWechseln = (code: DiagnoseCode) => {
-    setOffenesMenue(null);
     const zieleDort = plan.ziele.filter(z => z.diagnoseCode === code);
     if (aktiv === 3 && zieleDort.length > 0) {
       onFokus({ schritt: 3, diagnoseCode: code, zielId: zieleDort[0].zielId, zielTitel: zieleDort[0].titel });
@@ -124,17 +96,7 @@ function NavigationsPfad({ fokus, onFokus, kontext }: {
     }
   };
 
-  /* Klick ausserhalb schliesst die Auswahl. */
-  useEffect(() => {
-    if (offenesMenue === null) return;
-    const zu = (e: MouseEvent) => {
-      if (wurzel.current && e.target instanceof Node && !wurzel.current.contains(e.target)) setOffenesMenue(null);
-    };
-    document.addEventListener("mousedown", zu);
-    return () => document.removeEventListener("mousedown", zu);
-  }, [offenesMenue]);
-
-  /* Tastatur: 1/2/3 springen auf die Stufe — nie, während ein Eingabefeld
+  /* Tastatur: 1/2/3 springen auf den Reiter — nie, während ein Eingabefeld
      den Fokus hat. */
   useEffect(() => {
     const taste = (e: KeyboardEvent) => {
@@ -150,115 +112,66 @@ function NavigationsPfad({ fokus, onFokus, kontext }: {
     return () => window.removeEventListener("keydown", taste);
   });
 
-  const stufenStil = (nr: 1 | 2 | 3, begehbar: boolean): React.CSSProperties => ({
-    background: "none", border: "none", padding: "3px 2px", fontFamily: "inherit",
-    fontSize: "var(--text-meta)", whiteSpace: "nowrap",
-    fontWeight: aktiv === nr ? "var(--weight-medium)" : "var(--weight-regular)",
-    color: !begehbar ? "var(--text-tertiary)" : aktiv === nr ? "var(--brand-primary)" : "var(--text-secondary)",
-    borderBottom: aktiv === nr ? "2px solid var(--brand-primary)" : "2px solid transparent",
-    cursor: begehbar ? "pointer" : "default",
-  });
-
-  const menueEintrag: React.CSSProperties = {
-    display: "block", width: "100%", textAlign: "left", background: "none", border: "none",
-    fontFamily: "inherit", padding: "7px 10px", borderRadius: "var(--radius-card)", cursor: "pointer",
-  };
+  const reiter: { nr: 1 | 2 | 3; label: string; begehbar: boolean; grund?: string }[] = [
+    { nr: 1, label: "Diagnosen", begehbar: true },
+    { nr: 2, label: "Ziele", begehbar: zieleBegehbar, grund: zieleBegehbar ? undefined : "Zuerst eine Diagnose übernehmen." },
+    {
+      nr: 3, label: "Massnahmen", begehbar: massnahmenBegehbar,
+      grund: massnahmenBegehbar ? undefined
+        : kontextDiagnose === null ? "Zuerst eine Diagnose übernehmen."
+          : `«${kontextDiagnose.titel}» trägt noch kein Ziel.`,
+    },
+  ];
 
   return (
-    <div ref={wurzel} data-pfad className="flex items-center" style={{ gap: 4, marginBottom: 10, position: "relative", whiteSpace: "nowrap", minWidth: 0 }}>
-      {/* Stufe 1 */}
-      <button type="button" data-pfad-stufe="1" onClick={() => zuStufe(1)}
-        className="ui-fokusring cursor-pointer" style={stufenStil(1, true)}>
-        1 Diagnosen
-      </button>
-      <span aria-hidden style={{ color: "var(--text-tertiary)", fontSize: "var(--text-meta)" }}>›</span>
+    <div style={{ marginBottom: 10 }}>
+      <div role="tablist" data-kategorien className="flex items-center" style={{ gap: 16, borderBottom: "var(--border-thin) solid var(--border-default)", marginBottom: 10 }}>
+        {reiter.map(r => (
+          <button key={r.nr} type="button" role="tab" data-kategorie={r.nr}
+            aria-selected={aktiv === r.nr} aria-disabled={!r.begehbar} title={r.grund}
+            onClick={() => zuStufe(r.nr)}
+            className={r.begehbar ? "ui-fokusring cursor-pointer" : ""}
+            style={{
+              background: "none", border: "none", fontFamily: "inherit", padding: "2px 0 8px",
+              fontSize: "var(--text-small)", fontWeight: aktiv === r.nr ? "var(--weight-medium)" : "var(--weight-regular)",
+              color: !r.begehbar ? "var(--text-tertiary)" : aktiv === r.nr ? "var(--brand-primary)" : "var(--text-secondary)",
+              borderBottom: aktiv === r.nr ? "2px solid var(--brand-primary)" : "2px solid transparent",
+              marginBottom: -1, cursor: r.begehbar ? "pointer" : "default",
+            }}>
+            {r.label}
+          </button>
+        ))}
+      </div>
 
-      {/* Stufe 2 — Name und ▾ sind GETRENNTE Trefferbereiche mit sichtbarem
-          Trenner: wer den Namen trifft, wollte oft das ▾. */}
-      <span className="flex items-center" style={{ gap: 0, minWidth: 0, flexShrink: 1 }}>
-        <button type="button" data-pfad-stufe="2" onClick={() => zuStufe(2)}
-          aria-disabled={!stufe2Begehbar} title={grund2}
-          className={stufe2Begehbar ? "ui-fokusring cursor-pointer" : ""}
-          style={{ ...stufenStil(2, stufe2Begehbar), display: "flex", alignItems: "baseline", gap: 4, minWidth: 0, overflow: "hidden" }}>
-          <span style={{ whiteSpace: "nowrap" }}>2 Ziele{kontextDiagnose ? " ·" : ""}</span>
-          {kontextDiagnose && <PfadTitel titel={kontextDiagnose.titel} />}
-        </button>
-        <span aria-hidden style={{ width: 1, height: 14, background: "var(--border-default)", margin: "0 3px" }} />
-        <button type="button" data-pfad-menue="2" aria-label="Diagnose wechseln" aria-expanded={offenesMenue === 2}
-          aria-disabled={!stufe2Begehbar} title={grund2 ?? "Diagnose wechseln"}
-          onClick={() => { if (stufe2Begehbar) setOffenesMenue(offenesMenue === 2 ? null : 2); }}
-          className={stufe2Begehbar ? "ui-fokusring cursor-pointer" : ""}
-          style={{ background: "none", border: "none", padding: "3px 4px", fontSize: 10, color: stufe2Begehbar ? "var(--text-secondary)" : "var(--text-tertiary)", cursor: stufe2Begehbar ? "pointer" : "default" }}>
-          ▾
-        </button>
-      </span>
-      <span aria-hidden style={{ color: "var(--text-tertiary)", fontSize: "var(--text-meta)" }}>›</span>
-
-      {/* Stufe 3 */}
-      <span className="flex items-center" style={{ gap: 0, minWidth: 0, flexShrink: 1 }}>
-        <button type="button" data-pfad-stufe="3" onClick={() => zuStufe(3)}
-          aria-disabled={!stufe3Begehbar} title={grund3}
-          className={stufe3Begehbar ? "ui-fokusring cursor-pointer" : ""}
-          style={{ ...stufenStil(3, stufe3Begehbar), display: "flex", alignItems: "baseline", gap: 4, minWidth: 0, overflow: "hidden" }}>
-          <span style={{ whiteSpace: "nowrap" }}>3 Massnahmen{stufe3Begehbar && kontextZiel ? " ·" : ""}</span>
-          {stufe3Begehbar && kontextZiel && <PfadTitel titel={kontextZiel.titel} />}
-        </button>
-        <span aria-hidden style={{ width: 1, height: 14, background: "var(--border-default)", margin: "0 3px" }} />
-        <button type="button" data-pfad-menue="3" aria-label="Ziel wechseln" aria-expanded={offenesMenue === 3}
-          aria-disabled={!stufe3Begehbar} title={grund3 ?? "Ziel wechseln"}
-          onClick={() => { if (stufe3Begehbar) setOffenesMenue(offenesMenue === 3 ? null : 3); }}
-          className={stufe3Begehbar ? "ui-fokusring cursor-pointer" : ""}
-          style={{ background: "none", border: "none", padding: "3px 4px", fontSize: 10, color: stufe3Begehbar ? "var(--text-secondary)" : "var(--text-tertiary)", cursor: stufe3Begehbar ? "pointer" : "default" }}>
-          ▾
-        </button>
-      </span>
-
-      {/* Auswahl: Diagnosen in Prioritätsreihenfolge bzw. Ziele der
-          aktuellen Diagnose — voller Titel plus Kennzahl, damit sich der
-          Wechsel ohne Hinspringen beurteilen lässt. */}
-      {offenesMenue !== null && (
-        <div data-pfad-liste style={{
-          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 30, marginTop: 4,
-          background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
-          borderRadius: "var(--radius-card)", boxShadow: "0 8px 24px rgba(15, 23, 26, 0.12)", padding: 4,
-          maxHeight: 320, overflowY: "auto",
-        }}>
-          {offenesMenue === 2 && sortiert.map(d => {
-            const zielZahl = plan.ziele.filter(z => z.diagnoseCode === d.code).length;
-            const aktuell = kontextDiagnose?.code === d.code;
-            return (
-              <button key={d.code} type="button" onClick={() => diagnoseWechseln(d.code)}
-                className="ui-fokusring cursor-pointer"
-                style={{ ...menueEintrag, background: aktuell ? "var(--brand-primary-light)" : "none" }}>
-                <span className="flex items-baseline" style={{ gap: 8 }}>
-                  <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "normal" }}>
-                    {d.titel}
-                    {d.prioritaet === "wichtig" && <span style={{ marginLeft: 6, fontSize: "var(--text-micro)", color: "var(--brand-primary)", fontWeight: 500 }}>wichtig</span>}
-                  </span>
-                  <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
-                    {zielZahl} {zielZahl === 1 ? "Ziel" : "Ziele"}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-          {offenesMenue === 3 && kontextDiagnose && zieleHier.map(z => {
-            const mZahl = massnahmenZahl(kontextDiagnose.code, z.zielId);
-            const aktuell = kontextZiel?.zielId === z.zielId;
-            return (
-              <button key={z.zielId} type="button"
-                onClick={() => { setOffenesMenue(null); onFokus({ schritt: 3, diagnoseCode: kontextDiagnose.code, zielId: z.zielId, zielTitel: z.titel }); }}
-                className="ui-fokusring cursor-pointer"
-                style={{ ...menueEintrag, background: aktuell ? "var(--brand-primary-light)" : "none" }}>
-                <span className="flex items-baseline" style={{ gap: 8 }}>
-                  <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-small)", color: "var(--text-primary)", whiteSpace: "normal" }}>{z.titel}</span>
-                  <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
-                    {mZahl} {mZahl === 1 ? "Massnahme" : "Massnahmen"}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
+      {/* Der Kontext als beschriftete Auswahl — voller Titel samt Kennzahl,
+          Wechsel mit einem Klick. */}
+      {aktiv >= 2 && kontextDiagnose && (
+        <div className="flex flex-col" style={{ gap: 6 }}>
+          <div data-kontext-diagnose className="flex items-center" style={{ gap: 8 }}>
+            <span style={{ width: 62, flexShrink: 0, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Diagnose</span>
+            <InlineSelect value={kontextDiagnose.code}
+              onChange={v => diagnoseWechseln(v)}
+              options={sortiert.map(d => {
+                const n = plan.ziele.filter(z => z.diagnoseCode === d.code).length;
+                return { value: d.code, label: `${d.titel}${d.prioritaet === "wichtig" ? " · wichtig" : ""} · ${n} ${n === 1 ? "Ziel" : "Ziele"}` };
+              })}
+              style={{ flex: 1, minWidth: 0 }} />
+          </div>
+          {aktiv === 3 && kontextZiel && (
+            <div data-kontext-ziel className="flex items-center" style={{ gap: 8 }}>
+              <span style={{ width: 62, flexShrink: 0, fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Ziel</span>
+              <InlineSelect value={kontextZiel.zielId}
+                onChange={v => {
+                  const z = zieleHier.find(x => x.zielId === v);
+                  if (z) onFokus({ schritt: 3, diagnoseCode: kontextDiagnose.code, zielId: z.zielId, zielTitel: z.titel });
+                }}
+                options={zieleHier.map(z => {
+                  const n = massnahmenZahl(kontextDiagnose.code, z.zielId);
+                  return { value: z.zielId, label: `${z.titel} · ${n} ${n === 1 ? "Massnahme" : "Massnahmen"}` };
+                })}
+                style={{ flex: 1, minWidth: 0 }} />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -266,9 +179,7 @@ function NavigationsPfad({ fokus, onFokus, kontext }: {
 }
 
 /* ── Kontextkarte ──────────────────────────────────────────────────────────
-   Sagt, WOHER eine Liste kommt — der Navigationspfad sagt, WO man ist.
-   Zwei verschiedene Aussagen; der Zurück-Knopf ist mit Lauf 6e in den
-   Pfad gewandert. */
+   Sagt, WOHER eine Liste kommt — die Kategorie-Reiter sagen, WO man ist. */
 function KontextKarte({ zeilen }: { zeilen: React.ReactNode[] }) {
   return (
     <div style={{ ...KARTE, background: "var(--bg-secondary)", padding: "9px 12px", marginBottom: 10 }}>
@@ -321,8 +232,8 @@ function ImPlanMarke() {
 /* ══════════════════════════════════════════
    SCHRITT 1 — Diagnoseauswahl
    ══════════════════════════════════════════ */
-function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
-  caps: CapCode[]; assessmentDatum: string; onUebernommen: (code: DiagnoseCode) => void;
+function DiagnoseAuswahl({ caps, assessmentDatum }: {
+  caps: CapCode[]; assessmentDatum: string;
 }) {
   const plan = usePlan();
   const benutzer = useCurrentUser();
@@ -352,39 +263,6 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
 
   return (
     <div>
-      {/* Die Diagnostik-Phase (Lauf 6d): Abschluss und Rückweg über der
-          Liste — eine Wegmarke, kein Tor. */}
-      {!plan.diagnostikAbgeschlossen ? (
-        <div data-diagnostik-kopf className="flex items-center flex-wrap" style={{ gap: 10, padding: "8px 12px", marginBottom: 10, borderRadius: "var(--radius-card)", background: "var(--brand-primary-light)" }}>
-          <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-meta)", color: "var(--brand-primary)", fontWeight: 500 }}>
-            Diagnostik offen
-          </span>
-          <button type="button" data-diagnostik-abschliessen-liste
-            disabled={plan.diagnosen.length === 0}
-            title={plan.diagnosen.length === 0 ? "Ohne übernommene Diagnose gibt es nichts abzuschliessen." : undefined}
-            onClick={() => diagnostikAbschliessen()}
-            className={plan.diagnosen.length > 0 ? "ui-fokusring cursor-pointer shrink-0" : "shrink-0"}
-            style={{
-              padding: "4px 12px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: 500,
-              background: plan.diagnosen.length > 0 ? "var(--brand-primary)" : "var(--bg-secondary)",
-              color: plan.diagnosen.length > 0 ? "var(--text-on-dark)" : "var(--text-tertiary)",
-              border: "none", cursor: plan.diagnosen.length > 0 ? "pointer" : "not-allowed",
-            }}>
-            Diagnostik abschliessen
-          </button>
-        </div>
-      ) : (
-        <div data-diagnostik-kopf className="flex items-center flex-wrap" style={{ gap: 10, padding: "8px 12px", marginBottom: 10, borderRadius: "var(--radius-card)", background: "var(--bg-secondary)" }}>
-          <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-            Diagnostik abgeschlossen
-          </span>
-          <button type="button" data-diagnostik-oeffnen onClick={() => diagnostikOeffnen()}
-            className="ui-fokusring cursor-pointer shrink-0"
-            style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
-            Diagnostik wieder öffnen
-          </button>
-        </div>
-      )}
       <KontextKarte zeilen={[
         <><strong>{vorschlaege.length} Vorschläge</strong> · {caps.length - unbehandelt.length} CAPs · Assessment {assessmentDatum}</>,
         ...(unbehandelt.length > 0
@@ -458,9 +336,6 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
                   ) : (
                     <PillKnopf primaer label="Übernehmen" onClick={() => {
                       diagnoseUebernehmen({ code, titel: v.diagnose.titel, typ: v.diagnose.typ, belegZeile: belegZeile(v), ausloesendeCaps: v.ausloesendeCaps });
-                      /* In der Diagnostik bleibt die Liste offen — die
-                         Übernahme springt nicht zu den Zielen (Lauf 6d). */
-                      if (plan.diagnostikAbgeschlossen) onUebernommen(code);
                     }} />
                   )}
                   {!imPlan && (
@@ -726,10 +601,9 @@ export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum, mandate 
 
   return (
     <div>
-      <NavigationsPfad fokus={fokus} onFokus={onFokus} kontext={pfadKontext} />
+      <KategorieLeiste fokus={fokus} onFokus={onFokus} kontext={pfadKontext} />
       {fokus.schritt === 1 && (
-        <DiagnoseAuswahl caps={caps} assessmentDatum={assessmentDatum}
-          onUebernommen={code => onFokus({ schritt: 2, diagnoseCode: code })} />
+        <DiagnoseAuswahl caps={caps} assessmentDatum={assessmentDatum} />
       )}
       {fokus.schritt === 2 && (
         <ZielAuswahl diagnoseCode={fokus.diagnoseCode}

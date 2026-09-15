@@ -209,19 +209,11 @@ export interface PlanZustand {
   /** null = noch nie geprüft. META, nicht Inhalt — von der Signatur
    *  ausgeschlossen (wzw.ts, planSignatur). */
   pruefung: PlanPruefung | null;
-  /** Die Diagnostik-Phase (Lauf 6d): eine WEGMARKE im Aufbau, kein
-   *  Zustandswechsel des Plans — META, von der Signatur ausgeschlossen;
-   *  Abschliessen und Wiederöffnen veralten die Prüfung nicht. Jeder
-   *  Inhalt jenseits der Diagnosen schliesst die Diagnostik automatisch
-   *  ab: ein Plan mit Zielen IST in der Planung, niemand wird
-   *  zurückgeworfen. */
-  diagnostikAbgeschlossen: boolean;
 }
 
 const LEERER_PLAN: PlanZustand = {
   diagnosen: [], ziele: [], massnahmen: [], verwerfungen: [],
   status: "in_arbeit", fassungen: [], pruefung: null,
-  diagnostikAbgeschlossen: false,
 };
 
 let zustand: PlanZustand = { ...LEERER_PLAN };
@@ -249,7 +241,7 @@ export function diagnoseUebernehmen(d: Omit<PlanDiagnose, "prioritaet"> & { prio
 }
 
 /**
- * Diagnose entfernen (Lauf 6d, Phase 1 der Diagnostik). Bindungen und
+ * Diagnose entfernen. Bindungen und
  * Bezüge werden mitgelöst — nach dem Muster von zielEntfernen: Massnahmen
  * ohne verbleibenden Bezug fallen in «Ohne Zuordnung», statt still zu
  * verschwinden; anderweitig gebundene Ziele behalten ihre übrigen Einträge.
@@ -267,27 +259,12 @@ export function diagnoseEntfernen(code: DiagnoseCode): void {
   melden();
 }
 
-/** Die Priorität setzen — die Frage «welche zuerst» nach der Diagnostik. */
+/** Die Priorität setzen — die Frage «welche zuerst». */
 export function diagnosePriorisieren(code: DiagnoseCode, prioritaet: DiagnosePrioritaet): void {
   zustand = {
     ...zustand,
     diagnosen: zustand.diagnosen.map(d => d.code === code ? { ...d, prioritaet } : d),
   };
-  melden();
-}
-
-/* ── Die Diagnostik-Phase (Lauf 6d): Wegmarke, kein Tor ────────────────── */
-
-/** Abschliessen — ohne übernommene Diagnose nicht setzbar. Blockiert
- *  nichts und lässt sich jederzeit zurücknehmen. */
-export function diagnostikAbschliessen(): void {
-  if (zustand.diagnosen.length === 0) return;
-  zustand = { ...zustand, diagnostikAbgeschlossen: true };
-  melden();
-}
-
-export function diagnostikOeffnen(): void {
-  zustand = { ...zustand, diagnostikAbgeschlossen: false };
   melden();
 }
 
@@ -313,9 +290,6 @@ export function zielUebernehmen(z: Omit<PlanZiel, "evaluationsIntervall" | "eins
   const bestehend = zustand.ziele.find(x => x.zielId === z.zielId);
   zustand = {
     ...zustand,
-    /* Ein Ziel ist Inhalt jenseits der Diagnosen — die Diagnostik gilt
-       damit als abgeschlossen (Lauf 6d: faktisch hinter sich). */
-    diagnostikAbgeschlossen: true,
     ziele: [...zustand.ziele, {
       ...z,
       evaluationsIntervall: bestehend?.evaluationsIntervall ?? "",
@@ -373,7 +347,6 @@ export function zielVerbindungHerstellen(diagnoseCode: DiagnoseCode, zielId: Zie
   const ungebunden = eintraege.find(z => z.diagnoseCode === null);
   zustand = {
     ...zustand,
-    diagnostikAbgeschlossen: true,
     ziele: ungebunden
       ? zustand.ziele.map(z => (z.zielId === zielId && z.diagnoseCode === null) ? { ...z, diagnoseCode } : z)
       : [...zustand.ziele, { ...eintraege[0], diagnoseCode }],
@@ -406,7 +379,6 @@ export function eigenesZielHinzufuegen(diagnoseCode: DiagnoseCode, titel: string
   eigeneZielNummer += 1;
   zustand = {
     ...zustand,
-    diagnostikAbgeschlossen: true,
     ziele: [...zustand.ziele, {
       zielId: `Z-EIGEN-${eigeneZielNummer}`, diagnoseCode, titel, eigenes: true,
       evaluationsIntervall: "", einschaetzung: null,
@@ -432,7 +404,7 @@ export function massnahmeVerknuepfen(interventionId: InterventionId, titel: stri
         : m),
     };
   } else {
-    zustand = { ...zustand, diagnostikAbgeschlossen: true, massnahmen: [...zustand.massnahmen, { interventionId, titel, zielBezuege: [bezug], planung: { ...LEERE_PLANUNG } }] };
+    zustand = { ...zustand, massnahmen: [...zustand.massnahmen, { interventionId, titel, zielBezuege: [bezug], planung: { ...LEERE_PLANUNG } }] };
   }
   melden();
 }

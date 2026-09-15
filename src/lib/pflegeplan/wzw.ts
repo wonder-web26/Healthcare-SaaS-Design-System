@@ -36,12 +36,10 @@ import { wochenVorkommen } from "./planung";
  * übergangen» wäre unerreichbar.
  */
 export function planSignatur(plan: PlanZustand): string {
-  /* diagnostikAbgeschlossen (Lauf 6d) ist Meta: eine Wegmarke im Aufbau —
-     Abschliessen und Wiederöffnen dürfen die Prüfung nicht veralten. Die
-     PRIORITÄT dagegen bleibt bewusst im Inhalt: sie steht auf Dokument und
+  /* Die PRIORITÄT bleibt bewusst im Inhalt: sie steht auf Dokument und
      Blatt, und sie feldweise aus den Diagnosen herauszulösen wäre genau
      die handverlesene Aufzählung, vor der dieser Kommentar warnt. */
-  const { status: _status, fassungen: _fassungen, pruefung: _pruefung, diagnostikAbgeschlossen: _diagnostik, ...inhalt } = plan;
+  const { status: _status, fassungen: _fassungen, pruefung: _pruefung, ...inhalt } = plan;
   return JSON.stringify(inhalt);
 }
 

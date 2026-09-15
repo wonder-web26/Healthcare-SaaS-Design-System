@@ -159,16 +159,12 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                   wichtig
                 </button>
                 <TypMarke typ={d.typ} />
-                {/* Entfernen gehört zur Diagnostik (Phase 1) — später löst
-                    die Struktur Verbindungen, statt Diagnosen zu löschen. */}
-                {!plan.diagnostikAbgeschlossen && (
-                  <button type="button" aria-label={`Diagnose ${d.titel} entfernen`}
+                <button type="button" aria-label={`Diagnose ${d.titel} entfernen`}
                     onClick={() => diagnoseEntfernen(d.code)}
                     className="ui-fokusring cursor-pointer flex items-center justify-center shrink-0"
                     style={{ width: 24, height: 24, borderRadius: "var(--radius-pill)", background: "none", border: "var(--border-thin) solid var(--border-default)", color: "var(--text-tertiary)" }}>
                     <X style={{ width: 12, height: 12 }} />
                   </button>
-                )}
               </div>
 
               {dZu ? (
@@ -190,10 +186,7 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                   </div>
 
                   <div style={{ marginTop: 6, marginLeft: 24, display: "flex", flexDirection: "column", gap: 6 }}>
-                    {/* In der Diagnostik (Phase 1) ist «kein Ziel» kein
-                        Mangel, sondern der Zustand der Phase — der Hinweis
-                        erscheint erst in der Planung. */}
-                    {ziele.length === 0 && plan.diagnostikAbgeschlossen && (
+                    {ziele.length === 0 && (
                       <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", paddingLeft: 8 }}>
                         Noch kein Ziel
                       </div>
@@ -209,14 +202,12 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                             <span className="flex-1 min-w-0 truncate" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
                               {z.titel}{z.eigenes && <span style={{ fontWeight: "var(--weight-regular)", color: "var(--text-tertiary)" }}> · selbst formuliert</span>}
                             </span>
-                            {plan.diagnostikAbgeschlossen && (
-                              <button type="button"
-                                onClick={() => onFokus({ schritt: 3, diagnoseCode: z.diagnoseCode, zielId: z.zielId, zielTitel: z.titel })}
-                                className="ui-fokusring cursor-pointer shrink-0"
-                                style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
-                                Massnahmen wählen
-                              </button>
-                            )}
+                            <button type="button"
+                              onClick={() => onFokus({ schritt: 3, diagnoseCode: z.diagnoseCode, zielId: z.zielId, zielTitel: z.titel })}
+                              className="ui-fokusring cursor-pointer shrink-0"
+                              style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--brand-primary)" }}>
+                              Massnahmen wählen
+                            </button>
                           </div>
                           {zZu ? (
                             <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", padding: "1px 0 0 32px" }}>
