@@ -283,18 +283,6 @@ export function BlattAnsicht() {
           ))}
         </section>
 
-        {/* ── Planerische Massnahmen: ausgewiesen, nicht verschwiegen ── */}
-        {blatt.ohnePosition.length > 0 && (
-          <section style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", lineHeight: 1.6 }}>
-              {blatt.ohnePosition.length} {blatt.ohnePosition.length === 1 ? "Massnahme" : "Massnahmen"} des Plans
-              {" "}({blatt.ohnePosition.map(o => o.massnahmeTitel).join(" · ")}){" "}
-              {blatt.ohnePosition.length === 1 ? "bleibt" : "bleiben"} planerisch ohne Leistungsposition und
-              {" "}{blatt.ohnePosition.length === 1 ? "erscheint" : "erscheinen"} nicht in den Summen.
-            </div>
-          </section>
-        )}
-
         {/* ── Platzhalter der Kassenstrecke ── */}
         <section style={{ borderTop: "var(--border-thin) solid var(--border-default)", paddingTop: 8 }}>
           <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>

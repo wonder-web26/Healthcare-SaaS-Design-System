@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { ableitungAlsText } from "./vertrag";
-import { diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer, ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala, qualifikationsStufen, diagnoseDetails, merkmalsEintrag } from "./mock-adapter";
+import { diagnoseVorschlaege, zieleZuDiagnose, positionenZuZiel, leistungsKatalog, ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala, qualifikationsStufen, diagnoseDetails, merkmalsEintrag } from "./mock-adapter";
 import { leistungsposition } from "./positionen";
 import { MAS_ZIEL, PROB_MAS, PROB_ZIEL_HIDE } from "./mock-daten";
 
@@ -60,31 +60,35 @@ const VIER_CAPS = ["CAP-FALLS", "CAP-ADL", "CAP-PAIN", "CAP-MOOD"];
   console.log("✓ 4  Ausschlussliste angewendet: erreichbar, aber unterdrückt — nur im Kontext 00155");
 }
 
-/* ── 5: Detailauswahl schaltet die Position um ── */
+/* ── 5 (Modellwechsel): positionenZuZiel — die frühere Dialog-Variante
+      sind zwei eigenständige Vorschläge ── */
 {
-  const imBett = positionFuer("I-GANZWASCHUNG", [{ gruppe: "Ort der Durchführung", item: "Im Bett" }]);
-  const inDusche = positionFuer("I-GANZWASCHUNG", [{ gruppe: "Ort der Durchführung", item: "In Dusche oder Bad" }]);
-  assert.equal(imBett?.nummer, "10101");
-  assert.equal(inDusche?.nummer, "10102");
-  assert.notEqual(imBett?.nummer, inDusche?.nummer, "zwei Auswahlen, zwei Positionen");
-  console.log("✓ 5  positionFuer: Im Bett → 10101, In Dusche oder Bad → 10102");
+  const nummern = positionenZuZiel("00108", "Z-SELBSTPFLEGE").map(p => p.nummer);
+  assert.deepEqual(nummern.sort(), ["10101", "10102"],
+    "Ganzwäsche im Bett UND in Bad/Dusche stehen einzeln; die frühere planerische Intervention trägt nichts bei");
+  console.log("✓ 5  positionenZuZiel: 00108/Z-SELBSTPFLEGE → 10101 + 10102 (zusammengelegte Kette)");
 }
 
-/* ── 6: Intervention ohne Regel → null ── */
+/* ── 6 (Modellwechsel): Katalog und Einzelauflösung ── */
 {
-  assert.equal(positionFuer("I-ZIELGESPRAECH", []), null, "planerische Intervention liefert null");
-  console.log("✓ 6  positionFuer ohne Regel: null (gültiger Zustand)");
+  const katalog = leistungsKatalog();
+  assert.equal(katalog.length, 115, "der ganze Leistungskatalog: 115 Positionen");
+  assert.ok(katalog.every(p => p.herkunft.nummer === "katalog" && p.herkunft.bezeichnung === "katalog"),
+    "Nummer und Bezeichnung sind echter Katalog");
+  assert.ok(new Set(katalog.map(p => p.kategorie)).size >= 10, "nach Bereichen gegliedert");
+  assert.equal(leistungsposition("99999"), null, "unbekannte Nummer: null, kein Wurf");
+  console.log(`✓ 6  leistungsKatalog: ${katalog.length} Positionen, Herkunft katalog; Einzelauflösung null-sicher`);
 }
 
-/* ── 7: Die Ableitung als Zeichenkette ── */
+/* ── 7: Die Ableitung als Zeichenkette (ohne Interventions-Glied) ── */
 {
   const text = ableitungAlsText({
-    cap: "CAP-ADL", diagnoseCode: "00108", zielId: "Z-SELBSTPFLEGE",
-    interventionId: "I-GANZWASCHUNG", positionsNummer: "10102",
+    cap: "CAP-ADL", diagnoseCode: "00108", zielId: "Z-SELBSTPFLEGE", positionsNummer: "10102",
   });
-  for (const teil of ["CAP-ADL", "00108", "Z-SELBSTPFLEGE", "I-GANZWASCHUNG", "10102"]) {
+  for (const teil of ["CAP-ADL", "00108", "Z-SELBSTPFLEGE", "10102"]) {
     assert.ok(text.includes(teil), `Ableitungstext enthält ${teil}`);
   }
+  assert.ok(!text.includes("I-"), "kein Interventions-Glied mehr in der Kette");
   console.log(`✓ 7  Ableitung: ${text}`);
 }
 
@@ -126,14 +130,13 @@ const VIER_CAPS = ["CAP-FALLS", "CAP-ADL", "CAP-PAIN", "CAP-MOOD"];
   console.log("✓ 11 10001: teilhandlungen null, Abfrage wirft nicht");
 }
 
-/* ── Zusatz: der Detaildialog selbst ── */
+/* ── Zusatz: Vorschläge sind paar-spezifisch und dedupliziert ── */
 {
-  const dialog = detaildialog("I-GANZWASCHUNG");
-  assert.ok(dialog && dialog.gruppen.length === 2, "Ganzkörperwaschung trägt den Dialog");
-  assert.equal(detaildialog("I-TEILWAESCHE"), null, "ohne Dialog: null");
-  const interventionen = interventionenZuZiel("00108", "Z-SELBSTPFLEGE").map(i => i.id);
-  assert.deepEqual(interventionen.sort(), ["I-ANLEITUNG-SELBSTPFLEGE", "I-GANZWASCHUNG"], "Schnittmenge Diagnose ∩ Ziel");
-  console.log("✓ +  Detaildialog und interventionenZuZiel konsistent");
+  const nummern = positionenZuZiel("00155", "Z-STURZFREI").map(p => p.nummer);
+  assert.equal(new Set(nummern).size, nummern.length, "kein Vorschlag doppelt");
+  assert.deepEqual(positionenZuZiel("00162", "Z-STURZFREI"), [],
+    "Diagnose ohne Interventions-Rohdaten: leere Vorschlagsliste, kein Wurf");
+  console.log("✓ +  positionenZuZiel dedupliziert; leere Kette liefert []");
 }
 
 /* ── Lauf-2-Ergänzungen: die Gegenliste und die unbehandelten CAPs ── */
@@ -221,11 +224,11 @@ const VIER_CAPS = ["CAP-FALLS", "CAP-ADL", "CAP-PAIN", "CAP-MOOD"];
   // Katalogkennzahlen abgeleitet, nicht gepflegt: 00257 ehrlich 0/0,
   // 00155 deckungsgleich mit den Abfragen (2)/(3).
   assert.equal(syndrom!.anzahlZiele, 0, "00257: 0 erreichbare Ziele");
-  assert.equal(syndrom!.anzahlInterventionen, 0, "00257: 0 Interventionen");
+  assert.equal(syndrom!.anzahlPositionen, 0, "00257: 0 Positionen");
   const ziele155 = zieleZuDiagnose("00155");
   assert.equal(sturz!.anzahlZiele, ziele155.length, "00155: anzahlZiele = zieleZuDiagnose");
-  const ids = new Set(ziele155.flatMap(z => interventionenZuZiel("00155", z.id).map(x => x.id)));
-  assert.equal(sturz!.anzahlInterventionen, ids.size, "00155: anzahlInterventionen = Vereinigung aus (3)");
+  const nummern155 = new Set(ziele155.flatMap(z => positionenZuZiel("00155", z.id).map(x => x.nummer)));
+  assert.equal(sturz!.anzahlPositionen, nummern155.size, "00155: anzahlPositionen = Vereinigung aus (3)");
 
   // Unbekannter Code und Herkunft.
   assert.equal(diagnoseDetails("99999"), null, "unbekannter Code liefert null");

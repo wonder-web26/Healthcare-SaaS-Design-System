@@ -12,7 +12,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { ArrowRight, ClipboardList } from "lucide-react";
 import { MOCK_ASSESSMENTS } from "../../../lib/mocks/klinische-artefakte-mock";
-import { zieleZuDiagnose, interventionenZuZiel } from "../../../lib/pflegeplan/mock-adapter";
+import { zieleZuDiagnose, positionenZuZiel } from "../../../lib/pflegeplan/mock-adapter";
 import {
   usePlan, veroeffentlichen,
   pruefungDurchfuehren, pruefungAktuell, offeneBefunde, planSchnappschuss,
@@ -66,7 +66,7 @@ function naechsterSchritt(plan: ReturnType<typeof usePlan>): BalkenZustand {
   for (const d of sortiert) {
     for (const z of plan.ziele.filter(x => x.diagnoseCode === d.code)) {
       const hatMassnahme = plan.massnahmen.some(m => m.zielBezuege.some(b => b.diagnoseCode === z.diagnoseCode && b.zielId === z.zielId));
-      if (!hatMassnahme && z.diagnoseCode !== null && interventionenZuZiel(z.diagnoseCode, z.zielId).length > 0) {
+      if (!hatMassnahme && z.diagnoseCode !== null && positionenZuZiel(z.diagnoseCode, z.zielId).length > 0) {
         return {
           art: "schritt",
           text: `Schritt 3 von 3: Massnahme wählen für ${z.titel}`,
@@ -219,7 +219,7 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
         selektor = `[data-baum-ziel-frei="${b.element.code}"]`;
       }
     } else {
-      setFokus({ schritt: "editor", interventionId: b.element.code });
+      setFokus({ schritt: "editor", positionsNummer: b.element.code });
       selektor = `[data-massnahme="${b.element.code}"]`;
     }
     window.setTimeout(() => {
@@ -384,7 +384,7 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
         </div>
       ) : ansicht === "struktur" ? (
         <StrukturAnsicht plan={plan} mandate={mandate}
-          onEditor={interventionId => { setAnsicht("aufbau"); setFokus({ schritt: "editor", interventionId }); }}
+          onEditor={positionsNummer => { setAnsicht("aufbau"); setFokus({ schritt: "editor", positionsNummer }); }}
           onDetail={(code, titel) => { setAnsicht("aufbau"); setFokus(f => detailOeffnen(f, code, titel)); }} />
       ) : (
         <div className="flex-1 flex min-h-0">

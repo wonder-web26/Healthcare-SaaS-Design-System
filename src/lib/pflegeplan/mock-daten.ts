@@ -22,7 +22,19 @@
  * im realen Katalog steht dieser Code für eine andere Diagnose. Wer die
  * Mock-Codes später für real hält, ordnet falsch zu.
  */
-import type { Beleg, CapCode, Detaildialog, Diagnose, DiagnoseCode, InterventionId, PositionsNummer, ZielId } from "./vertrag";
+import type { Beleg, CapCode, Diagnose, DiagnoseCode, PositionsNummer, ZielId } from "./vertrag";
+
+/** Interne Kennung der ENP-Rohtabellen. Seit dem Modellwechsel (Massnahme =
+ *  Leistungsposition) tauchen Interventionen nirgends mehr im Vertrag auf —
+ *  die Relationen bleiben als Ableitungs-Rohdaten für Ziele (PROB_MAS,
+ *  MAS_ZIEL) und Positions-Vorschläge (DETAILDIALOGE, STANDARD_POSITION). */
+type InterventionId = string;
+
+/** Rohform des früheren Detaildialogs — nur noch Quelltabelle der
+ *  Positions-Vorschläge, kein Vertragstyp mehr. */
+interface RohDetaildialog {
+  gruppen: { label: string; items: { label: string; folgePosition: PositionsNummer | null }[] }[];
+}
 
 /* ── Diagnosekandidaten (41) ────────────────────────────────────────────── */
 export const MOCK_DIAGNOSEN: readonly Diagnose[] = [
@@ -134,25 +146,6 @@ export const CAP_ZUORDNUNG: Readonly<Record<CapCode, ReadonlyArray<{ code: Diagn
   ],
 };
 
-/* ── Interventionen ─────────────────────────────────────────────────────── */
-export const MOCK_INTERVENTIONEN: Readonly<Record<InterventionId, { titel: string }>> = {
-  "I-STURZASSESS": { titel: "Sturzrisiko-Assessment durchführen" },
-  "I-WOHNUMFELD": { titel: "Wohnumfeld anpassen und Gefahrenquellen beseitigen" },
-  "I-GLEICHGEWICHT": { titel: "Gleichgewichts- und Kraftübungen anleiten" },
-  "I-HILFSMITTEL": { titel: "Gebrauch der Gehhilfe schulen" },
-  "I-STURZBERATUNG": { titel: "Beratungsgespräch zur Sturzprophylaxe führen" },
-  "I-ZIELGESPRAECH": { titel: "Pflegeziele mit der Klientin oder dem Klienten besprechen" },
-  "I-GEHTRAINING": { titel: "Gehtraining durchführen" },
-  "I-TRANSFER": { titel: "Transfer üben und sichern" },
-  "I-BEWEGUNG": { titel: "Aktive und passive Bewegungsübungen durchführen" },
-  "I-LAGERUNG": { titel: "Lagern und positionieren" },
-  "I-GANZWASCHUNG": { titel: "Ganzkörperwaschung durchführen" },
-  "I-TEILWAESCHE": { titel: "Teilwäsche durchführen" },
-  "I-HAUTPFLEGE": { titel: "Hautpflege und Dekubitusprophylaxe durchführen" },
-  "I-ANLEITUNG-SELBSTPFLEGE": { titel: "Zur selbstständigen Körperpflege anleiten" },
-  "I-HAARWAESCHE": { titel: "Haare waschen" },
-};
-
 /* ── PROB_MAS: Diagnose → Interventionen ────────────────────────────────── */
 /** 00162 (Bereitschaftsdiagnose) hat bewusst KEINE Interventionen — die
  *  Diagnose ohne verknüpfte Ziele. I-GLEICHGEWICHT dient zwei Diagnosen. */
@@ -215,7 +208,7 @@ export const PROB_ZIEL_HIDE: ReadonlySet<string> = new Set([
 /** Nur die Ganzkörperwaschung präzisiert; die Ortswahl schaltet die
  *  Leistungsposition um (Vorbild aus dem Lauf: Bett → 10101, Dusche → 10102).
  *  Die zweite Gruppe zeigt den Fall ohne Positionswirkung. */
-export const DETAILDIALOGE: Readonly<Record<InterventionId, Detaildialog>> = {
+export const DETAILDIALOGE: Readonly<Record<InterventionId, RohDetaildialog>> = {
   "I-GANZWASCHUNG": {
     gruppen: [
       {

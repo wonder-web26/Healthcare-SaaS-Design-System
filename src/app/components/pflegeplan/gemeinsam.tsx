@@ -5,8 +5,8 @@
  */
 import { useState } from "react";
 import { Check } from "lucide-react";
-import type { DetailAuswahl, DiagnoseCode, DiagnoseTyp, InterventionId, ZielId } from "../../../lib/pflegeplan/vertrag";
-import { detaildialog, positionFuer } from "../../../lib/pflegeplan/mock-adapter";
+import type { DiagnoseCode, DiagnoseTyp, PositionsNummer, ZielId } from "../../../lib/pflegeplan/vertrag";
+import { leistungsposition } from "../../../lib/pflegeplan/mock-adapter";
 import { diagnoseBeschreiben } from "../../../lib/pflegeplan/plan-store";
 
 /** Wo die Fachperson gerade steht — bestimmt, was rechts angeboten wird.
@@ -16,7 +16,7 @@ export type AuswahlFokus =
   | { schritt: 1 }
   | { schritt: 2; diagnoseCode: DiagnoseCode }
   | { schritt: 3; diagnoseCode: DiagnoseCode; zielId: ZielId; zielTitel: string }
-  | { schritt: "editor"; interventionId: InterventionId };
+  | { schritt: "editor"; positionsNummer: PositionsNummer };
 
 /** «detail» ist die dritte Rolle (Lauf 6g): Lesen einer Diagnose aus dem
  *  Katalog. `stapel` sind die zuvor gelesenen Codes — Chips können mehrere
@@ -75,40 +75,18 @@ export function TypMarke({ typ }: { typ: DiagnoseTyp }) {
   );
 }
 
-/**
- * Was diese Intervention ergäbe — Position und Vorgabezeit, die Abhängigkeit
- * von der Detailauswahl, oder dass keine Position hinterlegt ist. In diesem
- * Lauf trägt die Satzzeile nur das; Häufigkeit und Erbringer kommen in Lauf 3.
- */
-export function positionsVorschau(interventionId: InterventionId): string {
-  if (detaildialog(interventionId)) return "Position hängt von der Detailauswahl ab";
-  const pos = positionFuer(interventionId, []);
-  if (!pos) return "Keine Position hinterlegt — bleibt planerisch";
-  const zeit = pos.vorgabeMinuten !== null ? ` · Vorgabe ${pos.vorgabeMinuten} min` : "";
-  return `Position ${pos.nummer} ${pos.bezeichnung}${zeit}`;
-}
-
-/** Positionslage einer Massnahme unter Berücksichtigung ihrer Detailauswahl —
- *  für Satzzeile und Editor-Kopf dieselbe Ableitung. */
-export function positionsLage(interventionId: InterventionId, auswahl: DetailAuswahl): {
+/** Positionslage einer Massnahme — für Satzzeile und Editor-Kopf dieselbe
+ *  Auflösung per Nummer (Modellwechsel: Massnahme = Position). */
+export function positionsLage(nummer: PositionsNummer): {
   text: string; vorgabeMinuten: number | null; qualifikation: string | null;
 } {
-  const dialog = detaildialog(interventionId);
-  const pos = positionFuer(interventionId, auswahl);
-  if (dialog && !pos) return { text: "Position offen — die Detailauswahl entscheidet", vorgabeMinuten: null, qualifikation: null };
-  if (!pos) return { text: "Keine Position hinterlegt — bleibt planerisch", vorgabeMinuten: null, qualifikation: null };
+  const pos = leistungsposition(nummer);
+  if (!pos) return { text: `Position ${nummer}`, vorgabeMinuten: null, qualifikation: null };
   return {
     text: `Position ${pos.nummer} ${pos.bezeichnung}`,
     vorgabeMinuten: pos.vorgabeMinuten,
     qualifikation: pos.mindestqualifikation,
   };
-}
-
-/** Gruppentitel der Massnahmenauswahl: Katalogkategorie der Standardposition. */
-export function katalogGruppe(interventionId: InterventionId): string {
-  if (detaildialog(interventionId)) return "Position nach Detailauswahl";
-  const pos = positionFuer(interventionId, []);
-  return pos ? pos.kategorie : "Ohne hinterlegte Position";
 }
 
 /**
@@ -174,7 +152,7 @@ import type { PlanMassnahme } from "../../../lib/pflegeplan/plan-store";
 import { wochenMinuten } from "../../../lib/pflegeplan/planung";
 
 export function massnahmenDauerMin(m: PlanMassnahme): number | null {
-  return m.planung.dauerMin ?? positionFuer(m.interventionId, m.planung.detailAuswahl)?.vorgabeMinuten ?? null;
+  return m.planung.dauerMin ?? leistungsposition(m.positionsNummer)?.vorgabeMinuten ?? null;
 }
 
 /** Geplante Minuten je Woche über Massnahmen mit Erbringer S. */

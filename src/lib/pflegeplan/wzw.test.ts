@@ -3,7 +3,8 @@
  *   npx tsx src/lib/pflegeplan/wzw.test.ts
  *
  * Geprüft werden: die Signatur (abgeleitet, Meta ausgeschlossen), alle
- * zwölf Prüfungen, die Aktualitätserkennung, das Überleben und Entfallen
+ * zehn Prüfungen (Massnahme = Leistungsposition — «ohne Position» gibt es
+ * nicht mehr), die Aktualitätserkennung, das Überleben und Entfallen
  * von Übergehungen (inkl. Verifikationspunkt 19: Wiederauftauchen) und die
  * Veröffentlichungs-Vorbedingung mit Rollen-Gate.
  */
@@ -63,20 +64,20 @@ function befundIds(): string[] {
   eigenesZielHinzufuegen("00108", "Eigenes Testziel");
   const eigenes = planSchnappschuss().ziele.find(z => z.eigenes)!;
 
-  massnahmeVerknuepfen("I-HAUTPFLEGE", "Hautpflege durchführen", { diagnoseCode: "00108", zielId: eigenes.zielId });
-  massnahmenBezugLoesen("I-HAUTPFLEGE", { diagnoseCode: "00108", zielId: eigenes.zielId }); // ohne Zielbezug
-  massnahmePlanen("I-HAUTPFLEGE", { wiederholung: "einmalig" }); // einmalig ohne Datum
+  massnahmeVerknuepfen("10105", "Intimpflege (im Bett oder am Lavabo)", { diagnoseCode: "00108", zielId: eigenes.zielId });
+  massnahmenBezugLoesen("10105", { diagnoseCode: "00108", zielId: eigenes.zielId }); // ohne Zielbezug
+  massnahmePlanen("10105", { wiederholung: "einmalig" }); // einmalig ohne Datum
 
-  massnahmeVerknuepfen("I-GEHTRAINING", "Gleichgewichts- und Kraftübungen anleiten", { diagnoseCode: "00108", zielId: eigenes.zielId });
-  massnahmePlanen("I-GEHTRAINING", { erbringer: "V" }); // Verweigerung ohne Begründung
+  massnahmeVerknuepfen("10505", "Gehtraining", { diagnoseCode: "00108", zielId: eigenes.zielId });
+  massnahmePlanen("10505", { erbringer: "V" }); // Verweigerung ohne Begründung
 
   const ids = befundIds();
   for (const erwartet of [
     "W-DIAGNOSE-OHNE-ZIEL:00155",
     `W-ZIEL-OHNE-MASSNAHME:00108|Z-HAUT`,
-    "W-MASSNAHME-OHNE-ZIEL:I-HAUTPFLEGE",
-    "W-EINMALIG-OHNE-DATUM:I-HAUTPFLEGE",
-    "W-VERWEIGERUNG-OHNE-GRUND:I-GEHTRAINING",
+    "W-MASSNAHME-OHNE-ZIEL:10105",
+    "W-EINMALIG-OHNE-DATUM:10105",
+    "W-VERWEIGERUNG-OHNE-GRUND:10505",
   ]) {
     assert.ok(ids.includes(erwartet), `Befund ${erwartet} wird erkannt`);
   }
@@ -93,39 +94,28 @@ function befundIds(): string[] {
 
 /* ── 3: Auflösen lässt Befunde verschwinden — die Prüfung meldet nur ── */
 {
-  massnahmePlanen("I-HAUTPFLEGE", { einmalDatum: "2026-08-20" });
-  assert.ok(!befundIds().includes("W-EINMALIG-OHNE-DATUM:I-HAUTPFLEGE"), "datierte Einmal-Leistung: Befund entfällt");
-  massnahmePlanen("I-GEHTRAINING", { erbringerNotiz: "Klientin lehnt Gehtraining ab — Angst vor Überlastung, dokumentiert am 04.08." });
-  assert.ok(!befundIds().includes("W-VERWEIGERUNG-OHNE-GRUND:I-GEHTRAINING"), "begründete Verweigerung: Befund entfällt");
+  massnahmePlanen("10105", { einmalDatum: "2026-08-20" });
+  assert.ok(!befundIds().includes("W-EINMALIG-OHNE-DATUM:10105"), "datierte Einmal-Leistung: Befund entfällt");
+  massnahmePlanen("10505", { erbringerNotiz: "Klientin lehnt Gehtraining ab — Angst vor Überlastung, dokumentiert am 04.08." });
+  assert.ok(!befundIds().includes("W-VERWEIGERUNG-OHNE-GRUND:10505"), "begründete Verweigerung: Befund entfällt");
   console.log("✓ 3  Auflösen im Plan lässt den jeweiligen Befund entfallen");
 }
 
-/* ── 4: Die vier Zweckmässigkeits- und zwei Wirtschaftlichkeits-Prüfungen ── */
+/* ── 4: Die drei Zweckmässigkeits- und zwei Wirtschaftlichkeits-Prüfungen ── */
 {
   planZuruecksetzen();
   diagnoseUebernehmen(DIAGNOSE_HAUT);
   eigenesZielHinzufuegen("00108", "Testziel");
   const ziel = planSchnappschuss().ziele[0];
 
-  // Ohne Position, Variante «Dialog unbeantwortet»
-  massnahmeVerknuepfen("I-GANZWASCHUNG", "Ganzkörperwaschung", { diagnoseCode: "00108", zielId: ziel.zielId });
-  // Ohne Position, Variante «bleibt planerisch»
-  massnahmeVerknuepfen("I-ZIELGESPRAECH", "Zielvereinbarungsgespräch führen", { diagnoseCode: "00108", zielId: ziel.zielId });
-  massnahmePlanen("I-ZIELGESPRAECH", { wiederholung: "woechentlich", wochentage: [0] });
-
-  let ids = befundIds();
-  assert.ok(ids.includes("Z-OHNE-POSITION:I-GANZWASCHUNG"), "Dialog unbeantwortet → ohne Position");
-  assert.ok(ids.includes("Z-OHNE-POSITION:I-ZIELGESPRAECH"), "keine Regel hinterlegt → ohne Position");
-  const varianten = befundeErmitteln(planSchnappschuss()).filter(b => b.id.startsWith("Z-OHNE-POSITION:"));
-  assert.notEqual(varianten[0].detail, varianten[1].detail, "die beiden Ohne-Position-Fälle sind im Text unterschieden");
-
-  // Position 10101 herstellen (Ort: Im Bett) und alles Weitere daran prüfen
-  massnahmePlanen("I-GANZWASCHUNG", { detailAuswahl: [{ gruppe: "Ort der Durchführung", item: "Im Bett" }] });
+  /* Die Massnahme IST die Position 10101 (Modellwechsel) — den Fall «ohne
+     Position» und die frühere Z-OHNE-POSITION-Prüfung gibt es nicht mehr. */
+  massnahmeVerknuepfen("10101", "Ganzwäsche bettlägerige Klientin", { diagnoseCode: "00108", zielId: ziel.zielId });
   const p10101 = leistungsposition("10101")!;
   assert.equal(p10101.mindestqualifikation, "Pflegehelfer/in SRK");
   assert.deepEqual([p10101.maxAnzahl, p10101.maxEinheit], [1, "tag"], "10101: max. 1× je Tag = 7 je Woche");
 
-  massnahmePlanen("I-GANZWASCHUNG", {
+  massnahmePlanen("10101", {
     wiederholung: "werktage", anzahl: 3,                    // 15 je Woche > 7
     qualifikation: "FaGe",                                  // über Minimum SRK
     erbringer: "I", erbringerNotiz: "",                     // ohne Angabe
@@ -133,14 +123,14 @@ function befundIds(): string[] {
     dauerMin: (p10101.vorgabeMinuten ?? 30) + 10, dauerBegruendung: "", // Abweichung ohne Grund
   });
 
-  ids = befundIds();
-  assert.ok(!ids.includes("Z-OHNE-POSITION:I-GANZWASCHUNG"), "mit Position: Ohne-Position-Befund entfällt");
+  const ids = befundIds();
+  assert.ok(!ids.some(id => id.startsWith("Z-OHNE-POSITION")), "die frühere Ohne-Position-Prüfung existiert nicht mehr");
   for (const erwartet of [
-    "Z-QUALIFIKATION-UEBER-MINIMUM:I-GANZWASCHUNG",
-    "Z-ERBRINGER-OHNE-ANGABE:I-GANZWASCHUNG",
-    "Z-ZEIT-VERBINDLICH:I-GANZWASCHUNG",
-    "WI-DAUER-OHNE-GRUND:I-GANZWASCHUNG",
-    "WI-HAEUFIGKEIT-UEBER-GRENZE:I-GANZWASCHUNG",
+    "Z-QUALIFIKATION-UEBER-MINIMUM:10101",
+    "Z-ERBRINGER-OHNE-ANGABE:10101",
+    "Z-ZEIT-VERBINDLICH:10101",
+    "WI-DAUER-OHNE-GRUND:10101",
+    "WI-HAEUFIGKEIT-UEBER-GRENZE:10101",
   ]) {
     assert.ok(ids.includes(erwartet), `Befund ${erwartet} wird erkannt`);
   }
@@ -149,21 +139,21 @@ function befundIds(): string[] {
   for (const b of befunde.filter(x => x.id.startsWith("WI-"))) assert.equal(b.kriterium, "wirtschaftlichkeit");
 
   // Wochenbasis ausdrücklich: der Befundtext rechnet 15 gegen 7
-  const haeufigkeit = befunde.find(b => b.id === "WI-HAEUFIGKEIT-UEBER-GRENZE:I-GANZWASCHUNG")!;
+  const haeufigkeit = befunde.find(b => b.id === "WI-HAEUFIGKEIT-UEBER-GRENZE:10101")!;
   assert.ok(haeufigkeit.detail.includes("15"), "geplante 15 je Woche stehen im Befund");
   assert.ok(haeufigkeit.detail.includes("7 je Woche"), "erlaubte 7 je Woche stehen im Befund");
 
   // Gegenprobe: SRK als Zuweisung ist KEIN Befund (nicht über dem Minimum)
-  massnahmePlanen("I-GANZWASCHUNG", { qualifikation: "Pflegehelfer/in SRK" });
-  assert.ok(!befundIds().includes("Z-QUALIFIKATION-UEBER-MINIMUM:I-GANZWASCHUNG"), "Zuweisung auf dem Minimum löst nicht aus");
-  console.log("✓ 4  Zweckmässigkeit und Wirtschaftlichkeit: alle sechs Prüfungen, Wochenbasis 15 gegen 7");
+  massnahmePlanen("10101", { qualifikation: "Pflegehelfer/in SRK" });
+  assert.ok(!befundIds().includes("Z-QUALIFIKATION-UEBER-MINIMUM:10101"), "Zuweisung auf dem Minimum löst nicht aus");
+  console.log("✓ 4  Zweckmässigkeit und Wirtschaftlichkeit: alle fünf Prüfungen, Wochenbasis 15 gegen 7");
 }
 
 /* ── 5: Aktualität über die Signatur, nicht über einen Zeitstempel ── */
 {
   pruefungDurchfuehren(GEGENWART_ISO);
   assert.ok(pruefungAktuell(planSchnappschuss()), "frisch geprüft: aktuell");
-  massnahmePlanen("I-GANZWASCHUNG", { anzahl: 1 });
+  massnahmePlanen("10101", { anzahl: 1 });
   assert.ok(!pruefungAktuell(planSchnappschuss()), "Planänderung: nicht mehr aktuell — bei UNVERÄNDERTEM Prüfdatum");
   pruefungDurchfuehren(GEGENWART_ISO);
   assert.ok(pruefungAktuell(planSchnappschuss()), "erneut geprüft: wieder aktuell");

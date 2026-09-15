@@ -47,15 +47,15 @@ function MassnahmenZeile({ m, diagnoseCode, zielId, zielTitelVon, mandate, onFok
      je Ansicht nachgebaut (Lauf 6e). */
   const istErster = istErsterBezug(m, diagnoseCode, zielId);
   return (
-    <button type="button" data-massnahme={istErster ? m.interventionId : undefined}
-      onClick={() => onFokus({ schritt: "editor", interventionId: m.interventionId })}
+    <button type="button" data-massnahme={istErster ? m.positionsNummer : undefined}
+      onClick={() => onFokus({ schritt: "editor", positionsNummer: m.positionsNummer })}
       className="ui-fokusring cursor-pointer w-full text-left"
       style={{ display: "block", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", fontFamily: "inherit", padding: "7px 10px", marginTop: 6 }}>
       <div style={{ fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{m.titel}</div>
       <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", marginTop: 1, lineHeight: 1.5 }}>
         {istErster
           ? (() => {
-              const lage = positionsLage(m.interventionId, m.planung.detailAuswahl);
+              const lage = positionsLage(m.positionsNummer);
               return massnahmenSatz(m.planung, { positionsText: lage.text, vorgabeMinuten: lage.vorgabeMinuten, qualifikation: lage.qualifikation }, mandate);
             })().map((t, i) => (
               <span key={i}>
@@ -104,7 +104,7 @@ export function PlanBaum({ plan, mandate, onFokus, onDetail, kontextDiagnose }: 
   const massnahmenJeDiagnose = (code: string): number => {
     const ids = new Set(plan.massnahmen
       .filter(m => m.zielBezuege.some(b => b.diagnoseCode === code))
-      .map(m => m.interventionId));
+      .map(m => m.positionsNummer));
     return ids.size;
   };
   const zielTitelVon = (code: string, zielId: string): string =>
@@ -248,7 +248,7 @@ export function PlanBaum({ plan, mandate, onFokus, onDetail, kontextDiagnose }: 
                           ) : (
                             <div>
                               {massnahmen.map(m => (
-                                <MassnahmenZeile key={m.interventionId} m={m} diagnoseCode={z.diagnoseCode} zielId={z.zielId} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
+                                <MassnahmenZeile key={m.positionsNummer} m={m} diagnoseCode={z.diagnoseCode} zielId={z.zielId} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
                               ))}
                               {massnahmen.length === 0 && (
                                 <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", padding: "4px 0 2px 30px" }}>
@@ -291,7 +291,7 @@ export function PlanBaum({ plan, mandate, onFokus, onDetail, kontextDiagnose }: 
             Massnahmen ohne Zielbezug
           </div>
           {ohneZuordnung.map(m => (
-            <MassnahmenZeile key={m.interventionId} m={m} diagnoseCode={null} zielId={null} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
+            <MassnahmenZeile key={m.positionsNummer} m={m} diagnoseCode={null} zielId={null} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
           ))}
         </div>
       )}

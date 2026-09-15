@@ -9,7 +9,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { Check, X } from "lucide-react";
-import { detaildialog, positionFuer, qualifikationsStufen } from "../../../lib/pflegeplan/mock-adapter";
+import { leistungsposition, qualifikationsStufen } from "../../../lib/pflegeplan/mock-adapter";
 import { ableitungAlsText } from "../../../lib/pflegeplan/vertrag";
 import {
   usePlan, massnahmePlanen, type MassnahmenPlanung, type Wiederholung, type ErbringerCode,
@@ -19,7 +19,7 @@ import {
   mandatAuswahlSichtbar, type MandatKurz,
 } from "../../../lib/pflegeplan/planung";
 import { InlineSelect } from "../ui/InlineSelect";
-import type { InterventionId } from "../../../lib/pflegeplan/vertrag";
+import type { PositionsNummer } from "../../../lib/pflegeplan/vertrag";
 
 const KARTE: React.CSSProperties = {
   background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
@@ -71,14 +71,13 @@ const feldStil: React.CSSProperties = {
   fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit", outline: "none",
 };
 
-export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
-  interventionId: InterventionId;
+export function MassnahmenEditor({ positionsNummer, mandate, onFertig }: {
+  positionsNummer: PositionsNummer;
   mandate: MandatKurz[];
   onFertig: () => void;
 }) {
   const plan = usePlan();
-  const m = plan.massnahmen.find(x => x.interventionId === interventionId) ?? null;
-  const dialog = useMemo(() => detaildialog(interventionId), [interventionId]);
+  const m = plan.massnahmen.find(x => x.positionsNummer === positionsNummer) ?? null;
   const [anweisungOffen, setAnweisungOffen] = useState(false);
   const [neueZeit, setNeueZeit] = useState("");
 
@@ -86,18 +85,15 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
      vorhandene; angezeigt wird die Auswahl nur bei mehreren (planung.ts). */
   useEffect(() => {
     if (m && m.planung.mandatId === null && mandate.length > 0) {
-      massnahmePlanen(interventionId, { mandatId: mandate[0].id });
+      massnahmePlanen(positionsNummer, { mandatId: mandate[0].id });
     }
-  }, [m, mandate, interventionId]);
+  }, [m, mandate, positionsNummer]);
+
+  const position = useMemo(() => leistungsposition(positionsNummer), [positionsNummer]);
 
   if (!m) return null;
   const p = m.planung;
-  const setze = (patch: Partial<MassnahmenPlanung>) => massnahmePlanen(interventionId, patch);
-
-  const ersteGruppe = dialog?.gruppen[0] ?? null;
-  const ersteGruppeBeantwortet = !ersteGruppe || p.detailAuswahl.some(a => a.gruppe === ersteGruppe.label);
-  const position = positionFuer(interventionId, p.detailAuswahl);
-  const positionOffen = dialog !== null && !ersteGruppeBeantwortet;
+  const setze = (patch: Partial<MassnahmenPlanung>) => massnahmePlanen(positionsNummer, patch);
 
   const dauerEffektiv = p.dauerMin ?? position?.vorgabeMinuten ?? null;
   const dauerWeicht = p.dauerMin !== null && position?.vorgabeMinuten !== null && p.dauerMin !== position?.vorgabeMinuten;
@@ -113,14 +109,8 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
     cap: plan.diagnosen.find(d => d.code === ersterBezug.diagnoseCode)?.ausloesendeCaps[0] ?? "—",
     diagnoseCode: ersterBezug.diagnoseCode,
     zielId: ersterBezug.zielId,
-    interventionId,
-    positionsNummer: position?.nummer ?? null,
+    positionsNummer,
   }) : null;
-
-  const wahlSetzen = (gruppe: string, item: string) => {
-    const ohne = p.detailAuswahl.filter(a => a.gruppe !== gruppe);
-    setze({ detailAuswahl: [...ohne, { gruppe, item }] });
-  };
 
   const zeigtAnzahl = p.wiederholung !== null && p.wiederholung !== "einmalig";
   const zeigtWochentage = p.wiederholung === "woechentlich" || p.wiederholung === "benutzerdefiniert";
@@ -130,18 +120,14 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
     : null;
 
   return (
-    <div data-editor={interventionId}>
+    <div data-editor={positionsNummer}>
       {/* ── Kopfkarte ── */}
       <div style={{ ...KARTE, background: "var(--bg-secondary)", padding: "12px 14px", marginBottom: 12 }}>
         <div className="flex items-start" style={{ gap: 8 }}>
           <div className="flex-1 min-w-0">
             <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{m.titel}</div>
-            <div style={{ fontSize: "var(--text-meta)", color: positionOffen ? "var(--status-warning-text)" : "var(--text-secondary)", marginTop: 2 }}>
-              {positionOffen
-                ? "Position offen"
-                : position
-                  ? `KLV ${position.klv} · ${position.nummer} ${position.bezeichnung}`
-                  : "Keine Position hinterlegt — bleibt planerisch"}
+            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>
+              {position ? `KLV ${position.klv} · ${position.nummer} · ${position.kategorie}` : `Position ${positionsNummer}`}
             </div>
             <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>
               Wochenzeit: {p.erbringer === "S" ? (wochenMin > 0 ? `${Math.round(wochenMin)} min/Woche` : "—") : "keine (nicht verrechnet)"}
@@ -156,21 +142,6 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
           </button>
         </div>
       </div>
-
-      {/* ── Detaildialog ── */}
-      {dialog && dialog.gruppen.map((g, gi) => (
-        <Abschnitt key={g.label} titel={g.label} kinder={
-          <div>
-            <div className="flex flex-wrap" style={{ gap: 6 }}>
-              {g.items.map(item => (
-                <Chip key={item.label} label={item.label}
-                  aktiv={p.detailAuswahl.some(a => a.gruppe === g.label && a.item === item.label)}
-                  onClick={() => wahlSetzen(g.label, item.label)} />
-              ))}
-            </div>
-          </div>
-        } />
-      ))}
 
       {/* ── Wiederholung ── */}
       <Abschnitt titel="Wiederholung" kinder={
@@ -350,11 +321,7 @@ export function MassnahmenEditor({ interventionId, mandate, onFertig }: {
           </button>
           {anweisungOffen && (
             <div style={{ marginTop: 8 }}>
-              {!position ? (
-                <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
-                  Keine Position hinterlegt.
-                </div>
-              ) : position.teilhandlungen === null ? (
+              {!position || position.teilhandlungen === null ? (
                 <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
                   Keine Teilhandlungen hinterlegt.
                 </div>

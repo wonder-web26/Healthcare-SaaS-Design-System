@@ -37,7 +37,6 @@ export type MitHerkunft<T> = T & { readonly herkunft: FeldHerkunft<T> };
 export type CapCode = string;
 export type DiagnoseCode = string;
 export type ZielId = string;
-export type InterventionId = string;
 export type PositionsNummer = string;
 
 /* ── Diagnose ───────────────────────────────────────────────────────────── */
@@ -121,49 +120,26 @@ export interface DiagnoseDetails {
   assoziierteBedingungen: Merkmalsliste | null;
   achsen: TaxonomieAchse[];
   /** Katalogkennzahlen, keine Planzahlen — abgeleitet aus denselben
-   *  Strukturen, die zieleZuDiagnose und interventionenZuZiel bedienen,
+   *  Strukturen, die zieleZuDiagnose und positionenZuZiel bedienen,
    *  damit keine zweite Zahlenquelle entsteht. 0 ist eine gültige,
    *  ehrliche Antwort. */
-  anzahlInterventionen: number;
+  anzahlPositionen: number;
   anzahlZiele: number;
 }
 
-/* ── Ziel und Intervention ──────────────────────────────────────────────── */
+/* ── Ziel ───────────────────────────────────────────────────────────────── */
 export interface Ziel {
   id: ZielId;
   titel: string;
 }
 
-export interface Intervention {
-  id: InterventionId;
-  titel: string;
-  /** Kündigt an, dass detaildialog(id) nicht null liefert — das UI zeigt
-   *  dann den Präzisierungs-Schritt vor der Positionsableitung. */
-  hatDetaildialog: boolean;
-}
-
-/* ── Detaildialog ───────────────────────────────────────────────────────── */
-/** Ein Item der Präzisierung. `folgePosition` bestimmt, welche
- *  Leistungsposition die Wahl dieses Items nach sich zieht — null, wenn die
- *  Wahl die Position nicht beeinflusst. */
-export interface DetaildialogItem {
-  label: string;
-  folgePosition: PositionsNummer | null;
-}
-
-export interface DetaildialogGruppe {
-  label: string;
-  items: DetaildialogItem[];
-}
-
-export interface Detaildialog {
-  gruppen: DetaildialogGruppe[];
-}
-
-/** Die im Dialog getroffene Wahl: je Gruppe das gewählte Item (per Label). */
-export type DetailAuswahl = ReadonlyArray<{ gruppe: string; item: string }>;
-
 /* ── Leistungsposition ──────────────────────────────────────────────────── */
+/**
+ * Seit dem Modellwechsel IST die Massnahme eine Leistungsposition aus dem
+ * Spitex-Leistungskatalog — es gibt keine ENP-Interventionsebene und keinen
+ * Detaildialog mehr. Varianten («Ganzwäsche im Bett» vs «in Bad/Dusche»)
+ * sind eigenständige Positionen und stehen einzeln in der Auswahl.
+ */
 export interface Leistungsposition {
   nummer: PositionsNummer;
   bezeichnung: string;
@@ -214,7 +190,7 @@ export interface QualifikationsStufe {
 
 /* ── Ableitung ──────────────────────────────────────────────────────────── */
 /**
- * Die Kette von CAP über Diagnose, Ziel und Intervention bis zur Position —
+ * Die Kette von CAP über Diagnose und Ziel bis zur Position —
  * als Wertobjekt, das später an jeder geplanten Massnahme hängt. Sie ist die
  * Begründungsspur: warum diese Position geplant ist, rückwärts lesbar bis
  * zum Assessment.
@@ -223,14 +199,12 @@ export interface Ableitung {
   cap: CapCode;
   diagnoseCode: DiagnoseCode;
   zielId: ZielId;
-  interventionId: InterventionId;
-  /** null = die Massnahme bleibt planerisch und wird nicht verrechnet. */
-  positionsNummer: PositionsNummer | null;
+  positionsNummer: PositionsNummer;
 }
 
 /** Die Ableitung als lesbare Zeichenkette, z.B. für Protokolle und Tooltips. */
 export function ableitungAlsText(a: Ableitung): string {
-  return [a.cap, a.diagnoseCode, a.zielId, a.interventionId, a.positionsNummer ?? "ohne Position"].join(" → ");
+  return [a.cap, a.diagnoseCode, a.zielId, a.positionsNummer].join(" → ");
 }
 
 /* ── Die Abfragen ───────────────────────────────────────────────────────── */
@@ -244,8 +218,12 @@ export function ableitungAlsText(a: Ableitung): string {
  * Zu (2): Vertragszusicherung — die Ausschlussliste (PROB_ZIEL_HIDE) ist
  * bereits angewendet.
  *
- * Zu (5): null ist ein gültiger Zustand, kein Fehler. Interventionen ohne
- * hinterlegte Regel bleiben planerisch und werden nicht verrechnet.
+ * Zu (3)–(5) — Modellwechsel: die Massnahme IST eine Leistungsposition.
+ * (3) liefert die Vorschläge je Diagnose-Ziel-Paar, (4) den ganzen Katalog
+ * für die freie Auswahl, (5) die Einzelauflösung per Nummer. Die früheren
+ * Abfragen interventionenZuZiel, detaildialog und positionFuer sind damit
+ * entfallen — es gibt keine ENP-Interventionsebene und keine planerischen
+ * Massnahmen ohne Position mehr.
  *
  * Zu (6) — Ergänzung aus Lauf 2: die Gegenliste zur Zusicherung aus (2).
  * Nicht als Zahl, sondern als Liste — «welche Ziele unterdrückt ihr bei
@@ -274,9 +252,15 @@ export function ableitungAlsText(a: Ableitung): string {
 export interface PflegeplanAbfragen {
   diagnoseVorschlaege(caps: CapCode[]): DiagnoseVorschlag[];
   zieleZuDiagnose(code: DiagnoseCode): MitHerkunft<Ziel>[];
-  interventionenZuZiel(code: DiagnoseCode, zielId: ZielId): MitHerkunft<Intervention>[];
-  detaildialog(interventionId: InterventionId): MitHerkunft<Detaildialog> | null;
-  positionFuer(interventionId: InterventionId, detailauswahl: DetailAuswahl): MitHerkunft<Leistungsposition> | null;
+  /** Vorschlagsliste je Diagnose-Ziel-Paar — Positionen, die diesem Ziel
+   *  dienen. Die Position selbst ist echter Katalog; die ZUORDNUNG ist
+   *  kuratierte Fachlichkeit (im Prototyp Mock). */
+  positionenZuZiel(code: DiagnoseCode, zielId: ZielId): MitHerkunft<Leistungsposition>[];
+  /** Der ganze Leistungskatalog, in Katalogreihenfolge — für die freie
+   *  Auswahl jenseits der Vorschläge. */
+  leistungsKatalog(): MitHerkunft<Leistungsposition>[];
+  /** Einzelauflösung — die Massnahme trägt nur die Nummer. */
+  leistungsposition(nummer: PositionsNummer): MitHerkunft<Leistungsposition> | null;
   ausgeschlosseneZiele(code: DiagnoseCode): MitHerkunft<Ziel>[];
   unbehandelteCaps(caps: CapCode[]): CapCode[];
   zielBewertungsSkala(): MitHerkunft<BewertungsStufe>[];

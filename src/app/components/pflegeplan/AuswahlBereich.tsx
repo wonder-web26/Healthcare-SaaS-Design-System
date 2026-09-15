@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 import {
-  diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel,
+  diagnoseVorschlaege, zieleZuDiagnose, positionenZuZiel, leistungsKatalog,
   ausgeschlosseneZiele, unbehandelteCaps, diagnoseDetails,
 } from "../../../lib/pflegeplan/mock-adapter";
 import type { CapCode, DiagnoseCode, DiagnoseVorschlag } from "../../../lib/pflegeplan/vertrag";
@@ -30,7 +30,7 @@ import { MassnahmenEditor } from "./MassnahmenEditor";
 import { DiagnoseDetail } from "./DiagnoseDetail";
 import { InlineSelect } from "../ui/InlineSelect";
 import {
-  type Fokus, TypMarke, ImPlanMarke, BeschreibungZeile, positionsVorschau, katalogGruppe,
+  type Fokus, TypMarke, ImPlanMarke, BeschreibungZeile,
   datumAnzeige, detailOeffnen, detailZurueck,
 } from "./gemeinsam";
 
@@ -80,8 +80,8 @@ function KategorieLeiste({ fokus, onFokus, kontext }: {
      selbst, nicht in einer zweiten Karte darunter. */
   const zielKatalog = kontextDiagnose ? zieleZuDiagnose(kontextDiagnose.code).length : 0;
   const zielAusgeschlossen = kontextDiagnose ? ausgeschlosseneZiele(kontextDiagnose.code).length : 0;
-  const interventionenZahl = kontextDiagnose && kontextZiel
-    ? interventionenZuZiel(kontextDiagnose.code, kontextZiel.zielId).length : 0;
+  const positionenZahl = kontextDiagnose && kontextZiel
+    ? positionenZuZiel(kontextDiagnose.code, kontextZiel.zielId).length : 0;
 
   const zieleBegehbar = kontextDiagnose !== null;
   const massnahmenBegehbar = zieleBegehbar && kontextZiel !== null;
@@ -200,7 +200,7 @@ function KategorieLeiste({ fokus, onFokus, kontext }: {
                   <>
                     <div className="truncate" style={{ fontWeight: "var(--weight-medium)" }}>{kontextZiel.titel}</div>
                     <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 1 }}>
-                      {interventionenZahl} {interventionenZahl === 1 ? "Intervention" : "Interventionen"} · {massnahmenZahl(kontextDiagnose.code, kontextZiel.zielId)} im Plan
+                      {positionenZahl} {positionenZahl === 1 ? "Positions-Vorschlag" : "Positions-Vorschläge"} · {massnahmenZahl(kontextDiagnose.code, kontextZiel.zielId)} im Plan
                     </div>
                   </>
                 }
@@ -518,76 +518,121 @@ function ZielAuswahl({ diagnoseCode, onMassnahmen }: {
 }
 
 /* ══════════════════════════════════════════
-   SCHRITT 3 — Massnahmenauswahl
+   SCHRITT 3 — Massnahmenauswahl (Positionen)
    ══════════════════════════════════════════ */
+/**
+ * Die Massnahme IST eine Leistungsposition (Modellwechsel): oben die
+ * Vorschläge zum Diagnose-Ziel-Paar, darunter der ganze Katalog nach
+ * Bereichen — die Suche greift über beides, damit nichts vom Vorschlag
+ * abhängt.
+ */
 function MassnahmenAuswahl({ diagnoseCode, zielId }: {
   diagnoseCode: DiagnoseCode; zielId: string;
 }) {
   const plan = usePlan();
-  const interventionen = useMemo(() => interventionenZuZiel(diagnoseCode, zielId), [diagnoseCode, zielId]);
+  const [suche, setSuche] = useState("");
+  const [katalogOffen, setKatalogOffen] = useState(false);
+  const vorschlaege = useMemo(() => positionenZuZiel(diagnoseCode, zielId), [diagnoseCode, zielId]);
+  const katalog = useMemo(() => leistungsKatalog(), []);
 
-  /* Gruppiert nach Katalogkategorie der Standardposition; dialogabhängige
-     und positionslose Interventionen bilden eigene Gruppen. */
-  const gruppen = useMemo(() => {
-    const je = new Map<string, typeof interventionen>();
-    for (const i of interventionen) {
-      const g = katalogGruppe(i.id);
-      je.set(g, [...(je.get(g) ?? []), i]);
+  const q = suche.trim().toLowerCase();
+  const passt = (p: { bezeichnung: string; nummer: string }) =>
+    p.bezeichnung.toLowerCase().includes(q) || p.nummer.includes(q);
+  const vorschlagTreffer = q ? vorschlaege.filter(passt) : vorschlaege;
+
+  /* Der Katalogteil: ohne Suche hinter einem Aufklapp-Knopf, mit Suche
+     automatisch sichtbar — getippt wird gefunden, nicht geblättert.
+     Vorschläge erscheinen nicht doppelt. */
+  const vorschlagsNummern = new Set(vorschlaege.map(p => p.nummer));
+  const katalogListe = (q ? katalog.filter(passt) : katalog).filter(p => !vorschlagsNummern.has(p.nummer));
+  const katalogSichtbar = q !== "" || katalogOffen;
+  const katalogGruppen = useMemo(() => {
+    const je: { kategorie: string; positionen: typeof katalogListe }[] = [];
+    for (const p of katalogListe) {
+      const letzte = je[je.length - 1];
+      if (letzte && letzte.kategorie === p.kategorie) letzte.positionen.push(p);
+      else je.push({ kategorie: p.kategorie, positionen: [p] });
     }
-    return [...je.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [interventionen]);
+    return je;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, katalogOffen, vorschlaege]);
+
+  const positionsZeile = (p: (typeof katalog)[number]) => {
+    const bestehend = plan.massnahmen.find(m => m.positionsNummer === p.nummer) ?? null;
+    const mitDiesem = bestehend?.zielBezuege.some(b => b.diagnoseCode === diagnoseCode && b.zielId === zielId) ?? false;
+    return (
+      <div key={p.nummer} data-positionwahl={p.nummer} style={{ ...KARTE, padding: "9px 12px" }}>
+        <div className="flex items-center" style={{ gap: 8 }}>
+          <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{p.bezeichnung}</span>
+          {mitDiesem ? (
+            <>
+              <ImPlanMarke />
+              <button type="button" aria-label={`Verknüpfung von ${p.bezeichnung} mit diesem Ziel lösen`}
+                onClick={() => massnahmenBezugLoesen(p.nummer, { diagnoseCode, zielId })}
+                className="ui-fokusring cursor-pointer flex items-center justify-center"
+                style={{ width: 26, height: 26, borderRadius: "var(--radius-pill)", background: "none", border: "var(--border-thin) solid var(--border-default)", color: "var(--text-tertiary)" }}>
+                <X style={{ width: 13, height: 13 }} />
+              </button>
+            </>
+          ) : (
+            /* Bereits im Plan (für ein anderes Ziel): verknüpfen statt
+               doppelt übernehmen — eine Leistung wird einmal erbracht
+               und einmal verrechnet. */
+            <PillKnopf primaer={!bestehend}
+              label={bestehend ? "Mit diesem Ziel verknüpfen" : "Übernehmen"}
+              onClick={() => massnahmeVerknuepfen(p.nummer, p.bezeichnung, { diagnoseCode, zielId })} />
+          )}
+        </div>
+        <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 2 }}>
+          {p.nummer} · {p.klv === "nein" ? "nicht KLV-pflichtig" : `KLV ${p.klv}`} · {p.vorgabeMinuten !== null ? `Vorgabe ${p.vorgabeMinuten} min` : "Zeit nach Bedarf"}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div>
-      {/* Ziel und Interventionszahl stehen im Ziel-Auswahlfeld der
-          Kategorie-Leiste. */}
-      {interventionen.length === 0 ? (
-        <div style={{ ...KARTE, padding: "var(--space-6)", textAlign: "center" }}>
-          <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-            Keine Interventionen im Katalog
-          </div>
+      <SuchFeld wert={suche} onChange={setSuche} platzhalter="Leistungsposition suchen (Bezeichnung oder Nummer)…" />
+
+      {/* ── Vorschläge zum Ziel ── */}
+      <div data-vorschlaege style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+          Vorschläge zu diesem Ziel · {vorschlaege.length}
         </div>
-      ) : gruppen.map(([gruppe, liste]) => (
-        <div key={gruppe} style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-            {gruppe}
+        {vorschlagTreffer.length === 0 ? (
+          <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>
+            {q ? "Kein Vorschlag passt zur Suche." : "Keine Vorschläge zu diesem Ziel."}
           </div>
+        ) : (
           <div className="flex flex-col" style={{ gap: 8 }}>
-            {liste.map(i => {
-              const bestehend = plan.massnahmen.find(m => m.interventionId === i.id) ?? null;
-              const mitDiesem = bestehend?.zielBezuege.some(b => b.diagnoseCode === diagnoseCode && b.zielId === zielId) ?? false;
-              return (
-                <div key={i.id} data-interventionwahl={i.id} style={{ ...KARTE, padding: "9px 12px" }}>
-                  <div className="flex items-center" style={{ gap: 8 }}>
-                    <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{i.titel}</span>
-                    {mitDiesem ? (
-                      <>
-                        <ImPlanMarke />
-                        <button type="button" aria-label={`Verknüpfung von ${i.titel} mit diesem Ziel lösen`}
-                          onClick={() => massnahmenBezugLoesen(i.id, { diagnoseCode, zielId })}
-                          className="ui-fokusring cursor-pointer flex items-center justify-center"
-                          style={{ width: 26, height: 26, borderRadius: "var(--radius-pill)", background: "none", border: "var(--border-thin) solid var(--border-default)", color: "var(--text-tertiary)" }}>
-                          <X style={{ width: 13, height: 13 }} />
-                        </button>
-                      </>
-                    ) : (
-                      /* Bereits im Plan (für ein anderes Ziel): verknüpfen statt
-                         doppelt übernehmen — eine Leistung wird einmal erbracht
-                         und einmal verrechnet. */
-                      <PillKnopf primaer={!bestehend}
-                        label={bestehend ? "Mit diesem Ziel verknüpfen" : "Übernehmen"}
-                        onClick={() => massnahmeVerknuepfen(i.id, i.titel, { diagnoseCode, zielId })} />
-                    )}
-                  </div>
-                  <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 2 }}>
-                    {positionsVorschau(i.id)}
-                  </div>
-                </div>
-              );
-            })}
+            {vorschlagTreffer.map(positionsZeile)}
           </div>
-        </div>
-      ))}
+        )}
+      </div>
+
+      {/* ── Der ganze Katalog ── */}
+      <div data-katalog>
+        {!katalogSichtbar ? (
+          <PillKnopf label={`Aus dem ganzen Katalog wählen (${katalog.length} Positionen)`} onClick={() => setKatalogOffen(true)} />
+        ) : (
+          <>
+            <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+              Aus dem ganzen Katalog · {katalogListe.length}
+            </div>
+            {katalogGruppen.map(g => (
+              <div key={g.kategorie} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginBottom: 6 }}>{g.kategorie}</div>
+                <div className="flex flex-col" style={{ gap: 8 }}>
+                  {g.positionen.map(positionsZeile)}
+                </div>
+              </div>
+            ))}
+            {katalogListe.length === 0 && (
+              <div style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>Keine Position passt zur Suche.</div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -619,13 +664,13 @@ export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum, mandate 
   /* Der Editor ist die zweite Rolle des Bereichs: kein Navigationspfad,
      eigene Kopfkarte, «Fertig» führt zur Auswahl zurück. */
   if (fokus.schritt === "editor") {
-    const m = plan.massnahmen.find(x => x.interventionId === fokus.interventionId);
+    const m = plan.massnahmen.find(x => x.positionsNummer === fokus.positionsNummer);
     const bezug = m?.zielBezuege[0] ?? null;
     const zielTitel = bezug
       ? plan.ziele.find(z => z.diagnoseCode === bezug.diagnoseCode && z.zielId === bezug.zielId)?.titel ?? bezug.zielId
       : "";
     return (
-      <MassnahmenEditor interventionId={fokus.interventionId} mandate={mandate}
+      <MassnahmenEditor positionsNummer={fokus.positionsNummer} mandate={mandate}
         onFertig={() => onFokus(bezug
           ? { schritt: 3, diagnoseCode: bezug.diagnoseCode, zielId: bezug.zielId, zielTitel }
           : { schritt: 1 })} />

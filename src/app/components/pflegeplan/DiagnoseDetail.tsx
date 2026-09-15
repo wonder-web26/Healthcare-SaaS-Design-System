@@ -206,7 +206,7 @@ export function DiagnoseDetail({ diagnoseCode, titelFallback, zurueckLabel, onZu
             </div>
           )}
           <div data-katalog-kennzahlen style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 4 }}>
-            Im Katalog: {details.anzahlInterventionen} {details.anzahlInterventionen === 1 ? "Intervention" : "Interventionen"}, {details.anzahlZiele} {details.anzahlZiele === 1 ? "erreichbares Ziel" : "erreichbare Ziele"}
+            Im Katalog: {details.anzahlPositionen} {details.anzahlPositionen === 1 ? "Position" : "Positionen"}, {details.anzahlZiele} {details.anzahlZiele === 1 ? "erreichbares Ziel" : "erreichbare Ziele"}
           </div>
         </div>
       </div>

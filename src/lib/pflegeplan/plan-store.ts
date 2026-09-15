@@ -12,7 +12,7 @@
  *   fallen in «Ohne Zuordnung». Das ist ein Arbeitszustand, kein Fehler.
  */
 import { useSyncExternalStore } from "react";
-import type { CapCode, DetailAuswahl, DiagnoseCode, DiagnoseTyp, InterventionId, ZielId } from "./vertrag";
+import type { CapCode, DiagnoseCode, DiagnoseTyp, PositionsNummer, ZielId } from "./vertrag";
 import type { UserRole } from "../../types/user";
 import { befundeErmitteln, planSignatur, type Befund } from "./wzw";
 
@@ -97,7 +97,6 @@ export type Wiederholung = "einmalig" | "taeglich" | "werktage" | "woechentlich"
 export type ErbringerCode = "S" | "I" | "A" | "V";
 
 export interface MassnahmenPlanung {
-  detailAuswahl: DetailAuswahl;
   /** null = noch nicht geplant; der Satz im Baum zeigt dann nur Position und Zeit. */
   wiederholung: Wiederholung | null;
   /** ISO-Datum; nur bei «einmalig». */
@@ -130,7 +129,6 @@ export interface MassnahmenPlanung {
 }
 
 export const LEERE_PLANUNG: MassnahmenPlanung = {
-  detailAuswahl: [],
   wiederholung: null,
   einmalDatum: "",
   anzahl: 1,
@@ -149,7 +147,9 @@ export const LEERE_PLANUNG: MassnahmenPlanung = {
 };
 
 export interface PlanMassnahme {
-  interventionId: InterventionId;
+  /** Die Massnahme IST eine Leistungsposition (Modellwechsel) — sie trägt
+   *  nur die Nummer; alles Weitere löst leistungsposition(nummer) auf. */
+  positionsNummer: PositionsNummer;
   titel: string;
   /** Leer = «Ohne Zuordnung» (Arbeitszustand). Reihenfolge = Verknüpfungsreihenfolge:
    *  der erste Bezug trägt Position und Zeit, weitere sagen «bereits gezählt». */
@@ -426,29 +426,29 @@ export function eigenesZielHinzufuegen(diagnoseCode: DiagnoseCode, titel: string
 
 /**
  * Massnahme übernehmen oder mit einem weiteren Ziel verknüpfen — dieselbe
- * Funktion, damit dieselbe Intervention nie zweimal im Plan landet.
+ * Funktion, damit dieselbe Position nie zweimal im Plan landet.
  */
-export function massnahmeVerknuepfen(interventionId: InterventionId, titel: string, bezug: ZielBezug): void {
-  const bestehend = zustand.massnahmen.find(m => m.interventionId === interventionId);
+export function massnahmeVerknuepfen(positionsNummer: PositionsNummer, titel: string, bezug: ZielBezug): void {
+  const bestehend = zustand.massnahmen.find(m => m.positionsNummer === positionsNummer);
   if (bestehend) {
     if (bestehend.zielBezuege.some(b => b.diagnoseCode === bezug.diagnoseCode && b.zielId === bezug.zielId)) return;
     zustand = {
       ...zustand,
-      massnahmen: zustand.massnahmen.map(m => m.interventionId === interventionId
+      massnahmen: zustand.massnahmen.map(m => m.positionsNummer === positionsNummer
         ? { ...m, zielBezuege: [...m.zielBezuege, bezug] }
         : m),
     };
   } else {
-    zustand = { ...zustand, massnahmen: [...zustand.massnahmen, { interventionId, titel, zielBezuege: [bezug], planung: { ...LEERE_PLANUNG } }] };
+    zustand = { ...zustand, massnahmen: [...zustand.massnahmen, { positionsNummer, titel, zielBezuege: [bezug], planung: { ...LEERE_PLANUNG } }] };
   }
   melden();
 }
 
 /** Feinplanung einer Massnahme ändern — ein Zustand, unter allen Zielen gleich. */
-export function massnahmePlanen(interventionId: InterventionId, patch: Partial<MassnahmenPlanung>): void {
+export function massnahmePlanen(positionsNummer: PositionsNummer, patch: Partial<MassnahmenPlanung>): void {
   zustand = {
     ...zustand,
-    massnahmen: zustand.massnahmen.map(m => m.interventionId === interventionId
+    massnahmen: zustand.massnahmen.map(m => m.positionsNummer === positionsNummer
       ? { ...m, planung: { ...m.planung, ...patch } }
       : m),
   };
@@ -456,10 +456,10 @@ export function massnahmePlanen(interventionId: InterventionId, patch: Partial<M
 }
 
 /** Einen Zielbezug lösen; ohne verbleibenden Bezug bleibt die Massnahme in «Ohne Zuordnung». */
-export function massnahmenBezugLoesen(interventionId: InterventionId, bezug: ZielBezug): void {
+export function massnahmenBezugLoesen(positionsNummer: PositionsNummer, bezug: ZielBezug): void {
   zustand = {
     ...zustand,
-    massnahmen: zustand.massnahmen.map(m => m.interventionId === interventionId
+    massnahmen: zustand.massnahmen.map(m => m.positionsNummer === positionsNummer
       ? { ...m, zielBezuege: m.zielBezuege.filter(b => !(b.diagnoseCode === bezug.diagnoseCode && b.zielId === bezug.zielId)) }
       : m),
   };

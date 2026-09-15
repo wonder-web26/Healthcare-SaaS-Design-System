@@ -21,11 +21,11 @@ import {
   type PlanZustand,
 } from "../../../lib/pflegeplan/plan-store";
 import { massnahmenSatz, type MandatKurz } from "../../../lib/pflegeplan/planung";
-import type { InterventionId, ZielId, DiagnoseCode } from "../../../lib/pflegeplan/vertrag";
+import type { PositionsNummer, ZielId, DiagnoseCode } from "../../../lib/pflegeplan/vertrag";
 import { TypMarke, positionsLage, planWochenSummeMin, massnahmenDauerMin } from "./gemeinsam";
 import { wochenMinuten } from "../../../lib/pflegeplan/planung";
 
-type Auswahl = { art: "d"; code: DiagnoseCode } | { art: "z"; zielId: ZielId } | { art: "m"; interventionId: InterventionId } | null;
+type Auswahl = { art: "d"; code: DiagnoseCode } | { art: "z"; zielId: ZielId } | { art: "m"; positionsNummer: PositionsNummer } | null;
 
 interface Linie { von: string; zu: string; teilgraph: boolean }
 
@@ -37,7 +37,7 @@ const KARTE: React.CSSProperties = {
 export function StrukturAnsicht({ plan: planProp, mandate, onEditor, onDetail }: {
   plan: PlanZustand;
   mandate: MandatKurz[];
-  onEditor: (interventionId: InterventionId) => void;
+  onEditor: (positionsNummer: PositionsNummer) => void;
   /** Öffnet die Diagnose-Detailansicht (Lauf 6g) — per Doppelklick auf den
    *  Diagnose-Knoten, wie onEditor bei den Massnahmen. */
   onDetail: (code: string, titel: string) => void;
@@ -67,18 +67,18 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor, onDetail }:
 
   /* ── Teilgraph der Auswahl ── */
   const teil = useMemo(() => {
-    const d = new Set<DiagnoseCode>(); const z = new Set<ZielId>(); const m = new Set<InterventionId>();
+    const d = new Set<DiagnoseCode>(); const z = new Set<ZielId>(); const m = new Set<PositionsNummer>();
     if (auswahl?.art === "d") {
       d.add(auswahl.code);
       for (const x of plan.ziele) if (x.diagnoseCode === auswahl.code) z.add(x.zielId);
-      for (const x of plan.massnahmen) if (x.zielBezuege.some(b => b.diagnoseCode === auswahl.code)) m.add(x.interventionId);
+      for (const x of plan.massnahmen) if (x.zielBezuege.some(b => b.diagnoseCode === auswahl.code)) m.add(x.positionsNummer);
     } else if (auswahl?.art === "z") {
       z.add(auswahl.zielId);
       for (const x of plan.ziele) if (x.zielId === auswahl.zielId && x.diagnoseCode !== null) d.add(x.diagnoseCode);
-      for (const x of plan.massnahmen) if (x.zielBezuege.some(b => b.zielId === auswahl.zielId)) m.add(x.interventionId);
+      for (const x of plan.massnahmen) if (x.zielBezuege.some(b => b.zielId === auswahl.zielId)) m.add(x.positionsNummer);
     } else if (auswahl?.art === "m") {
-      m.add(auswahl.interventionId);
-      const mm = plan.massnahmen.find(x => x.interventionId === auswahl.interventionId);
+      m.add(auswahl.positionsNummer);
+      const mm = plan.massnahmen.find(x => x.positionsNummer === auswahl.positionsNummer);
       for (const b of mm?.zielBezuege ?? []) { z.add(b.zielId); d.add(b.diagnoseCode); }
     }
     return { d, z, m, aktiv: auswahl !== null };
@@ -92,18 +92,18 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor, onDetail }:
       aus.push({
         von: `d:${z.diagnoseCode}`, zu: `z:${z.zielId}`,
         teilgraph: teil.aktiv && teil.d.has(z.diagnoseCode) && teil.z.has(z.zielId)
-          && (auswahl?.art !== "m" || (plan.massnahmen.find(x => x.interventionId === auswahl.interventionId)?.zielBezuege.some(b => b.diagnoseCode === z.diagnoseCode && b.zielId === z.zielId) ?? false)),
+          && (auswahl?.art !== "m" || (plan.massnahmen.find(x => x.positionsNummer === auswahl.positionsNummer)?.zielBezuege.some(b => b.diagnoseCode === z.diagnoseCode && b.zielId === z.zielId) ?? false)),
       });
     }
     const paare = new Set<string>();
     for (const m of plan.massnahmen) {
       for (const b of m.zielBezuege) {
-        const key = `${b.zielId}|${m.interventionId}`;
+        const key = `${b.zielId}|${m.positionsNummer}`;
         if (paare.has(key)) continue;
         paare.add(key);
         aus.push({
-          von: `z:${b.zielId}`, zu: `m:${m.interventionId}`,
-          teilgraph: teil.aktiv && teil.z.has(b.zielId) && teil.m.has(m.interventionId)
+          von: `z:${b.zielId}`, zu: `m:${m.positionsNummer}`,
+          teilgraph: teil.aktiv && teil.z.has(b.zielId) && teil.m.has(m.positionsNummer)
             && (auswahl?.art !== "d" || b.diagnoseCode === auswahl.code),
         });
       }
@@ -173,39 +173,39 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor, onDetail }:
       return;
     }
     if (auswahl?.art === "m") {
-      const m = plan.massnahmen.find(x => x.interventionId === auswahl.interventionId);
+      const m = plan.massnahmen.find(x => x.positionsNummer === auswahl.positionsNummer);
       if (!m) return;
       const bezuege = m.zielBezuege.filter(b => b.zielId === zielId);
-      if (bezuege.length > 0) { bezuege.forEach(b => massnahmenBezugLoesen(m.interventionId, b)); return; }
+      if (bezuege.length > 0) { bezuege.forEach(b => massnahmenBezugLoesen(m.positionsNummer, b)); return; }
       const traeger = plan.ziele.find(z => z.zielId === zielId && z.diagnoseCode !== null);
       if (!traeger || traeger.diagnoseCode === null) {
         setMeldung("Das Ziel ist mit keiner Diagnose verbunden.");
         return;
       }
-      massnahmeVerknuepfen(m.interventionId, m.titel, { diagnoseCode: traeger.diagnoseCode, zielId });
+      massnahmeVerknuepfen(m.positionsNummer, m.titel, { diagnoseCode: traeger.diagnoseCode, zielId });
       return;
     }
     setAuswahl({ art: "z", zielId });
   };
 
-  const klickMassnahme = (interventionId: InterventionId) => {
+  const klickMassnahme = (positionsNummer: PositionsNummer) => {
     setMeldung(null);
-    if (auswahl?.art === "m") { setAuswahl(auswahl.interventionId === interventionId ? null : { art: "m", interventionId }); return; }
+    if (auswahl?.art === "m") { setAuswahl(auswahl.positionsNummer === positionsNummer ? null : { art: "m", positionsNummer }); return; }
     if (auswahl?.art === "z") {
-      const m = plan.massnahmen.find(x => x.interventionId === interventionId);
+      const m = plan.massnahmen.find(x => x.positionsNummer === positionsNummer);
       if (!m) return;
       const bezuege = m.zielBezuege.filter(b => b.zielId === auswahl.zielId);
-      if (bezuege.length > 0) { bezuege.forEach(b => massnahmenBezugLoesen(interventionId, b)); return; }
+      if (bezuege.length > 0) { bezuege.forEach(b => massnahmenBezugLoesen(positionsNummer, b)); return; }
       const traeger = plan.ziele.find(z => z.zielId === auswahl.zielId && z.diagnoseCode !== null);
       if (!traeger || traeger.diagnoseCode === null) {
         setMeldung("Das Ziel ist mit keiner Diagnose verbunden.");
         return;
       }
-      massnahmeVerknuepfen(interventionId, m.titel, { diagnoseCode: traeger.diagnoseCode, zielId: auswahl.zielId });
+      massnahmeVerknuepfen(positionsNummer, m.titel, { diagnoseCode: traeger.diagnoseCode, zielId: auswahl.zielId });
       return;
     }
     /* Diagnose-Auswahl + Massnahmen-Klick: keine Nachbarspalte — Auswahl wechselt. */
-    setAuswahl({ art: "m", interventionId });
+    setAuswahl({ art: "m", positionsNummer });
   };
 
   /* Verknüpfbarkeit während einer Auswahl — sichtbar gekennzeichnet. */
@@ -337,9 +337,9 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor, onDetail }:
               Massnahmen · {plan.massnahmen.length} · {(summeMin / 60).toFixed(2)} h/Wo.
             </div>
             <div className="flex flex-col" style={{ gap: 10 }}>
-              {verbundeneMassnahmen.map(m => <MassnahmenKnoten key={m.interventionId} m={m} plan={plan} mandate={mandate}
-                gewaehlt={auswahl?.art === "m" && auswahl.interventionId === m.interventionId}
-                imTeil={teil.m.has(m.interventionId)} verknuepfbar={massnahmeVerknuepfbar()}
+              {verbundeneMassnahmen.map(m => <MassnahmenKnoten key={m.positionsNummer} m={m} plan={plan} mandate={mandate}
+                gewaehlt={auswahl?.art === "m" && auswahl.positionsNummer === m.positionsNummer}
+                imTeil={teil.m.has(m.positionsNummer)} verknuepfbar={massnahmeVerknuepfbar()}
                 abblassen={abblassen} onKlick={klickMassnahme} onDoppel={onEditor} refCb={ref} />)}
             </div>
             {freieMassnahmen.length > 0 && (
@@ -349,9 +349,9 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor, onDetail }:
                   Ohne Zielbezug — nicht begründet
                 </div>
                 <div className="flex flex-col" style={{ gap: 10 }}>
-                  {freieMassnahmen.map(m => <MassnahmenKnoten key={m.interventionId} m={m} plan={plan} mandate={mandate}
-                    gewaehlt={auswahl?.art === "m" && auswahl.interventionId === m.interventionId}
-                    imTeil={teil.m.has(m.interventionId)} verknuepfbar={massnahmeVerknuepfbar()}
+                  {freieMassnahmen.map(m => <MassnahmenKnoten key={m.positionsNummer} m={m} plan={plan} mandate={mandate}
+                    gewaehlt={auswahl?.art === "m" && auswahl.positionsNummer === m.positionsNummer}
+                    imTeil={teil.m.has(m.positionsNummer)} verknuepfbar={massnahmeVerknuepfbar()}
                     abblassen={abblassen} onKlick={klickMassnahme} onDoppel={onEditor} refCb={ref} />)}
                 </div>
               </div>
@@ -371,17 +371,17 @@ function MassnahmenKnoten({ m, plan, mandate, gewaehlt, imTeil, verknuepfbar, ab
   imTeil: boolean;
   verknuepfbar: boolean;
   abblassen: (imTeil: boolean) => number;
-  onKlick: (id: InterventionId) => void;
-  onDoppel: (id: InterventionId) => void;
+  onKlick: (id: PositionsNummer) => void;
+  onDoppel: (id: PositionsNummer) => void;
   refCb: (key: string) => (el: HTMLElement | null) => void;
 }) {
-  const lage = positionsLage(m.interventionId, m.planung.detailAuswahl);
+  const lage = positionsLage(m.positionsNummer);
   const satz = massnahmenSatz(m.planung, { positionsText: lage.text, vorgabeMinuten: lage.vorgabeMinuten, qualifikation: lage.qualifikation }, mandate);
   void plan;
   return (
-    <button type="button" ref={refCb(`m:${m.interventionId}`)} data-struktur-m={m.interventionId}
-      onClick={() => onKlick(m.interventionId)}
-      onDoubleClick={() => onDoppel(m.interventionId)}
+    <button type="button" ref={refCb(`m:${m.positionsNummer}`)} data-struktur-m={m.positionsNummer}
+      onClick={() => onKlick(m.positionsNummer)}
+      onDoubleClick={() => onDoppel(m.positionsNummer)}
       className="ui-fokusring"
       style={{
         background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",

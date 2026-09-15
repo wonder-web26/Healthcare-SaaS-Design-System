@@ -5,25 +5,23 @@
  * hinter denselben Vertrag und tauscht die Datenquelle — nicht das UI.
  */
 import type {
-  Beleg, BewertungsStufe, CapCode, DetailAuswahl, Detaildialog, Diagnose, DiagnoseCode,
-  DiagnoseDetails, DiagnoseVorschlag, FeldHerkunft, Intervention, InterventionId,
+  Beleg, BewertungsStufe, CapCode, Diagnose, DiagnoseCode,
+  DiagnoseDetails, DiagnoseVorschlag, FeldHerkunft,
   Leistungsposition, MerkmalsEintrag, Merkmalsliste, MitHerkunft, PflegeplanAbfragen,
-  QualifikationsStufe, Ziel, ZielId,
+  PositionsNummer, QualifikationsStufe, Ziel, ZielId,
 } from "./vertrag";
 import {
   CAP_ZUORDNUNG, DETAILDIALOGE, DIAGNOSE_DETAILS, MAS_ZIEL, MOCK_DIAGNOSEN,
-  MOCK_INTERVENTIONEN, MOCK_ZIELE, PROB_MAS, PROB_ZIEL_HIDE, STANDARD_POSITION,
+  MOCK_ZIELE, PROB_MAS, PROB_ZIEL_HIDE, STANDARD_POSITION,
   type RohMerkmal,
 } from "./mock-daten";
-import { leistungsposition } from "./positionen";
+import { alleLeistungspositionen, leistungsposition } from "./positionen";
 
 /* Herkunft der Mock-Objekte: alles in mock-daten.ts ist für den Prototyp
    frei gewählt. Die Leistungsposition trägt ihre differenzierte Herkunft
    (katalog/kuratiert/mock) in positionen.ts. */
 const HERKUNFT_DIAGNOSE: FeldHerkunft<Diagnose> = { code: "mock", titel: "mock", typ: "mock", definition: "mock" };
 const HERKUNFT_ZIEL: FeldHerkunft<Ziel> = { id: "mock", titel: "mock" };
-const HERKUNFT_INTERVENTION: FeldHerkunft<Intervention> = { id: "mock", titel: "mock", hatDetaildialog: "mock" };
-const HERKUNFT_DETAILDIALOG: FeldHerkunft<Detaildialog> = { gruppen: "mock" };
 
 const diagnoseJeCode = new Map(MOCK_DIAGNOSEN.map(d => [d.code, d]));
 
@@ -99,54 +97,49 @@ export function zieleZuDiagnose(code: DiagnoseCode): MitHerkunft<Ziel>[] {
 }
 
 /**
- * (3) Interventionen, mit denen ein Ziel im Kontext einer Diagnose verfolgt
- * wird — die Umkehrung derselben Ableitung:
+ * (3) Positions-Vorschläge, mit denen ein Ziel im Kontext einer Diagnose
+ * verfolgt wird — die Massnahme IST seit dem Modellwechsel eine
+ * Leistungsposition.
  *
- *   interventionenZuZiel(d, z) = Interventionen von d (PROB_MAS),
- *                                geschnitten mit den Interventionen,
- *                                die z vorschlagen (MAS_ZIEL).
+ * Die Zuordnung entsteht durch ZUSAMMENLEGEN der früheren ENP-Kette: die
+ * Interventions-Relationen (PROB_MAS ∩ MAS_ZIEL) bleiben als interne
+ * Rohtabellen liegen, und je Intervention werden ihre Positionsnummern
+ * eingesammelt — die Standardregel und alle Folgepositionen des früheren
+ * Detaildialogs («Ganzwäsche im Bett» UND «in Bad/Dusche» sind jetzt zwei
+ * Vorschläge). Frühere planerische Interventionen ohne Position tragen
+ * nichts bei. Beim echten Katalog ersetzt eine kuratierte Zuordnungsliste
+ * Diagnose/Ziel → Positionen diese Ableitung — die Abfrage bleibt.
  */
-export function interventionenZuZiel(code: DiagnoseCode, zielId: ZielId): MitHerkunft<Intervention>[] {
-  return (PROB_MAS[code] ?? [])
-    .filter(interventionId => (MAS_ZIEL[interventionId] ?? []).includes(zielId))
-    .map(interventionId => ({
-      id: interventionId,
-      titel: MOCK_INTERVENTIONEN[interventionId]?.titel ?? interventionId,
-      hatDetaildialog: interventionId in DETAILDIALOGE,
-      herkunft: HERKUNFT_INTERVENTION,
-    }));
-}
-
-/** (4) Präzisierungs-Dialog einer Intervention — null, wenn keiner hinterlegt ist. */
-export function detaildialog(interventionId: InterventionId): MitHerkunft<Detaildialog> | null {
-  const dialog = DETAILDIALOGE[interventionId];
-  if (!dialog) return null;
-  return { gruppen: dialog.gruppen, herkunft: HERKUNFT_DETAILDIALOG };
-}
-
-/**
- * (5) Leistungsposition zu einer Intervention und der getroffenen
- * Detailauswahl.
- *
- * Mit Dialog entscheidet die Auswahl: die erste gewählte Option mit
- * `folgePosition` (in Dialogreihenfolge der Gruppen) bestimmt die Position.
- * Ohne Treffer — und ohne Dialog — gilt die Standardregel der Intervention.
- * Ohne jede Regel: null. Das ist ein gültiger Zustand, kein Fehler —
- * die Massnahme bleibt planerisch und wird nicht verrechnet.
- */
-export function positionFuer(interventionId: InterventionId, detailauswahl: DetailAuswahl): MitHerkunft<Leistungsposition> | null {
-  const dialog = DETAILDIALOGE[interventionId];
-  if (dialog) {
-    for (const gruppe of dialog.gruppen) {
-      const wahl = detailauswahl.find(a => a.gruppe === gruppe.label);
-      if (!wahl) continue;
-      const item = gruppe.items.find(i => i.label === wahl.item);
-      if (item?.folgePosition) return leistungsposition(item.folgePosition);
+export function positionenZuZiel(code: DiagnoseCode, zielId: ZielId): MitHerkunft<Leistungsposition>[] {
+  const nummern: PositionsNummer[] = [];
+  const merken = (nr: PositionsNummer) => { if (!nummern.includes(nr)) nummern.push(nr); };
+  for (const interventionId of (PROB_MAS[code] ?? [])) {
+    if (!(MAS_ZIEL[interventionId] ?? []).includes(zielId)) continue;
+    const dialog = DETAILDIALOGE[interventionId];
+    if (dialog) {
+      for (const gruppe of dialog.gruppen) {
+        for (const item of gruppe.items) {
+          if (item.folgePosition) merken(item.folgePosition);
+        }
+      }
     }
+    const standard = STANDARD_POSITION[interventionId];
+    if (standard) merken(standard);
   }
-  const standard = STANDARD_POSITION[interventionId];
-  return standard ? leistungsposition(standard) : null;
+  return nummern
+    .map(nr => leistungsposition(nr))
+    .filter((p): p is MitHerkunft<Leistungsposition> => p !== null);
 }
+
+/** (4) Der ganze Leistungskatalog — für die freie Auswahl jenseits der
+ *  Vorschläge, in Katalogreihenfolge. */
+export function leistungsKatalog(): MitHerkunft<Leistungsposition>[] {
+  return alleLeistungspositionen();
+}
+
+/* (5) Einzelauflösung einer Position per Nummer — re-exportiert aus
+   positionen.ts; die Massnahme trägt nur die Nummer. */
+export { leistungsposition };
 
 /**
  * (6) Die Gegenliste zur Zusicherung aus (2): Ziele, die über eine
@@ -250,7 +243,7 @@ const HERKUNFT_DETAILS: FeldHerkunft<DiagnoseDetails> = {
   code: "mock", titel: "mock", typ: "mock", definition: "mock", gebiet: "mock", thema: "mock",
   bestimmendeMerkmale: "mock", beeinflussendeFaktoren: "mock", risikofaktoren: "mock",
   risikopopulation: "mock", assoziierteBedingungen: "mock", achsen: "mock",
-  anzahlInterventionen: "mock", anzahlZiele: "mock",
+  anzahlPositionen: "mock", anzahlZiele: "mock",
 };
 
 export function diagnoseDetails(code: DiagnoseCode): MitHerkunft<DiagnoseDetails> | null {
@@ -275,9 +268,9 @@ export function diagnoseDetails(code: DiagnoseCode): MitHerkunft<DiagnoseDetails
   /* Katalogkennzahlen aus denselben Strukturen wie (2) und (3) — keine
      zweite Zahlenquelle. 0/0 ist eine gültige, ehrliche Antwort. */
   const ziele = zieleZuDiagnose(code);
-  const interventionsIds = new Set<InterventionId>();
+  const positionsNummern = new Set<PositionsNummer>();
   for (const z of ziele) {
-    for (const i of interventionenZuZiel(code, z.id)) interventionsIds.add(i.id);
+    for (const p of positionenZuZiel(code, z.id)) positionsNummern.add(p.nummer);
   }
 
   return {
@@ -289,7 +282,7 @@ export function diagnoseDetails(code: DiagnoseCode): MitHerkunft<DiagnoseDetails
     risikopopulation: liste(roh.risikopopulation),
     assoziierteBedingungen: liste(roh.assoziierteBedingungen),
     achsen: roh.achsen.map(a => ({ ...a })),
-    anzahlInterventionen: interventionsIds.size,
+    anzahlPositionen: positionsNummern.size,
     anzahlZiele: ziele.length,
     herkunft: HERKUNFT_DETAILS,
   };
@@ -297,7 +290,7 @@ export function diagnoseDetails(code: DiagnoseCode): MitHerkunft<DiagnoseDetails
 
 /** Der Vertrag als ein Objekt — für Übergabe an Komponenten oder Tests. */
 export const mockPflegeplanKatalog: PflegeplanAbfragen = {
-  diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer,
+  diagnoseVorschlaege, zieleZuDiagnose, positionenZuZiel, leistungsKatalog, leistungsposition,
   ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala, qualifikationsStufen,
   diagnoseDetails,
 };

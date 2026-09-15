@@ -136,6 +136,36 @@ dbml heute nicht vorsieht:
    (`GEGENWART_ISO`); produktiv ersetzt das Systemdatum die Konstante.
    (Die Überfälligkeits-Ableitung ist mit dem Zieldatum entfallen.)
 
+## Modellwechsel: Massnahme = Leistungsposition
+
+Entschieden nach Lauf 6g (Vergleich mit dem DomoHealth-Modell): Die
+Fachperson übernimmt im Massnahmen-Schritt DIREKT Positionen aus dem
+Spitex-Leistungskatalog — es gibt keine ENP-Interventionsebene mehr.
+
+1. **Vertrag:** `interventionenZuZiel`, `detaildialog` und `positionFuer`
+   sind entfallen; neu sind `positionenZuZiel(diagnose, ziel)`
+   (Vorschlagsliste je Paar), `leistungsKatalog()` (alle 115 Positionen,
+   für die freie Auswahl) und `leistungsposition(nummer)`
+   (Einzelauflösung). Die `Ableitung` verliert ihr Interventions-Glied:
+   CAP → Diagnose → Ziel → Position.
+2. **Instanzebene:** `PlanMassnahme` trägt `positionsNummer` statt einer
+   Interventions-Kennung; die Detailauswahl entfällt (Varianten wie
+   «Ganzwäsche im Bett» / «in Bad/Dusche» sind eigenständige Positionen).
+   Schemabedarf: `ActionItem` referenziert die Positionsnummer des
+   Leistungskatalogs, kein Interventions-Fremdschlüssel.
+3. **Vorschlags-Herkunft (Mock):** Die frühere ENP-Kette bleibt als
+   Rohtabelle liegen und wird im Adapter ZUSAMMENGELEGT — je Intervention
+   des Paars ihre Standard- und Dialogfolge-Positionen. Beim echten
+   Katalog ersetzt eine kuratierte Zuordnungsliste Diagnose/Ziel →
+   Positionen diese Ableitung; die Abfrage bleibt. Die ZIEL-Herleitung
+   (ENP-Struktur über PROB_MAS/MAS_ZIEL) ist unverändert.
+4. **Folgen:** Planerische Massnahmen ohne Position und Freitext-Massnahmen
+   gibt es nicht mehr (der Katalog führt Anleitung/Beratung und
+   Abklärung/Koordination selbst); die WZW-Prüfung Z-OHNE-POSITION und der
+   Blatt-Abschnitt «ohne Position» sind entfallen. Auf dem Blatt ist eine
+   Position konstruktiv genau eine Zeile — der Store dedupliziert über die
+   Nummer.
+
 ## Nachtrag: Beschreibung und Protokoll je Plan-Diagnose
 
 Die Plan-Diagnose (Instanzebene) trägt neu: eine **individuelle

@@ -24,7 +24,7 @@
  */
 import type { PlanZustand, PlanMassnahme } from "./plan-store";
 import type { Leistungsposition, MitHerkunft } from "./vertrag";
-import { positionFuer, qualifikationsStufen } from "./mock-adapter";
+import { leistungsposition, qualifikationsStufen } from "./mock-adapter";
 import { haeufigkeitsText, wochenMinuten, ERBRINGER } from "./planung";
 
 /** Ein Glied der Begründungskette: dieses Ziel unter dieser Diagnose trägt
@@ -80,7 +80,7 @@ export interface BlattNichtErbracht {
   massnahmeTitel: string;
   erbringerLabel: string;
   begruendung: string;
-  positionsNummer: string | null;
+  positionsNummer: string;
   traeger: BlattTraeger[];
 }
 
@@ -88,9 +88,6 @@ export interface Blatt {
   abschnitte: BlattAbschnitt[];
   einmalige: BlattEinmalig[];
   nichtErbracht: BlattNichtErbracht[];
-  /** Planerische S-Massnahmen (ohne Position) — sie erscheinen nicht in der
-   *  Tabelle; das Blatt weist sie aus, statt sie zu verschweigen. */
-  ohnePosition: { massnahmeTitel: string; wochenMin: number }[];
   /** Summe der Abschnitte — muss der Wochensumme des Plans entsprechen. */
   gesamtWochenMin: number;
 }
@@ -127,8 +124,10 @@ function traegerNachPrioritaet(plan: PlanZustand, traeger: BlattTraeger[]): Blat
   return [...traeger.filter(t => wichtig.has(t.diagnoseCode)), ...traeger.filter(t => !wichtig.has(t.diagnoseCode))];
 }
 
-function positionVon(m: PlanMassnahme): MitHerkunft<Leistungsposition> | null {
-  return positionFuer(m.interventionId, m.planung.detailAuswahl);
+function positionVon(m: PlanMassnahme): MitHerkunft<Leistungsposition> {
+  const p = leistungsposition(m.positionsNummer);
+  if (!p) throw new Error(`Mock-Datenfehler: Massnahme nennt unbekannte Position ${m.positionsNummer}`);
+  return p;
 }
 
 /** Das Blatt aus dem Plan — deterministisch, ohne Seiteneffekte. */
@@ -140,7 +139,6 @@ export function blattAbleiten(plan: PlanZustand): Blatt {
   const zeilenJeNummer = new Map<string, BlattZeile>();
   const einmalige: BlattEinmalig[] = [];
   const nichtErbracht: BlattNichtErbracht[] = [];
-  const ohnePosition: Blatt["ohnePosition"] = [];
 
   for (const m of plan.massnahmen) {
     const p = m.planung;
@@ -152,16 +150,8 @@ export function blattAbleiten(plan: PlanZustand): Blatt {
         massnahmeTitel: m.titel,
         erbringerLabel: ERBRINGER.find(e => e.code === p.erbringer)?.label ?? p.erbringer,
         begruendung: p.erbringerNotiz.trim(),
-        positionsNummer: position?.nummer ?? null,
+        positionsNummer: position.nummer,
         traeger,
-      });
-      continue;
-    }
-
-    if (position === null) {
-      ohnePosition.push({
-        massnahmeTitel: m.titel,
-        wochenMin: wochenMinuten(p, p.dauerMin),
       });
       continue;
     }
@@ -229,7 +219,6 @@ export function blattAbleiten(plan: PlanZustand): Blatt {
     abschnitte,
     einmalige: einmalige.map(e => ({ ...e, traeger: traegerNachPrioritaet(plan, e.traeger) })),
     nichtErbracht: nichtErbracht.map(n => ({ ...n, traeger: traegerNachPrioritaet(plan, n.traeger) })),
-    ohnePosition,
     gesamtWochenMin: abschnitte.reduce((s, a) => s + a.summeMin, 0),
   };
 }

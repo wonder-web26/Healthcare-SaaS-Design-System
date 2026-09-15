@@ -74,8 +74,16 @@ function baueposition(nr: PositionsNummer): MitHerkunft<Leistungsposition> | nul
   return { ...wert, herkunft };
 }
 
-/** Einzelauflösung einer Position — die einzige Leseschnittstelle nach aussen.
+/** Einzelauflösung einer Position — Leseschnittstelle nach aussen.
  *  Die Quelltabellen bleiben gekapselt (Tauschgrenze). */
 export function leistungsposition(nr: PositionsNummer): MitHerkunft<Leistungsposition> | null {
   return baueposition(nr);
+}
+
+/** Der ganze Katalog in Katalogreihenfolge — für die freie Auswahl im
+ *  Massnahmen-Schritt (Modellwechsel: Massnahme = Position). */
+export function alleLeistungspositionen(): MitHerkunft<Leistungsposition>[] {
+  return SPITEX_LEISTUNGSKATALOG_2025
+    .map(p => baueposition(p.nr))
+    .filter((p): p is MitHerkunft<Leistungsposition> => p !== null);
 }

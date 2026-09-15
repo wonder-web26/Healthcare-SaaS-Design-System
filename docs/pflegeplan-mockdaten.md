@@ -1,7 +1,16 @@
 # Pflegeplan — der Mock-Datensatz
 
 Aus dem Code extrahiert (über die Vertragsabfragen aus `src/lib/pflegeplan/`),
-nicht aus dem Gedächtnis. Stand: Lauf 6g, Branch `feature/pflegeplanung`.
+nicht aus dem Gedächtnis. Stand: Modellwechsel «Massnahme = Leistungsposition»,
+Branch `feature/leistungsplanung`.
+
+**Modellwechsel:** Massnahmen sind seit dem Wechsel DIREKT Positionen aus
+dem Spitex-Leistungskatalog (115, echt). Die unten dokumentierten
+Interventions-Relationen (PROB_MAS, MAS_ZIEL, Detaildialoge,
+Standardpositionen) existieren nur noch als interne Rohtabellen: sie
+leiten die Ziele her (unverändert ENP-Struktur) und werden im Adapter zu
+Positions-Vorschlägen je Diagnose-Ziel-Paar zusammengelegt
+(`positionenZuZiel`). Interventions-Titel gibt es nicht mehr.
 
 **Auch die Codes sind Mock.** Sie decken sich nicht mit der realen
 NANDA-Zuordnung — 00257 etwa trägt hier das Gebrechlichkeitssyndrom, im

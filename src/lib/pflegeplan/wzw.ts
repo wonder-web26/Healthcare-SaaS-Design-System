@@ -13,7 +13,7 @@
  * wie «konform» und kein Prüfergebnis «bestanden».
  */
 import type { PlanZustand, PlanMassnahme } from "./plan-store";
-import { positionFuer, detaildialog, qualifikationsStufen } from "./mock-adapter";
+import { leistungsposition, qualifikationsStufen } from "./mock-adapter";
 import { wochenVorkommen } from "./planung";
 
 /* ── Die Plansignatur ───────────────────────────────────────────────────── */
@@ -55,7 +55,7 @@ export const KRITERIUM_LABEL: Record<PruefKriterium, { titel: string; frage: str
 /** Das Element, auf das ein Befund verweist — jedes verweist auf genau eines. */
 export interface BefundElement {
   art: "diagnose" | "ziel" | "massnahme";
-  /** diagnoseCode, zielId oder interventionId. */
+  /** diagnoseCode, zielId oder positionsNummer. */
   code: string;
   titel: string;
   /** Bei art «ziel»: die Diagnose der betroffenen Bindung — null bei
@@ -84,7 +84,6 @@ export const PRUEFUNG_GRUPPE: Record<string, string> = {
   "W-MASSNAHME-OHNE-ZIEL": "Massnahmen ohne Zielbezug",
   "W-EINMALIG-OHNE-DATUM": "Einmalige Leistungen ohne Datum",
   "W-VERWEIGERUNG-OHNE-GRUND": "Verweigerungen ohne Begründung",
-  "Z-OHNE-POSITION": "Massnahmen ohne Leistungsposition",
   "Z-QUALIFIKATION-UEBER-MINIMUM": "Qualifikationen über dem Katalogminimum",
   "Z-ERBRINGER-OHNE-ANGABE": "Erbringer ohne Angabe",
   "Z-ZEIT-VERBINDLICH": "Verbindliche Zeitfenster",
@@ -92,7 +91,7 @@ export const PRUEFUNG_GRUPPE: Record<string, string> = {
   "WI-HAEUFIGKEIT-UEBER-GRENZE": "Häufigkeiten über der Kataloggrenze",
 };
 
-/* ── Die zwölf Prüfungen ────────────────────────────────────────────────── */
+/* ── Die Prüfungen ────────────────────────────────────────────────── */
 
 function element(art: BefundElement["art"], code: string, titel: string, diagnoseCode: string | null = null): BefundElement {
   return { art, code, titel, diagnoseCode };
@@ -103,7 +102,7 @@ function befund(pruefCode: string, kriterium: PruefKriterium, el: BefundElement,
 }
 
 function positionVon(m: PlanMassnahme) {
-  return positionFuer(m.interventionId, m.planung.detailAuswahl);
+  return leistungsposition(m.positionsNummer);
 }
 
 /**
@@ -147,7 +146,7 @@ export function befundeErmitteln(plan: PlanZustand): Befund[] {
   for (const m of plan.massnahmen) {
     if (m.zielBezuege.length === 0) {
       aus.push(befund("W-MASSNAHME-OHNE-ZIEL", "wirksamkeit",
-        element("massnahme", m.interventionId, m.titel),
+        element("massnahme", m.positionsNummer, m.titel),
         `Massnahme ohne Zielbezug: ${m.titel}`,
         "Eine Massnahme ohne Ziel hat keinen belegten Zweck — in der Struktur verknüpfen oder begründet übergehen."));
     }
@@ -162,13 +161,13 @@ export function befundeErmitteln(plan: PlanZustand): Befund[] {
     const p = m.planung;
     if (p.wiederholung === "einmalig" && p.einmalDatum === "") {
       aus.push(befund("W-EINMALIG-OHNE-DATUM", "wirksamkeit",
-        element("massnahme", m.interventionId, m.titel),
+        element("massnahme", m.positionsNummer, m.titel),
         `Einmalige Leistung ohne Datum: ${m.titel}`,
         "Eine einmalige Leistung ohne Datum ist nicht planbar — Datum im Editor setzen."));
     }
     if (p.erbringer === "V" && p.erbringerNotiz.trim() === "") {
       aus.push(befund("W-VERWEIGERUNG-OHNE-GRUND", "wirksamkeit",
-        element("massnahme", m.interventionId, m.titel),
+        element("massnahme", m.positionsNummer, m.titel),
         `Verweigerung ohne Begründung: ${m.titel}`,
         "Festgestellter Bedarf wurde abgelehnt — was abgelehnt wurde und mit welcher Begründung gehört in den Plan."));
     }
@@ -178,17 +177,12 @@ export function befundeErmitteln(plan: PlanZustand): Befund[] {
 
   for (const m of plan.massnahmen) {
     const p = m.planung;
-    const el = element("massnahme", m.interventionId, m.titel);
+    const el = element("massnahme", m.positionsNummer, m.titel);
     const position = positionVon(m);
 
-    if (position === null) {
-      const dialogOffen = detaildialog(m.interventionId) !== null;
-      aus.push(befund("Z-OHNE-POSITION", "zweckmaessigkeit", el,
-        `Massnahme ohne Leistungsposition: ${m.titel}`,
-        dialogOffen
-          ? "Die Position ist offen, weil der Detaildialog unbeantwortet ist — im Editor präzisieren."
-          : "Keine Position hinterlegt — die Massnahme bleibt planerisch und wird nicht verrechnet. Beabsichtigt? Dann begründet übergehen."));
-    }
+    /* Eine Massnahme IST eine Katalogposition (Modellwechsel) — den Fall
+       «ohne Position» gibt es nicht mehr, die frühere Z-OHNE-POSITION-
+       Prüfung ist entfallen. */
 
     if (p.qualifikation !== null && position?.mindestqualifikation != null) {
       const zugewiesen = rangVon(p.qualifikation);
@@ -217,7 +211,7 @@ export function befundeErmitteln(plan: PlanZustand): Befund[] {
 
   for (const m of plan.massnahmen) {
     const p = m.planung;
-    const el = element("massnahme", m.interventionId, m.titel);
+    const el = element("massnahme", m.positionsNummer, m.titel);
     const position = positionVon(m);
 
     if (p.dauerMin !== null && position?.vorgabeMinuten != null
