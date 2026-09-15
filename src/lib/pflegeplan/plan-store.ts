@@ -33,6 +33,19 @@ export interface PlanDiagnose {
   /** Standard «normal». INHALT, nicht Meta: die Priorität steht auf
    *  Dokument und Blatt — ihre Änderung veraltet die Prüfung bewusst. */
   prioritaet: DiagnosePrioritaet;
+  /** Individuelle Beschreibung der Fachperson zu dieser Diagnose am
+   *  Klienten — die Möglichkeit besteht immer, eine Pflicht ist sie nicht.
+   *  INHALT: sie steht auf dem Dokument, ihre Änderung veraltet die
+   *  Prüfung. null = keine erfasst. */
+  beschreibung: string | null;
+  /** Protokoll der Übernahme: wer die Diagnose in den Plan geholt hat,
+   *  und wann (ISO-Datum). Wird bei der Übernahme gesetzt, nie danach. */
+  hinzugefuegtVon: string;
+  hinzugefuegtAm: string;
+  /** Protokoll der letzten aktiven Prioritäts-Setzung — null, solange die
+   *  Standard-Priorität «normal» nie angefasst wurde. */
+  prioritaetVon: string | null;
+  prioritaetAm: string | null;
 }
 
 /** Wichtige zuerst, innerhalb der Gruppen stabil in Übernahme-Reihenfolge —
@@ -234,9 +247,28 @@ export function planSchnappschuss(): PlanZustand {
 
 /* ── Diagnosen ─────────────────────────────────────────────────────────── */
 
-export function diagnoseUebernehmen(d: Omit<PlanDiagnose, "prioritaet"> & { prioritaet?: DiagnosePrioritaet }): void {
+export function diagnoseUebernehmen(
+  d: Omit<PlanDiagnose, "prioritaet" | "beschreibung" | "prioritaetVon" | "prioritaetAm">
+    & { prioritaet?: DiagnosePrioritaet },
+): void {
   if (zustand.diagnosen.some(x => x.code === d.code)) return;
-  zustand = { ...zustand, diagnosen: [...zustand.diagnosen, { ...d, prioritaet: d.prioritaet ?? "normal" }] };
+  zustand = {
+    ...zustand,
+    diagnosen: [...zustand.diagnosen, {
+      ...d, prioritaet: d.prioritaet ?? "normal",
+      beschreibung: null, prioritaetVon: null, prioritaetAm: null,
+    }],
+  };
+  melden();
+}
+
+/** Die individuelle Beschreibung setzen oder leeren (leerer Text → null). */
+export function diagnoseBeschreiben(code: DiagnoseCode, beschreibung: string): void {
+  const text = beschreibung.trim();
+  zustand = {
+    ...zustand,
+    diagnosen: zustand.diagnosen.map(d => d.code === code ? { ...d, beschreibung: text === "" ? null : text } : d),
+  };
   melden();
 }
 
@@ -259,11 +291,14 @@ export function diagnoseEntfernen(code: DiagnoseCode): void {
   melden();
 }
 
-/** Die Priorität setzen — die Frage «welche zuerst». */
-export function diagnosePriorisieren(code: DiagnoseCode, prioritaet: DiagnosePrioritaet): void {
+/** Die Priorität setzen — die Frage «welche zuerst». Wer und wann wird
+ *  protokolliert, wie bei der Übernahme. */
+export function diagnosePriorisieren(code: DiagnoseCode, prioritaet: DiagnosePrioritaet, von: string, datumIso: string): void {
   zustand = {
     ...zustand,
-    diagnosen: zustand.diagnosen.map(d => d.code === code ? { ...d, prioritaet } : d),
+    diagnosen: zustand.diagnosen.map(d => d.code === code
+      ? { ...d, prioritaet, prioritaetVon: von, prioritaetAm: datumIso }
+      : d),
   };
   melden();
 }

@@ -12,7 +12,9 @@ import {
   type PlanZustand, type PlanMassnahme, type PlanZiel,
 } from "../../../lib/pflegeplan/plan-store";
 import { massnahmenSatz, istErsterBezug, type MandatKurz } from "../../../lib/pflegeplan/planung";
-import { type Fokus, TypMarke, positionsLage } from "./gemeinsam";
+import { type Fokus, TypMarke, BeschreibungZeile, datumAnzeige, positionsLage } from "./gemeinsam";
+import { useCurrentUser } from "../../auth";
+import { GEGENWART_ISO } from "../../../lib/gegenwart";
 
 const KARTE: React.CSSProperties = {
   background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
@@ -81,6 +83,8 @@ export function PlanBaum({ plan, mandate, onFokus, onDetail, kontextDiagnose }: 
   kontextDiagnose?: string | null;
 }) {
   const [zugeklappt, setZugeklappt] = useState<Set<string>>(new Set());
+  const benutzer = useCurrentUser();
+  const person = `${benutzer.vorname.charAt(0)}. ${benutzer.name}`;
 
   const toggle = (key: string) => setZugeklappt(prev => {
     const next = new Set(prev);
@@ -161,7 +165,7 @@ export function PlanBaum({ plan, mandate, onFokus, onDetail, kontextDiagnose }: 
                 {/* Die Priorität: eine fachliche Aussage der Fachperson —
                     wichtig zuerst, keine Berechnung (Lauf 6d). */}
                 <button type="button" data-prioritaet={d.code} aria-pressed={wichtig}
-                  onClick={() => diagnosePriorisieren(d.code, wichtig ? "normal" : "wichtig")}
+                  onClick={() => diagnosePriorisieren(d.code, wichtig ? "normal" : "wichtig", person, GEGENWART_ISO)}
                   title={wichtig ? "Als normal einstufen" : "Als wichtig einstufen"}
                   className="ui-fokusring cursor-pointer shrink-0"
                   style={{
@@ -187,7 +191,14 @@ export function PlanBaum({ plan, mandate, onFokus, onDetail, kontextDiagnose }: 
                 </div>
               ) : (
                 <>
-                  {/* Belegzeile: bleibt am Element hängen, eingeklappt. */}
+                  {/* Die individuelle Beschreibung der Fachperson. */}
+                  <div style={{ padding: "4px 0 0 32px" }}>
+                    <BeschreibungZeile code={d.code} beschreibung={d.beschreibung} />
+                  </div>
+
+                  {/* Belegzeile und Protokoll: bleiben am Element hängen,
+                      eingeklappt — Beleg aus dem Assessment, darunter wer
+                      die Diagnose wann übernommen und priorisiert hat. */}
                   <div style={{ padding: "2px 0 0 32px" }}>
                     <button type="button" onClick={() => setBelegOffen(prev => { const n = new Set(prev); if (n.has(d.code)) n.delete(d.code); else n.add(d.code); return n; })}
                       className="ui-fokusring cursor-pointer"
@@ -195,7 +206,15 @@ export function PlanBaum({ plan, mandate, onFokus, onDetail, kontextDiagnose }: 
                       {belegOffen.has(d.code) ? "Beleg ausblenden" : "Beleg anzeigen"}
                     </button>
                     {belegOffen.has(d.code) && (
-                      <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 2 }}>{d.belegZeile}</div>
+                      <>
+                        <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 2 }}>{d.belegZeile}</div>
+                        <div data-protokoll={d.code} style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 2 }}>
+                          Übernommen {datumAnzeige(d.hinzugefuegtAm)} · {d.hinzugefuegtVon}
+                          {d.prioritaetVon && d.prioritaetAm && (
+                            <> · Priorität «{d.prioritaet}» gesetzt {datumAnzeige(d.prioritaetAm)} · {d.prioritaetVon}</>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
 

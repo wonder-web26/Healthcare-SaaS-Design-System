@@ -136,6 +136,18 @@ dbml heute nicht vorsieht:
    (`GEGENWART_ISO`); produktiv ersetzt das Systemdatum die Konstante.
    (Die Überfälligkeits-Ableitung ist mit dem Zieldatum entfallen.)
 
+## Nachtrag: Beschreibung und Protokoll je Plan-Diagnose
+
+Die Plan-Diagnose (Instanzebene) trägt neu: eine **individuelle
+Beschreibung** der Fachperson (Freitext, optional — Inhalt: sie steht auf
+dem Dokument, ihre Änderung veraltet die WZW-Prüfung) sowie ein
+**Protokoll** — wer die Diagnose wann übernommen hat
+(`hinzugefuegtVon/-Am`, gesetzt bei der Übernahme, danach unveränderlich)
+und wer die Priorität zuletzt wann gesetzt hat (`prioritaetVon/-Am`, null
+solange «normal» nie angefasst wurde). Schemabedarf: vier Spalten und ein
+Textfeld an der Diagnose-Instanztabelle (heute `ActionItem`-Umfeld); mit
+echter Auth kommen Person und Zeitpunkt aus der Session, nicht aus dem UI.
+
 ## Abweichungen aus Lauf 6g (Diagnose-Detailansicht)
 
 1. **Die dbml führt keine Merkmalslisten- und Taxonomie-Tabellen.** Die

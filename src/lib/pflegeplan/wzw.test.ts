@@ -21,8 +21,8 @@ import {
   veroeffentlichungsVorbedingung, veroeffentlichen, planAendern,
 } from "./plan-store";
 
-const DIAGNOSE_STURZ = { code: "00155", titel: "Sturzgefahr", typ: "risiko" as const, belegZeile: "Test", ausloesendeCaps: ["CAP-FALLS"] };
-const DIAGNOSE_HAUT = { code: "00108", titel: "Selbstversorgungsdefizit Körperpflege", typ: "problem" as const, belegZeile: "Test", ausloesendeCaps: ["CAP-ADL"] };
+const DIAGNOSE_STURZ = { code: "00155", titel: "Sturzgefahr", typ: "risiko" as const, belegZeile: "Test", ausloesendeCaps: ["CAP-FALLS"], hinzugefuegtVon: "T. Test", hinzugefuegtAm: "2026-08-04" };
+const DIAGNOSE_HAUT = { code: "00108", titel: "Selbstversorgungsdefizit Körperpflege", typ: "problem" as const, belegZeile: "Test", ausloesendeCaps: ["CAP-ADL"], hinzugefuegtVon: "T. Test", hinzugefuegtAm: "2026-08-04" };
 
 function befundIds(): string[] {
   return befundeErmitteln(planSchnappschuss()).map(b => b.id);
@@ -49,7 +49,7 @@ function befundIds(): string[] {
   /* Die PRIORITÄT ist Inhalt: sie steht auf Dokument und Blatt — ihre
      Änderung veraltet die Prüfung bewusst (feldweises Herauslösen wäre die
      handverlesene Aufzählung, vor der planSignatur warnt). */
-  diagnosePriorisieren("00108", "wichtig");
+  diagnosePriorisieren("00108", "wichtig", "T. Test", "2026-08-04");
   assert.notEqual(planSignatur(planSchnappschuss()), sig3, "die Priorität (Inhalt) ändert die Signatur");
   console.log("✓ 1  planSignatur: Meta (Prüfung) ausgeschlossen; Inhalt (Verwerfungen, Priorität) eingeschlossen");
 }

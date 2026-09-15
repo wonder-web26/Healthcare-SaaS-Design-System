@@ -30,8 +30,8 @@ import { MassnahmenEditor } from "./MassnahmenEditor";
 import { DiagnoseDetail } from "./DiagnoseDetail";
 import { InlineSelect } from "../ui/InlineSelect";
 import {
-  type Fokus, TypMarke, ImPlanMarke, positionsVorschau, katalogGruppe, datumAnzeige,
-  detailOeffnen, detailZurueck,
+  type Fokus, TypMarke, ImPlanMarke, BeschreibungZeile, positionsVorschau, katalogGruppe,
+  datumAnzeige, detailOeffnen, detailZurueck,
 } from "./gemeinsam";
 
 const KARTE: React.CSSProperties = {
@@ -269,6 +269,7 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onDetail }: {
   const [alleSichtbar, setAlleSichtbar] = useState(false);
   const [gruendeOffen, setGruendeOffen] = useState<DiagnoseCode | null>(null);
 
+  const person = `${benutzer.vorname.charAt(0)}. ${benutzer.name}`;
   const vorschlaege = useMemo(() => diagnoseVorschlaege(caps), [caps]);
   const unbehandelt = useMemo(() => unbehandelteCaps(caps), [caps]);
   /* «Keine Ziele hinterlegt» muss VOR dem Klick sichtbar sein — sonst führt
@@ -352,7 +353,7 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onDetail }: {
                         const wichtig = planD.prioritaet === "wichtig";
                         return (
                           <button type="button" data-prioritaet-liste={code} aria-pressed={wichtig}
-                            onClick={() => diagnosePriorisieren(code, wichtig ? "normal" : "wichtig")}
+                            onClick={() => diagnosePriorisieren(code, wichtig ? "normal" : "wichtig", person, GEGENWART_ISO)}
                             title={wichtig ? "Als normal einstufen" : "Als wichtig einstufen"}
                             className="ui-fokusring cursor-pointer shrink-0"
                             style={{
@@ -368,7 +369,10 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onDetail }: {
                     </>
                   ) : (
                     <PillKnopf primaer label="Übernehmen" onClick={() => {
-                      diagnoseUebernehmen({ code, titel: v.diagnose.titel, typ: v.diagnose.typ, belegZeile: belegZeile(v), ausloesendeCaps: v.ausloesendeCaps });
+                      diagnoseUebernehmen({
+                        code, titel: v.diagnose.titel, typ: v.diagnose.typ, belegZeile: belegZeile(v), ausloesendeCaps: v.ausloesendeCaps,
+                        hinzugefuegtVon: person, hinzugefuegtAm: GEGENWART_ISO,
+                      });
                     }} />
                   )}
                   {!imPlan && (
@@ -379,6 +383,14 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onDetail }: {
                       <X style={{ width: 13, height: 13 }} />
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* Die individuelle Beschreibung — sofort nach der Übernahme
+                  möglich, dieselbe Komponente wie im Baum. */}
+              {imPlan && !verworfen && (
+                <div style={{ marginTop: 6 }}>
+                  <BeschreibungZeile code={code} beschreibung={plan.diagnosen.find(d => d.code === code)?.beschreibung ?? null} />
                 </div>
               )}
 

@@ -3,9 +3,11 @@
  * Positionsvorschau. Baum und Auswahl lesen dieselbe Vorschau — zwei
  * Formulierungen für dieselbe Ableitung liefen auseinander.
  */
+import { useState } from "react";
 import { Check } from "lucide-react";
 import type { DetailAuswahl, DiagnoseCode, DiagnoseTyp, InterventionId, ZielId } from "../../../lib/pflegeplan/vertrag";
 import { detaildialog, positionFuer } from "../../../lib/pflegeplan/mock-adapter";
+import { diagnoseBeschreiben } from "../../../lib/pflegeplan/plan-store";
 
 /** Wo die Fachperson gerade steht — bestimmt, was rechts angeboten wird.
  *  «editor» ist die zweite Rolle des Auswahlbereichs: Bearbeiten von
@@ -107,6 +109,57 @@ export function katalogGruppe(interventionId: InterventionId): string {
   if (detaildialog(interventionId)) return "Position nach Detailauswahl";
   const pos = positionFuer(interventionId, []);
   return pos ? pos.kategorie : "Ohne hinterlegte Position";
+}
+
+/**
+ * Die individuelle Beschreibung einer Plan-Diagnose — EINE Komponente für
+ * Auswahl-Karte und Baum, damit beide Stellen dasselbe Feld bedienen.
+ * Die Möglichkeit besteht immer, eine Pflicht ist sie nicht: ohne Text
+ * steht nur die Ergänzen-Aktion da, kein leeres Feld.
+ */
+export function BeschreibungZeile({ code, beschreibung }: { code: DiagnoseCode; beschreibung: string | null }) {
+  const [entwurf, setEntwurf] = useState<string | null>(null);
+
+  if (entwurf === null) {
+    return (
+      <div data-beschreibung={code}>
+        {beschreibung !== null ? (
+          <button type="button" onClick={() => setEntwurf(beschreibung)}
+            title="Beschreibung bearbeiten"
+            className="ui-fokusring cursor-pointer w-full text-left"
+            style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-small)", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+            {beschreibung}
+          </button>
+        ) : (
+          <button type="button" onClick={() => setEntwurf("")}
+            className="ui-fokusring cursor-pointer"
+            style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)" }}>
+            Beschreibung ergänzen
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div data-beschreibung={code} className="flex flex-col" style={{ gap: 6 }}>
+      <textarea value={entwurf} onChange={e => setEntwurf(e.target.value)} autoFocus rows={2}
+        data-beschreibung-feld placeholder="Individuelle Beschreibung zu dieser Diagnose…"
+        style={{ width: "100%", padding: "6px 10px", borderRadius: "var(--radius-card)", border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", fontSize: "var(--text-small)", color: "var(--text-primary)", fontFamily: "inherit", lineHeight: 1.5, resize: "vertical", outline: "none" }} />
+      <div className="flex items-center" style={{ gap: 8 }}>
+        <button type="button" onClick={() => { diagnoseBeschreiben(code, entwurf); setEntwurf(null); }}
+          className="ui-fokusring cursor-pointer"
+          style={{ padding: "3px 12px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-meta)", fontWeight: 500, background: "var(--brand-primary)", color: "var(--text-on-dark)", border: "none", fontFamily: "inherit" }}>
+          Speichern
+        </button>
+        <button type="button" onClick={() => setEntwurf(null)}
+          className="ui-fokusring cursor-pointer"
+          style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-secondary)" }}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function datumAnzeige(iso: string): string {

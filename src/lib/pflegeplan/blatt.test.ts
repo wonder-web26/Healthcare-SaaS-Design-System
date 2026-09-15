@@ -19,8 +19,8 @@ import {
 } from "./plan-store";
 
 planZuruecksetzen();
-diagnoseUebernehmen({ code: "00155", titel: "Sturzgefahr", typ: "risiko", belegZeile: "Test", ausloesendeCaps: ["CAP-FALLS"] });
-diagnoseUebernehmen({ code: "00085", titel: "Beeinträchtigte körperliche Mobilität", typ: "problem", belegZeile: "Test", ausloesendeCaps: ["CAP-FALLS"] });
+diagnoseUebernehmen({ code: "00155", titel: "Sturzgefahr", typ: "risiko", belegZeile: "Test", ausloesendeCaps: ["CAP-FALLS"], hinzugefuegtVon: "T. Test", hinzugefuegtAm: "2026-08-04" });
+diagnoseUebernehmen({ code: "00085", titel: "Beeinträchtigte körperliche Mobilität", typ: "problem", belegZeile: "Test", ausloesendeCaps: ["CAP-FALLS"], hinzugefuegtVon: "T. Test", hinzugefuegtAm: "2026-08-04" });
 zielUebernehmen({ zielId: "Z-STURZFREI", diagnoseCode: "00155", titel: "Bleibt im Beobachtungszeitraum sturzfrei", eigenes: false });
 zielUebernehmen({ zielId: "Z-BALANCE", diagnoseCode: "00085", titel: "Verbesserte Gleichgewichtsfähigkeit", eigenes: false });
 zielUebernehmen({ zielId: "Z-BEWEGLICH", diagnoseCode: "00085", titel: "Erhält die Gelenkbeweglichkeit", eigenes: false });
@@ -79,7 +79,7 @@ const blatt = blattAbleiten(plan);
   assert.equal(zeile.traeger.find(t => t.zielId === "Z-STURZFREI")?.diagnoseTitel, "Sturzgefahr", "Titel aufgelöst");
 
   /* Priorität (Lauf 6d): ändert am Blatt NUR die Reihenfolge, nie die Zahlen. */
-  diagnosePriorisieren("00085", "wichtig");
+  diagnosePriorisieren("00085", "wichtig", "T. Test", "2026-08-04");
   const blatt2 = blattAbleiten(planSchnappschuss());
   const zeile2 = blatt2.abschnitte.find(a => a.klv === "c")!.zeilen.find(z => z.nummer === "10506")!;
   assert.equal(zeile2.traeger[0].diagnoseCode, "00085", "wichtige Diagnose trägt zuerst");
@@ -92,7 +92,7 @@ const blatt = blattAbleiten(plan);
     .flatMap(z => z.teile)
     .filter(t => t.massnahmeTitel === "Gleichgewichts- und Kraftübungen anleiten");
   assert.equal(gleichgewichtZeilen.length, 1, "eine Massnahme, eine Unterzeile — trotz zweier Diagnosen am ersten Bezugsziel");
-  diagnosePriorisieren("00085", "normal");
+  diagnosePriorisieren("00085", "normal", "T. Test", "2026-08-04");
   console.log("✓ 3  Begründungskette: 10506 von drei Zielen unter zwei Diagnosen getragen; Priorität ordnet, rechnet nicht");
 }
 

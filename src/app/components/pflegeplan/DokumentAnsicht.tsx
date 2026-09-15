@@ -164,6 +164,21 @@ export function DokumentAnsicht({ mandate, onPlanAendern, onBlatt }: {
                 )}
                 <TypMarke typ={d.typ} />
               </div>
+              {/* Die individuelle Beschreibung der Fachperson — Inhalt des
+                  Dokuments, wenn erfasst. */}
+              {d.beschreibung && (
+                <div data-dok-beschreibung={d.code} style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", marginTop: 4, lineHeight: 1.5 }}>
+                  {d.beschreibung}
+                </div>
+              )}
+              {/* Protokoll: wer die Diagnose wann übernommen und priorisiert
+                  hat — auf dem Dokument dauerhaft nachlesbar. */}
+              <div data-dok-protokoll={d.code} style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 4 }}>
+                Übernommen {datumAnzeige(d.hinzugefuegtAm)} · {d.hinzugefuegtVon}
+                {d.prioritaetVon && d.prioritaetAm && (
+                  <> · Priorität «{d.prioritaet}» gesetzt {datumAnzeige(d.prioritaetAm)} · {d.prioritaetVon}</>
+                )}
+              </div>
               {ziele.length === 0 && (
                 <div style={{ fontSize: "var(--text-micro)", color: "var(--status-warning-text)", marginTop: 4 }}>Ohne Ziel.</div>
               )}
