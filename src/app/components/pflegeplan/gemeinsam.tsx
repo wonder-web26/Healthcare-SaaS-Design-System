@@ -3,23 +3,62 @@
  * Positionsvorschau. Baum und Auswahl lesen dieselbe Vorschau — zwei
  * Formulierungen für dieselbe Ableitung liefen auseinander.
  */
+import { Check } from "lucide-react";
 import type { DetailAuswahl, DiagnoseCode, DiagnoseTyp, InterventionId, ZielId } from "../../../lib/pflegeplan/vertrag";
 import { detaildialog, positionFuer } from "../../../lib/pflegeplan/mock-adapter";
 
 /** Wo die Fachperson gerade steht — bestimmt, was rechts angeboten wird.
  *  «editor» ist die zweite Rolle des Auswahlbereichs: Bearbeiten von
  *  Bestätigtem statt Auswählen aus Katalogen. */
-export type Fokus =
+export type AuswahlFokus =
   | { schritt: 1 }
   | { schritt: 2; diagnoseCode: DiagnoseCode }
   | { schritt: 3; diagnoseCode: DiagnoseCode; zielId: ZielId; zielTitel: string }
   | { schritt: "editor"; interventionId: InterventionId };
+
+/** «detail» ist die dritte Rolle (Lauf 6g): Lesen einer Diagnose aus dem
+ *  Katalog. `stapel` sind die zuvor gelesenen Codes — Chips können mehrere
+ *  Ebenen tief führen, und jede Ebene führt zurück. `basis` ist der
+ *  Auswahl-Zustand, zu dem der letzte Zurück-Schritt führt. `titel` ist der
+ *  Anzeige-Rückfall, wenn der Katalog zum Code keine Detailangaben führt. */
+export type Fokus =
+  | AuswahlFokus
+  | { schritt: "detail"; diagnoseCode: DiagnoseCode; titel?: string; stapel: DiagnoseCode[]; basis: AuswahlFokus };
+
+/** Detail-Fokus aus beliebigem Stand: aus einer Detailansicht heraus wird
+ *  gestapelt (Chip-Navigation), sonst frisch geöffnet — die Basis bleibt
+ *  der zuletzt aktive Auswahl-Zustand. */
+export function detailOeffnen(aktuell: Fokus, diagnoseCode: DiagnoseCode, titel?: string): Fokus {
+  if (aktuell.schritt === "detail") {
+    return { schritt: "detail", diagnoseCode, titel, stapel: [...aktuell.stapel, aktuell.diagnoseCode], basis: aktuell.basis };
+  }
+  return { schritt: "detail", diagnoseCode, titel, stapel: [], basis: aktuell };
+}
+
+/** Ein Zurück-Schritt: erst den Stapel abtragen, dann in die Auswahl. */
+export function detailZurueck(aktuell: Extract<Fokus, { schritt: "detail" }>): Fokus {
+  const stapel = [...aktuell.stapel];
+  const vorheriger = stapel.pop();
+  return vorheriger !== undefined
+    ? { schritt: "detail", diagnoseCode: vorheriger, stapel, basis: aktuell.basis }
+    : aktuell.basis;
+}
 
 export const TYP_LABEL: Record<DiagnoseTyp, string> = {
   problem: "Problem",
   risiko: "Risiko",
   bereitschaft: "Bereitschaft",
 };
+
+/** Der Planzustand als Marke — überall dieselbe, damit «steht im Plan»
+ *  in Auswahl und Detailansicht gleich aussieht. */
+export function ImPlanMarke() {
+  return (
+    <span className="inline-flex items-center shrink-0" style={{ gap: 4, padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-success-bg)", color: "var(--status-success-text)" }}>
+      <Check style={{ width: 10, height: 10 }} /> Im Plan
+    </span>
+  );
+}
 
 export function TypMarke({ typ }: { typ: DiagnoseTyp }) {
   return (

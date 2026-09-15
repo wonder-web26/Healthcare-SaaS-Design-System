@@ -3,8 +3,8 @@
  *
  * TAUSCHGRENZE: Diese Tabellen liest ausschliesslich der Mock-Adapter
  * (mock-adapter.ts) und die Vertragstest-Datei. Das UI importiert nie von
- * hier, sondern nur die fünf Abfragen — wer den echten Katalog anschliesst,
- * tauscht diese Datei, nicht das UI.
+ * hier, sondern nur die Vertragsabfragen — wer den echten Katalog
+ * anschliesst, tauscht diese Datei, nicht das UI.
  *
  * Die drei Relationen tragen dieselben Namen und dieselbe Richtung wie die
  * Katalogseite der dbml:
@@ -16,6 +16,11 @@
  * lizenzierten NANDA-Vorlage übernommen (dieselbe Regel wie bei interRAI).
  * Alle fachlichen Zuordnungen in dieser Datei sind für den Prototyp frei
  * gewählt — Herkunft "mock"; der Adapter trägt das an jedes Feld.
+ *
+ * AUCH DIE CODES SIND MOCK: Sie decken sich nicht mit der realen
+ * NANDA-Zuordnung. 00257 etwa trägt hier das Gebrechlichkeitssyndrom —
+ * im realen Katalog steht dieser Code für eine andere Diagnose. Wer die
+ * Mock-Codes später für real hält, ordnet falsch zu.
  */
 import type { Beleg, CapCode, Detaildialog, Diagnose, DiagnoseCode, InterventionId, PositionsNummer, ZielId } from "./vertrag";
 
@@ -66,6 +71,8 @@ export const MOCK_DIAGNOSEN: readonly Diagnose[] = [
   { code: "00062", titel: "Gefahr einer Rollenüberlastung pflegender Angehöriger", typ: "risiko", definition: "Erhöhte Anfälligkeit für eine Überforderung in der Pflegerolle." },
   { code: "00162", titel: "Bereitschaft für ein verbessertes Gesundheitsmanagement", typ: "bereitschaft", definition: "Muster der Steuerung der eigenen Gesundheit, das gestärkt werden kann." },
   { code: "00078", titel: "Unwirksames Gesundheitsmanagement", typ: "problem", definition: "Unzureichende Steuerung von Therapieplan und Gesundheitsverhalten im Alltag." },
+  // Syndrom (Lauf 6g): die Bestimmenden Merkmale sind selbst Diagnosen
+  { code: "00257", titel: "Gebrechlichkeitssyndrom des älteren Menschen", typ: "problem", definition: "Dynamischer Zustand instabilen Gleichgewichts, der ältere Menschen für den Verlust von Selbstständigkeit in einem oder mehreren Lebensbereichen anfällig macht." },
 ] as const;
 
 /* ── CAP → Diagnosen (die fehlende Zuordnungsliste, als Mock) ───────────── */
@@ -87,6 +94,7 @@ export const CAP_ZUORDNUNG: Readonly<Record<CapCode, ReadonlyArray<{ code: Diagn
     { code: "00126", belege: [{ itemCode: "iJ2", wert: "1" }] },
     { code: "00161", belege: [{ itemCode: "iJ2", wert: "0" }] },
     { code: "00004", belege: [{ itemCode: "iK4", wert: "1" }] },
+    { code: "00257", belege: [{ itemCode: "iJ1", wert: "2" }, { itemCode: "iG6", wert: "2" }] },
   ],
   "CAP-ADL": [
     { code: "00108", belege: [{ itemCode: "iG1a", wert: "3" }, { itemCode: "iG1b", wert: "2" }] },
@@ -247,4 +255,257 @@ export const STANDARD_POSITION: Readonly<Record<InterventionId, PositionsNummer>
      die drei Ziele unter zwei Diagnosen bedienen. */
   "I-BEWEGUNG": "10506",
   "I-GLEICHGEWICHT": "10506",
+};
+
+/* ── Diagnose-Detailangaben (Lauf 6g) ───────────────────────────────────── */
+/**
+ * Rohform, quellennah: `itemArt` trägt den Zahlencode der Quellspalte
+ * ITEM_ART (1 = Gruppenüberschrift, 3 = Item; andere Werte sind nicht
+ * ausgeschlossen), `extTaxonomie` den String der Quellspalte EXT_TAXONOMIE
+ * («9» + NANDA-Code, wenn der Eintrag selbst eine Pflegediagnose ist).
+ * Die ABBILDUNG auf den Vertragstyp — Gruppenerkennung, Code-Auflösung,
+ * Umgang mit unbekannter itemArt — leistet der Adapter, nicht diese Datei.
+ * Beim Anschluss des echten Katalogs tauscht sich die Quelle, nicht die
+ * Logik.
+ *
+ * Detailliert sind vier Diagnosen (alle Anzeigefälle des Laufs); die
+ * übrigen Codes liefern null. Alle Angaben: Herkunft mock.
+ */
+export interface RohMerkmal {
+  itemArt: number;
+  text: string;
+  extTaxonomie: string | null;
+}
+
+export interface RohDetails {
+  gebiet: string;
+  thema: string;
+  achsen: ReadonlyArray<{ art: string; wert: string }>;
+  bestimmendeMerkmale?: ReadonlyArray<RohMerkmal>;
+  beeinflussendeFaktoren?: ReadonlyArray<RohMerkmal>;
+  risikofaktoren?: ReadonlyArray<RohMerkmal>;
+  risikopopulation?: ReadonlyArray<RohMerkmal>;
+  assoziierteBedingungen?: ReadonlyArray<RohMerkmal>;
+}
+
+/* Kurzform für die Rohzeilen: g = Gruppenüberschrift (ITEM_ART 1),
+   i = Item (ITEM_ART 3), Code als «9»+NANDA wie in der Quelle. */
+const g = (text: string): RohMerkmal => ({ itemArt: 1, text, extTaxonomie: null });
+const i = (text: string, code?: string): RohMerkmal => ({ itemArt: 3, text, extTaxonomie: code ? `9${code}` : null });
+
+export const DIAGNOSE_DETAILS: Readonly<Record<DiagnoseCode, RohDetails>> = {
+  /* Das Syndrom: alle fünfzehn Bestimmenden Merkmale sind selbst
+     Pflegediagnosen — der Code steht in EXT_TAXONOMIE, nie im Fliesstext. */
+  "00257": {
+    gebiet: "Gesundheitsförderung",
+    thema: "Gesundheitsmanagement",
+    achsen: [
+      { art: "Fokus", wert: "Gebrechlichkeitssyndrom" },
+      { art: "Subjekt", wert: "Individuum" },
+      { art: "Beurteilung", wert: "beeinträchtigt" },
+      { art: "Alter", wert: "älterer Mensch" },
+      { art: "Zeit", wert: "chronisch" },
+      { art: "Status", wert: "vorhanden" },
+    ],
+    bestimmendeMerkmale: [
+      i("Aktivitätsintoleranz", "00092"),
+      i("Fatigue", "00093"),
+      i("Beeinträchtigte körperliche Mobilität", "00085"),
+      i("Beeinträchtigte Gehfähigkeit", "00088"),
+      i("Beeinträchtigte Transferfähigkeit", "00090"),
+      i("Beeinträchtigte Mobilität im Bett", "00091"),
+      i("Selbstversorgungsdefizit Körperpflege", "00108"),
+      i("Selbstversorgungsdefizit Sich-Kleiden", "00109"),
+      i("Selbstversorgungsdefizit Essen", "00102"),
+      i("Selbstversorgungsdefizit Toilettenbenutzung", "00110"),
+      i("Unausgewogene Ernährung: weniger als der Bedarf", "00002"),
+      i("Hoffnungslosigkeit", "00124"),
+      i("Soziale Isolation", "00053"),
+      i("Beeinträchtigtes Gedächtnis", "00131"),
+      i("Sturzgefahr", "00155"),
+    ],
+    beeinflussendeFaktoren: [
+      i("Immobilität über längere Zeit"),
+      i("Erschöpfung"),
+      i("Mangelernährung"),
+      i("Altersbedingter Muskelabbau"),
+      i("Soziale Vereinsamung"),
+      i("Depressive Verstimmung"),
+      i("Polypharmazie (mehr als fünf Wirkstoffe)"),
+      i("Unzureichende Energiezufuhr"),
+    ],
+    risikopopulation: [
+      i("Menschen über 70 Jahre"),
+      i("Alleinlebende Menschen"),
+      i("Menschen mit niedrigem Einkommen"),
+      i("Menschen nach längerem Spitalaufenthalt"),
+    ],
+    assoziierteBedingungen: [
+      i("Chronische Erkrankung"),
+      i("Endokrine Störung"),
+      i("Psychische Erkrankung"),
+      i("Sensorische Beeinträchtigung"),
+      i("Sarkopenie"),
+      i("Verminderte Serumalbuminwerte"),
+    ],
+  },
+
+  /* Die Risikodiagnose: keine Bestimmenden Merkmale, keine Beeinflussenden
+     Faktoren — dafür 49 Risikofaktoren in vier Gruppen (nach dem Vorbild
+     von 00303). Zwei Faktoren tragen selbst einen Diagnosecode. */
+  "00155": {
+    gebiet: "Sicherheit und Schutz",
+    thema: "Physische Verletzung",
+    achsen: [
+      { art: "Fokus", wert: "Sturz" },
+      { art: "Subjekt", wert: "Individuum" },
+      { art: "Beurteilung", wert: "Gefahr" },
+      { art: "Alter", wert: "älterer Mensch" },
+      { art: "Zeit", wert: "akut" },
+      { art: "Status", wert: "Risiko" },
+    ],
+    risikofaktoren: [
+      g("Physiologische Faktoren"),
+      i("Beeinträchtigtes Gleichgewicht"),
+      i("Beeinträchtigte körperliche Mobilität", "00085"),
+      i("Beeinträchtigte Gehfähigkeit", "00088"),
+      i("Verminderte Muskelkraft der unteren Extremitäten"),
+      i("Orthostatische Hypotonie"),
+      i("Schwindel beim Lagewechsel"),
+      i("Verminderte Sehschärfe"),
+      i("Hörbeeinträchtigung"),
+      i("Dranginkontinenz"),
+      i("Nächtlicher Toilettengang"),
+      i("Fussdeformitäten"),
+      i("Schmerzen beim Gehen"),
+      i("Verminderte Ausdauer"),
+      i("Hypoglykämie-Episoden"),
+      i("Anämie"),
+      i("Dehydratation"),
+      i("Schlafmangel"),
+      i("Verminderte propriozeptive Wahrnehmung"),
+      g("Psychoneurologische Faktoren"),
+      i("Akute Verwirrtheit"),
+      i("Chronische kognitive Beeinträchtigung"),
+      i("Fehleinschätzung der eigenen Fähigkeiten"),
+      i("Sturzangst mit Vermeidungsverhalten"),
+      i("Unruhe und Agitation"),
+      i("Depressive Symptomatik"),
+      i("Impulsivität"),
+      i("Beeinträchtigte Aufmerksamkeit"),
+      i("Delirante Episoden in der Nacht"),
+      i("Desorientierung in neuer Umgebung"),
+      g("Umweltfaktoren"),
+      i("Lose Teppiche und Läufer"),
+      i("Fehlende Haltegriffe im Bad"),
+      i("Unzureichende Beleuchtung"),
+      i("Glatte oder nasse Böden"),
+      i("Stolperkanten und Türschwellen"),
+      i("Ungeeignetes Schuhwerk"),
+      i("Möbel als Gehhilfe benutzt"),
+      i("Kabel in Gehwegen"),
+      i("Fehlender Handlauf an der Treppe"),
+      i("Haustiere im Gehbereich"),
+      i("Ungesicherte Leitern und Tritte"),
+      i("Wohnung über mehrere Etagen"),
+      g("Andere Faktoren"),
+      i("Sedierende Medikation"),
+      i("Polypharmazie (mehr als fünf Wirkstoffe)"),
+      i("Alkoholkonsum"),
+      i("Neu angepasste Brille"),
+      i("Kürzlich veränderte Medikation"),
+      i("Eile beim Gang zur Toilette"),
+      i("Ungewohnte Hilfsmittel"),
+      i("Fehlende Begleitung bei Transfers"),
+      i("Sturz in den letzten drei Monaten"),
+    ],
+    risikopopulation: [
+      i("Menschen über 65 Jahre"),
+      i("Alleinlebende Menschen"),
+      i("Menschen mit Stürzen in der Vorgeschichte"),
+      i("Menschen in den ersten Tagen nach Spitalaustritt"),
+      i("Menschen mit nächtlichem Toilettengang"),
+      i("Menschen mit Gehhilfen"),
+      i("Menschen mit kürzlich verändertem Wohnumfeld"),
+      i("Menschen mit orthostatischen Beschwerden"),
+    ],
+    assoziierteBedingungen: [
+      i("Morbus Parkinson"),
+      i("Zustand nach Hirnschlag"),
+      i("Demenz"),
+      i("Diabetes mellitus mit Polyneuropathie"),
+      i("Herzrhythmusstörungen"),
+      i("Arthrose der unteren Extremitäten"),
+      i("Osteoporose"),
+      i("Katarakt"),
+      i("Periphere Neuropathie"),
+      i("Vestibuläre Störung"),
+    ],
+  },
+
+  /* Der Alltagsfall: vier belegte Listen, kein Eintrag trägt einen
+     Diagnosecode — die Gegenprobe zur Anklickbarkeit. */
+  "00108": {
+    gebiet: "Aktivität und Ruhe",
+    thema: "Selbstversorgung",
+    achsen: [
+      { art: "Fokus", wert: "Selbstversorgung: Körperpflege" },
+      { art: "Subjekt", wert: "Individuum" },
+      { art: "Beurteilung", wert: "beeinträchtigt" },
+      { art: "Alter", wert: "alle Altersgruppen" },
+      { art: "Zeit", wert: "anhaltend" },
+      { art: "Status", wert: "vorhanden" },
+    ],
+    bestimmendeMerkmale: [
+      i("Unfähigkeit, den Körper vollständig zu waschen"),
+      i("Unfähigkeit, Wasser in geeigneter Temperatur bereitzustellen"),
+      i("Unfähigkeit, die Badezimmerausstattung zu erreichen"),
+      i("Unfähigkeit, sich abzutrocknen"),
+      i("Unfähigkeit, Waschutensilien zu beschaffen"),
+      i("Auslassen einzelner Körperregionen bei der Pflege"),
+      i("Unvollständige Mund- und Zahnpflege"),
+      i("Vernachlässigte Haar- und Nagelpflege"),
+      i("Ablehnung der Körperpflege bei Übernahme durch Dritte"),
+    ],
+    beeinflussendeFaktoren: [
+      i("Verminderte Ausdauer"),
+      i("Schmerz bei Bewegung"),
+      i("Beeinträchtigte Wahrnehmung des eigenen Körpers"),
+      i("Antriebslosigkeit"),
+      i("Angst vor dem Ausrutschen in der Nasszelle"),
+      i("Ungeeignete Ausstattung der Nasszelle"),
+    ],
+    risikopopulation: [
+      i("Menschen im hohen Alter"),
+      i("Menschen nach längerer Immobilisation"),
+      i("Alleinlebende Menschen ohne Unterstützung im Haushalt"),
+    ],
+    assoziierteBedingungen: [
+      i("Neuromuskuläre Erkrankung"),
+      i("Kognitive Beeinträchtigung"),
+      i("Muskuloskelettale Beeinträchtigung"),
+      i("Ausgeprägte Sehbeeinträchtigung"),
+      i("Depressive Störung"),
+    ],
+  },
+
+  /* Die Bereitschaftsdiagnose: genau eine belegte Liste. */
+  "00161": {
+    gebiet: "Wahrnehmung und Kognition",
+    thema: "Kognition",
+    achsen: [
+      { art: "Fokus", wert: "Wissen" },
+      { art: "Subjekt", wert: "Individuum" },
+      { art: "Beurteilung", wert: "Bereitschaft für Verbesserung" },
+      { art: "Zeit", wert: "anhaltend" },
+      { art: "Status", wert: "Gesundheitsförderung" },
+    ],
+    bestimmendeMerkmale: [
+      i("Äussert den Wunsch, mehr über die eigene Erkrankung zu erfahren"),
+      i("Stellt gezielte Fragen zu Pflege und Behandlung"),
+      i("Greift angebotene Informationsmaterialien auf"),
+      i("Wendet Gelerntes im Alltag an"),
+      i("Beschreibt frühere Lernerfolge im Umgang mit der Gesundheit"),
+    ],
+  },
 };

@@ -136,6 +136,34 @@ dbml heute nicht vorsieht:
    (`GEGENWART_ISO`); produktiv ersetzt das Systemdatum die Konstante.
    (Die Überfälligkeits-Ableitung ist mit dem Zieldatum entfallen.)
 
+## Abweichungen aus Lauf 6g (Diagnose-Detailansicht)
+
+1. **Die dbml führt keine Merkmalslisten- und Taxonomie-Tabellen.** Die
+   zehnte Vertragsabfrage `diagnoseDetails(code)` braucht je Diagnose:
+   die fünf Merkmalslisten (Bestimmende Merkmale, Beeinflussende Faktoren,
+   Risikofaktoren, Risikopopulation, Assoziierte Bedingungen) mit
+   Gliederung (`ITEM_ART`: 1 = Gruppenüberschrift, 3 = Item) und
+   Diagnose-Verweis (`EXT_TAXONOMIE`: «9» + NANDA-Code), dazu
+   Taxonomie-Achsen sowie Gebiets- und Themenzuordnung. **Antrag:**
+   Katalogtabellen nach dem Vorbild der Lieferung; bis dahin Mock
+   (`DIAGNOSE_DETAILS` in `mock-daten.ts`, quellennah als `itemArt`-Zahl
+   plus `extTaxonomie`-String — die Abbildung leistet der Adapter, beim
+   Anschluss tauscht sich die Quelle, nicht die Logik).
+
+2. **Abbildungsregeln als Vertragszusicherung:** unbekannte `ITEM_ART`-Werte
+   werden als Item behandelt und gemeldet, nicht verworfen (testbeobachtbar
+   über `merkmalsEintrag`); Diagnosecodes werden ausschliesslich aus
+   `EXT_TAXONOMIE` gelesen, nie aus dem Fliesstext.
+
+3. **Kein Ressourcenfeld:** `R_DLG_ID` ist in der gesamten Lieferung 0.
+   Falls Ressourcen je geliefert werden, gehören sie an die Plan-Diagnose
+   (Instanzebene), nicht an die Katalog-Details.
+
+4. **Katalogkennzahlen abgeleitet, nicht gepflegt:** `anzahlZiele` und
+   `anzahlInterventionen` entstehen im Adapter aus denselben Strukturen wie
+   die Abfragen (2) und (3) — keine zweite Zahlenquelle, 0 ist eine
+   gültige Antwort (00257 trägt bewusst keine Kette).
+
 ## Abweichungen aus Lauf 6d (Diagnostik als Phase)
 
 1. **Prioritätsfeld an der Plan-Diagnose:** Jede übernommene Diagnose trägt

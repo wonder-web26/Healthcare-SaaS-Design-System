@@ -11,10 +11,10 @@
  * Plan-Zustand.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Check, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import {
   diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel,
-  ausgeschlosseneZiele, unbehandelteCaps,
+  ausgeschlosseneZiele, unbehandelteCaps, diagnoseDetails,
 } from "../../../lib/pflegeplan/mock-adapter";
 import type { CapCode, DiagnoseCode, DiagnoseVorschlag } from "../../../lib/pflegeplan/vertrag";
 import {
@@ -27,8 +27,12 @@ import { useCurrentUser } from "../../auth";
 import { GEGENWART_ISO } from "../../../lib/gegenwart";
 import type { MandatKurz } from "../../../lib/pflegeplan/planung";
 import { MassnahmenEditor } from "./MassnahmenEditor";
+import { DiagnoseDetail } from "./DiagnoseDetail";
 import { InlineSelect } from "../ui/InlineSelect";
-import { type Fokus, TypMarke, positionsVorschau, katalogGruppe, datumAnzeige } from "./gemeinsam";
+import {
+  type Fokus, TypMarke, ImPlanMarke, positionsVorschau, katalogGruppe, datumAnzeige,
+  detailOeffnen, detailZurueck,
+} from "./gemeinsam";
 
 const KARTE: React.CSSProperties = {
   background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
@@ -81,7 +85,10 @@ function KategorieLeiste({ fokus, onFokus, kontext }: {
 
   const zieleBegehbar = kontextDiagnose !== null;
   const massnahmenBegehbar = zieleBegehbar && kontextZiel !== null;
-  const aktiv = fokus.schritt === 1 || fokus.schritt === 2 || fokus.schritt === 3 ? fokus.schritt : 3;
+  /* In der Detailansicht liest man eine Diagnose — die Reiter bleiben
+     stehen und führen mit einem Klick zurück in die Auswahl. */
+  const aktiv = fokus.schritt === 1 || fokus.schritt === 2 || fokus.schritt === 3
+    ? fokus.schritt : fokus.schritt === "detail" ? 1 : 3;
 
   const zuStufe = (nr: 1 | 2 | 3) => {
     if (nr === 1) onFokus({ schritt: 1 });
@@ -249,19 +256,12 @@ function PillKnopf({ label, onClick, primaer }: { label: string; onClick: () => 
   );
 }
 
-function ImPlanMarke() {
-  return (
-    <span className="inline-flex items-center shrink-0" style={{ gap: 4, padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: "var(--weight-medium)", background: "var(--status-success-bg)", color: "var(--status-success-text)" }}>
-      <Check style={{ width: 10, height: 10 }} /> Im Plan
-    </span>
-  );
-}
-
 /* ══════════════════════════════════════════
    SCHRITT 1 — Diagnoseauswahl
    ══════════════════════════════════════════ */
-function DiagnoseAuswahl({ caps, assessmentDatum }: {
+function DiagnoseAuswahl({ caps, assessmentDatum, onDetail }: {
   caps: CapCode[]; assessmentDatum: string;
+  onDetail: (code: DiagnoseCode, titel: string) => void;
 }) {
   const plan = usePlan();
   const benutzer = useCurrentUser();
@@ -307,10 +307,15 @@ function DiagnoseAuswahl({ caps, assessmentDatum }: {
           return (
             <div key={code} data-kandidat={code} style={{ ...KARTE, padding: "9px 12px", opacity: verworfen ? 0.85 : 1 }}>
               <div className="flex items-center" style={{ gap: 8 }}>
-                <span className="flex-1 min-w-0" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", textDecoration: verworfen ? "line-through" : "none" }}>
+                {/* Der Titel öffnet die Detailansicht — Übernehmen und
+                    Verwerfen bleiben eigene Flächen. */}
+                <button type="button" onClick={() => onDetail(code, v.diagnose.titel)}
+                  title="Details der Diagnose öffnen"
+                  className="ui-fokusring cursor-pointer flex-1 min-w-0 text-left"
+                  style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", textDecoration: verworfen ? "line-through" : "none" }}>
                   {v.diagnose.titel}
                   <span style={{ fontWeight: "var(--weight-regular)", color: "var(--text-tertiary)", marginLeft: 6, fontVariantNumeric: "tabular-nums" }}>{code}</span>
-                </span>
+                </button>
                 <TypMarke typ={v.diagnose.typ} />
                 <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
                   {v.ausloesendeCaps.length} {v.ausloesendeCaps.length === 1 ? "CAP" : "CAPs"}
@@ -615,11 +620,32 @@ export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum, mandate 
     );
   }
 
+  /* Die Detailansicht ist die dritte Rolle: Lesen aus dem Katalog. Die
+     Kategorie-Reiter bleiben oben stehen (Rückweg in die Auswahl); der
+     Zurück-Knopf trägt erst den Chip-Stapel ab, dann die Basis. */
+  if (fokus.schritt === "detail") {
+    const vorheriger = fokus.stapel.length > 0 ? fokus.stapel[fokus.stapel.length - 1] : null;
+    const zurueckLabel = vorheriger !== null
+      ? `Zurück zu «${diagnoseDetails(vorheriger)?.titel ?? vorheriger}»`
+      : "Zurück zur Auswahl";
+    return (
+      <div>
+        <KategorieLeiste fokus={fokus} onFokus={onFokus} kontext={pfadKontext} />
+        <DiagnoseDetail key={`${fokus.diagnoseCode}:${fokus.stapel.length}`}
+          diagnoseCode={fokus.diagnoseCode} titelFallback={fokus.titel}
+          zurueckLabel={zurueckLabel}
+          onZurueck={() => onFokus(detailZurueck(fokus))}
+          onOeffnen={(code, titel) => onFokus(detailOeffnen(fokus, code, titel))} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <KategorieLeiste fokus={fokus} onFokus={onFokus} kontext={pfadKontext} />
       {fokus.schritt === 1 && (
-        <DiagnoseAuswahl caps={caps} assessmentDatum={assessmentDatum} />
+        <DiagnoseAuswahl caps={caps} assessmentDatum={assessmentDatum}
+          onDetail={(code, titel) => onFokus(detailOeffnen(fokus, code, titel))} />
       )}
       {fokus.schritt === 2 && (
         <ZielAuswahl diagnoseCode={fokus.diagnoseCode}

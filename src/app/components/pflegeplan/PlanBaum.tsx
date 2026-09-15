@@ -70,10 +70,12 @@ function MassnahmenZeile({ m, diagnoseCode, zielId, zielTitelVon, mandate, onFok
   );
 }
 
-export function PlanBaum({ plan, mandate, onFokus, kontextDiagnose }: {
+export function PlanBaum({ plan, mandate, onFokus, onDetail, kontextDiagnose }: {
   plan: PlanZustand;
   mandate: MandatKurz[];
   onFokus: (f: Fokus) => void;
+  /** Öffnet die Diagnose-Detailansicht (Lauf 6g) im Auswahlbereich. */
+  onDetail: (code: string, titel: string) => void;
   /** Diagnose, an der links gerade Ziele oder Massnahmen gewählt werden —
    *  ihre Karte wird im Baum markiert. */
   kontextDiagnose?: string | null;
@@ -148,7 +150,14 @@ export function PlanBaum({ plan, mandate, onFokus, kontextDiagnose }: {
               <div className="flex items-center" style={{ gap: 8 }}>
                 <FaltKnopf zu={dZu} onToggle={() => toggle(dKey)} label={`Diagnose ${d.code} auf- oder zuklappen`} />
                 <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{d.code}</span>
-                <span className="flex-1 min-w-0 truncate" style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{d.titel}</span>
+                {/* Der Titel öffnet die Detailansicht im Auswahlbereich —
+                    Falten, Priorität und Entfernen bleiben eigene Flächen. */}
+                <button type="button" onClick={() => onDetail(d.code, d.titel)}
+                  title="Details der Diagnose öffnen"
+                  className="ui-fokusring cursor-pointer flex-1 min-w-0 truncate text-left"
+                  style={{ background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+                  {d.titel}
+                </button>
                 {/* Die Priorität: eine fachliche Aussage der Fachperson —
                     wichtig zuerst, keine Berechnung (Lauf 6d). */}
                 <button type="button" data-prioritaet={d.code} aria-pressed={wichtig}

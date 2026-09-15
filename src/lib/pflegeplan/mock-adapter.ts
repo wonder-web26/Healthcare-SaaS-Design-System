@@ -1,17 +1,19 @@
 /**
- * Mock-Adapter — die fünf Leseabfragen des Pflegeplan-Vertrags, bedient aus
+ * Mock-Adapter — die Leseabfragen des Pflegeplan-Vertrags, bedient aus
  * dem Mock-Datensatz. Wer später den echten Katalog (NANDA-I PLUS mit ENP,
  * CAP-NANDA-Zuordnungsliste) anschliesst, schreibt einen zweiten Adapter
  * hinter denselben Vertrag und tauscht die Datenquelle — nicht das UI.
  */
 import type {
   Beleg, BewertungsStufe, CapCode, DetailAuswahl, Detaildialog, Diagnose, DiagnoseCode,
-  DiagnoseVorschlag, FeldHerkunft, Intervention, InterventionId,
-  Leistungsposition, MitHerkunft, PflegeplanAbfragen, QualifikationsStufe, Ziel, ZielId,
+  DiagnoseDetails, DiagnoseVorschlag, FeldHerkunft, Intervention, InterventionId,
+  Leistungsposition, MerkmalsEintrag, Merkmalsliste, MitHerkunft, PflegeplanAbfragen,
+  QualifikationsStufe, Ziel, ZielId,
 } from "./vertrag";
 import {
-  CAP_ZUORDNUNG, DETAILDIALOGE, MAS_ZIEL, MOCK_DIAGNOSEN,
+  CAP_ZUORDNUNG, DETAILDIALOGE, DIAGNOSE_DETAILS, MAS_ZIEL, MOCK_DIAGNOSEN,
   MOCK_INTERVENTIONEN, MOCK_ZIELE, PROB_MAS, PROB_ZIEL_HIDE, STANDARD_POSITION,
+  type RohMerkmal,
 } from "./mock-daten";
 import { leistungsposition } from "./positionen";
 
@@ -213,8 +215,89 @@ export function qualifikationsStufen(): MitHerkunft<QualifikationsStufe>[] {
   return QUALIFIKATIONS_STUFEN.map(s => ({ ...s, herkunft: HERKUNFT_QUALIFIKATION }));
 }
 
+/**
+ * (10) Die Detailangaben einer Diagnose. Die Abbildung der Rohzeilen
+ * (Gruppenerkennung, Code-Auflösung) leistet merkmalsEintrag — als eigene,
+ * testbare Funktion, damit die Logik beim Anschluss des echten Katalogs
+ * unverändert bleibt.
+ */
+
+/**
+ * Eine Rohzeile der Quelle auf den Vertragstyp abgebildet.
+ *
+ * ITEM_ART: 1 → Gruppe, 3 → Item. Ein UNBEKANNTER Wert ist ein Datenbefund,
+ * kein Log-Eintrag: er kommt als Item durch (nichts wird verworfen) und
+ * steht benannt im Rückgabewert — der Vertragstest prüft beides.
+ *
+ * EXT_TAXONOMIE: «9» + fünfstelliger NANDA-Code («900326» → 00326) →
+ * diagnoseCode. Jede andere Form → null; der Code wird nie aus dem
+ * Fliesstext gelesen.
+ */
+export function merkmalsEintrag(roh: RohMerkmal): { eintrag: MerkmalsEintrag; unbekannteArt: number | null } {
+  const bekannt = roh.itemArt === 1 || roh.itemArt === 3;
+  const treffer = roh.extTaxonomie?.match(/^9(\d{5})$/) ?? null;
+  return {
+    eintrag: {
+      art: roh.itemArt === 1 ? "gruppe" : "item",
+      text: roh.text,
+      diagnoseCode: treffer ? treffer[1] : null,
+    },
+    unbekannteArt: bekannt ? null : roh.itemArt,
+  };
+}
+
+const HERKUNFT_DETAILS: FeldHerkunft<DiagnoseDetails> = {
+  code: "mock", titel: "mock", typ: "mock", definition: "mock", gebiet: "mock", thema: "mock",
+  bestimmendeMerkmale: "mock", beeinflussendeFaktoren: "mock", risikofaktoren: "mock",
+  risikopopulation: "mock", assoziierteBedingungen: "mock", achsen: "mock",
+  anzahlInterventionen: "mock", anzahlZiele: "mock",
+};
+
+export function diagnoseDetails(code: DiagnoseCode): MitHerkunft<DiagnoseDetails> | null {
+  const basis = diagnoseJeCode.get(code);
+  const roh = DIAGNOSE_DETAILS[code];
+  if (!basis || !roh) return null;
+
+  const liste = (zeilen?: ReadonlyArray<RohMerkmal>): Merkmalsliste | null => {
+    if (!zeilen) return null;
+    const unbekannte = new Set<number>();
+    const eintraege = zeilen.map(z => {
+      const { eintrag, unbekannteArt } = merkmalsEintrag(z);
+      if (unbekannteArt !== null) unbekannte.add(unbekannteArt);
+      return eintrag;
+    });
+    if (unbekannte.size > 0) {
+      console.warn(`Pflegeplan-Katalog ${code}: unbekannte ITEM_ART ${[...unbekannte].join(", ")} — als Item behandelt.`);
+    }
+    return eintraege;
+  };
+
+  /* Katalogkennzahlen aus denselben Strukturen wie (2) und (3) — keine
+     zweite Zahlenquelle. 0/0 ist eine gültige, ehrliche Antwort. */
+  const ziele = zieleZuDiagnose(code);
+  const interventionsIds = new Set<InterventionId>();
+  for (const z of ziele) {
+    for (const i of interventionenZuZiel(code, z.id)) interventionsIds.add(i.id);
+  }
+
+  return {
+    code: basis.code, titel: basis.titel, typ: basis.typ, definition: basis.definition,
+    gebiet: roh.gebiet, thema: roh.thema,
+    bestimmendeMerkmale: liste(roh.bestimmendeMerkmale),
+    beeinflussendeFaktoren: liste(roh.beeinflussendeFaktoren),
+    risikofaktoren: liste(roh.risikofaktoren),
+    risikopopulation: liste(roh.risikopopulation),
+    assoziierteBedingungen: liste(roh.assoziierteBedingungen),
+    achsen: roh.achsen.map(a => ({ ...a })),
+    anzahlInterventionen: interventionsIds.size,
+    anzahlZiele: ziele.length,
+    herkunft: HERKUNFT_DETAILS,
+  };
+}
+
 /** Der Vertrag als ein Objekt — für Übergabe an Komponenten oder Tests. */
 export const mockPflegeplanKatalog: PflegeplanAbfragen = {
   diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer,
   ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala, qualifikationsStufen,
+  diagnoseDetails,
 };

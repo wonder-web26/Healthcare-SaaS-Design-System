@@ -34,10 +34,13 @@ const KARTE: React.CSSProperties = {
   borderRadius: "var(--radius-card)",
 };
 
-export function StrukturAnsicht({ plan: planProp, mandate, onEditor }: {
+export function StrukturAnsicht({ plan: planProp, mandate, onEditor, onDetail }: {
   plan: PlanZustand;
   mandate: MandatKurz[];
   onEditor: (interventionId: InterventionId) => void;
+  /** Öffnet die Diagnose-Detailansicht (Lauf 6g) — per Doppelklick auf den
+   *  Diagnose-Knoten, wie onEditor bei den Massnahmen. */
+  onDetail: (code: string, titel: string) => void;
 }) {
   const plan = usePlan(); void planProp; /* dieselbe Quelle — Prop dient der Signatur-Klarheit */
   const [auswahl, setAuswahl] = useState<Auswahl>(null);
@@ -268,6 +271,8 @@ export function StrukturAnsicht({ plan: planProp, mandate, onEditor }: {
                 return (
                   <button key={d.code} type="button" ref={ref(`d:${d.code}`)} data-struktur-d={d.code}
                     onClick={() => klickDiagnose(d.code)}
+                    onDoubleClick={() => onDetail(d.code, d.titel)}
+                    title="Doppelklick öffnet die Diagnose-Details"
                     className="ui-fokusring"
                     style={knopfStil(`d:${d.code}`, teil.d.has(d.code), gewaehlt, diagnoseVerknuepfbar(d.code))}>
                     <div className="flex items-center" style={{ gap: 6 }}>

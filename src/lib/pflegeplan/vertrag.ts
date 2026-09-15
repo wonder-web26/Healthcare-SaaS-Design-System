@@ -70,6 +70,64 @@ export interface DiagnoseVorschlag {
   rang: number;
 }
 
+/* ── Diagnose-Details ───────────────────────────────────────────────────── */
+/**
+ * Die Leseansicht einer Diagnose: woran man sie erkennt (Bestimmende
+ * Merkmale), warum (Beeinflussende Faktoren), wen sie betrifft
+ * (Risikopopulation). Ohne diese Listen ist die Definition allein keine
+ * Beurteilungsgrundlage.
+ *
+ * Quellabbildung, die der Adapter leistet:
+ * - Die Listen sind gegliedert. ITEM_ART 1 ist Gruppenüberschrift, 3 ist
+ *   Item; unbekannte Werte werden als Item behandelt und gemeldet, nicht
+ *   verworfen.
+ * - Manche Einträge sind selbst Pflegediagnosen. Ihr Code steht
+ *   maschinenlesbar in EXT_TAXONOMIE («9» plus NANDA-Code, 00326 → 900326)
+ *   — der Adapter liest ihn von dort, nie aus dem Fliesstext des Titels.
+ *
+ * Kein Ressourcenfeld: R_DLG_ID ist in der gesamten Lieferung 0. Falls
+ * Ressourcen je geliefert werden, gehören sie an die Plan-Diagnose,
+ * nicht hierher.
+ */
+export interface MerkmalsEintrag {
+  art: "gruppe" | "item";
+  text: string;
+  /** Nur belegt, wenn der Eintrag selbst eine Pflegediagnose ist. */
+  diagnoseCode: DiagnoseCode | null;
+}
+
+export type Merkmalsliste = MerkmalsEintrag[];
+
+export interface TaxonomieAchse {
+  art: string;
+  wert: string;
+}
+
+export interface DiagnoseDetails {
+  code: DiagnoseCode;
+  titel: string;
+  typ: DiagnoseTyp;
+  definition: string;
+  /** z.B. «Gesundheitsmanagement». */
+  gebiet: string;
+  /** z.B. «Gesundheitsförderung». */
+  thema: string;
+  /** null = im Katalog nicht belegt — die Ansicht zeigt dann keinen
+   *  Abschnitt, keinen leeren Platzhalter. */
+  bestimmendeMerkmale: Merkmalsliste | null;
+  beeinflussendeFaktoren: Merkmalsliste | null;
+  risikofaktoren: Merkmalsliste | null;
+  risikopopulation: Merkmalsliste | null;
+  assoziierteBedingungen: Merkmalsliste | null;
+  achsen: TaxonomieAchse[];
+  /** Katalogkennzahlen, keine Planzahlen — abgeleitet aus denselben
+   *  Strukturen, die zieleZuDiagnose und interventionenZuZiel bedienen,
+   *  damit keine zweite Zahlenquelle entsteht. 0 ist eine gültige,
+   *  ehrliche Antwort. */
+  anzahlInterventionen: number;
+  anzahlZiele: number;
+}
+
 /* ── Ziel und Intervention ──────────────────────────────────────────────── */
 export interface Ziel {
   id: ZielId;
@@ -207,6 +265,11 @@ export function ableitungAlsText(a: Ableitung): string {
  * geordnet (Rang 1 = niedrigste). Die echte Quelle sind die
  * Qualifikationsniveaus des Personalstamms und ihre Verknüpfung mit den
  * Tarifstufen — beides liegt nicht vor, deshalb Herkunft mock. Siehe Delta.
+ *
+ * Zu (10) — Ergänzung aus Lauf 6g: die Detailangaben einer Diagnose zum
+ * Lesen. null, wenn der Katalog zu diesem Code keine Detailangaben führt —
+ * die Ansicht zeigt dann den Kopf nicht aus anderer Quelle nach, sondern
+ * benennt den Zustand. Kennzahlen darin sind Katalogzahlen, keine Planzahlen.
  */
 export interface PflegeplanAbfragen {
   diagnoseVorschlaege(caps: CapCode[]): DiagnoseVorschlag[];
@@ -218,4 +281,5 @@ export interface PflegeplanAbfragen {
   unbehandelteCaps(caps: CapCode[]): CapCode[];
   zielBewertungsSkala(): MitHerkunft<BewertungsStufe>[];
   qualifikationsStufen(): MitHerkunft<QualifikationsStufe>[];
+  diagnoseDetails(code: DiagnoseCode): MitHerkunft<DiagnoseDetails> | null;
 }

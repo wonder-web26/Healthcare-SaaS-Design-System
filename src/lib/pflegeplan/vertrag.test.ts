@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { ableitungAlsText } from "./vertrag";
-import { diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer, ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala, qualifikationsStufen } from "./mock-adapter";
+import { diagnoseVorschlaege, zieleZuDiagnose, interventionenZuZiel, detaildialog, positionFuer, ausgeschlosseneZiele, unbehandelteCaps, zielBewertungsSkala, qualifikationsStufen, diagnoseDetails, merkmalsEintrag } from "./mock-adapter";
 import { leistungsposition } from "./positionen";
 import { MAS_ZIEL, PROB_MAS, PROB_ZIEL_HIDE } from "./mock-daten";
 
@@ -180,6 +180,81 @@ const VIER_CAPS = ["CAP-FALLS", "CAP-ADL", "CAP-PAIN", "CAP-MOOD"];
       `${nr}: Mindestqualifikation «${p?.mindestqualifikation}» liegt auf der Leiter`);
   }
   console.log("✓ 15 qualifikationsStufen: drei Stufen, Ordnung 1→3, Herkunft mock, deckt die Positionsminima");
+}
+
+/* ── 16 (Lauf 6g): diagnoseDetails — Listen, Gruppen, Code-Auflösung ── */
+{
+  // Belegte und leere Listen: das Syndrom trägt vier, die Risikodiagnose
+  // lässt Bestimmende Merkmale und Beeinflussende Faktoren bei null.
+  const syndrom = diagnoseDetails("00257");
+  assert.ok(syndrom, "00257 liefert Details");
+  assert.ok(syndrom!.bestimmendeMerkmale && syndrom!.beeinflussendeFaktoren
+    && syndrom!.risikopopulation && syndrom!.assoziierteBedingungen, "00257: vier belegte Listen");
+  assert.equal(syndrom!.risikofaktoren, null, "00257: Risikofaktoren nicht belegt — null, keine leere Liste");
+
+  const sturz = diagnoseDetails("00155");
+  assert.ok(sturz, "00155 liefert Details");
+  assert.equal(sturz!.bestimmendeMerkmale, null, "00155: keine Bestimmenden Merkmale");
+  assert.equal(sturz!.beeinflussendeFaktoren, null, "00155: keine Beeinflussenden Faktoren");
+
+  // Gruppenerkennung: 49 Items unter 4 Überschriften, Überschriften zählen
+  // nicht als Items.
+  const rf = sturz!.risikofaktoren!;
+  assert.equal(rf.filter(e => e.art === "gruppe").length, 4, "00155: vier Gruppenüberschriften");
+  assert.equal(rf.filter(e => e.art === "item").length, 49, "00155: 49 Risikofaktoren-Items");
+  assert.equal(rf[0].art, "gruppe", "die erste Zeile ist eine Überschrift");
+
+  // Diagnosecode-Auflösung: aus EXT_TAXONOMIE («9» + Code), nie aus dem Text.
+  const merkmale = syndrom!.bestimmendeMerkmale!;
+  assert.equal(merkmale.length, 15, "00257: fünfzehn Bestimmende Merkmale");
+  assert.ok(merkmale.every(m => m.art === "item" && m.diagnoseCode !== null), "alle fünfzehn tragen einen Diagnosecode");
+  assert.ok(merkmale.some(m => m.diagnoseCode === "00108"), "00108 ist unter den Merkmalen (Planmarken-Fall)");
+  const ohneCode = diagnoseDetails("00108")!.bestimmendeMerkmale!;
+  assert.ok(ohneCode.every(m => m.diagnoseCode === null), "00108: kein Merkmal trägt einen Code (Gegenprobe)");
+
+  // Bereitschaftsdiagnose: genau eine belegte Liste.
+  const wissen = diagnoseDetails("00161")!;
+  const listen = [wissen.bestimmendeMerkmale, wissen.beeinflussendeFaktoren,
+    wissen.risikofaktoren, wissen.risikopopulation, wissen.assoziierteBedingungen];
+  assert.equal(listen.filter(l => l !== null).length, 1, "00161: genau eine belegte Liste");
+
+  // Katalogkennzahlen abgeleitet, nicht gepflegt: 00257 ehrlich 0/0,
+  // 00155 deckungsgleich mit den Abfragen (2)/(3).
+  assert.equal(syndrom!.anzahlZiele, 0, "00257: 0 erreichbare Ziele");
+  assert.equal(syndrom!.anzahlInterventionen, 0, "00257: 0 Interventionen");
+  const ziele155 = zieleZuDiagnose("00155");
+  assert.equal(sturz!.anzahlZiele, ziele155.length, "00155: anzahlZiele = zieleZuDiagnose");
+  const ids = new Set(ziele155.flatMap(z => interventionenZuZiel("00155", z.id).map(x => x.id)));
+  assert.equal(sturz!.anzahlInterventionen, ids.size, "00155: anzahlInterventionen = Vereinigung aus (3)");
+
+  // Unbekannter Code und Herkunft.
+  assert.equal(diagnoseDetails("99999"), null, "unbekannter Code liefert null");
+  assert.equal(syndrom!.herkunft.gebiet, "mock", "Herkunft je Feld: mock");
+  assert.equal(syndrom!.herkunft.bestimmendeMerkmale, "mock");
+  console.log(`✓ 16 diagnoseDetails: Listen belegt/null, ${rf.length} Zeilen mit 4 Gruppen, Codes aufgelöst, Kennzahlen abgeleitet`);
+}
+
+/* ── 17 (Lauf 6g): merkmalsEintrag — die Abbildung selbst, beobachtbar ── */
+{
+  // Bekannte Arten: 1 → Gruppe, 3 → Item, nichts gemeldet.
+  assert.deepEqual(merkmalsEintrag({ itemArt: 1, text: "Umweltfaktoren", extTaxonomie: null }),
+    { eintrag: { art: "gruppe", text: "Umweltfaktoren", diagnoseCode: null }, unbekannteArt: null });
+  assert.deepEqual(merkmalsEintrag({ itemArt: 3, text: "Anämie", extTaxonomie: null }),
+    { eintrag: { art: "item", text: "Anämie", diagnoseCode: null }, unbekannteArt: null });
+
+  // Ein unbekannter Wert ist ein Datenbefund: er kommt als Item durch UND
+  // steht benannt im Ergebnis — nicht nur «stürzt nicht ab».
+  const fremd = merkmalsEintrag({ itemArt: 7, text: "Unbekannte Zeile", extTaxonomie: null });
+  assert.equal(fremd.eintrag.art, "item", "unbekannte ITEM_ART wird als Item behandelt, nicht verworfen");
+  assert.equal(fremd.unbekannteArt, 7, "… und der Fall ist im Rückgabewert erkennbar");
+
+  // EXT_TAXONOMIE: «9» + fünfstelliger Code wird aufgelöst, alles andere nicht.
+  assert.equal(merkmalsEintrag({ itemArt: 3, text: "Fatigue", extTaxonomie: "900093" }).eintrag.diagnoseCode, "00093");
+  assert.equal(merkmalsEintrag({ itemArt: 3, text: "Fatigue (00093)", extTaxonomie: null }).eintrag.diagnoseCode, null,
+    "ohne EXT_TAXONOMIE kein Code — der Fliesstext wird nie gelesen");
+  assert.equal(merkmalsEintrag({ itemArt: 3, text: "x", extTaxonomie: "812345" }).eintrag.diagnoseCode, null, "falscher Präfix");
+  assert.equal(merkmalsEintrag({ itemArt: 3, text: "x", extTaxonomie: "9123" }).eintrag.diagnoseCode, null, "zu kurz");
+  console.log("✓ 17 merkmalsEintrag: 1/3 abgebildet, unbekannte Art als Item + benannt, Codes nur aus EXT_TAXONOMIE");
 }
 
 console.log("\nAlle Vertragstests bestanden.");

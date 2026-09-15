@@ -1,7 +1,12 @@
 # Pflegeplan — der Mock-Datensatz
 
 Aus dem Code extrahiert (über die Vertragsabfragen aus `src/lib/pflegeplan/`),
-nicht aus dem Gedächtnis. Stand: Lauf 6b, Branch `feature/pflegeplanung`.
+nicht aus dem Gedächtnis. Stand: Lauf 6g, Branch `feature/pflegeplanung`.
+
+**Auch die Codes sind Mock.** Sie decken sich nicht mit der realen
+NANDA-Zuordnung — 00257 etwa trägt hier das Gebrechlichkeitssyndrom, im
+realen Katalog steht der Code für eine andere Diagnose. Mock-Codes nie für
+real halten (Hinweis auch im Kopf von `mock-daten.ts`).
 
 Herkunfts-Legende je Eintrag:
 - **katalog** — echter Katalog (Spitex-Leistungskatalog 2025 bzw. belegte
@@ -22,20 +27,39 @@ Herkunfts-Legende je Eintrag:
 Nur diese vier tragen Interventions-Zuordnungen (PROB_MAS); die übrigen 37
 Kandidaten sind reine Vorschläge ohne hinterlegte Kette.
 
-## Die 41 Kandidaten
+## Die 42 Kandidaten (seit Lauf 6g)
 
 Je CAP (Rangfolge = Listenposition, Belege als Itemcode=Wert; alles mock):
 
 | CAP | Kandidaten |
 |---|---|
-| CAP-FALLS | 14 |
+| CAP-FALLS | 15 |
 | CAP-ADL | 12 |
 | CAP-PAIN | 8 |
 | CAP-MOOD | 10 |
 
-Summe 44, **dedupliziert 41**. Mehrfach vorgeschlagen: **00146** (PAIN+MOOD),
+Summe 45, **dedupliziert 42**. Mehrfach vorgeschlagen: **00146** (PAIN+MOOD),
 **00085** (FALLS+PAIN), **00092** (FALLS+PAIN) — bei ihnen werden CAPs und
-Belege vereinigt und der beste Rang behalten.
+Belege vereinigt und der beste Rang behalten. Neu seit Lauf 6g: **00257**
+(Gebrechlichkeitssyndrom, CAP-FALLS, letzter Rang).
+
+## Diagnose-Detailangaben (Lauf 6g)
+
+Vier Diagnosen tragen Detailangaben (`DIAGNOSE_DETAILS` in `mock-daten.ts`,
+Rohform mit `itemArt`-Zahlencode und `extTaxonomie`-String wie in der
+Quelle; die Abbildung leistet der Adapter). Alle übrigen Codes liefern
+`diagnoseDetails(code) = null`. Alles mock:
+
+| Code | Fall | Listen |
+|---|---|---|
+| 00257 | Syndrom: alle 15 Bestimmenden Merkmale sind selbst Diagnosen (Code via `extTaxonomie` «9»+NANDA) | 4 belegte Listen (15/8/4/6); **keine** Ziel-/Interventions-Zuordnung — die Fusszeile zeigt ehrlich «Im Katalog: 0 Interventionen, 0 erreichbare Ziele» |
+| 00155 | Risikodiagnose + die grosse Liste | 49 Risikofaktoren in 4 Gruppen (Physiologische, Psychoneurologische, Umwelt-, Andere Faktoren), Risikopopulation 8, Assoziierte Bedingungen 10; **ohne** Bestimmende Merkmale und Beeinflussende Faktoren. Zwei Risikofaktoren tragen Codes (00085, 00088) — der Weg in die zweite Navigations-Ebene |
+| 00108 | Alltagsfall | 4 Listen (9/6/3/5), **kein** Eintrag mit Code — Gegenprobe zur Anklickbarkeit |
+| 00161 | Bereitschaftsdiagnose | genau eine Liste (5 Bestimmende Merkmale) |
+
+Dazu je Diagnose Gebiet, Thema und 5–6 Taxonomie-Achsen. Die Kennzahlen im
+Fuss (`anzahlInterventionen`, `anzahlZiele`) werden im Adapter aus PROB_MAS/
+MAS_ZIEL abgeleitet, nicht gepflegt — keine zweite Zahlenquelle.
 
 ## Ziele je Diagnose (hergeleitet über die Interventionen)
 

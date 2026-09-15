@@ -30,7 +30,7 @@ import { AuswahlBereich } from "./AuswahlBereich";
 import { StrukturAnsicht } from "./StrukturAnsicht";
 import { DokumentAnsicht } from "./DokumentAnsicht";
 import { PruefungsPanel } from "./PruefungsPanel";
-import { planWochenSummeMin, datumAnzeige, type Fokus } from "./gemeinsam";
+import { planWochenSummeMin, datumAnzeige, detailOeffnen, type Fokus } from "./gemeinsam";
 
 /**
  * Der geführte Einstieg: rechnet sich aus dem Planzustand und sagt immer, was
@@ -279,7 +279,8 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
       </div>
 
       <PlanBaum plan={plan} mandate={mandate} onFokus={setFokus}
-        kontextDiagnose={fokus.schritt === 2 || fokus.schritt === 3 ? fokus.diagnoseCode : null} />
+        onDetail={(code, titel) => setFokus(f => detailOeffnen(f, code, titel))}
+        kontextDiagnose={fokus.schritt === 2 || fokus.schritt === 3 || fokus.schritt === "detail" ? fokus.diagnoseCode : null} />
     </>
   );
 
@@ -393,7 +394,8 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
           onBlatt={() => navigate(`/pflegeplan/${patientId}/blatt${blattRuecksprung ? `?returnTo=${encodeURIComponent(blattRuecksprung)}` : ""}`)} />
       ) : ansicht === "struktur" ? (
         <StrukturAnsicht plan={plan} mandate={mandate}
-          onEditor={interventionId => { setAnsicht("aufbau"); setFokus({ schritt: "editor", interventionId }); }} />
+          onEditor={interventionId => { setAnsicht("aufbau"); setFokus({ schritt: "editor", interventionId }); }}
+          onDetail={(code, titel) => { setAnsicht("aufbau"); setFokus(f => detailOeffnen(f, code, titel)); }} />
       ) : (
         <div className="flex-1 flex min-h-0">
           {/* Links: die Auswahl zum aktuellen Fokus — Übernehmen in
