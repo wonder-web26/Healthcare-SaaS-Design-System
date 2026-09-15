@@ -134,6 +134,29 @@ dbml heute nicht vorsieht:
 4. Das Bezugsdatum für «überfällig» ist die feste Mock-Gegenwart
    (`GEGENWART_ISO`); produktiv ersetzt das Systemdatum die Konstante.
 
+## Abweichungen aus Lauf 6c (Einbindung)
+
+1. **Der Plan-Zustand ist nicht je Klient adressiert:** es gibt EINEN
+   Plan-Store und im Mock genau EINEN planfähigen Klienten (der einzige mit
+   abgeschlossenem Assessment und getriggerten CAPs). Die Wache
+   `einstieg.ts` (`planGehoertZu`) verhindert, dass fremde Klienten den
+   Plan des einen angezeigt bekommen; die Kopf-Aktionen der Plan-Ansicht
+   (Prüfstand, Prüfung, Veröffentlichen) erscheinen ohne Assessment nicht
+   mehr — sonst wäre Veröffentlichen ein Schreibweg auf einen fremden Plan.
+   Mit echten Daten wird der Plan-Zustand **je Klient geführt** (Plan trägt
+   die Patientenkennung; Stores keyed).
+2. **Initialschulungs-Nachweis aus dem abgeleiteten Blatt:** die
+   Konvertierung erzeugt den Nachweis wieder — aus `blattAbleiten` des
+   VERÖFFENTLICHTEN Plans (ein Entwurf erzeugt keinen; der
+   Abschluss-Dialog weist auf die fehlende Freigabe hin). Sobald das Blatt
+   ein persistiertes, versioniertes Objekt ist (Kassenstrecke), gehört der
+   Nachweis an die Blatt-Fassung statt an den lebenden Zustand.
+3. **Bewusst nicht zurückgekehrt:** die Auslösefläche der Arzt-Anfrage
+   (hing am alten Onboarding-Tab; gehört zur Kassenstrecke) und alle
+   LPB-abhängigen Controlling-Flächen jenseits der Prüfbereitschafts-Karte
+   (Tagessoll der Einsatzkontrolle, Abgleich Teil 2 — sie brauchen das
+   persistierte Blatt bzw. die Kostengutsprache).
+
 ## Abweichungen aus Lauf 6b (Leistungsplanungsblatt)
 
 1. **Das Blatt ist eine Ableitung, kein gespeichertes Objekt:** Im Prototyp

@@ -118,8 +118,19 @@ const ANSICHT_SATZ: Record<Ansicht, string> = {
   dokument: "Lesen und erkennen, was ansteht. Für den veröffentlichten Plan.",
 };
 
-export function PflegeplanAufbau() {
-  const { patientId } = useParams();
+/**
+ * Einstiegspunkte (Lauf 6c): eigenständig unter /pflegeplan/:patientId ODER
+ * eingebettet (Onboarding-Tab, Patient360) mit patientId als Prop. Eingebettet
+ * entfällt die eigene Titelzeile — der Gastgeber nennt den Klienten bereits.
+ * `blattRuecksprung` gibt dem Blatt den Rückweg in den Einbettungs-Kontext.
+ */
+export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false, blattRuecksprung }: {
+  patientId?: string;
+  eingebettet?: boolean;
+  blattRuecksprung?: string;
+} = {}) {
+  const params = useParams();
+  const patientId = patientIdProp ?? params.patientId;
   const navigate = useNavigate();
   const plan = usePlan();
   const benutzer = useCurrentUser();
@@ -227,15 +238,20 @@ export function PflegeplanAufbau() {
 
   return (
     <div className="h-full flex flex-col" style={{ background: "var(--bg-primary)" }}>
-      {/* Kopfzeile mit Ansichtsumschalter */}
-      <div style={{ padding: "16px var(--space-6) 0", borderBottom: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)" }}>
-        <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
-          Pflegeplan
-        </div>
-        <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>
-          {patient ? `${patient.nachname}, ${patient.vorname}` : patientId}
-        </div>
-        <div className="flex items-center flex-wrap" style={{ gap: 14, marginTop: 10 }}>
+      {/* Kopfzeile mit Ansichtsumschalter — eingebettet ohne Titelblock,
+          der Gastgeber (Onboarding, Patient360) nennt den Klienten schon. */}
+      <div style={{ padding: eingebettet ? "6px var(--space-4) 0" : "16px var(--space-6) 0", borderBottom: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)" }}>
+        {!eingebettet && (
+          <>
+            <div style={{ fontSize: "var(--text-h3)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+              Pflegeplan
+            </div>
+            <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>
+              {patient ? `${patient.nachname}, ${patient.vorname}` : patientId}
+            </div>
+          </>
+        )}
+        <div className="flex items-center flex-wrap" style={{ gap: 14, marginTop: eingebettet ? 4 : 10 }}>
           {(["aufbau", "struktur", "dokument"] as Ansicht[]).map(a => (
             <button key={a} type="button" onClick={() => setAnsicht(a)}
               className="ui-fokusring cursor-pointer"
@@ -252,7 +268,12 @@ export function PflegeplanAufbau() {
             {ANSICHT_SATZ[ansicht]}
           </span>
 
-          {/* Rechts: Prüfstand, Prüfung, Veröffentlichen — in allen drei Ansichten. */}
+          {/* Rechts: Prüfstand, Prüfung, Veröffentlichen — in allen drei
+              Ansichten, aber NUR wenn dieser Klient überhaupt planfähig ist:
+              ohne Assessment gehört der (eine) Plan-Zustand nicht zu ihm,
+              und ein Veröffentlichen-Knopf wäre ein Schreibweg auf einen
+              fremden Plan (Lauf 6c, Einbettung). */}
+          {assessment && (
           <div className="flex items-center flex-wrap" style={{ gap: 10, marginLeft: "auto", marginBottom: 6 }}>
             <span data-pruefstand style={{
               fontSize: "var(--text-micro)",
@@ -298,6 +319,7 @@ export function PflegeplanAufbau() {
               </>
             )}
           </div>
+          )}
         </div>
       </div>
 
@@ -330,7 +352,7 @@ export function PflegeplanAufbau() {
       ) : ansicht === "dokument" ? (
         <DokumentAnsicht mandate={mandate}
           onPlanAendern={() => { planAendern(); setAnsicht("struktur"); }}
-          onBlatt={() => navigate(`/pflegeplan/${patientId}/blatt`)} />
+          onBlatt={() => navigate(`/pflegeplan/${patientId}/blatt${blattRuecksprung ? `?returnTo=${encodeURIComponent(blattRuecksprung)}` : ""}`)} />
       ) : ansicht === "struktur" ? (
         <StrukturAnsicht plan={plan} mandate={mandate}
           onEditor={interventionId => { setAnsicht("aufbau"); setFokus({ schritt: "editor", interventionId }); }} />

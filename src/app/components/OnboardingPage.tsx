@@ -53,6 +53,8 @@ import { type NotizReferenz } from "../../lib/notizen/notizen";
 import { DEMO_FALL_ID, demoSteinerAngehoeriger, demoSteinerPatient } from "./demoSteinerFall";
 // Anna Next-Best-Action-Banner: bewusst zurückgestellt. Hier vorgesehen für künftige dynamische Anna-Zeile.
 import { konvertiereOnboarding } from "../../lib/onboarding/konvertierung";
+import { planGehoertZu, planBesteht } from "../../lib/pflegeplan/einstieg";
+import { planSchnappschuss } from "../../lib/pflegeplan/plan-store";
 import { qualifikationAusFunktion } from "../../lib/stammdaten/funktionen";
 import { sdaVerlangtInterrai } from "../../lib/stammdaten/sda-einschaetzung-situation";
 import { naechsteFallKennung } from "../../lib/onboarding/faelle";
@@ -1338,6 +1340,15 @@ export function OnboardingPage() {
               // wird ihr Fehlen nicht als Lücke gemeldet.
               const chbb16Hint = registrierungFuerOnboarding(wirksameFallKennung)?.answers["CHBB16"] ?? "";
               if (chbb16Hint !== "" && sdaVerlangtInterrai(chbb16Hint) && (!ba || ba.status !== "abgeschlossen")) hints.push("Das InterRAI ist noch nicht abgeschlossen. Es wird mitkonvertiert und kann später vervollständigt werden.");
+              // Lauf 6c: Besteht eine Pflegeplanung? Wieder da — jetzt aus dem
+              // neuen Plan-Zustand statt aus MOCK_PFLEGEPLANUNGEN (Lauf 0).
+              // Nur für den planfähigen Klienten aussagekräftig (einstieg.ts).
+              const abschlussFall = fallById(wirksameFallKennung);
+              if (abschlussFall && planGehoertZu(abschlussFall.patientId)) {
+                const plan = planSchnappschuss();
+                if (!planBesteht(plan)) hints.push("Es wurde noch keine Pflegeplanung erstellt.");
+                else if (plan.status !== "veroeffentlicht") hints.push("Die Pflegeplanung besteht, ist aber noch nicht veröffentlicht — ohne Freigabe entsteht kein Leistungsplanungsblatt.");
+              }
               // Der KLV-Hinweis ist mit dem LPB-Modul abgerissen (Lauf 0b).
               if (hints.length === 0) return null;
               return hints.map((h, i) => (

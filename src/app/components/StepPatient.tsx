@@ -86,6 +86,8 @@ import { DokumentScanUpload, type ScanFile } from "./form/DokumentScanUpload";
 import { EinwilligungModal } from "./einwilligung/EinwilligungModal";
 import { ScanDisplay, ScanSlot } from "./form/MigratedAngehoerigerForms2";
 import { useCurrentUser } from "../auth";
+import { fallById } from "../../lib/onboarding/faelle";
+import { PflegeplanAufbau } from "./pflegeplan/PflegeplanAufbau";
 
 export interface ATLEntry {
   ja: boolean | null;
@@ -484,6 +486,11 @@ const tabDefs = [
   { key: "medikamente", label: "Medikamente", icon: Pill },
   { key: "aktivitaeten", label: "ATL", icon: Activity },
   { key: "interrai", label: "Bedarfsabklärung", icon: ClipboardList },
+  /* Lauf 6c: der Pflegeplan-Tab kehrt an seine alte Stelle zurück (zwischen
+     Bedarfsabklärung und Betreuung; der KLV-Tab dazwischen ist mit Lauf 0b
+     Geschichte). Eingebettet, nicht verlinkt — wer im Onboarding plant,
+     verlässt das Onboarding nicht. */
+  { key: "pflegeplanung", label: "Pflegeplan", icon: ClipboardList },
   // Der Reiter "Pflegeplan" ist mit der alten Pflegeplanung abgerissen und
   // kommt mit dem neuen Pflegeplan-Modul zurück.
   // Der Reiter "KLV" ist mit dem alten KLV-/LPB-Modul abgerissen (Lauf 0b)
@@ -777,6 +784,9 @@ export function StepPatient({ data, onChange, onValidityChange, onboardingId, re
           )}
           {activeTab === "interrai" && (onboardingId
             ? <OnboardingTabBA onboardingId={onboardingId} patientVorname={data.vorname} patientNachname={data.name} />
+            : <OhneFallkennung />)}
+          {activeTab === "pflegeplanung" && (onboardingId
+            ? <OnboardingTabPflegeplan onboardingId={onboardingId} />
             : <OhneFallkennung />)}
           {activeTab === "workflow" && (onboardingId
             ? (() => {
@@ -1401,6 +1411,27 @@ function OhneFallkennung() {
       titel="Noch keine Fallkennung"
       untertitel="Sie entsteht, sobald der Schritt Patient geöffnet ist. Danach zeigt dieser Reiter seinen Inhalt."
     />
+  );
+}
+
+/**
+ * Der Pflegeplan-Tab (Lauf 6c): die Aufbau-Ansicht, EINGEBETTET — wer im
+ * Onboarding plant, verlässt das Onboarding nicht. Ohne abgeschlossenes
+ * Assessment greift der Leerzustand aus Lauf 2 (Verweis auf die
+ * Bedarfsabklärung) — kein Fehler, die richtige Reihenfolge.
+ *
+ * Der Wrapper begrenzt die Höhe auf den Sichtbereich, damit die
+ * Zweibereich-Aufteilung ihr eigenes Rollverhalten behält — das Layout der
+ * Komponente selbst bleibt unverändert.
+ */
+function OnboardingTabPflegeplan({ onboardingId }: { onboardingId: string }) {
+  const fall = fallById(onboardingId);
+  if (!fall) return <OhneFallkennung />;
+  return (
+    <div style={{ height: "calc(100vh - 240px)", minHeight: 560, margin: "0 calc(-1 * var(--space-2))", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
+      <PflegeplanAufbau patientId={fall.patientId} eingebettet
+        blattRuecksprung={`/onboarding/${onboardingId}?step=patient&tab=pflegeplanung`} />
+    </div>
   );
 }
 

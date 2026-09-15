@@ -14,6 +14,10 @@ import { konvertiereRhythmusSubjekt, generiereRhythmusTickets, getTicketsFuerSub
 import { protokolliereAufteilung } from "./aufteilung-log";
 import { getPersonByOnboardingId, setPatientId } from "../interrai/store";
 import { schliessePatientOnboardingAb } from "../patienten/store";
+import { planSchnappschuss } from "../pflegeplan/plan-store";
+import { blattAbleiten } from "../pflegeplan/blatt";
+import { planGehoertZu } from "../pflegeplan/einstieg";
+import { erstelleNachweis } from "../schulung/nachweis-store";
 import { schliesseAngehoerigenOnboardingAb } from "../angehoerige/store";
 import { GEGENWART, GEGENWART_ISO } from "../gegenwart";
 // Beziehungen entstehen jetzt direkt in der Bezugsteam-Liste, nicht mehr bei der
@@ -125,10 +129,34 @@ export function konvertiereOnboarding(
     anzahlNeuAngehoeriger,
   });
 
-  /* Initialschulungs-Nachweis: entstand aus den KLV-Positionen des Blattes —
-     mit dem LPB-Modul abgerissen (Lauf 0b). Bis Lauf 6 erzeugt der Abschluss
-     keinen Schulungsnachweis; danach kommen die Positionen aus dem neuen
-     Modul (siehe docs/schema-delta-pflegeplan.md). */
+  /* Initialschulungs-Nachweis (Lauf 6c): wieder da — jetzt aus dem
+     ABGELEITETEN Blatt des veröffentlichten Plans (blattAbleiten) statt aus
+     dem gespeicherten KLV-Objekt des alten Moduls (Lauf 0b). Nur ein
+     freigegebener Plan trägt ein Blatt; ein Entwurf erzeugt keinen Nachweis
+     (der Abschluss-Dialog weist auf die fehlende Veröffentlichung hin). */
+  if (patientId && planGehoertZu(patientId) && angehoerigenDaten) {
+    const plan = planSchnappschuss();
+    if (plan.status === "veroeffentlicht") {
+      const blatt = blattAbleiten(plan);
+      const klvNummern = [
+        ...blatt.abschnitte.flatMap(a => a.zeilen.map(z => z.nummer)),
+        ...blatt.einmalige.map(e => e.nummer),
+      ];
+      if (klvNummern.length > 0) {
+        const patientName = patient ? `${patient.vorname} ${patient.nachname}`.trim() : "Patient";
+        erstelleNachweis(
+          angehoerigerId,
+          angehoerigenDaten.name,
+          angehoerigenDaten.qualifikation || "",
+          patientId,
+          patientName,
+          "Sandra Weber",
+          klvNummern,
+        );
+        console.info(`[Audit] Schulungsnachweis erstellt: ${angehoerigenDaten.name} → ${patientName}, ${klvNummern.length} Positionen`);
+      }
+    }
+  }
 
   // SP-07: Bei Quellensteuerpflicht Pendenz fuer Buchhaltung erzeugen
   // Erst jetzt, weil der Angehoerige als Mitarbeiter erst nach Konvertierung existiert.

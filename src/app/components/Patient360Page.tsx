@@ -180,6 +180,12 @@ import "../../lib/schulung/demo-seed";
 import { BezugspersonFeld } from "./BezugspersonFeld";
 import { AppButton } from "./ui/AppButton";
 import { StatusMarke, type StatusMarkeVariante } from "./ui/StatusMarke";
+/* Einstiege der Pflegeplanung (Lauf 6c): eingebettete Arbeitsfläche,
+   Blatt-Einstieg, Diagnosen- und Prüfbereitschafts-Anbindung. */
+import { PflegeplanAufbau } from "./pflegeplan/PflegeplanAufbau";
+import { TypMarke, datumAnzeige, planWochenSummeMin } from "./pflegeplan/gemeinsam";
+import { usePlan } from "../../lib/pflegeplan/plan-store";
+import { planGehoertZu, planBesteht } from "../../lib/pflegeplan/einstieg";
 
 /** Map the existing Tailwind bg class of a status config to a semantic StatusMarke variant. */
 function bgZuVariante(bg: string): StatusMarkeVariante {
@@ -791,11 +797,11 @@ function AnsichtInhalt({ schluessel, patient, tickets, navigate }: {
     case "interrai-hc": return <TabInterRAI patientId={patient.id} patientName={`${patient.nachname}, ${patient.vorname}`} navigate={navigate} />;
     case "atl": return <TabATL patient={patient} />;
     case "anamnese": return <TabAnamnese patient={patient} />;
-    case "pflegeplan": return <TabPflegeplanung />;
+    case "pflegeplan": return <TabPflegeplanung patient={patient} />;
     case "vitalwerte": return <VitalzeichenAbschnitt patientId={patient.id} />;
     case "unvertraeglichkeiten": return <AllergienAbschnitt patientId={patient.id} />;
     case "betreuungsrhythmus": return <TabWorkflow patient={patient} />;
-    case "leistungsplanungsblatt": return <TabKLV />;
+    case "leistungsplanungsblatt": return <TabKLV patient={patient} navigate={navigate} />;
     case "pflegekontrolle": return <AnsichtPflegekontrolle patient={patient} />;
     case "pflegeberichte": return <AnsichtPflegeberichte patient={patient} />;
     case "controlling": return <AnsichtControlling patient={patient} />;
@@ -3692,19 +3698,39 @@ function AnsichtDiagnosen({ patient }: { patient: Patient }) {
         )}
       </PSectionCard>
 
-      {/* Leerzustand statt Bestand: die alte Pflegeplanung ist abgerissen,
-          die Pflegediagnosen entstehen künftig im neuen Pflegeplan-Modul. */}
+      {/* Die Pflegediagnosen aus dem Plan (Lauf 6c) — lesend; erfasst wird
+          im Pflegeplan, nicht hier. */}
       <PSectionCard title="Pflegediagnosen" icon={ClipboardList}>
-        <div style={{ padding: "var(--space-6) var(--space-4)", textAlign: "center" }}>
-          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
-            Die Pflegeplanung wird neu gebaut
-          </div>
-          <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 auto", maxWidth: "48ch", lineHeight: 1.6 }}>
-            Die Pflegediagnosen entstehen künftig im neuen Pflegeplan-Modul und
-            erscheinen dann an dieser Stelle.
-          </p>
-        </div>
+        <PflegediagnosenAusPlan patient={patient} />
       </PSectionCard>
+    </div>
+  );
+}
+
+function PflegediagnosenAusPlan({ patient }: { patient: Patient }) {
+  const plan = usePlan();
+  const eigene = planGehoertZu(patient.id) ? plan.diagnosen : [];
+  if (eigene.length === 0) {
+    return (
+      <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: 0, maxWidth: "74ch" }}>
+        Keine Pflegediagnosen erfasst. Sie entstehen im Pflegeplan (Bereich
+        Pflege) aus den Vorschlägen der Bedarfsabklärung.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col" style={{ gap: 2 }}>
+      {eigene.map(d => (
+        <div key={d.code} className="flex items-baseline flex-wrap" style={{ gap: 10, padding: "8px 0", borderTop: "var(--border-thin) solid var(--border-default)" }}>
+          <span style={{ width: 74, fontSize: "var(--text-meta)", color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>{d.code}</span>
+          <span style={{ flex: 1, minWidth: 180, fontSize: "var(--text-small)", color: "var(--text-primary)" }}>{d.titel}</span>
+          <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>{d.belegZeile}</span>
+          <TypMarke typ={d.typ} />
+        </div>
+      ))}
+      <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 6 }}>
+        Aus dem Pflegeplan — bearbeitet wird dort, nicht hier.
+      </div>
     </div>
   );
 }
@@ -4307,6 +4333,7 @@ const CONTROLLING_ZEITRAEUME = [3, 6, 12];
 
 function AnsichtControlling({ patient }: { patient: Patient }) {
   const nav = useNavigate();
+  const planZustand = usePlan();
   const einsaetze = useEinsaetze();
   const leistungen = useErbrachteLeistungen();
   const mandate = useMandate();
@@ -4358,9 +4385,9 @@ function AnsichtControlling({ patient }: { patient: Patient }) {
     patientId: patient.id, zeitraum,
     verordnungen: verordnungen.filter(v => mandatIds.includes(v.mandatId)),
     kostengutsprachen: kgs.filter(k => mandatIds.includes(k.mandatId)),
-    // Kein Pflegeplan mehr im Bestand — der Zustand «null = kein Pflegeplan»
-    // ist im Prüfmodell vorgesehen; die Karte zeigt ihren Fehltext.
-    pflegediagnosen: null,
+    // Lauf 6c: die Karte «Pflegediagnosen» liest wieder aus dem Plan —
+    // null bleibt der ehrliche Zustand für Klienten ohne (eigenen) Plan.
+    pflegediagnosen: planGehoertZu(patient.id) && planBesteht(planZustand) ? planZustand.diagnosen.length : null,
     jeMonat, abgerechnete, rhythmus,
     dokumentluecken: {
       fehlend: pflichtluecken(alleDokumente, DOK_REF(patient.id), PATIENT_DOK_KONTEXT_360, MANDAT_STICHTAG).map(l => l.label),
@@ -5772,41 +5799,85 @@ function TabInterRAI({ patientId }: { patientId: string; patientName: string; na
 /* ══════════════════════════════════════════
    TAB: PFLEGEPLANUNG
    ══════════════════════════════════════════ */
-function TabPflegeplanung() {
-  /* Leerzustand statt Bestand: die alte Pflegeplanung ist abgerissen, das
-     neue Pflegeplan-Modul (Kette Diagnose → Ziel → Massnahme → Position)
-     entsteht als eigener Lauf. Kein Start-Knopf — die Arbeitsfläche existiert
-     noch nicht. */
-  return (
-    <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-      <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
-        Die Pflegeplanung wird neu gebaut
+function TabPflegeplanung({ patient }: { patient: Patient }) {
+  /* Der Einstieg (Lauf 6c): die eingebettete Plan-Arbeitsfläche. Ein
+     veröffentlichter Plan öffnet im DOKUMENT (wer einen Klienten aufruft,
+     will lesen, nicht bauen — die Initial-Ansicht der Komponente entscheidet
+     das nach Status, Lauf 5); ein Entwurf öffnet im Aufbau. Für Klienten
+     ohne planfähiges Assessment gehört der (eine) Plan-Zustand nicht
+     hierher — dann steht die richtige Reihenfolge da, kein fremder Plan. */
+  if (!planGehoertZu(patient.id)) {
+    return (
+      <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+        <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
+          Keine Pflegeplanung
+        </div>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 auto", maxWidth: "48ch", lineHeight: 1.6 }}>
+          Die Pflegeplanung entsteht aus den getriggerten CAPs der
+          abgeschlossenen Bedarfsabklärung — zuerst die Abklärung, dann der
+          Plan.
+        </p>
       </div>
-      <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 auto", maxWidth: "48ch", lineHeight: 1.6 }}>
-        Hier erscheinen künftig die Pflegediagnosen mit ihren Zielen und
-        Massnahmen aus dem neuen Pflegeplan-Modul.
-      </p>
+    );
+  }
+  return (
+    <div style={{ height: "calc(100vh - 260px)", minHeight: 560, border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
+      <PflegeplanAufbau patientId={patient.id} eingebettet
+        blattRuecksprung={`/patienten/${patient.id}/pflege/pflegeplan`} />
     </div>
   );
 }
 
 
 /* ══════════════════════════════════════════
-   TAB: LEISTUNGSPLANUNGSBLATT — Leerzustand
-   Das KLV-/LPB-Modul ist abgerissen (Lauf 0b); das Fachmodell ist in
-   docs/lpb-fachmodell.md gesichert. Der Neubau kommt in Lauf 6 aus dem
-   Pflegeplan-Vertrag. Kein Start-Knopf — die Arbeitsfläche existiert nicht.
+   TAB: LEISTUNGSPLANUNGSBLATT — der Einstieg (Lauf 6c)
+   Das Blatt fällt aus dem veröffentlichten Plan (Lauf 6b). Der Einstieg
+   erscheint NUR bei veröffentlichtem Plan — ein Entwurf trägt kein Blatt.
+   Die Kassenstrecke (Zustandskette, Kostengutsprache) kommt in eigenen
+   Läufen; das Fachmodell steht in docs/lpb-fachmodell.md.
    ══════════════════════════════════════════ */
-function TabKLV() {
-  return (
-    <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
-      <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
-        Das Leistungsplanungsblatt wird neu gebaut
+function TabKLV({ patient, navigate }: { patient: Patient; navigate: (p: string) => void }) {
+  const plan = usePlan();
+  const veroeffentlicht = planGehoertZu(patient.id) && plan.status === "veroeffentlicht";
+  const fassung = plan.fassungen[plan.fassungen.length - 1] ?? null;
+
+  if (!veroeffentlicht || !fassung) {
+    return (
+      <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+        <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
+          Kein Leistungsplanungsblatt
+        </div>
+        <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 auto", maxWidth: "48ch", lineHeight: 1.6 }}>
+          Ein freigegebener Pflegeplan trägt ein Blatt — ein Entwurf nicht.
+          Das Blatt entsteht mit dem Veröffentlichen im Pflegeplan.
+        </p>
       </div>
-      <p style={{ fontSize: "var(--text-small)", color: "var(--text-secondary)", margin: "0 auto", maxWidth: "48ch", lineHeight: 1.6 }}>
-        Hier erscheinen künftig die geplanten Leistungen mit ihrer Ableitung
-        aus dem neuen Pflegeplan-Modul — vom Entwurf bis zum Kassenentscheid.
-      </p>
+    );
+  }
+
+  const summeMin = planWochenSummeMin(plan.massnahmen);
+  return (
+    <div data-lpb-einstieg style={{ padding: "var(--space-5)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+      <div className="flex items-center flex-wrap" style={{ gap: 10 }}>
+        <div className="flex-1 min-w-0">
+          <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+            Leistungsplanungsblatt
+          </div>
+          <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 3 }}>
+            Fassung {fassung.nummer} · freigegeben von {fassung.autorin} am {datumAnzeige(fassung.datum)} ·
+            Geplant: {(summeMin / 60).toFixed(2)} h/Woche
+          </div>
+          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginTop: 3 }}>
+            Abgeleitet aus dem veröffentlichten Pflegeplan — jede Position bis
+            zur Diagnose rückverfolgbar. Druckbar als A4.
+          </div>
+        </div>
+        <button type="button" onClick={() => navigate(`/pflegeplan/${patient.id}/blatt?returnTo=${encodeURIComponent(`/patienten/${patient.id}/leistungen/leistungsplanungsblatt`)}`)}
+          className="ui-fokusring cursor-pointer inline-flex items-center shrink-0"
+          style={{ gap: 6, padding: "7px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", border: "none", fontSize: "var(--text-small)", fontWeight: 500 }}>
+          <FileText style={{ width: 13, height: 13 }} /> Blatt öffnen
+        </button>
+      </div>
     </div>
   );
 }

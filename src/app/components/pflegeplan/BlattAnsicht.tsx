@@ -9,7 +9,7 @@
  * Kostengutsprache, Gültigkeitsende, Zustandskette), stehen gekennzeichnete
  * Platzhalter mit Verweis — keine leeren Felder, keine geratenen Werte.
  */
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 import { ArrowLeft, Printer } from "lucide-react";
 import { usePlan } from "../../../lib/pflegeplan/plan-store";
 import { blattAbleiten, KLV_LABEL, type BlattTraeger } from "../../../lib/pflegeplan/blatt";
@@ -54,6 +54,10 @@ function Platzhalter({ label, verweis }: { label: string; verweis: string }) {
 
 export function BlattAnsicht() {
   const { patientId } = useParams();
+  const [searchParams] = useSearchParams();
+  /* Rücksprung in den Einbettungs-Kontext (Onboarding-Tab, Patient360) —
+     ohne Angabe zurück zur eigenständigen Plan-Route (Lauf 6c). */
+  const zurueck = searchParams.get("returnTo") ?? `/pflegeplan/${patientId}`;
   const plan = usePlan();
   const patient = patientId ? getPatient(patientId) : undefined;
   const alleMandate = useMandate();
@@ -73,7 +77,7 @@ export function BlattAnsicht() {
           Das Leistungsplanungsblatt entsteht mit dem Veröffentlichen — es wird
           nicht getippt, es fällt aus dem freigegebenen Plan.
         </p>
-        <Link to={`/pflegeplan/${patientId}`} className="ui-fokusring inline-flex items-center"
+        <Link to={zurueck} className="ui-fokusring inline-flex items-center"
           style={{ gap: 6, padding: "8px 18px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", fontSize: "var(--text-small)", fontWeight: 500, textDecoration: "none" }}>
           <ArrowLeft style={{ width: 13, height: 13 }} /> Zum Plan
         </Link>
@@ -102,7 +106,7 @@ export function BlattAnsicht() {
 
       {/* Bedienleiste — nur am Schirm. */}
       <div className="blatt-nur-schirm flex items-center" style={{ gap: 10, padding: "12px 24px", borderBottom: "var(--border-thin) solid var(--border-default)", background: "var(--bg-elevated)" }}>
-        <Link to={`/pflegeplan/${patientId}`} className="ui-fokusring inline-flex items-center"
+        <Link to={zurueck} className="ui-fokusring inline-flex items-center"
           style={{ gap: 5, fontSize: "var(--text-small)", fontWeight: 500, color: "var(--text-secondary)", textDecoration: "none" }}>
           <ArrowLeft style={{ width: 13, height: 13 }} /> Zum Plan
         </Link>
