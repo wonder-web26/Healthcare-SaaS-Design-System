@@ -6,7 +6,7 @@
  * nicht anklickbar; der Editor kommt in Lauf 3.
  */
 import { useState } from "react";
-import { ChevronDown, ChevronRight, ClipboardList, Target, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ClipboardList, X } from "lucide-react";
 import {
   nachPrioritaet, diagnosePriorisieren, diagnoseEntfernen,
   type PlanZustand, type PlanMassnahme, type PlanZiel,
@@ -231,9 +231,7 @@ export function PlanBaum({ plan, mandate, onFokus, onDetail, kontextDiagnose }: 
                       return (
                         <div key={z.zielId} data-baum-ziel={`${z.diagnoseCode}|${z.zielId}`} style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius-card)", borderLeft: "3px solid var(--brand-primary)", padding: "7px 12px 7px 10px" }}>
                           <div className="flex items-center" style={{ gap: 8 }}>
-                            <FaltKnopf zu={zZu} onToggle={() => toggle(zKey)} label={`Ziel ${z.titel} auf- oder zuklappen`} />
-                            <Target aria-hidden style={{ width: 13, height: 13, color: "var(--brand-primary)", flexShrink: 0 }} />
-                            <span className="flex-1 min-w-0 truncate" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
+                            <FaltKnopf zu={zZu} onToggle={() => toggle(zKey)} label={`Ziel ${z.titel} auf- oder zuklappen`} />                            <span className="flex-1 min-w-0 truncate" style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
                               {z.titel}{z.eigenes && <span style={{ fontWeight: "var(--weight-regular)", color: "var(--text-tertiary)" }}> · selbst formuliert</span>}
                             </span>
                             <button type="button"
@@ -279,7 +277,6 @@ export function PlanBaum({ plan, mandate, onFokus, onDetail, kontextDiagnose }: 
           {freieZiele.map(z => (
             <div key={z.zielId} data-baum-ziel-frei={z.zielId} className="flex items-center"
               style={{ gap: 8, marginTop: 8, background: "var(--bg-secondary)", borderRadius: "var(--radius-card)", borderLeft: "3px solid var(--brand-primary)", padding: "7px 12px 7px 10px" }}>
-              <Target aria-hidden style={{ width: 13, height: 13, color: "var(--brand-primary)", flexShrink: 0 }} />
               <span style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>{z.titel}</span>
             </div>
           ))}
