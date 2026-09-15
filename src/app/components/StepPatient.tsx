@@ -1429,8 +1429,7 @@ function OnboardingTabPflegeplan({ onboardingId }: { onboardingId: string }) {
   if (!fall) return <OhneFallkennung />;
   return (
     <div style={{ height: "calc(100vh - 240px)", minHeight: 560, margin: "0 calc(-1 * var(--space-2))", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
-      <PflegeplanAufbau patientId={fall.patientId} eingebettet
-        blattRuecksprung={`/onboarding/${onboardingId}?step=patient&tab=pflegeplanung`} />
+      <PflegeplanAufbau patientId={fall.patientId} eingebettet />
     </div>
   );
 }

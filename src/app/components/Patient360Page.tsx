@@ -5800,12 +5800,11 @@ function TabInterRAI({ patientId }: { patientId: string; patientName: string; na
    TAB: PFLEGEPLANUNG
    ══════════════════════════════════════════ */
 function TabPflegeplanung({ patient }: { patient: Patient }) {
-  /* Der Einstieg (Lauf 6c): die eingebettete Plan-Arbeitsfläche. Ein
-     veröffentlichter Plan öffnet im DOKUMENT (wer einen Klienten aufruft,
-     will lesen, nicht bauen — die Initial-Ansicht der Komponente entscheidet
-     das nach Status, Lauf 5); ein Entwurf öffnet im Aufbau. Für Klienten
-     ohne planfähiges Assessment gehört der (eine) Plan-Zustand nicht
-     hierher — dann steht die richtige Reihenfolge da, kein fremder Plan. */
+  /* Der Einstieg (Lauf 6c): die eingebettete Plan-Arbeitsfläche, sie öffnet
+     im Aufbau (die Dokument-Ansicht ist entfernt — die Leseform übernimmt
+     die kommende Leistungsplanungsseite). Für Klienten ohne planfähiges
+     Assessment gehört der (eine) Plan-Zustand nicht hierher — dann steht
+     die richtige Reihenfolge da, kein fremder Plan. */
   if (!planGehoertZu(patient.id)) {
     return (
       <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
@@ -5822,8 +5821,7 @@ function TabPflegeplanung({ patient }: { patient: Patient }) {
   }
   return (
     <div style={{ height: "calc(100vh - 260px)", minHeight: 560, border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)", overflow: "hidden" }}>
-      <PflegeplanAufbau patientId={patient.id} eingebettet
-        blattRuecksprung={`/patienten/${patient.id}/pflege/pflegeplan`} />
+      <PflegeplanAufbau patientId={patient.id} eingebettet />
     </div>
   );
 }

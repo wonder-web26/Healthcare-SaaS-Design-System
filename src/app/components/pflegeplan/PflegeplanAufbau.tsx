@@ -14,7 +14,7 @@ import { ArrowRight, ClipboardList } from "lucide-react";
 import { MOCK_ASSESSMENTS } from "../../../lib/mocks/klinische-artefakte-mock";
 import { zieleZuDiagnose, interventionenZuZiel } from "../../../lib/pflegeplan/mock-adapter";
 import {
-  usePlan, veroeffentlichen, planAendern,
+  usePlan, veroeffentlichen,
   pruefungDurchfuehren, pruefungAktuell, offeneBefunde, planSchnappschuss,
   nachPrioritaet,
   type PruefBefund,
@@ -28,7 +28,6 @@ import { useCurrentUser } from "../../auth";
 import { PlanBaum } from "./PlanBaum";
 import { AuswahlBereich } from "./AuswahlBereich";
 import { StrukturAnsicht } from "./StrukturAnsicht";
-import { DokumentAnsicht } from "./DokumentAnsicht";
 import { PruefungsPanel } from "./PruefungsPanel";
 import { planWochenSummeMin, datumAnzeige, detailOeffnen, type Fokus } from "./gemeinsam";
 
@@ -112,18 +111,16 @@ function naechsterSchritt(plan: ReturnType<typeof usePlan>): BalkenZustand {
   return { art: "vollstaendig" };
 }
 
-type Ansicht = "aufbau" | "struktur" | "dokument";
+type Ansicht = "aufbau" | "struktur";
 
 /**
  * Einstiegspunkte (Lauf 6c): eigenständig unter /pflegeplan/:patientId ODER
  * eingebettet (Onboarding-Tab, Patient360) mit patientId als Prop. Eingebettet
  * entfällt die eigene Titelzeile — der Gastgeber nennt den Klienten bereits.
- * `blattRuecksprung` gibt dem Blatt den Rückweg in den Einbettungs-Kontext.
  */
-export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false, blattRuecksprung }: {
+export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false }: {
   patientId?: string;
   eingebettet?: boolean;
-  blattRuecksprung?: string;
 } = {}) {
   const params = useParams();
   const patientId = patientIdProp ?? params.patientId;
@@ -131,9 +128,7 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
   const plan = usePlan();
   const benutzer = useCurrentUser();
   const [fokus, setFokus] = useState<Fokus>({ schritt: 1 });
-  /* Ein veröffentlichter Plan öffnet im Dokument; Aufbau und Struktur
-     bleiben erreichbar, aber der Einstieg ist das Dokument. */
-  const [ansicht, setAnsicht] = useState<Ansicht>(() => plan.status === "veroeffentlicht" ? "dokument" : "aufbau");
+  const [ansicht, setAnsicht] = useState<Ansicht>("aufbau");
 
   const [pruefungOffen, setPruefungOffen] = useState(false);
   const [pruefungsHinweis, setPruefungsHinweis] = useState<string | null>(null);
@@ -199,8 +194,7 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
       setPruefungOffen(true);
       return;
     }
-    const grund = veroeffentlichen(autorin, benutzer.role, GEGENWART_ISO);
-    if (!grund) setAnsicht("dokument");
+    veroeffentlichen(autorin, benutzer.role, GEGENWART_ISO);
   };
 
   /* Ein Befund verweist auf sein Element: Ansicht wechseln, Fokus setzen,
@@ -300,7 +294,7 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
           </>
         )}
         <div className="flex items-center flex-wrap" style={{ gap: 14, marginTop: eingebettet ? 4 : 10 }}>
-          {(["aufbau", "struktur", "dokument"] as Ansicht[]).map(a => (
+          {(["aufbau", "struktur"] as Ansicht[]).map(a => (
             <button key={a} type="button" onClick={() => setAnsicht(a)}
               className="ui-fokusring cursor-pointer"
               style={{
@@ -309,7 +303,7 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
                 color: ansicht === a ? "var(--brand-primary)" : "var(--text-secondary)",
                 borderBottom: ansicht === a ? "2px solid var(--brand-primary)" : "2px solid transparent",
               }}>
-              {a === "aufbau" ? "Aufbau" : a === "struktur" ? "Struktur" : "Dokument"}
+              {a === "aufbau" ? "Aufbau" : "Struktur"}
             </button>
           ))}
           {/* Rechts: Prüfstand, Prüfung, Veröffentlichen — in allen drei
@@ -388,10 +382,6 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
             </button>
           </div>
         </div>
-      ) : ansicht === "dokument" ? (
-        <DokumentAnsicht mandate={mandate}
-          onPlanAendern={() => { planAendern(); setAnsicht("struktur"); }}
-          onBlatt={() => navigate(`/pflegeplan/${patientId}/blatt${blattRuecksprung ? `?returnTo=${encodeURIComponent(blattRuecksprung)}` : ""}`)} />
       ) : ansicht === "struktur" ? (
         <StrukturAnsicht plan={plan} mandate={mandate}
           onEditor={interventionId => { setAnsicht("aufbau"); setFokus({ schritt: "editor", interventionId }); }}
