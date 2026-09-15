@@ -2,8 +2,9 @@
  * Der Auswahlbereich (links seit dem A/B-Entscheid — Übernehmen in
  * Leserichtung, der Plan wächst rechts): die Auswahl zum aktuellen Fokus.
  * Oben die KATEGORIE-REITER (Diagnosen · Ziele · Massnahmen, blockiert nur
- * was leer liefe) mit beschrifteten Kontext-Auswahlfeldern, darunter die
- * Kontextkarte (woher kommt die Liste), dann die Liste der Kategorie.
+ * was leer liefe) mit beschrifteten Kontext-Auswahlfeldern, die die
+ * Herkunfts-Kennzahlen der aktiven Liste gleich mittragen, dann die Liste
+ * der Kategorie.
  *
  * Alle Daten kommen über die Vertragsabfragen aus src/lib/pflegeplan/ —
  * kein Zugriff unter dem Vertrag vorbei; der Pfad selbst liest nur den
@@ -63,14 +64,20 @@ function KategorieLeiste({ fokus, onFokus, kontext }: {
 }) {
   const plan = usePlan();
 
-  /* Kontext auflösen — ausschliesslich aus dem Plan-Zustand, keine
-     Katalogabfragen. */
+  /* Kontext auflösen aus dem Plan-Zustand. */
   const sortiert = nachPrioritaet(plan.diagnosen);
   const kontextDiagnose = plan.diagnosen.find(d => d.code === kontext.diagnoseCode) ?? sortiert[0] ?? null;
   const zieleHier = kontextDiagnose ? plan.ziele.filter(z => z.diagnoseCode === kontextDiagnose.code) : [];
   const kontextZiel = zieleHier.find(z => z.zielId === kontext.zielId) ?? zieleHier[0] ?? null;
   const massnahmenZahl = (diagnoseCode: string, zielId: string) =>
     plan.massnahmen.filter(m => m.zielBezuege.some(b => b.diagnoseCode === diagnoseCode && b.zielId === zielId)).length;
+
+  /* Herkunfts-Kennzahlen der aktiven Liste — sie stehen im Auswahlfeld
+     selbst, nicht in einer zweiten Karte darunter. */
+  const zielKatalog = kontextDiagnose ? zieleZuDiagnose(kontextDiagnose.code).length : 0;
+  const zielAusgeschlossen = kontextDiagnose ? ausgeschlosseneZiele(kontextDiagnose.code).length : 0;
+  const interventionenZahl = kontextDiagnose && kontextZiel
+    ? interventionenZuZiel(kontextDiagnose.code, kontextZiel.zielId).length : 0;
 
   const zieleBegehbar = kontextDiagnose !== null;
   const massnahmenBegehbar = zieleBegehbar && kontextZiel !== null;
@@ -143,8 +150,9 @@ function KategorieLeiste({ fokus, onFokus, kontext }: {
         ))}
       </div>
 
-      {/* Der Kontext als beschriftete Auswahl — voller Titel samt Kennzahl,
-          Wechsel mit einem Klick. */}
+      {/* Der Kontext als beschriftete Auswahl. Das Feld der aktiven Liste
+          trägt ihre Herkunfts-Kennzahlen gleich mit — Auswahl und Kennzahl
+          sind EINE Komponente, keine zweite Karte darunter. */}
       {aktiv >= 2 && kontextDiagnose && (
         <div className="flex flex-col" style={{ gap: 6 }}>
           <div data-kontext-diagnose className="flex items-center" style={{ gap: 8 }}>
@@ -155,6 +163,18 @@ function KategorieLeiste({ fokus, onFokus, kontext }: {
                 const n = plan.ziele.filter(z => z.diagnoseCode === d.code).length;
                 return { value: d.code, label: `${d.titel}${d.prioritaet === "wichtig" ? " · wichtig" : ""} · ${n} ${n === 1 ? "Ziel" : "Ziele"}` };
               })}
+              anzeige={
+                <>
+                  <div className="truncate" style={{ fontWeight: "var(--weight-medium)" }}>
+                    {kontextDiagnose.titel} ({kontextDiagnose.code})
+                  </div>
+                  {aktiv === 2 && (
+                    <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 1 }}>
+                      {zielKatalog} {zielKatalog === 1 ? "Ziel" : "Ziele"} · {zielAusgeschlossen} ausgeschlossen · {zieleHier.length} im Plan
+                    </div>
+                  )}
+                </>
+              }
               style={{ flex: 1, minWidth: 0 }} />
           </div>
           {aktiv === 3 && kontextZiel && (
@@ -169,6 +189,14 @@ function KategorieLeiste({ fokus, onFokus, kontext }: {
                   const n = massnahmenZahl(kontextDiagnose.code, z.zielId);
                   return { value: z.zielId, label: `${z.titel} · ${n} ${n === 1 ? "Massnahme" : "Massnahmen"}` };
                 })}
+                anzeige={
+                  <>
+                    <div className="truncate" style={{ fontWeight: "var(--weight-medium)" }}>{kontextZiel.titel}</div>
+                    <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 1 }}>
+                      {interventionenZahl} {interventionenZahl === 1 ? "Intervention" : "Interventionen"} · {massnahmenZahl(kontextDiagnose.code, kontextZiel.zielId)} im Plan
+                    </div>
+                  </>
+                }
                 style={{ flex: 1, minWidth: 0 }} />
             </div>
           )}
@@ -389,9 +417,7 @@ function ZielAuswahl({ diagnoseCode, onMassnahmen }: {
   const [suche, setSuche] = useState("");
   const [eigenerTitel, setEigenerTitel] = useState("");
 
-  const diagnose = plan.diagnosen.find(d => d.code === diagnoseCode) ?? null;
   const ziele = useMemo(() => zieleZuDiagnose(diagnoseCode), [diagnoseCode]);
-  const entfernt = useMemo(() => ausgeschlosseneZiele(diagnoseCode).length, [diagnoseCode]);
   const imPlanHier = plan.ziele.filter(z => z.diagnoseCode === diagnoseCode);
 
   const q = suche.trim().toLowerCase();
@@ -399,14 +425,8 @@ function ZielAuswahl({ diagnoseCode, onMassnahmen }: {
 
   return (
     <div>
-      {/* Eine Kennzahlenzeile (Lauf 6f): die Zahl der Ausgeschlossenen ist
-          der Beleg, dass die Ausschlussliste gegriffen hat. */}
-      <KontextKarte
-        zeilen={[
-          <><strong>{diagnose?.titel ?? diagnoseCode}</strong> ({diagnoseCode}) · {ziele.length} {ziele.length === 1 ? "Ziel" : "Ziele"} · {entfernt} ausgeschlossen · {imPlanHier.length} im Plan</>,
-        ]}
-      />
-
+      {/* Die Herkunfts-Kennzahlen (Katalog, ausgeschlossen, im Plan) stehen
+          im Diagnose-Auswahlfeld der Kategorie-Leiste. */}
       {ziele.length === 0 ? (
         <div style={{ ...KARTE, padding: "var(--space-6)", textAlign: "center" }}>
           <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 10 }}>
@@ -483,8 +503,8 @@ function ZielAuswahl({ diagnoseCode, onMassnahmen }: {
 /* ══════════════════════════════════════════
    SCHRITT 3 — Massnahmenauswahl
    ══════════════════════════════════════════ */
-function MassnahmenAuswahl({ diagnoseCode, zielId, zielTitel }: {
-  diagnoseCode: DiagnoseCode; zielId: string; zielTitel: string;
+function MassnahmenAuswahl({ diagnoseCode, zielId }: {
+  diagnoseCode: DiagnoseCode; zielId: string;
 }) {
   const plan = usePlan();
   const interventionen = useMemo(() => interventionenZuZiel(diagnoseCode, zielId), [diagnoseCode, zielId]);
@@ -502,12 +522,8 @@ function MassnahmenAuswahl({ diagnoseCode, zielId, zielTitel }: {
 
   return (
     <div>
-      <KontextKarte
-        zeilen={[
-          <><strong>{zielTitel}</strong> · Diagnose {diagnoseCode} · {interventionen.length} {interventionen.length === 1 ? "Intervention" : "Interventionen"}</>,
-        ]}
-      />
-
+      {/* Ziel und Interventionszahl stehen im Ziel-Auswahlfeld der
+          Kategorie-Leiste. */}
       {interventionen.length === 0 ? (
         <div style={{ ...KARTE, padding: "var(--space-6)", textAlign: "center" }}>
           <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>
@@ -610,7 +626,7 @@ export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum, mandate 
           onMassnahmen={(zielId, zielTitel) => onFokus({ schritt: 3, diagnoseCode: fokus.diagnoseCode, zielId, zielTitel })} />
       )}
       {fokus.schritt === 3 && (
-        <MassnahmenAuswahl diagnoseCode={fokus.diagnoseCode} zielId={fokus.zielId} zielTitel={fokus.zielTitel} />
+        <MassnahmenAuswahl diagnoseCode={fokus.diagnoseCode} zielId={fokus.zielId} />
       )}
     </div>
   );

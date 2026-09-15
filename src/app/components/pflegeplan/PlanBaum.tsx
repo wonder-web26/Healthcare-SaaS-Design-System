@@ -70,10 +70,13 @@ function MassnahmenZeile({ m, diagnoseCode, zielId, zielTitelVon, mandate, onFok
   );
 }
 
-export function PlanBaum({ plan, mandate, onFokus }: {
+export function PlanBaum({ plan, mandate, onFokus, kontextDiagnose }: {
   plan: PlanZustand;
   mandate: MandatKurz[];
   onFokus: (f: Fokus) => void;
+  /** Diagnose, an der links gerade Ziele oder Massnahmen gewählt werden —
+   *  ihre Karte wird im Baum markiert. */
+  kontextDiagnose?: string | null;
 }) {
   const [zugeklappt, setZugeklappt] = useState<Set<string>>(new Set());
 
@@ -138,8 +141,10 @@ export function PlanBaum({ plan, mandate, onFokus }: {
           const ziele = zieleVon(d.code);
           const mAnzahl = massnahmenJeDiagnose(d.code);
           const wichtig = d.prioritaet === "wichtig";
+          const imKontext = d.code === kontextDiagnose;
           return (
-            <div key={d.code} data-baum-diagnose={d.code} style={{ ...KARTE, padding: "10px 14px" }}>
+            <div key={d.code} data-baum-diagnose={d.code} aria-current={imKontext ? "true" : undefined}
+              style={{ ...KARTE, padding: "10px 14px", ...(imKontext ? { border: "1.5px solid var(--brand-primary)" } : {}) }}>
               <div className="flex items-center" style={{ gap: 8 }}>
                 <FaltKnopf zu={dZu} onToggle={() => toggle(dKey)} label={`Diagnose ${d.code} auf- oder zuklappen`} />
                 <span style={{ fontSize: "var(--text-meta)", fontVariantNumeric: "tabular-nums", color: "var(--brand-primary)", fontWeight: "var(--weight-medium)" }}>{d.code}</span>

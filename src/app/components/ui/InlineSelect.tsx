@@ -21,10 +21,16 @@ interface InlineSelectProps {
    * Eintrag der Liste — er ist nicht wählbar und wird nie gespeichert.
    */
   platzhalter?: string;
+  /**
+   * Eigener Inhalt für das geschlossene Feld (z. B. Titel plus
+   * Kennzahlenzeile). Die Aufklappliste zeigt weiterhin die Options-Labels;
+   * mehrzeiliger Inhalt kümmert sich selbst um seine Kürzung.
+   */
+  anzeige?: React.ReactNode;
   style?: React.CSSProperties;
 }
 
-export function InlineSelect({ value, onChange, options, disabled, platzhalter, style }: InlineSelectProps) {
+export function InlineSelect({ value, onChange, options, disabled, platzhalter, anzeige, style }: InlineSelectProps) {
   const [open, setOpen] = useState(false);
   const [lage, setLage] = useState<AufklappLage | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -75,7 +81,7 @@ export function InlineSelect({ value, onChange, options, disabled, platzhalter, 
         fontFamily: "inherit",
         ...style,
       }}>
-        {selectedLabel}
+        {anzeige ?? selectedLabel}
       </div>
     );
   }
@@ -99,7 +105,9 @@ export function InlineSelect({ value, onChange, options, disabled, platzhalter, 
           textAlign: "left",
         }}
       >
-        <span className="truncate">{selectedLabel}</span>
+        {anzeige !== undefined
+          ? <div className="flex-1 min-w-0">{anzeige}</div>
+          : <span className="truncate">{selectedLabel}</span>}
         <ChevronDown style={{ width: 14, height: 14, color: "var(--text-tertiary)", flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
       </button>
 

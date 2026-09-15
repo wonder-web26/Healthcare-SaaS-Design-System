@@ -278,7 +278,8 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
         )}
       </div>
 
-      <PlanBaum plan={plan} mandate={mandate} onFokus={setFokus} />
+      <PlanBaum plan={plan} mandate={mandate} onFokus={setFokus}
+        kontextDiagnose={fokus.schritt === 2 || fokus.schritt === 3 ? fokus.diagnoseCode : null} />
     </>
   );
 
