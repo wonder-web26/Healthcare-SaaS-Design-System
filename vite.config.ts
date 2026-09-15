@@ -31,6 +31,13 @@ export default defineConfig({
     },
   },
 
+  server: {
+    // Fixed port so the local URL stays stable across restarts,
+    // independent of other Vite instances on this machine
+    port: 5176,
+    strictPort: true,
+  },
+
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })
