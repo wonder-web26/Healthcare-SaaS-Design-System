@@ -28,28 +28,6 @@ const STATUS_LABEL: Record<PlanZustand["status"], string> = {
   aenderung_in_arbeit: "Änderung in Arbeit",
 };
 
-/**
- * Fällig = Zieldatum überschritten und keine Einschätzung erfasst.
- * Bezugsdatum ist die feste Mock-Gegenwart GEGENWART_ISO (04.08.2026) —
- * der Prototyp hat kein laufendes Heute; mit echten Daten ersetzt das
- * Systemdatum diese Konstante.
- */
-function istFaellig(z: PlanZiel): boolean {
-  return z.zieldatum !== "" && z.zieldatum < GEGENWART_ISO && z.einschaetzung === null;
-}
-
-/** Eindeutige Ziele in Baumreihenfolge — ein Ziel unter zwei Diagnosen ist EIN Ziel. */
-function eindeutigeZiele(plan: PlanZustand): PlanZiel[] {
-  const gesehen = new Set<string>();
-  const aus: PlanZiel[] = [];
-  for (const z of plan.ziele) {
-    if (gesehen.has(z.zielId)) continue;
-    gesehen.add(z.zielId);
-    aus.push(z);
-  }
-  return aus;
-}
-
 function ZielErreichung({ z }: { z: PlanZiel }) {
   const benutzer = useCurrentUser();
   const skala = zielBewertungsSkala();
@@ -62,14 +40,10 @@ function ZielErreichung({ z }: { z: PlanZiel }) {
       </div>
     );
   }
-  /* Die Einschätzung braucht KEIN Zieldatum — das Datum ist bewusst
-     optional; wer einschätzen will, kann es jederzeit. */
   return (
     <div className="flex items-center flex-wrap" style={{ gap: 6 }}>
       <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-        {z.zieldatum
-          ? `Zieldatum ${datumAnzeige(z.zieldatum)}${istFaellig(z) ? " — überschritten, Einschätzung fällig:" : ""}`
-          : "Einschätzung:"}
+        Einschätzung:
       </span>
       {skala.map(s => (
         <button key={s.stufe} type="button"
@@ -116,7 +90,6 @@ export function DokumentAnsicht({ mandate, onPlanAendern, onBlatt }: {
   const plan = usePlan();
   const summeMin = planWochenSummeMin(plan.massnahmen);
   const aktuelleFassung = plan.fassungen[plan.fassungen.length - 1] ?? null;
-  const faellige = eindeutigeZiele(plan).filter(istFaellig);
   const dritte = plan.massnahmen.filter(m => m.planung.erbringer !== "S");
   const ohneZuordnung = plan.massnahmen.filter(m => m.zielBezuege.length === 0);
   const eindeutigeZielZahl = new Set(plan.ziele.map(z => z.zielId)).size;
@@ -175,22 +148,6 @@ export function DokumentAnsicht({ mandate, onPlanAendern, onBlatt }: {
             </div>
           </div>
         </div>
-
-        {/* ── Was ansteht — der Grund, auf einen veröffentlichten Plan
-              zurückzukommen. Ist nichts fällig, entfällt der Abschnitt. ── */}
-        {faellige.length > 0 && (
-          <div data-dok-ansteht style={{ ...KARTE, borderColor: "var(--status-warning)", padding: "12px 18px", marginBottom: 14 }}>
-            <div style={{ fontSize: "var(--text-small)", fontWeight: "var(--weight-medium)", color: "var(--status-warning-text)", marginBottom: 6 }}>
-              Was ansteht — {faellige.length} {faellige.length === 1 ? "Ziel" : "Ziele"} zur Evaluation fällig
-            </div>
-            {faellige.map(z => (
-              <div key={z.zielId} className="flex items-center flex-wrap" style={{ gap: 8, padding: "4px 0", fontSize: "var(--text-meta)", color: "var(--text-primary)" }}>
-                <span className="flex-1 min-w-0">{z.titel}</span>
-                <span style={{ color: "var(--status-warning-text)", whiteSpace: "nowrap" }}>Zieldatum {datumAnzeige(z.zieldatum)} überschritten</span>
-              </div>
-            ))}
-</div>
-        )}
 
         {/* ── Der Plan — in Prioritätsreihenfolge: wichtige zuerst (Lauf 6d) ── */}
         {nachPrioritaet(plan.diagnosen).map(d => {

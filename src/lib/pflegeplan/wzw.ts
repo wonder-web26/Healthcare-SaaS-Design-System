@@ -15,7 +15,6 @@
 import type { PlanZustand, PlanMassnahme } from "./plan-store";
 import { positionFuer, detaildialog, qualifikationsStufen } from "./mock-adapter";
 import { wochenVorkommen } from "./planung";
-import { GEGENWART_ISO } from "../gegenwart";
 
 /* ── Die Plansignatur ───────────────────────────────────────────────────── */
 /**
@@ -85,7 +84,6 @@ export const PRUEFUNG_GRUPPE: Record<string, string> = {
   "W-DIAGNOSE-OHNE-ZIEL": "Diagnosen ohne Ziel",
   "W-ZIEL-OHNE-MASSNAHME": "Ziele ohne Massnahme",
   "W-MASSNAHME-OHNE-ZIEL": "Massnahmen ohne Zielbezug",
-  "W-ZIEL-UEBERFAELLIG": "Zieldaten überschritten ohne Einschätzung",
   "W-EINMALIG-OHNE-DATUM": "Einmalige Leistungen ohne Datum",
   "W-VERWEIGERUNG-OHNE-GRUND": "Verweigerungen ohne Begründung",
   "Z-OHNE-POSITION": "Massnahmen ohne Leistungsposition",
@@ -157,21 +155,9 @@ export function befundeErmitteln(plan: PlanZustand): Befund[] {
     }
   }
 
-  // Zieldatum überschritten ohne Einschätzung — je Ziel, nicht je Bindung:
-  // deshalb OHNE diagnoseCode im Element, sonst hinge die Befund-Kennung
-  // (und damit die Übergehung) an einer austauschbaren Bindung.
-  // Ein Ziel OHNE Zieldatum ist KEIN Befund: das Zieldatum ist bewusst
-  // optional — geprüft wird nur ein gesetztes, verstrichenes Datum.
-  const gesehen = new Set<string>();
-  for (const z of plan.ziele) {
-    if (gesehen.has(z.zielId)) continue;
-    gesehen.add(z.zielId);
-    if (z.zieldatum !== "" && z.zieldatum < GEGENWART_ISO && z.einschaetzung === null) {
-      aus.push(befund("W-ZIEL-UEBERFAELLIG", "wirksamkeit", element("ziel", z.zielId, z.titel),
-        `Zieldatum überschritten, keine Einschätzung: ${z.titel}`,
-        "Das Zieldatum ist vorbei, die Zielerreichung wurde nicht eingeschätzt — im Dokument einschätzen."));
-    }
-  }
+  // Ziele tragen KEIN Zieldatum (fachlicher Entscheid) — eine
+  // Terminierungs- oder Überfälligkeitsprüfung existiert deshalb nicht;
+  // die Zielerreichung wird über die Einschätzung erfasst.
 
   // Einmalige Leistung ohne Datum / Verweigerung ohne Begründung
   for (const m of plan.massnahmen) {

@@ -45,9 +45,9 @@ function befundIds(): string[] {
   diagnostikAbschliessen();
   assert.equal(planSignatur(planSchnappschuss()), sig1, "die Diagnostik-Wegmarke (Phase) veraltet die Prüfung nicht");
 
-  zielTerminieren("Z-HAUT", { zieldatum: "2026-09-30" });
+  zielTerminieren("Z-HAUT", { evaluationsIntervall: "alle 4 Wochen" });
   const sig2 = planSignatur(planSchnappschuss());
-  assert.notEqual(sig2, sig1, "Inhaltsänderung (Zieldatum) ändert die Signatur");
+  assert.notEqual(sig2, sig1, "Inhaltsänderung (Evaluationsintervall) ändert die Signatur");
 
   diagnoseVerwerfen("00201", "Nicht zutreffend", "M. Keller", GEGENWART_ISO);
   const sig3 = planSignatur(planSchnappschuss());
@@ -84,15 +84,14 @@ function befundIds(): string[] {
   diagnoseUebernehmen(DIAGNOSE_STURZ); // ohne Ziel
   diagnoseUebernehmen(DIAGNOSE_HAUT);
   zielUebernehmen({ zielId: "Z-HAUT", diagnoseCode: "00108", titel: "Intakte Haut", eigenes: false }); // ohne Massnahme, ohne Datum
-  eigenesZielHinzufuegen("00108", "Überfälliges Testziel");
-  const ueberfaellig = planSchnappschuss().ziele.find(z => z.eigenes)!;
-  zielTerminieren(ueberfaellig.zielId, { zieldatum: "2026-07-01" }); // vor GEGENWART, keine Einschätzung
+  eigenesZielHinzufuegen("00108", "Eigenes Testziel");
+  const eigenes = planSchnappschuss().ziele.find(z => z.eigenes)!;
 
-  massnahmeVerknuepfen("I-HAUTPFLEGE", "Hautpflege durchführen", { diagnoseCode: "00108", zielId: ueberfaellig.zielId });
-  massnahmenBezugLoesen("I-HAUTPFLEGE", { diagnoseCode: "00108", zielId: ueberfaellig.zielId }); // ohne Zielbezug
+  massnahmeVerknuepfen("I-HAUTPFLEGE", "Hautpflege durchführen", { diagnoseCode: "00108", zielId: eigenes.zielId });
+  massnahmenBezugLoesen("I-HAUTPFLEGE", { diagnoseCode: "00108", zielId: eigenes.zielId }); // ohne Zielbezug
   massnahmePlanen("I-HAUTPFLEGE", { wiederholung: "einmalig" }); // einmalig ohne Datum
 
-  massnahmeVerknuepfen("I-GEHTRAINING", "Gleichgewichts- und Kraftübungen anleiten", { diagnoseCode: "00108", zielId: ueberfaellig.zielId });
+  massnahmeVerknuepfen("I-GEHTRAINING", "Gleichgewichts- und Kraftübungen anleiten", { diagnoseCode: "00108", zielId: eigenes.zielId });
   massnahmePlanen("I-GEHTRAINING", { erbringer: "V" }); // Verweigerung ohne Begründung
 
   const ids = befundIds();
@@ -100,20 +99,20 @@ function befundIds(): string[] {
     "W-DIAGNOSE-OHNE-ZIEL:00155",
     `W-ZIEL-OHNE-MASSNAHME:00108|Z-HAUT`,
     "W-MASSNAHME-OHNE-ZIEL:I-HAUTPFLEGE",
-    `W-ZIEL-UEBERFAELLIG:${ueberfaellig.zielId}`,
     "W-EINMALIG-OHNE-DATUM:I-HAUTPFLEGE",
     "W-VERWEIGERUNG-OHNE-GRUND:I-GEHTRAINING",
   ]) {
     assert.ok(ids.includes(erwartet), `Befund ${erwartet} wird erkannt`);
   }
-  /* Z-HAUT trägt kein Zieldatum — und das ist KEIN Befund: das Zieldatum
-     ist bewusst optional. */
-  assert.ok(!ids.some(id => id.startsWith("W-ZIEL-OHNE-DATUM")), "ein Ziel ohne Zieldatum löst keinen Befund aus");
+  /* Ziele tragen kein Zieldatum mehr — Datums-Befunde an Zielen existieren
+     nicht. */
+  assert.ok(!ids.some(id => id.startsWith("W-ZIEL-OHNE-DATUM") || id.startsWith("W-ZIEL-UEBERFAELLIG")),
+    "keine Datums-Befunde an Zielen");
   const befunde = befundeErmitteln(planSchnappschuss());
   for (const b of befunde.filter(x => x.id.startsWith("W-"))) {
     assert.equal(b.kriterium, "wirksamkeit", `${b.id} liegt in der Gruppe Wirksamkeit`);
   }
-  console.log("✓ 2  Wirksamkeit: alle sechs Prüfungen lösen aus; ohne Zieldatum ist kein Befund");
+  console.log("✓ 2  Wirksamkeit: alle fünf Prüfungen lösen aus; Ziele tragen kein Zieldatum");
 }
 
 /* ── 3: Auflösen lässt Befunde verschwinden — die Prüfung meldet nur ── */
@@ -131,7 +130,6 @@ function befundIds(): string[] {
   diagnoseUebernehmen(DIAGNOSE_HAUT);
   eigenesZielHinzufuegen("00108", "Testziel");
   const ziel = planSchnappschuss().ziele[0];
-  zielTerminieren(ziel.zielId, { zieldatum: "2026-10-15" });
 
   // Ohne Position, Variante «Dialog unbeantwortet»
   massnahmeVerknuepfen("I-GANZWASCHUNG", "Ganzkörperwaschung", { diagnoseCode: "00108", zielId: ziel.zielId });

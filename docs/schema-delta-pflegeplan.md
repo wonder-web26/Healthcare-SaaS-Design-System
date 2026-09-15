@@ -121,18 +121,20 @@ dbml heute nicht vorsieht:
    hängt die Skala **je Ziel** (`EnpGoalCatalog.evaluationScaleId`), nicht
    global — verschiedene Ziele können verschiedene Skalen tragen. Der
    Adapter darf nicht auf eine globale Skala festgelegt werden.
-2. **Zieldatum, Evaluationsintervall und Einschätzung** (Stufe, Datum,
-   Autorin) leben im Prototyp am Plan-Zustand je Ziel. In der dbml trägt
-   `TreatmentGoal` nur `status (active | achieved | cancelled)` — es fehlen
-   **Zieldatum**, **Evaluationsintervall** und die **skalierte Einschätzung
-   mit Datum und Person**.
+2. **Evaluationsintervall und Einschätzung** (Stufe, Datum, Autorin) leben
+   im Prototyp am Plan-Zustand je Ziel. In der dbml trägt `TreatmentGoal`
+   nur `status (active | achieved | cancelled)` — es fehlen
+   **Evaluationsintervall** und die **skalierte Einschätzung mit Datum und
+   Person**. Ein **Zieldatum** trägt das Ziel bewusst NICHT (fachlicher
+   Entscheid, nach Lauf 6f entfernt) — dafür besteht kein Schemabedarf.
 3. **Fassungen sind im Prototyp eine Zählung, keine Historie**: alte Stände
    werden nicht gespeichert und sind nicht lesbar. Mit echten Daten braucht
    der Plan **versionierte Stände** (Vorbild: die LPB-Versionierung im
    Fachmodell — neue Fassung statt stiller Änderung, ersetzte Fassungen
    bleiben lesbar).
-4. Das Bezugsdatum für «überfällig» ist die feste Mock-Gegenwart
+4. Freigabe- und Einschätzungsdaten nutzen die feste Mock-Gegenwart
    (`GEGENWART_ISO`); produktiv ersetzt das Systemdatum die Konstante.
+   (Die Überfälligkeits-Ableitung ist mit dem Zieldatum entfallen.)
 
 ## Abweichungen aus Lauf 6d (Diagnostik als Phase)
 

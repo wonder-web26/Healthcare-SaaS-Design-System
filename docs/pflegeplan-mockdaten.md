@@ -126,18 +126,13 @@ Nummer, Bezeichnung, KLV-Kategorie und Vorgabezeit: **katalog**
 | Unbehandelter CAP | CAP-CARDIO (keine Zuordnungsliste; im Assessment-Mock seit Lauf 2 nicht mehr getriggert — `unbehandelteCaps` weist ihn aus, wenn er auftritt) |
 | Kandidat aus mehreren CAPs | 00146, 00085, 00092 |
 
-## Beispiel-Zieldaten und -Einschätzungen (Lauf 5; frei gewählt, mock)
+## Einschätzungen (Lauf 5; angepasst nach Entfernung des Zieldatums)
 
-Die Mock-Gegenwart ist `GEGENWART_ISO` = **04.08.2026**. Für die
-Dokument-Ansicht setzt das Durchspielen über die Oberfläche:
-
-- **Z-STURZFREI: Zieldatum 15.07.2026** — vor der Gegenwart, ohne
-  Einschätzung → erscheint unter «Was ansteht» (V4) und wird dort mit
-  Stufe 4 «weitgehend erreicht» eingeschätzt (V5).
-- **Z-SELBSTPFLEGE: Zieldatum 30.09.2026** — in der Zukunft, nichts fällig.
-- Alle übrigen Ziele bleiben ohne Zieldatum — das Zieldatum ist bewusst
-  optional, ohne Datum entsteht kein Befund. Geprüft wird nur ein gesetztes,
-  verstrichenes Datum ohne Einschätzung.
+Die Mock-Gegenwart ist `GEGENWART_ISO` = **04.08.2026**. Ziele tragen
+**kein Zieldatum** (fachlicher Entscheid): die Zielerreichung wird über die
+fünfstufige Einschätzung erfasst — jederzeit, im Dokument, mit Datum und
+Autorin der Erfassung. Datums-Befunde an Zielen und der Abschnitt
+«Was ansteht» existieren damit nicht.
 
 ## Prüfung
 

@@ -60,12 +60,9 @@ export interface PlanZiel {
   titel: string;
   /** Selbst formuliert statt aus der hergeleiteten Liste übernommen. */
   eigenes: boolean;
-  /** ISO-Datum; "" = keines. NIE automatisch vorbelegt und BEWUSST
-   *  optional — ein Ziel ohne Zieldatum ist kein Befund. Geprüft wird nur
-   *  ein gesetztes, verstrichenes Datum ohne Einschätzung (wzw.ts,
-   *  W-ZIEL-UEBERFAELLIG). */
-  zieldatum: string;
-  /** Freitext, z.B. «alle 4 Wochen»; "" = keines. */
+  /** Freitext, z.B. «alle 4 Wochen»; "" = keines. Ein Zieldatum trägt das
+   *  Ziel NICHT — fachlicher Entscheid: Ziele werden eingeschätzt
+   *  (einschaetzung), nicht terminiert. */
   evaluationsIntervall: string;
   einschaetzung: ZielEinschaetzung | null;
 }
@@ -309,11 +306,10 @@ export function verwerfungZuruecknehmen(code: DiagnoseCode): void {
 
 /* ── Ziele ─────────────────────────────────────────────────────────────── */
 
-/** Ziel übernehmen — OHNE Zieldatum: es wird nie automatisch vorbelegt. */
-export function zielUebernehmen(z: Omit<PlanZiel, "zieldatum" | "evaluationsIntervall" | "einschaetzung">): void {
+export function zielUebernehmen(z: Omit<PlanZiel, "evaluationsIntervall" | "einschaetzung">): void {
   if (zustand.ziele.some(x => x.diagnoseCode === z.diagnoseCode && x.zielId === z.zielId)) return;
   /* Dient das Ziel bereits einer anderen Diagnose, teilen sich die Einträge
-     Zieldatum und Einschätzung — sie gehören zum Ziel, nicht zur Bindung. */
+     Intervall und Einschätzung — sie gehören zum Ziel, nicht zur Bindung. */
   const bestehend = zustand.ziele.find(x => x.zielId === z.zielId);
   zustand = {
     ...zustand,
@@ -322,7 +318,6 @@ export function zielUebernehmen(z: Omit<PlanZiel, "zieldatum" | "evaluationsInte
     diagnostikAbgeschlossen: true,
     ziele: [...zustand.ziele, {
       ...z,
-      zieldatum: bestehend?.zieldatum ?? "",
       evaluationsIntervall: bestehend?.evaluationsIntervall ?? "",
       einschaetzung: bestehend?.einschaetzung ?? null,
     }],
@@ -330,8 +325,8 @@ export function zielUebernehmen(z: Omit<PlanZiel, "zieldatum" | "evaluationsInte
   melden();
 }
 
-/** Zieldatum und Intervall setzen — je Ziel, synchron über alle Bindungen. */
-export function zielTerminieren(zielId: ZielId, patch: { zieldatum?: string; evaluationsIntervall?: string }): void {
+/** Evaluationsintervall setzen — je Ziel, synchron über alle Bindungen. */
+export function zielTerminieren(zielId: ZielId, patch: { evaluationsIntervall?: string }): void {
   zustand = {
     ...zustand,
     ziele: zustand.ziele.map(z => z.zielId === zielId ? { ...z, ...patch } : z),
@@ -414,7 +409,7 @@ export function eigenesZielHinzufuegen(diagnoseCode: DiagnoseCode, titel: string
     diagnostikAbgeschlossen: true,
     ziele: [...zustand.ziele, {
       zielId: `Z-EIGEN-${eigeneZielNummer}`, diagnoseCode, titel, eigenes: true,
-      zieldatum: "", evaluationsIntervall: "", einschaetzung: null,
+      evaluationsIntervall: "", einschaetzung: null,
     }],
   };
   melden();

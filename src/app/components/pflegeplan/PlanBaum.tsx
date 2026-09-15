@@ -8,11 +8,11 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, ClipboardList, X } from "lucide-react";
 import {
-  zielTerminieren, nachPrioritaet, diagnosePriorisieren, diagnoseEntfernen,
+  nachPrioritaet, diagnosePriorisieren, diagnoseEntfernen,
   type PlanZustand, type PlanMassnahme, type PlanZiel,
 } from "../../../lib/pflegeplan/plan-store";
 import { massnahmenSatz, istErsterBezug, type MandatKurz } from "../../../lib/pflegeplan/planung";
-import { type Fokus, TypMarke, positionsLage, datumAnzeige } from "./gemeinsam";
+import { type Fokus, TypMarke, positionsLage } from "./gemeinsam";
 
 const KARTE: React.CSSProperties = {
   background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)",
@@ -220,22 +220,10 @@ export function PlanBaum({ plan, mandate, onFokus }: {
                           </div>
                           {zZu ? (
                             <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)", padding: "1px 0 0 32px" }}>
-                              {z.zieldatum ? `Zieldatum ${datumAnzeige(z.zieldatum)}` : "ohne Zieldatum"} · {massnahmen.length} {massnahmen.length === 1 ? "Massnahme" : "Massnahmen"}
+                              {massnahmen.length} {massnahmen.length === 1 ? "Massnahme" : "Massnahmen"}
                             </div>
                           ) : (
                             <div>
-                              {/* Zieldatum: hier setzbar, NIE vorbelegt und
-                                  BEWUSST optional — sein Fehlen ist kein
-                                  Befund; geprüft wird nur ein verstrichenes
-                                  Datum ohne Einschätzung. */}
-                              <div className="flex items-center" style={{ gap: 6, padding: "2px 0 0 32px" }}>
-                                <label style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Zieldatum</label>
-                                <input type="date" value={z.zieldatum}
-                                  aria-label={`Zieldatum für ${z.titel}`}
-                                  onChange={e => zielTerminieren(z.zielId, { zieldatum: e.target.value })}
-                                  onClick={e => e.stopPropagation()}
-                                  style={{ height: 22, padding: "0 6px", borderRadius: 6, border: "var(--border-thin) solid var(--border-default)", background: "var(--bg-primary)", fontSize: "var(--text-micro)", color: z.zieldatum ? "var(--text-primary)" : "var(--text-tertiary)", fontFamily: "inherit", outline: "none" }} />
-                              </div>
                               {massnahmen.map(m => (
                                 <MassnahmenZeile key={m.interventionId} m={m} diagnoseCode={z.diagnoseCode} zielId={z.zielId} zielTitelVon={zielTitelVon} mandate={mandate} onFokus={onFokus} />
                               ))}
