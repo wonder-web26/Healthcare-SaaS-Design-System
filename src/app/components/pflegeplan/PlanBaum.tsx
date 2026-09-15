@@ -11,7 +11,7 @@ import {
   zielTerminieren, nachPrioritaet, diagnosePriorisieren, diagnoseEntfernen,
   type PlanZustand, type PlanMassnahme, type PlanZiel,
 } from "../../../lib/pflegeplan/plan-store";
-import { massnahmenSatz, type MandatKurz } from "../../../lib/pflegeplan/planung";
+import { massnahmenSatz, istErsterBezug, type MandatKurz } from "../../../lib/pflegeplan/planung";
 import { type Fokus, TypMarke, positionsLage, datumAnzeige } from "./gemeinsam";
 
 const KARTE: React.CSSProperties = {
@@ -41,11 +41,9 @@ function MassnahmenZeile({ m, diagnoseCode, zielId, zielTitelVon, mandate, onFok
   onFokus: (f: Fokus) => void;
 }) {
   const erster = m.zielBezuege[0] ?? null;
-  /* «Erster» ist das PAAR aus Diagnose und Ziel — nur die Ziel-Kennung
-     genügt nicht: dient das erste Bezugsziel zwei Diagnosen, erschiene die
-     Zeit sonst unter beiden voll (Lauf-6d-Fund). */
-  const istErster = zielId === null
-    || (erster !== null && erster.zielId === zielId && erster.diagnoseCode === diagnoseCode);
+  /* Die Paar-Regel lebt in EINER Funktion (planung.ts) — getestet, nicht
+     je Ansicht nachgebaut (Lauf 6e). */
+  const istErster = istErsterBezug(m, diagnoseCode, zielId);
   return (
     <button type="button" data-massnahme={istErster ? m.interventionId : undefined}
       onClick={() => onFokus({ schritt: "editor", interventionId: m.interventionId })}

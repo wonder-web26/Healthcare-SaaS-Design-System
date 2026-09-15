@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { LEERE_PLANUNG, type MassnahmenPlanung } from "./plan-store";
-import { wochenMinuten, wochenVorkommen, mandatAuswahlSichtbar, mandatImSatz, massnahmenSatz, haeufigkeitsText } from "./planung";
+import { wochenMinuten, wochenVorkommen, mandatAuswahlSichtbar, mandatImSatz, massnahmenSatz, haeufigkeitsText, istErsterBezug } from "./planung";
 
 const p = (patch: Partial<MassnahmenPlanung>): MassnahmenPlanung => ({ ...LEERE_PLANUNG, ...patch });
 
@@ -75,6 +75,26 @@ const p = (patch: Partial<MassnahmenPlanung>): MassnahmenPlanung => ({ ...LEERE_
   assert.ok(warnTeil && warnTeil.text.includes("nicht verrechnet"), "Nicht-S: Warnteil «nicht verrechnet»");
   assert.equal(haeufigkeitsText(p({ wiederholung: "einmalig", einmalDatum: "2026-08-12" })), "einmalig am 12.08.2026");
   console.log("✓ SZ Satzzeile: Katalog normal, Gesetztes fett, Nicht-S gewarnt");
+}
+
+/* ── Erster Zielbezug (Lauf 6e, V18): das PAAR entscheidet ── */
+{
+  /* Das erste Bezugsziel Z dient zwei Diagnosen A und B — der Lauf-6d-Fund. */
+  const m = { zielBezuege: [
+    { diagnoseCode: "A", zielId: "Z" },
+    { diagnoseCode: "B", zielId: "Z" },
+    { diagnoseCode: "B", zielId: "W" },
+  ] };
+  const paare = m.zielBezuege.map(b => [b.diagnoseCode, b.zielId] as const);
+  const erste = paare.filter(([d, z]) => istErsterBezug(m, d, z));
+  assert.deepEqual(erste, [["A", "Z"]], "Position und Zeit erscheinen unter GENAU einer Diagnose-Ziel-Kombination");
+  assert.equal(istErsterBezug(m, "B", "Z"), false, "dasselbe Ziel unter der anderen Diagnose: «bereits gezählt»");
+  assert.equal(istErsterBezug(m, null, null), true, "ohne Zielkontext («Ohne Zuordnung») ist die Zeile immer die erste");
+  /* Die Funktion hängt NUR an der Bezugsreihenfolge der Massnahme —
+     Prioritäts- und Anzeige-Sortierungen sind keine Eingabe und können
+     das Ergebnis nicht kippen. */
+  assert.equal(istErsterBezug(m, "A", "Z"), true, "stabil: dieselbe Eingabe, dasselbe Ergebnis");
+  console.log("✓ EB istErsterBezug: genau eine volle Zeile je Massnahme, das Paar entscheidet");
 }
 
 console.log("\nAlle Planungstests bestanden.");

@@ -85,6 +85,13 @@ const blatt = blattAbleiten(plan);
   assert.equal(zeile2.traeger[0].diagnoseCode, "00085", "wichtige Diagnose trägt zuerst");
   assert.equal(zeile2.traeger[zeile2.traeger.length - 1].diagnoseCode, "00155", "normale danach");
   assert.equal(zeile2.wochenMin, zeile.wochenMin, "…und nur die Reihenfolge ändert sich, nie die Zahlen");
+  /* V18 (Lauf 6e): jede Massnahme trägt auf dem Blatt GENAU eine Unterzeile
+     mit Zeit — auch nach der Prioritätsänderung. */
+  const gleichgewichtZeilen = blatt2.abschnitte
+    .flatMap(a => a.zeilen)
+    .flatMap(z => z.teile)
+    .filter(t => t.massnahmeTitel === "Gleichgewichts- und Kraftübungen anleiten");
+  assert.equal(gleichgewichtZeilen.length, 1, "eine Massnahme, eine Unterzeile — trotz zweier Diagnosen am ersten Bezugsziel");
   diagnosePriorisieren("00085", "normal");
   console.log("✓ 3  Begründungskette: 10506 von drei Zielen unter zwei Diagnosen getragen; Priorität ordnet, rechnet nicht");
 }

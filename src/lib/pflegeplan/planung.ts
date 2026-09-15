@@ -65,6 +65,30 @@ export function wochenMinuten(p: MassnahmenPlanung, dauerMin: number | null): nu
   return wochenVorkommen(p) * dauerMin;
 }
 
+/* ── Erster Zielbezug: das PAAR entscheidet ────────────────────────────── */
+/**
+ * Trägt die Massnahme unter dieser Diagnose-Ziel-Kombination Position und
+ * Zeit — oder sagt sie «bereits gezählt»?
+ *
+ * DIE KENNUNG IST DAS PAAR, nie die Ziel-Kennung allein: dient das erste
+ * Bezugsziel zwei Diagnosen, erschiene die Massnahme sonst unter beiden
+ * voll — sie sähe aus wie doppelte Leistung (Lauf-6d-Fund, als Funktion
+ * gesichert in Lauf 6e). Hängt NUR an der Bezugsreihenfolge der Massnahme;
+ * Prioritäts- und Anzeige-Sortierungen ändern nichts daran.
+ *
+ * zielId null = Kontext ohne Ziel («Ohne Zuordnung»): dort ist die Zeile
+ * immer die erste.
+ */
+export function istErsterBezug(
+  m: { zielBezuege: ReadonlyArray<{ diagnoseCode: string; zielId: string }> },
+  diagnoseCode: string | null,
+  zielId: string | null,
+): boolean {
+  if (zielId === null) return true;
+  const erster = m.zielBezuege[0] ?? null;
+  return erster !== null && erster.zielId === zielId && erster.diagnoseCode === diagnoseCode;
+}
+
 /* ── Mandat: Sichtbarkeit und Satz-Regel ───────────────────────────────── */
 export interface MandatKurz { id: string; label: string }
 

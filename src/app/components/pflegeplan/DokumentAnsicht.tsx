@@ -12,7 +12,7 @@ import {
   usePlan, zielEinschaetzen, nachPrioritaet,
   type PlanZustand, type PlanZiel, type PlanMassnahme,
 } from "../../../lib/pflegeplan/plan-store";
-import { massnahmenSatz, ERBRINGER, type MandatKurz } from "../../../lib/pflegeplan/planung";
+import { massnahmenSatz, istErsterBezug, ERBRINGER, type MandatKurz } from "../../../lib/pflegeplan/planung";
 import { GEGENWART_ISO } from "../../../lib/gegenwart";
 import { useCurrentUser } from "../../auth";
 import { TypMarke, positionsLage, planWochenSummeMin, datumAnzeige } from "./gemeinsam";
@@ -88,11 +88,9 @@ function MassnahmenSatzZeile({ m, diagnoseCode, zielId, plan, mandate }: {
   m: PlanMassnahme; diagnoseCode: string | null; zielId: string | null; plan: PlanZustand; mandate: MandatKurz[];
 }) {
   const erster = m.zielBezuege[0] ?? null;
-  /* «Erster» ist das PAAR aus Diagnose und Ziel — nur die Ziel-Kennung
-     genügt nicht: dient das erste Bezugsziel zwei Diagnosen, erschiene die
-     Zeit sonst unter beiden voll (Lauf-6d-Fund). */
-  const istErster = zielId === null
-    || (erster !== null && erster.zielId === zielId && erster.diagnoseCode === diagnoseCode);
+  /* Die Paar-Regel lebt in EINER Funktion (planung.ts) — getestet, nicht
+     je Ansicht nachgebaut (Lauf 6e). */
+  const istErster = istErsterBezug(m, diagnoseCode, zielId);
   const lage = positionsLage(m.interventionId, m.planung.detailAuswahl);
   const ersterTitel = erster ? (plan.ziele.find(z => z.zielId === erster.zielId)?.titel ?? erster.zielId) : "";
   return (
