@@ -136,6 +136,38 @@ dbml heute nicht vorsieht:
    (`GEGENWART_ISO`); produktiv ersetzt das Systemdatum die Konstante.
    (Die Überfälligkeits-Ableitung ist mit dem Zieldatum entfallen.)
 
+## Abweichungen aus Lauf 7 (Leistungsplanung, Teil 1)
+
+1. **Gemeldeter Bedarf an die Pflegeplanung (Ü8):** Die Leistungsplanung
+   braucht je übernommenem Wert (Anzahl, Wiederholung, Zeit, W, Mandat,
+   Qualifikation) einen **Änderungszeitstempel und Urheber** — ohne sie ist
+   der Dreiwegabgleich (Block G) nicht ableitbar. Die Pflegeplanung führt
+   beides heute nicht. Bis dahin liefert
+   `src/lib/leistungsplanung/schnittstelle.ts` einen dokumentierten
+   Mock-Planbestand mit Mock-Spuren; der Anschluss der echten Quelle
+   tauscht diese eine Datei.
+
+2. **Schemabedarf (dbml unberührt):**
+   - **NeedsReport fehlt komplett**: Empfänger, Periode, Minuten je
+     Leistungsart, unveränderliche Referenz auf genau eine Blatt-Version,
+     Kanal, Sendezeitpunkt, Zustellbeleg, Antwortstatus.
+   - `SpitexServicePlan`: **Versionsnummer**, Zustände
+     `freigegeben`/`gemeldet`/`ersetzt`, Abzugsfelder je Leistungsart für
+     gleichzeitig erbrachte Leistungen (D6), Bemerkung für die
+     Verordnung (B4).
+   - `SpitexServicePlanPosition`: **Gesamtherkunft**
+     (pflegeplan/hauswirtschaft/prozess/manuell), **Einsatzblock**,
+     Zielbezüge zur Pflegeplanung (n:m), die dreiteilige Zeit-Begründung
+     (F7: Freitext, Beleg, Vergleich), Änderungszeitstempel/Urheber je
+     Wert.
+   - `MedicalPrescription`: **ZSR** neben der GLN, **Eingangsbeleg**
+     (kein Statuswechsel ohne Beleg, I5), **unbefristet** bei
+     Hilflosenentschädigung mittleren oder schweren Grades (I6).
+
+3. **Hauswirtschaft:** Ein Quellmodul existiert nicht; der Bestand ist in
+   der Schnittstellendatei als Mock vorbelegt (Nicht-KLV, Herkunft
+   «hauswirtschaft») und dort als solcher vermerkt.
+
 ## Modellwechsel: Massnahme = Leistungsposition
 
 Entschieden nach Lauf 6g (Vergleich mit dem DomoHealth-Modell): Die

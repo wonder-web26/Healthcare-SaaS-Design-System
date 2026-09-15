@@ -4,6 +4,7 @@ import { DashboardPage } from "./components/DashboardPage";
 import { StrategicDashboard } from "./components/StrategicDashboard";
 import { PatientenPage } from "./components/PatientenPage";
 import { Patient360Page } from "./components/Patient360Page";
+import { LeistungsplanungPage } from "./components/leistungsplanung/LeistungsplanungPage";
 import { OnboardingListPage } from "./components/OnboardingListPage";
 import { OnboardingPage } from "./components/OnboardingPage";
 import { ZuteilungPage } from "./components/ZuteilungPage";
@@ -26,6 +27,8 @@ export const router = createBrowserRouter([
      es ist ein druckbares Dokument — der Druck darf keine
      Navigationselemente enthalten. */
   { path: "/pflegeplan/:patientId/blatt", Component: BlattAnsicht },
+  /* Vollbildroute der Leistungsplanung (Lauf 7, A2) — Rücksprung über ?returnTo. */
+  { path: "/leistungsplanung/:patientId", Component: LeistungsplanungPage },
   {
     path: "/",
     Component: AppShell,

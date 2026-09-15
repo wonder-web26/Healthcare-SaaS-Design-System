@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="de-CH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leistungsplanung v6 — reduziert</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --n100:#fff;--n200:#fcf9f8;--n300:#f5f3f0;--n400:#edeae5;--n500:#d9d6d0;--n600:#b4b0a8;
+  --n700:#88847d;--n800:#65615b;--n900:#48453f;--n1000:#302e2a;
+  --b100:#eef7f8;--b300:#c0dbde;--b700:#216a71;--b800:#033b40;
+  --red:#a23544;--red7:#812231;--yel:#9c7236;--grn:#406b49;--grn8:#2e5336;
+  --bg1:var(--n100);--bg2:var(--n200);--bd:var(--n400);--bdh:var(--n500);
+  --t1:var(--n1000);--t2:var(--n900);--t3:var(--n800);--tr:var(--n100);
+  --fs:13px;--fsc:11px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,sans-serif;font-size:var(--fs);color:var(--t1);background:var(--bg2);-webkit-font-smoothing:antialiased}
+.mono{font-family:"IBM Plex Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
+input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--b700);outline-offset:1px;border-radius:2px}
+
+.app{display:flex;flex-direction:column;height:100vh;min-height:0}
+.top{display:flex;align-items:center;gap:12px;padding:0 14px;height:36px;flex:0 0 auto;background:var(--b800);color:var(--tr);font-size:var(--fsc)}
+.top b{font-weight:600;font-size:12px}
+.top .sp{flex:1}
+.top select{background:rgba(255,255,255,.12);border:none;border-radius:3px;color:#fff;font-size:var(--fsc);padding:2px 5px}
+.top select option{color:#000}
+
+.ch{flex:0 0 auto;background:var(--bg1);border-bottom:1px solid var(--bd);padding:7px 14px 0}
+.ch h1{font-size:16px;font-weight:600;display:inline;margin-right:10px}
+.ch .f{display:inline;font-size:var(--fsc);color:var(--t3)}
+.ch .f b{color:var(--t1);font-weight:500}
+.tabs{display:flex;gap:0;margin-top:6px}
+.tabs div{padding:5px 9px;font-size:12px;color:var(--t3);border-bottom:2px solid transparent}
+.tabs div[aria-current]{color:var(--t1);font-weight:500;border-bottom-color:var(--b700)}
+
+.kopf{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:6px 14px;background:var(--bg1);border-bottom:1px solid var(--bd)}
+.kopf .st{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600}
+.kopf input[type=date]{border:1px solid var(--bd);border-radius:3px;padding:2px 5px;font-size:12px;background:var(--bg1)}
+.seg{display:inline-flex;border:1px solid var(--bd);border-radius:3px;overflow:hidden}
+.seg button{padding:2px 7px;font-size:var(--fsc);border-right:1px solid var(--bd)}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:var(--b700);color:#fff}
+.kopf .sp{flex:1}
+.kopf .save{font-size:var(--fsc);color:var(--t3)}
+.kopf .save button{text-decoration:underline}
+
+.dot{width:6px;height:6px;border-radius:50%;flex:0 0 auto}
+.dot.ok{background:var(--grn)}.dot.warn{background:var(--yel)}.dot.err{background:var(--red)}
+.dot.idle{background:var(--n600)}.dot.live{background:var(--b700)}
+.tag{display:inline-flex;align-items:center;gap:3px;padding:0 5px;border-radius:3px;font-size:var(--fsc);font-weight:500;white-space:nowrap;line-height:16px}
+.tag.ok{background:#5790651a;color:var(--grn8)}
+.tag.warn{background:#9c72361a;color:var(--yel)}
+.tag.err{background:#a2354414;color:var(--red7)}
+.tag.info{background:#216a711a;color:var(--b700)}
+.tag.grey{background:#b4b0a824;color:var(--t2)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:3px;font-size:12px;font-weight:500;white-space:nowrap}
+.btn--p{background:var(--b700);color:#fff}.btn--p:hover{background:var(--b800)}
+.btn--o{background:var(--bg1);border:1px solid var(--bd)}.btn--o:hover{border-color:var(--bdh)}
+.btn--s{background:var(--n300)}.btn--s:hover{background:var(--n400)}
+.btn--l{text-decoration:underline;padding:1px 0;font-weight:400}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn--sm{padding:1px 6px;font-size:var(--fsc)}
+
+.band{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:4px 14px;background:var(--bg1);border-bottom:1px solid var(--bd);flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:1px 8px;border-radius:10px;border:1px solid var(--bd);font-size:var(--fsc);background:var(--bg1)}
+.chip:hover{border-color:var(--bdh)}
+.chip[aria-pressed="true"]{border-color:var(--b700);background:var(--b100);font-weight:500}
+.chip .c{font-weight:600}
+.chip.err .c{color:var(--red7)}.chip.warn .c{color:var(--yel)}.chip.ok .c{color:var(--grn8)}
+.banner{display:flex;gap:9px;align-items:center;padding:5px 14px;border-bottom:1px solid var(--bd);font-size:12px}
+.banner.err{background:#a2354414}.banner.warn{background:#9c72361a}
+.banner .bt{flex:1}
+
+.body{flex:1 1 auto;overflow-y:auto;background:var(--bg1);min-height:0}
+.gh{display:flex;align-items:center;justify-content:space-between;padding:5px 14px;background:var(--bg2);
+  border-top:1px solid var(--bd);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:3;font-size:12px}
+.gh .l{display:flex;align-items:center;gap:7px;font-weight:600}
+.gh .r{color:var(--t3);font-size:var(--fsc);display:flex;gap:8px;align-items:center}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+thead th{font-size:var(--fsc);font-weight:400;color:var(--t3);text-align:left;padding:3px 6px;border-bottom:1px solid var(--bd);white-space:nowrap}
+th.n,td.n{text-align:right}
+tbody td{padding:0 6px;height:29px;border-bottom:1px solid var(--n300);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+tbody tr:hover td{background:var(--n200)}
+tr.dim td{color:var(--t3)}
+tr.hit td,tr.hit:hover td{background:var(--b100)}
+td:first-child,th:first-child{padding-left:14px}
+td:last-child,th:last-child{padding-right:14px}
+.c-x{width:24px}.c-nr{width:50px}.c-h{width:88px}.c-z{width:58px}.c-d{width:52px}.c-a{width:80px}.c-m{width:70px}.c-s{width:186px}
+.exp{color:var(--n600);font-size:10px;line-height:1}
+.exp:hover{color:var(--t1)}
+.inp{width:100%;border:none;border-bottom:1px solid transparent;background:transparent;padding:0 2px;text-align:right;font-size:12px}
+.inp:hover{border-bottom-color:var(--bd)}
+.inp:focus{border-bottom-color:var(--b700);background:var(--b100)}
+.zi{width:100%;text-align:right;border:1px solid var(--bd);border-radius:3px;background:var(--bg1);padding:1px 4px;font-size:12px;font-weight:500}
+.zi:focus{border-color:var(--b700);background:var(--b100)}
+.zi:disabled,.inp:disabled{border-color:transparent;background:transparent}
+.freq{display:flex;align-items:center;gap:2px;justify-content:flex-end}
+.sel{border:none;background:transparent;font-size:12px;max-width:100%;padding:0}
+.sel:hover{background:var(--n300);border-radius:2px}
+.delta.p{color:var(--red7);font-weight:600}.delta.m{color:var(--grn8);font-weight:600}.delta.z{color:var(--n600)}
+.st-cell{display:flex;gap:4px;align-items:center;overflow:hidden}
+.det td{background:var(--bg2);white-space:normal;height:auto;padding:8px 14px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:8px 16px}
+.dg{display:flex;flex-direction:column;gap:2px}
+.dg .k{font-size:var(--fsc);color:var(--t3)}
+.dg .v{font-size:12px}
+.dg select,.dg input{border:1px solid var(--bd);border-radius:3px;padding:2px 4px;font-size:12px;background:var(--bg1);width:100%}
+.det .bg{margin-top:7px;font-size:12px;color:var(--t2)}
+
+.fuss{flex:0 0 auto;display:flex;align-items:center;gap:0;background:var(--bg1);border-top:1px solid var(--bd);height:30px;font-size:12px}
+.fuss .i{padding:0 12px;border-right:1px solid var(--bd);display:flex;align-items:center;gap:6px;height:100%}
+.fuss .i .k{color:var(--t3);font-size:var(--fsc)}
+.fuss .sp{flex:1;border-right:none}
+.fuss .tot{background:var(--bg2);font-weight:600}
+
+.scrim{position:fixed;inset:0;background:rgba(19,17,15,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:60}
+.modal{background:var(--bg1);border-radius:5px;max-width:760px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden}
+.modal.nw{max-width:460px}
+.modal header{padding:11px 15px;border-bottom:1px solid var(--bd);font-size:14px;font-weight:600}
+.modal .mb{padding:13px 15px;overflow:auto;flex:1}
+.modal footer{padding:9px 15px;border-top:1px solid var(--bd);display:flex;justify-content:flex-end;gap:8px}
+.fr{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}
+.fr label{font-size:var(--fsc);color:var(--t3)}
+.fr input,.fr textarea,.fr select{border:1px solid var(--bd);border-radius:3px;padding:5px 7px;font-size:12px;background:var(--bg1);width:100%}
+.fr textarea{min-height:58px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.li{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--n300);font-size:12px}
+.li:last-child{border-bottom:none}
+.li .d{font-size:var(--fsc);color:var(--t3)}
+.sec{border:1px solid var(--bd);border-radius:4px;margin-bottom:9px}
+.sec .sh{display:flex;justify-content:space-between;padding:6px 10px;background:var(--bg2);border-bottom:1px solid var(--bd);font-size:12px;font-weight:600}
+.sec .sb{padding:7px 10px}
+.mline{display:grid;grid-template-columns:120px 1fr;gap:6px;font-size:12px;padding:2px 0}
+.mline .s{color:var(--t3);font-size:var(--fsc)}
+.demo{position:fixed;right:10px;bottom:38px;z-index:50;background:var(--b800);color:#fff;border-radius:4px;font-size:var(--fsc);overflow:hidden;max-width:250px}
+.demo h4{padding:5px 9px;cursor:pointer;font-size:var(--fsc);font-weight:600}
+.demo ol{margin:0;padding:0 9px 8px 24px;line-height:1.5;opacity:.85}
+.demo.cl ol{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <b>hogo health</b><span>Marković-Hadžiabdić, Z. › Leistungsplanung</span><span class="sp"></span>
+    <select onchange="S.rolle=this.value;render()">
+      <option value="hf">S. Frei · dipl. HF</option><option value="fage">T. Aebi · FaGe</option>
+      <option value="rev">R. Iten · Revision</option></select>
+  </div>
+  <div class="ch">
+    <h1>Zvezdana Marković-Hadžiabdić</h1>
+    <span class="f">84 J. · Fall <b class="mono">303580</b> · Groupe Mutuel · <b>KVG-LZP</b> · Dietikon ZH</span>
+    <div class="tabs"><div>Übersicht</div><div>Bedarfsabklärung</div><div>Pflegeplanung</div>
+      <div aria-current="page">Leistungsplanung</div><div>Einsätze</div><div>Abrechnung</div><div>Pendenzen</div></div>
+  </div>
+  <div class="kopf" id="kopf"></div>
+  <div class="band" id="band"></div>
+  <div id="banners"></div>
+  <div class="body"><div id="table"></div></div>
+  <div class="fuss" id="fuss"></div>
+</div>
+<div id="mh"></div>
+<div class="demo cl" id="demo"><h4 onclick="document.getElementById('demo').classList.toggle('cl')">Demo ▾</h4><ol id="ds"></ol></div>
+
+<script>
+const KAT={
+ "10102":{lb:"Ganzwäsche in Bad, Dusche oder am Lavabo",cat:"c",anz:1,einh:"w",zeit:40,mq:"Pflegehilfe"},
+ "10104":{lb:"Teilwäsche am Lavabo",cat:"c",anz:1,einh:"t7",zeit:26,mq:"Pflegehilfe"},
+ "10105":{lb:"Intimpflege",cat:"c",anz:1,einh:"t7",zeit:15,mq:"Pflegehilfe"},
+ "10108":{lb:"Nägel schneiden Finger",cat:"c",anz:2,einh:"m",zeit:15,mq:"Pflegehilfe"},
+ "10112":{lb:"Zahnpflege",cat:"c",anz:3,einh:"t7",zeit:5,mq:"Pflegehilfe"},
+ "10114":{lb:"Hilfe An-/Auskleiden",cat:"c",anz:2,einh:"t7",zeit:15,mq:"Pflegehilfe"},
+ "10115":{lb:"Kompressionsstrümpfe/-verband",cat:"c",anz:2,einh:"t7",zeit:10,mq:"Pflegehilfe"},
+ "10302":{lb:"Beim Essen helfen",cat:"c",anz:2,einh:"t7",zeit:20,mq:"Pflegehilfe"},
+ "10419":{lb:"Begleitung bei Toilettengang",cat:"c",anz:3,einh:"t7",zeit:10,mq:"Pflegehilfe"},
+ "10506":{lb:"Aktive/passive Bewegungsunterstützung",cat:"c",anz:1,einh:"t6",zeit:17,mq:"Pflegehilfe"},
+ "10601":{lb:"Medikamente richten",cat:"b",anz:1,einh:"w",zeit:10,mq:"dipl. HF"},
+ "10702":{lb:"Mittlerer Verband",cat:"b",anz:1,einh:"t3",zeit:15,mq:"dipl. HF"},
+ "10801":{lb:"Blutdruck / Puls messen",cat:"b",anz:1,einh:"w",zeit:5,mq:"FaGe"},
+ "10902":{lb:"Reassessment",cat:"a",anz:1,einh:"e",zeit:150,mq:"dipl. HF",retro:1},
+ "10904":{lb:"Pflegeplanung erstmalig",cat:"a",anz:1,einh:"e",zeit:60,mq:"dipl. HF",retro:1},
+ "10906":{lb:"Pflegebedarf bestimmen und evaluieren",cat:"a",anz:1,einh:"m",zeit:15,mq:"dipl. HF"},
+ "10907":{lb:"Konsultation Arzt – Spitex",cat:"a",anz:1,einh:"e",zeit:11,mq:"dipl. HF",retro:1},
+ "10909":{lb:"Pflegeanleitung / Beratung Angehörige",cat:"a",anz:1,einh:"w",zeit:20,mq:"dipl. HF"},
+ "20012":{lb:"Wochenkehr 4-Zimmer-Wohnung",cat:"n",anz:1,einh:"w",zeit:90,mq:"Hauswirtschaft"},
+ "20014":{lb:"Küche / Bad reinigen",cat:"n",anz:2,einh:"w",zeit:20,mq:"Hauswirtschaft"}};
+const MASS={m1:"Körperpflege teilweise übernehmen",m2:"Kompressionstherapie bei CVI",m3:"Mobilität fördern, Sturzprophylaxe",
+ m4:"Nahrungsaufnahme unterstützen",m5:"Ausscheidung begleiten",m6:"Medikamentenmanagement",
+ m7:"Wundversorgung Ulcus cruris rechts",m8:"Dekubitusprophylaxe Sitzbereich",m9:"Angehörigen anleiten"};
+const HERK={pflegeplan:"Pflegeplanung",hauswirtschaft:"Hauswirtschaftsabklärung",prozess:"Abklärungsvorgang",manuell:"hier eingefügt"};
+const BLOCK={"":"—",morgen:"Morgen",mittag:"Mittag",abend:"Abend",einzeln:"eigener Einsatz"};
+const AUSF={ang:"Angehörige",fach:"Fachperson",hw:"Hauswirtschaft"};
+const AUSFK={ang:"Angeh.",fach:"Fachp.",hw:"HW"};
+const STUFE={"Pflegehilfe":0,"Hauswirtschaft":1,"FaGe":2,"dipl. HF":3};
+const KSTUFE={ang:0,hw:1,fach:3};
+const WL={S:"Spitex",I:"Informelles Netz",A:"Anderer Anbieter",V:"Verweigert"};
+const MAND={kvg:"KVG-LZP",uvg:"UVG",ivg:"IVG",mvg:"MVG",privat:"Privat"};
+const ABKL={ohne:"Ohne Abklärung",erst:"Erstabklärung",neu:"Neuabklärung"};
+const CN={a:"KLV a · Abklärung, Beratung, Koordination",b:"KLV b · Untersuchung und Behandlung",
+ c:"KLV c · Grundpflege",n:"Nicht-KLV · Hauswirtschaft"};
+
+let S,undoS;
+function P(nr,o){const k=KAT[nr];return Object.assign({id:nr+"_"+Math.random().toString(36).slice(2,6),
+ nr,lb:k.lb,cat:k.cat,mq:k.mq,retro:!!k.retro,herkunft:"pflegeplan",mass:[],
+ anz:k.anz,anzPlan:null,einh:k.einh,einhPlan:null,zeit:k.zeit,richt:k.zeit,
+ t:false,tH:null,w:"S",wGrund:"",begr:"",block:"",mandat:k.cat==="n"?"privat":"kvg",
+ ausf:k.cat==="n"?"hw":(k.cat==="c"?"ang":"fach"),drift:null,mGrund:""},o||{});}
+function initial(){return{rolle:"hf",status:"entwurf",order:"fehlt",meldung:null,open:null,
+ start:"2026-10-01",monate:6,savedAt:"09:42",filter:null,abklTyp:"erst",abklDatum:"2026-09-22",
+ andereZSR:"",bemerkung:"",sim:{a:0,b:0,c:0,n:0},version:1,
+ pos:[P("10902",{herkunft:"prozess",block:"einzeln"}),P("10904",{herkunft:"prozess",block:"einzeln"}),
+  P("10907",{herkunft:"prozess",block:"einzeln"}),P("10906",{herkunft:"prozess",block:"einzeln"}),
+  P("10909",{mass:["m9","m2","m1"],anzPlan:1,einhPlan:"w",block:"morgen"}),
+  P("10104",{mass:["m1"],anzPlan:1,einhPlan:"t7",zeit:34,block:"morgen"}),
+  P("10112",{mass:["m1"],anzPlan:3,einhPlan:"t7",block:"morgen"}),
+  P("10114",{mass:["m1"],anzPlan:2,einhPlan:"t7",block:"morgen"}),
+  P("10102",{mass:["m1"],anzPlan:1,einhPlan:"w",block:"morgen"}),
+  P("10115",{mass:["m2"],anzPlan:2,einhPlan:"t7",block:"morgen"}),
+  P("10506",{mass:["m3"],anzPlan:1,einhPlan:"t6",t:true,tH:"plan",zeit:20,block:"mittag",
+    begr:"Rehabilitationsziel Transfer, Anleitung statt Übernahme"}),
+  P("10302",{mass:["m4"],anzPlan:2,einhPlan:"t7",block:"mittag"}),
+  P("10419",{mass:["m5"],anzPlan:2,einhPlan:"t7",anz:2,block:"mittag",drift:{neu:3,alt:2,datum:"14.11.2026",von:"S. Frei"}}),
+  P("10105",{herkunft:"manuell",block:"abend"}),
+  P("10601",{mass:["m6"],anzPlan:1,einhPlan:"w",block:"morgen"}),
+  P("10702",{mass:["m7"],anzPlan:1,einhPlan:"t3",block:"morgen"}),
+  P("20012",{herkunft:"hauswirtschaft",block:"einzeln"}),P("20014",{herkunft:"hauswirtschaft",block:"einzeln"})],
+ massOhne:["m8"]};}
+
+const tg=e=>/^t[2-7]$/.test(e)?+e[1]:null;
+function min(p){if(p.w!=="S")return{mon:0,ein:0};const z=p.zeit,n=tg(p.einh);
+ if(p.einh==="e")return{mon:0,ein:p.anz*z};
+ if(n)return{mon:p.anz*z*n*4.286,ein:0};
+ if(p.einh==="w")return{mon:p.anz*z*4.286,ein:0};
+ if(p.einh==="m")return{mon:p.anz*z,ein:0};return{mon:0,ein:0};}
+function sum(){const o={a:{mon:0,ein:0},b:{mon:0,ein:0},c:{mon:0,ein:0},n:{mon:0,ein:0}};
+ S.pos.forEach(p=>{const m=min(p);o[p.cat].mon+=m.mon;o[p.cat].ein+=m.ein;});
+ ["a","b","c","n"].forEach(k=>{o[k].monR=Math.max(0,o[k].mon-(S.sim[k]||0));
+  o[k].tag=o[k].monR/30;o[k].woche=o[k].monR/4.286;o[k].per=o[k].monR*S.monate+o[k].ein;o[k].qu=o[k].monR*3;});
+ return o;}
+const r1=x=>(Math.round(x*10)/10).toLocaleString("de-CH",{minimumFractionDigits:1,maximumFractionDigits:1});
+const r0=x=>Math.round(x).toLocaleString("de-CH");
+const hm=m=>Math.floor(m/60)+":"+String(Math.round(m%60)).padStart(2,"0");
+const addM=(i,n)=>{const d=new Date(i);d.setMonth(d.getMonth()+n);d.setDate(d.getDate()-1);return d;};
+const fmt=d=>d.toLocaleDateString("de-CH",{day:"2-digit",month:"2-digit",year:"numeric"});
+const isoE=()=>addM(S.start,S.monate).toISOString().slice(0,10);
+function simG(){const g={};S.pos.filter(p=>p.w==="S"&&p.block&&p.block!=="einzeln"&&p.einh!=="e"&&p.einh!=="m")
+ .forEach(p=>{(g[p.block]=g[p.block]||[]).push(p);});Object.keys(g).forEach(k=>{if(g[k].length<2)delete g[k];});return g;}
+const simN=p=>{const g=simG();return (g[p.block]||[]).length?g[p.block].length-1:0;};
+
+function bef(){const b={drift:[],richtzeit:[],qual:[],mandat:[],manuell:[],angepasst:[],wOhne:[],leer:[],ohneMass:[]};
+ S.pos.forEach(p=>{
+  if(p.zeit>p.richt){(p.begr?b.angepasst:b.richtzeit).push(p);}
+  else if(p.anzPlan!==null&&(p.anz!==p.anzPlan||p.einh!==p.einhPlan))b.angepasst.push(p);
+  if(p.drift)b.drift.push(p);
+  if(p.w!=="S")b.wOhne.push(p);
+  if(p.herkunft==="manuell")b.manuell.push(p);
+  if(p.zeit===0)b.leer.push(p);
+  if((p.cat==="n"&&p.mandat!=="privat")||(p.cat!=="n"&&p.mandat==="privat")||(p.cat==="c"&&p.mandat==="ivg"))b.mandat.push(p);
+  if((p.cat==="b"&&p.ausf==="ang")||KSTUFE[p.ausf]<STUFE[p.mq])b.qual.push(p);});
+ b.ohneMass=S.massOhne.map(m=>({id:m,lb:MASS[m]}));return b;}
+const blk=()=>{const b=bef();return b.richtzeit.length+b.qual.length+b.leer.length+b.drift.length+b.mandat.length
+ +b.manuell.filter(p=>!p.mGrund).length+b.wOhne.filter(p=>p.w==="V"&&!p.wGrund).length;};
+const hatB=()=>S.pos.some(p=>p.cat==="b"&&p.w==="S");
+const lock=()=>S.status==="gemeldet"||S.status==="aktiv";
+const ro=()=>S.rolle!=="hf"||lock();
+const bB=()=>hatB()&&S.order!=="erhalten";
+
+function rKopf(){
+ const st={entwurf:{d:"idle",t:"Entwurf"},freigegeben:{d:"live",t:"Freigegeben"},
+  gemeldet:{d:"warn",t:"Gemeldet"},aktiv:{d:"ok",t:"Aktiv"}}[S.status];
+ let prim;
+ if(S.rolle!=="hf")prim=`<span class="tag grey">nur Lesezugriff</span>`;
+ else if(S.status==="entwurf")prim=`<button class="btn btn--p" onclick="oFinal()">Prüfen und freigeben</button>`;
+ else if(S.status==="freigegeben")prim=`<button class="btn btn--p" onclick="oMeld()">Bedarfsmeldung erstellen</button>`;
+ else if(S.status==="gemeldet"&&bB())prim=`<button class="btn btn--p" onclick="oAnord()">Anordnung erfassen</button>`;
+ else prim=`<button class="btn btn--o" onclick="oErn()">Periode erneuern</button>`;
+ const d=ro()?"disabled":"";
+ document.getElementById("kopf").innerHTML=`
+  <span class="st"><span class="dot ${st.d}"></span>LPB v${S.version} · ${st.t}</span>
+  <input type="date" value="${S.start}" ${d} onchange="setStart(this.value)">
+  <span style="color:var(--t3)">bis</span>
+  <input type="date" value="${isoE()}" ${d} onchange="setEnde(this.value)">
+  <span class="seg">${[1,3,6,9].map(m=>`<button ${d} aria-pressed="${S.monate===m}" onclick="setM(${m})">${m}</button>`).join("")}</span>
+  ${S.monate>9?`<span class="tag err">über 9 Monate</span>`:""}
+  <button class="btn btn--o btn--sm" onclick="oKopf()">Kopfdaten</button>
+  ${ro()?"":`<button class="btn btn--o btn--sm" onclick="oKat()">+ Position</button>`}
+  <span class="sp"></span>
+  ${!ro()?`<span class="save">${S.savedAt}${undoS.length?` · <button onclick="undo()">Rückgängig</button>`:""}</span>`:""}
+  ${prim}`;}
+
+function rBand(){const b=bef();
+ const c=[{i:"drift",l:"Pflegeplan geändert",n:b.drift.length,k:"warn"},
+  {i:"richtzeit",l:"Begründung fehlt",n:b.richtzeit.length,k:"err"},
+  {i:"qual",l:"Qualifikation",n:b.qual.length,k:"err"},
+  {i:"mandat",l:"Mandat",n:b.mandat.length,k:"err"},
+  {i:"manuell",l:"eingefügt",n:b.manuell.length,k:"warn"},
+  {i:"angepasst",l:"angepasst",n:b.angepasst.length,k:"ok"},
+  {i:"wOhne",l:"nicht durch uns",n:b.wOhne.length,k:"ok"},
+  {i:"ohneMass",l:"Massnahme ohne Position",n:b.ohneMass.length,k:"warn"}].filter(x=>x.n);
+ document.getElementById("band").innerHTML=
+  (c.length?c.map(x=>`<button class="chip ${x.k}" aria-pressed="${S.filter===x.i}" onclick="setF('${x.i}')"><span class="c">${x.n}</span> ${x.l}</button>`).join("")
+   :`<span class="tag ok">keine Abweichung</span>`)+
+  (S.filter?`<button class="btn btn--l" onclick="setF(null)">Filter aufheben</button>`:"");}
+
+function rBan(){let h="";
+ if(bB())h+=`<div class="banner err"><span class="dot err"></span><div class="bt">B-Positionen blockiert, A und C laufen weiter.</div>
+  ${S.order==="fehlt"?`<button class="btn btn--o btn--sm" onclick="S.order='angefragt';render()">Anordnung anfordern</button>`
+   :`<button class="btn btn--o btn--sm" onclick="oAnord()">Beleg erfassen</button>`}</div>`;
+ if(S.status==="gemeldet")h+=`<div class="banner warn"><span class="dot warn"></span><div class="bt">Version ${S.version} gesperrt.</div>
+  <button class="btn btn--s btn--sm" onclick="S.status='aktiv';render()">Frist abgelaufen</button></div>`;
+ document.getElementById("banners").innerHTML=h;}
+
+const passt=p=>{if(!S.filter)return true;if(S.filter==="ohneMass")return false;return (bef()[S.filter]||[]).some(x=>x.id===p.id);};
+
+function rTab(){const s=sum();let h="";
+ if(S.filter==="ohneMass"){
+  h=`<div class="gh"><div class="l">Massnahmen ohne Position</div></div>`+
+   bef().ohneMass.map(m=>`<div style="padding:10px 14px;border-bottom:1px solid var(--n300);font-size:12px">
+    ${m.lb} ${ro()?"":`<button class="btn btn--o btn--sm" style="margin-left:8px">In Pflegeplanung öffnen</button>`}</div>`).join("");
+  document.getElementById("table").innerHTML=h;return;}
+ ["a","b","c","n"].forEach(cat=>{
+  const rows=S.pos.filter(p=>p.cat===cat&&!p.retro&&passt(p)),
+        rt=S.pos.filter(p=>p.cat===cat&&p.retro&&passt(p)),al=S.pos.filter(p=>p.cat===cat);
+  if(S.filter&&rows.length+rt.length===0)return;
+  h+=`<div class="gh"><div class="l">${CN[cat]}${cat==="b"&&bB()?` <span class="tag err">blockiert</span>`:""}</div>
+   <div class="r"><span class="mono">${r0(s[cat].monR)} Min./Mt.${s[cat].ein?` · ${r0(s[cat].ein)} einm.`:""}</span></div></div>`;
+  if(!al.length){h+=`<div style="padding:10px 14px;color:var(--t3);font-size:12px">Keine Position.</div>`;return;}
+  h+=`<table><colgroup><col class="c-x"><col class="c-nr"><col><col class="c-h"><col class="c-z"><col class="c-d"><col class="c-a"><col class="c-m"><col class="c-s"></colgroup>
+   <thead><tr><th></th><th>Nr.</th><th>Leistung</th><th class="n">Häufigkeit</th><th class="n">Zeit</th>
+   <th class="n">Δ</th><th>Ausführung</th><th class="n">Min./Mt.</th><th></th></tr></thead><tbody>`;
+  h+=rows.map(row).join("");
+  if(rt.length)h+=`<tr><td colspan="9" style="background:var(--n300);font-size:var(--fsc);color:var(--t2);height:20px">Retrospektiv, einmalig</td></tr>`+rt.map(row).join("");
+  h+=`</tbody></table>`;});
+ document.getElementById("table").innerHTML=h||`<div style="padding:14px;color:var(--t3)">Kein Treffer.</div>`;}
+
+function row(p){
+ const m=min(p),d=ro()||(p.cat==="b"&&bB())?"disabled":"",diff=p.zeit-p.richt,op=S.open===p.id;
+ const st=[];
+ if(p.drift)st.push(`<button class="tag warn" onclick="oDrift('${p.id}')">Plan geändert</button>`);
+ if(diff>0&&!p.begr)st.push(`<button class="tag err" onclick="oBegr('${p.id}')">Begründung</button>`);
+ if(p.herkunft==="manuell"&&!p.mGrund)st.push(`<button class="tag warn" onclick="oMan('${p.id}')">Grund</button>`);
+ if((p.cat==="b"&&p.ausf==="ang")||KSTUFE[p.ausf]<STUFE[p.mq])st.push(`<span class="tag err">Qualifikation</span>`);
+ if((p.cat==="n"&&p.mandat!=="privat")||(p.cat!=="n"&&p.mandat==="privat")||(p.cat==="c"&&p.mandat==="ivg"))st.push(`<span class="tag err">Mandat</span>`);
+ if(p.w!=="S")st.push(`<span class="tag grey">${WL[p.w]}</span>`);
+ if(p.anzPlan!==null&&(p.anz!==p.anzPlan||p.einh!==p.einhPlan))st.push(`<span class="tag info">≠ Plan</span>`);
+ if(diff>0&&p.begr)st.push(`<span class="tag ok">begründet</span>`);
+ if(p.t)st.push(`<span class="tag grey">T</span>`);
+ const sn=simN(p);
+ let h=`<tr class="${p.w!=="S"?"dim":""} ${S.filter&&passt(p)?"hit":""}">
+  <td><button class="exp" onclick="tog('${p.id}')" aria-expanded="${op}">${op?"▾":"▸"}</button></td>
+  <td class="mono" style="color:var(--t3)">${p.nr}</td>
+  <td title="${p.lb}">${p.lb}${sn?` <span style="color:var(--n600)" title="gleichzeitig mit ${sn}">⧉</span>`:""}</td>
+  <td class="n"><div class="freq"><input class="inp mono" style="width:22px" ${d} value="${p.anz}" onfocus="this.select()" onchange="set('${p.id}','anz',this.value)">
+   <span style="color:var(--t3)">×</span>
+   <select class="sel" ${d} onchange="set('${p.id}','einh',this.value)">${["t7","t6","t5","t4","t3","t2","w","m","e"].map(v=>`<option ${p.einh===v?"selected":""}>${v}</option>`).join("")}</select></div></td>
+  <td class="n"><input class="zi mono" ${d} value="${p.zeit}" inputmode="numeric" onfocus="this.select()" onchange="set('${p.id}','zeit',this.value)"></td>
+  <td class="n mono"><span class="delta ${diff>0?"p":(diff<0?"m":"z")}">${diff===0?"—":(diff>0?"+":"−")+Math.abs(diff)}</span></td>
+  <td><select class="sel" ${d} onchange="set('${p.id}','ausf',this.value)">${Object.entries(AUSFK).map(([k,v])=>`<option value="${k}" ${p.ausf===k?"selected":""}>${v}</option>`).join("")}</select></td>
+  <td class="n mono">${p.w!=="S"?"—":(p.einh==="e"?r0(m.ein)+"e":r0(m.mon))}</td>
+  <td><div class="st-cell">${st.join("")}</div></td></tr>`;
+ if(op)h+=`<tr class="det"><td colspan="9"><div class="dgrid">
+   <div class="dg"><span class="k">Herkunft</span><span class="v">${p.herkunft==="pflegeplan"?p.mass.map(x=>MASS[x]).join(" · "):HERK[p.herkunft]}</span></div>
+   <div class="dg"><span class="k">Erbringt</span><select ${d} onchange="setW('${p.id}',this.value)">${Object.entries(WL).map(([k,v])=>`<option value="${k}" ${p.w===k?"selected":""}>${v}</option>`).join("")}</select></div>
+   <div class="dg"><span class="k">Mandat</span><select ${d} onchange="set('${p.id}','mandat',this.value)">${Object.entries(MAND).map(([k,v])=>`<option value="${k}" ${p.mandat===k?"selected":""}>${v}</option>`).join("")}</select></div>
+   <div class="dg"><span class="k">Einsatz</span><select ${d} onchange="set('${p.id}','block',this.value)">${Object.entries(BLOCK).map(([k,v])=>`<option value="${k}" ${p.block===k?"selected":""}>${v}</option>`).join("")}</select></div>
+   <div class="dg"><span class="k">Training</span><span class="v"><button class="btn btn--o btn--sm" ${d} onclick="tT('${p.id}')">${p.t?"gesetzt":"nicht gesetzt"}</button>
+     ${p.t&&p.zeit===p.richt&&!d?` <button class="btn btn--l" onclick="aT('${p.id}')">+20 % = ${Math.round(p.richt*1.2)}</button>`:""}</span></div>
+   <div class="dg"><span class="k">Richtzeit</span><span class="v mono">${p.richt} Min. · M-Qual ${p.mq}</span></div>
+   <div class="dg"><span class="k">Ausführung</span><span class="v">${AUSF[p.ausf]}</span></div>
+   ${p.herkunft==="manuell"?`<div class="dg"><span class="k">Position entfernen</span><span class="v"><button class="btn btn--o btn--sm" ${d} onclick="del('${p.id}')">Entfernen</button></span></div>`:""}
+   </div>
+   ${p.begr?`<div class="bg">Begründung: ${p.begr}</div>`:""}
+   ${p.wGrund?`<div class="bg">Grund: ${p.wGrund}</div>`:""}
+   ${p.mGrund?`<div class="bg">Einfügung: ${p.mGrund}</div>`:""}</td></tr>`;
+ return h;}
+
+function rFuss(){const s=sum(),g=simG();
+ const tot=s.a.per+s.b.per+s.c.per,qu=(s.a.qu+s.b.qu+s.c.qu)/60;
+ document.getElementById("fuss").innerHTML=
+  ["a","b","c","n"].map(c=>`<div class="i"><span class="k">${c==="n"?"N":c.toUpperCase()}</span><span class="mono">${r1(s[c].tag)}</span><span class="k">Min./Tag</span></div>`).join("")+
+  `<div class="i tot"><span class="k">Periode</span><span class="mono">${r0(tot)} Min. · ${hm(tot)} Std.</span></div>
+   <div class="i"><span class="k">Quartal</span><span class="mono">${hm(s.a.qu+s.b.qu+s.c.qu)}</span>${qu>60?`<span class="tag warn">über 60 Std.</span>`:""}</div>
+   ${Object.keys(g).length?`<div class="i"><span class="k">Gleichzeitig</span><span>${Object.keys(g).map(k=>BLOCK[k]).join(", ")}</span>
+     <button class="btn btn--l" onclick="oSim()">Abzug</button></div>`:""}
+   <div class="sp"></div>`;}
+
+function render(){rKopf();rBand();rBan();rTab();rFuss();rDemo();}
+
+function snap(){undoS.push(JSON.stringify(S.pos));if(undoS.length>20)undoS.shift();}
+function undo(){if(!undoS.length)return;S.pos=JSON.parse(undoS.pop());render();}
+function tch(){S.savedAt=new Date().toLocaleTimeString("de-CH",{hour:"2-digit",minute:"2-digit"});}
+function set(id,f,v){snap();const p=S.pos.find(x=>x.id===id);
+ if(f==="anz"||f==="zeit")v=Math.max(0,parseInt(v,10)||0);p[f]=v;tch();render();}
+function tog(id){S.open=S.open===id?null:id;render();}
+function tT(id){snap();const p=S.pos.find(x=>x.id===id);p.t=!p.t;p.tH=p.t?"lokal":null;tch();render();}
+function aT(id){snap();const p=S.pos.find(x=>x.id===id);p.zeit=Math.round(p.richt*1.2);tch();render();}
+function setW(id,v){const p=S.pos.find(x=>x.id===id);if(v==="V"){oW(id);return;}snap();p.w=v;if(v==="S")p.wGrund="";tch();render();}
+function setF(f){S.filter=S.filter===f?null:f;render();}
+function setM(m){snap();S.monate=m;tch();render();}
+function setStart(v){snap();S.start=v;tch();render();}
+function setEnde(v){snap();const a=new Date(S.start),b=new Date(v);
+ S.monate=Math.max(1,(b.getFullYear()-a.getFullYear())*12+(b.getMonth()-a.getMonth())+(b.getDate()>=a.getDate()?1:0));tch();render();}
+function del(id){snap();S.pos=S.pos.filter(p=>p.id!==id);S.open=null;tch();render();}
+
+function cm(){document.getElementById("mh").innerHTML="";}
+function md(h){document.getElementById("mh").innerHTML=`<div class="scrim" onclick="if(event.target===this)cm()">${h}</div>`;
+ const f=document.querySelector(".modal textarea,.modal input");if(f)f.focus();}
+
+function oKopf(){const d=ro()?"disabled":"";
+ md(`<div class="modal nw"><header>Kopfdaten</header><div class="mb">
+  <div class="fr"><label>Abklärung</label><select ${d} onchange="S.abklTyp=this.value">
+    ${Object.entries(ABKL).map(([k,v])=>`<option value="${k}" ${S.abklTyp===k?"selected":""}>${v}</option>`).join("")}</select></div>
+  <div class="fr"><label>Abklärungsdatum</label><input type="date" ${d} value="${S.abklDatum}" onchange="S.abklDatum=this.value"></div>
+  <div class="fr"><label>Weitere Leistungserbringer (ZSR)</label><input ${d} value="${S.andereZSR}" onchange="S.andereZSR=this.value"></div>
+  <div class="fr"><label>Bemerkung für die Verordnung</label><textarea ${d} onchange="S.bemerkung=this.value">${S.bemerkung}</textarea></div>
+  </div><footer><button class="btn btn--p" onclick="cm();render()">Schliessen</button></footer></div>`);}
+
+function oSim(){const g=simG(),d=ro()?"disabled":"";
+ md(`<div class="modal nw"><header>Abzug für gleichzeitig erbrachte Leistungen</header><div class="mb">
+  ${Object.entries(g).map(([k,v])=>`<div class="li"><div>${BLOCK[k]}<div class="d">${v.map(p=>p.nr).join(", ")}</div></div></div>`).join("")}
+  ${["a","b","c"].map(c=>`<div class="fr"><label>KLV ${c} · Minuten pro Monat</label>
+    <input class="mono" ${d} value="${S.sim[c]}" onchange="S.sim['${c}']=Math.max(0,parseInt(this.value,10)||0)"></div>`).join("")}
+  </div><footer><button class="btn btn--p" onclick="cm();render()">Übernehmen</button></footer></div>`);}
+
+function oDrift(id){const p=S.pos.find(x=>x.id===id);
+ md(`<div class="modal nw"><header>${p.nr} ${p.lb}</header><div class="mb">
+  <div class="mline"><span class="s">Pflegeplan neu</span><span class="mono">${p.drift.neu} × ${p.einh} · ${p.drift.datum}</span></div>
+  <div class="mline"><span class="s">Pflegeplan vorher</span><span class="mono">${p.drift.alt} × ${p.einh}</span></div>
+  <div class="mline"><span class="s">Dieses Blatt</span><span class="mono">${p.anz} × ${p.einh}</span></div>
+  <div class="fr" style="margin-top:10px"><label>Begründung, falls die Anpassung bleibt</label><textarea id="dk"></textarea></div>
+  </div><footer><button class="btn btn--o" onclick="dKeep('${id}')">Anpassung behalten</button>
+  <button class="btn btn--p" onclick="dTake('${id}')">Pflegeplan übernehmen</button></footer></div>`);}
+function dTake(id){snap();const p=S.pos.find(x=>x.id===id);p.anz=p.drift.neu;p.anzPlan=p.drift.neu;p.drift=null;tch();cm();render();}
+function dKeep(id){const t=document.getElementById("dk").value.trim();if(!t){alert("Begründung ist Pflicht.");return;}
+ snap();const p=S.pos.find(x=>x.id===id);p.begr=(p.begr?p.begr+" · ":"")+t;p.drift=null;tch();cm();render();}
+
+function oBegr(id){const p=S.pos.find(x=>x.id===id);
+ md(`<div class="modal nw"><header>${p.nr} · ${p.zeit} statt ${p.richt} Min.</header><div class="mb">
+  <div class="fr"><label>Begründung</label><textarea id="bt">${p.begr}</textarea></div>
+  <div class="fr"><label>Beleg aus der Bedarfsabklärung</label><select id="ba">
+    <option>iG2h Körperpflege — 4, vollständige Übernahme</option><option>iG3 Gehen im Wohnbereich — 3</option>
+    <option>CAP ADL ausgelöst</option><option>keine</option></select></div>
+  <div class="fr"><label>Aufwand einer nicht-angehörigen Pflegekraft</label><select id="bb">
+    <option>gleich hoch</option><option>tiefer</option></select></div>
+  </div><footer><button class="btn btn--s" onclick="cm()">Abbrechen</button>
+  <button class="btn btn--p" onclick="sBegr('${id}')">Speichern</button></footer></div>`);}
+function sBegr(id){snap();const p=S.pos.find(x=>x.id===id),t=document.getElementById("bt").value.trim();
+ p.begr=t?`${t} · ${document.getElementById("ba").value} · ${document.getElementById("bb").value}`:"";tch();cm();render();}
+
+function oW(id){const p=S.pos.find(x=>x.id===id);
+ md(`<div class="modal nw"><header>${p.nr} verweigert</header><div class="mb">
+  <div class="fr"><label>Grund</label><textarea id="wg"></textarea></div></div>
+  <footer><button class="btn btn--s" onclick="cm()">Abbrechen</button>
+  <button class="btn btn--p" onclick="sW('${id}')">Festhalten</button></footer></div>`);}
+function sW(id){const t=document.getElementById("wg").value.trim();if(!t){alert("Grund ist Pflicht.");return;}
+ snap();const p=S.pos.find(x=>x.id===id);p.w="V";p.wGrund=t;tch();cm();render();}
+
+function oMan(id){const p=S.pos.find(x=>x.id===id);
+ md(`<div class="modal nw"><header>${p.nr} hier eingefügt</header><div class="mb">
+  <div class="fr"><label>Grund</label><textarea id="mg"></textarea></div></div>
+  <footer><button class="btn btn--o" onclick="del('${id}');cm()">Entfernen</button>
+  <button class="btn btn--p" onclick="sMan('${id}')">Speichern</button></footer></div>`);}
+function sMan(id){const t=document.getElementById("mg").value.trim();if(!t){alert("Grund ist Pflicht.");return;}
+ snap();S.pos.find(x=>x.id===id).mGrund=t;tch();cm();render();}
+
+function oKat(){md(`<div class="modal nw"><header>Position einfügen</header><div class="mb">
+ <div class="fr"><input id="kq" placeholder="Nummer oder Bezeichnung" oninput="kList()"></div>
+ <div id="kl" style="max-height:300px;overflow:auto"></div></div>
+ <footer><button class="btn btn--s" onclick="cm()">Schliessen</button></footer></div>`);
+ kList();document.getElementById("kq").addEventListener("keydown",e=>{if(e.key==="Enter"){const f=document.querySelector("#kl button");if(f)f.click();}});}
+function kList(){const q=(document.getElementById("kq").value||"").toLowerCase().trim();
+ document.getElementById("kl").innerHTML=Object.entries(KAT).filter(([nr,k])=>!q||nr.includes(q)||k.lb.toLowerCase().includes(q)).slice(0,25)
+  .map(([nr,k])=>`<button style="display:flex;gap:8px;width:100%;text-align:left;padding:4px 5px;font-size:12px" onclick="add('${nr}')"
+   onmouseover="this.style.background='var(--b100)'" onmouseout="this.style.background='none'">
+   <span class="mono" style="width:42px;color:var(--t3)">${nr}</span><span style="flex:1">${k.lb}</span>
+   <span style="color:var(--t3)">${k.cat==="n"?"N":k.cat.toUpperCase()} · ${k.zeit}′</span></button>`).join("")
+  ||`<div style="color:var(--t3);font-size:12px">Kein Treffer.</div>`;}
+function add(nr){snap();const p=P(nr,{herkunft:"manuell"});S.pos.push(p);S.open=p.id;S.filter=null;tch();cm();render();}
+
+function oFinal(){const b=bef(),off=blk();
+ const sec=(t,it,ok)=>`<div class="sec"><div class="sh"><span>${t}</span><span class="tag ${it.length?"warn":"ok"}">${it.length}</span></div>
+  <div class="sb">${it.length?it.map(i=>`<div class="li"><div>${i.a}<div class="d">${i.b}</div></div><div>${i.c||""}</div></div>`).join("")
+   :`<div class="li"><div class="d">${ok}</div></div>`}</div></div>`;
+ md(`<div class="modal"><header>Prüfen und freigeben</header><div class="mb">
+  ${off?`<div class="sec" style="border-color:var(--red)"><div class="sh" style="background:#a2354414;color:var(--red7)">
+    <span>${off} offene Punkte</span></div></div>`:""}
+  ${sec("Kopfdaten",[{a:fmt(new Date(S.start))+" bis "+fmt(addM(S.start,S.monate)),b:S.monate+" Monate",c:`<span class="tag ${S.monate>9?"err":"ok"}">Zeitraum</span>`},
+    {a:ABKL[S.abklTyp],b:fmt(new Date(S.abklDatum)),c:""},
+    {a:S.andereZSR||"keine weiteren Leistungserbringer",b:"",c:""}],"")}
+  ${sec("Zeit über Richtzeit",S.pos.filter(p=>p.zeit>p.richt).map(p=>({a:p.nr+" "+p.lb,b:p.begr||"Begründung fehlt",
+    c:`<span class="tag ${p.begr?"ok":"err"}">+${p.zeit-p.richt}</span>`})),"keine")}
+  ${sec("Vom Pflegeplan abweichend",S.pos.filter(p=>p.anzPlan!==null&&(p.anz!==p.anzPlan||p.einh!==p.einhPlan))
+    .map(p=>({a:p.nr+" "+p.lb,b:`Plan ${p.anzPlan}×${p.einhPlan}, Blatt ${p.anz}×${p.einh}`,c:""})),"keine")}
+  ${sec("Mandat",b.mandat.map(p=>({a:p.nr+" "+p.lb,b:MAND[p.mandat]+" bei "+(p.cat==="n"?"Nicht-KLV":"KLV "+p.cat),c:`<span class="tag err">unzulässig</span>`})),"zulässig")}
+  ${sec("Nicht durch uns erbracht",S.pos.filter(p=>p.w!=="S").map(p=>({a:p.nr+" "+p.lb,b:p.wGrund||"",c:`<span class="tag grey">${WL[p.w]}</span>`})),"keine")}
+  ${sec("Hier eingefügt",b.manuell.map(p=>({a:p.nr+" "+p.lb,b:p.mGrund||"Grund fehlt",c:""})),"keine")}
+  ${sec("Massnahmen ohne Position",b.ohneMass.map(m=>({a:m.lb,b:"",c:`<span class="tag warn">offen</span>`})),"alle abgedeckt")}
+  </div><footer><button class="btn btn--s" onclick="cm()">Zurück</button>
+  <button class="btn btn--p" ${off?"disabled":""} onclick="frei()">Freigeben</button></footer></div>`);}
+function frei(){S.status="freigegeben";cm();render();}
+
+function oMeld(){const s=sum(),raus=S.pos.filter(p=>p.cat==="n"||p.w!=="S");
+ md(`<div class="modal"><header>Bedarfsmeldung an Groupe Mutuel</header><div class="mb">
+  <table style="border:1px solid var(--bd)"><thead><tr><th style="padding:4px 8px">Leistungsart</th>
+   <th class="n" style="padding:4px 8px">Min./Monat</th><th class="n" style="padding:4px 8px">Einmalig</th>
+   <th class="n" style="padding:4px 8px">Total Periode</th></tr></thead><tbody>
+   ${["a","b","c"].map(c=>`<tr><td style="padding:3px 8px">KLV ${c}</td><td class="n mono">${r1(s[c].monR)}</td>
+     <td class="n mono">${r0(s[c].ein)}</td><td class="n mono">${r1(s[c].per)}</td></tr>`).join("")}</tbody></table>
+  <div class="sec" style="margin-top:10px"><div class="sh"><span>Nicht mitgeliefert</span></div><div class="sb">
+   ${raus.map(p=>`<div class="li"><div>${p.nr} ${p.lb}</div><div class="d">${p.cat==="n"?"Nicht-KLV":WL[p.w]}</div></div>`).join("")}
+   <div class="li"><div>Spalte M-Qual</div><div class="d">Datenschutz</div></div></div></div>
+  </div><footer><button class="btn btn--s" onclick="cm()">Abbrechen</button>
+  <button class="btn btn--p" onclick="send()">Senden</button></footer></div>`);}
+function send(){md(`<div class="modal nw"><header>Übermittlung</header><div class="mb">
+ <div style="display:flex;flex-direction:column;gap:7px">
+  <button class="btn btn--o" onclick="sOk()">Zustellbeleg trifft ein</button>
+  <button class="btn btn--o" onclick="sFail()">Übermittlung schlägt fehl</button></div></div>
+ <footer><button class="btn btn--s" onclick="cm()">Später</button></footer></div>`);}
+function sOk(){S.meldung=true;S.status="gemeldet";cm();render();}
+function sFail(){md(`<div class="modal nw"><header>Fehlgeschlagen</header><div class="mb">
+ <div style="font-size:12px">GLN der Pflegefachperson fehlt. Version bleibt offen, Inhalt erhalten.</div></div>
+ <footer><button class="btn btn--s" onclick="cm()">Später</button><button class="btn btn--p" onclick="send()">Erneut senden</button></footer></div>`);}
+
+function oAnord(){md(`<div class="modal nw"><header>Ärztliche Anordnung</header><div class="mb">
+ <div class="fr"><label>Beleg</label><div style="border:1px dashed var(--bd);border-radius:3px;padding:10px;text-align:center;font-size:var(--fsc);color:var(--t3)">
+  Anordnung_Studer_2026-09-25.pdf · eingegangen 25.09.2026, 08:41 über HIN</div></div>
+ <div class="two"><div class="fr"><label>Arzt</label><input value="Dr. med. D. Studer · GLN 7601000287341"></div>
+  <div class="fr"><label>Ausstellung</label><input value="25.09.2026"></div></div>
+ <div class="two"><div class="fr"><label>Gültig ab</label><input value="01.10.2026"></div>
+  <div class="fr"><label>Gültig bis</label><input value="30.06.2027"></div></div>
+ <div class="fr"><label>Umfang</label><input value="10601, 10702, MiGeL 35"></div></div>
+ <footer><button class="btn btn--s" onclick="cm()">Abbrechen</button>
+ <button class="btn btn--p" onclick="S.order='erhalten';cm();render()">Eingang bestätigen</button></footer></div>`);}
+
+function oErn(){md(`<div class="modal"><header>Periode erneuern</header><div class="mb">
+ <div class="sec"><div class="sh"><span>Neue Bedarfsermittlung erforderlich</span><span class="tag err">offen</span></div></div>
+ <table style="border:1px solid var(--bd)"><thead><tr><th style="padding:4px 8px">Position</th><th class="n">bisher</th><th class="n">neu</th><th style="padding:4px 8px">Differenz</th></tr></thead><tbody>
+  <tr><td style="padding:3px 8px">10104 Teilwäsche</td><td class="n mono">34′</td><td class="n mono">26′</td><td><span class="tag ok">−8</span></td></tr>
+  <tr><td style="padding:3px 8px">10419 Toilettengang</td><td class="n mono">2 × t7</td><td class="n mono">3 × t7</td><td><span class="tag warn">+10/Tag</span></td></tr>
+  <tr><td style="padding:3px 8px">10702 Verband</td><td class="n mono">1 × t3</td><td class="n mono">—</td><td><span class="tag grey">entfällt</span></td></tr>
+ </tbody></table></div>
+ <footer><button class="btn btn--s" onclick="cm()">Abbrechen</button><button class="btn btn--p" onclick="cm()">Bedarfsermittlung starten</button></footer></div>`);}
+
+document.addEventListener("keydown",e=>{
+ if(e.key==="Escape")cm();
+ if(e.key==="/"&&!/input|textarea|select/i.test(document.activeElement.tagName)){e.preventDefault();if(!ro())oKat();}
+ if((e.ctrlKey||e.metaKey)&&e.key==="z"){e.preventDefault();if(!ro())undo();}});
+
+function rDemo(){const b=bef();
+ const st=[{t:"Zeile aufklappen für Herkunft, W, Mandat, Einsatz, T",d:!!S.open},
+  {t:"Plan geändert lösen",d:!b.drift.length},{t:"Begründung bei 10104",d:!b.richtzeit.length},
+  {t:"Grund bei 10105",d:!b.manuell.filter(p=>!p.mGrund).length},
+  {t:"Prüfen und freigeben",d:S.status!=="entwurf"},{t:"Senden",d:!!S.meldung}];
+ const i=st.findIndex(x=>!x.d);
+ document.getElementById("ds").innerHTML=st.map((x,j)=>`<li style="${x.d?'opacity:.4;text-decoration:line-through':(j===i?'font-weight:600':'')}">${x.t}</li>`).join("");}
+function reset(){S=initial();undoS=[];cm();render();}
+reset();
+</script>
+</body>
+</html>

@@ -256,7 +256,10 @@ const PATIENT_NAV: GruppeDef[] = [
     /* «Verordnung und Kostengutsprache» und «Kassenregeln» sind mit dem
        KLV-/LPB-Modul abgerissen (Lauf 0b); das Leistungsplanungsblatt zeigt
        den Leerzustand, bis Lauf 6 das neue Blatt bringt. */
-    { schluessel: "leistungsplanungsblatt", label: "Leistungsplanungsblatt" },
+    /* Lauf 7: die Seite heisst «Leistungsplanung», das Dokument darin
+       «Leistungsplanungsblatt» — deshalb heissen Tab und Dokument nicht gleich.
+       «KLV» war fachlich falsch (Bundesverordnung, kein Dokument). */
+    { schluessel: "leistungsplanungsblatt", label: "Leistungsplanung" },
   ] },
   { schluessel: "einsaetze", label: "Einsätze", ansichten: [
     { schluessel: "termine", label: "Termine" },
@@ -5839,8 +5842,27 @@ function TabKLV({ patient, navigate }: { patient: Patient; navigate: (p: string)
   const veroeffentlicht = planGehoertZu(patient.id) && plan.status === "veroeffentlicht";
   const fassung = plan.fassungen[plan.fassungen.length - 1] ?? null;
 
+  /* Lauf 7: der Weg in die Vollbildroute der Leistungsplanung — dort wird
+     das Blatt finalisiert; der Rücksprung führt hierher zurück. */
+  const leistungsplanungOeffnen = (
+    <div data-leistungsplanung-einstieg className="flex items-center" style={{ gap: 10, padding: "var(--space-4) var(--space-5)", marginBottom: 12, background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
+      <div className="flex-1 min-w-0">
+        <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)" }}>Leistungsplanung</div>
+        <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginTop: 2 }}>Periode, Mengen und Begründungen des Leistungsplanungsblatts</div>
+      </div>
+      <button type="button"
+        onClick={() => navigate(`/leistungsplanung/${patient.id}?returnTo=${encodeURIComponent(`/patienten/${patient.id}/leistungen/leistungsplanungsblatt`)}`)}
+        className="ui-fokusring cursor-pointer"
+        style={{ padding: "6px 16px", borderRadius: "var(--radius-pill)", background: "var(--brand-primary)", color: "var(--text-on-dark)", border: "none", fontSize: "var(--text-meta)", fontWeight: 500, fontFamily: "inherit" }}>
+        Öffnen
+      </button>
+    </div>
+  );
+
   if (!veroeffentlicht || !fassung) {
     return (
+      <>
+      {leistungsplanungOeffnen}
       <div style={{ padding: "var(--space-8)", textAlign: "center", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
         <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)", marginBottom: 6 }}>
           Kein Leistungsplanungsblatt
@@ -5850,11 +5872,14 @@ function TabKLV({ patient, navigate }: { patient: Patient; navigate: (p: string)
           Das Blatt entsteht mit dem Veröffentlichen im Pflegeplan.
         </p>
       </div>
+      </>
     );
   }
 
   const summeMin = planWochenSummeMin(plan.massnahmen);
   return (
+    <>
+    {leistungsplanungOeffnen}
     <div data-lpb-einstieg style={{ padding: "var(--space-5)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", borderRadius: "var(--radius-card)" }}>
       <div className="flex items-center flex-wrap" style={{ gap: 10 }}>
         <div className="flex-1 min-w-0">
@@ -5877,5 +5902,6 @@ function TabKLV({ patient, navigate }: { patient: Patient; navigate: (p: string)
         </button>
       </div>
     </div>
+    </>
   );
 }
