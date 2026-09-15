@@ -3,8 +3,8 @@
  *
  * Einspaltig, mittig, wie ein Dokument — keine Auswahlspalte: 41 Kandidaten
  * neben einem fertigen Plan wären eine Einladung, versehentlich zu ändern.
- * Bedient wird hier nur die Zielerreichung (fünf Stufen, ein Klick); alles
- * andere führt über «Plan ändern» in die Struktur.
+ * Bedient wird hier nur die Zielerreichung; alles andere führt über
+ * «Plan ändern» in die Struktur.
  */
 import { Check, FileText } from "lucide-react";
 import { zielBewertungsSkala } from "../../../lib/pflegeplan/mock-adapter";

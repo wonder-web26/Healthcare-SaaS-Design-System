@@ -1,5 +1,5 @@
 /**
- * Der linke Bereich: der Plan als Baum — Diagnose enthält Ziele, Ziel enthält
+ * Der Plan als Baum (rechts seit dem A/B-Entscheid) — Diagnose enthält Ziele, Ziel enthält
  * Massnahmen. Drei Faltebenen (Diagnose, Ziel, «Alle zuklappen»); zugeklappt
  * zeigt jede Ebene eine Zusammenfassung, nicht nichts — bei 15 Massnahmen ist
  * das der Normalfall, kein Randfall. Massnahmenzeilen sind in diesem Lauf
@@ -32,7 +32,7 @@ function FaltKnopf({ zu, onToggle, label }: { zu: boolean; onToggle: () => void;
 /** Satzzeile einer Massnahme unter einem Ziel: die Massnahme liest sich als
  *  Satz — fett ist, was gesetzt wurde, der Rest kommt aus dem Katalog. Der
  *  erste Zielbezug trägt Position und Zeit; unter weiteren Zielen wird nicht
- *  doppelt gezählt. Die Zeile öffnet den Editor rechts (Lauf 3); der Baum
+ *  doppelt gezählt. Die Zeile öffnet den Editor im Auswahlbereich (Lauf 3); der Baum
  *  bleibt dabei stehen. */
 function MassnahmenZeile({ m, diagnoseCode, zielId, zielTitelVon, mandate, onFokus }: {
   m: PlanMassnahme; diagnoseCode: string | null; zielId: string | null;

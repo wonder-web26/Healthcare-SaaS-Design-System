@@ -1,24 +1,22 @@
 /**
  * Pflegeplan — Aufbau (Lauf 2): die Ansicht für die Erstplanung.
  *
- * Links der Plan, wie er wächst; rechts die Auswahl zum aktuellen Fokus.
- * Auswählen rechts, Ergebnis links — kein Overlay, kein Seitenwechsel: die
- * Frage «passt diese Diagnose» ist nur beantwortbar, wenn man sieht, was
- * schon im Plan steht. Für den Laptop gebaut; mobil ist ausdrücklich kein
- * Ziel — die Planung findet nicht beim Klienten statt.
- *
- * Eigene Route, bewusst ohne Einbindung in Patient360, Onboarding oder Menü —
- * die Einbindung kommt in einem späteren Lauf.
+ * Links die Auswahl zum aktuellen Fokus, rechts der Plan, wie er wächst —
+ * Übernehmen läuft in Leserichtung (Quelle links, Ergebnis rechts;
+ * A/B-Entscheid nach Lauf 6f). Kein Overlay, kein Seitenwechsel: die Frage
+ * «passt diese Diagnose» ist nur beantwortbar, wenn man sieht, was schon im
+ * Plan steht. Für den Laptop gebaut; mobil ist ausdrücklich kein Ziel — die
+ * Planung findet nicht beim Klienten statt.
  */
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ArrowRight, ClipboardList, X } from "lucide-react";
+import { ArrowRight, ClipboardList } from "lucide-react";
 import { MOCK_ASSESSMENTS } from "../../../lib/mocks/klinische-artefakte-mock";
 import { zieleZuDiagnose, interventionenZuZiel } from "../../../lib/pflegeplan/mock-adapter";
 import {
   usePlan, veroeffentlichen, planAendern,
   pruefungDurchfuehren, pruefungAktuell, offeneBefunde, planSchnappschuss,
-  diagnostikAbschliessen, diagnoseEntfernen, nachPrioritaet,
+  diagnostikAbschliessen, nachPrioritaet,
   type PruefBefund,
 } from "../../../lib/pflegeplan/plan-store";
 import { type MandatKurz } from "../../../lib/pflegeplan/planung";
@@ -147,17 +145,6 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
   const [pruefungOffen, setPruefungOffen] = useState(false);
   const [pruefungsHinweis, setPruefungsHinweis] = useState<string | null>(null);
 
-  /* ── A/B-EXPERIMENT (temporär, zum Anschauen): drei Layouts der
-     Aufbau-Ansicht. «aktuell» = Plan links, Auswahl rechts. «a» = getauscht
-     (Auswahl links, Übernehmen in Leserichtung). «b» = Diagnostik-Phase in
-     voller Breite mit mehrspaltigen Kandidaten, danach wie aktuell.
-     Fliegt nach der Entscheidung wieder raus. ── */
-  const [layout, setLayout] = useState<"aktuell" | "a" | "b">(() =>
-    (localStorage.getItem("pflegeplan-layout-ab") as "aktuell" | "a" | "b") ?? "aktuell");
-  const layoutWaehlen = (l: "aktuell" | "a" | "b") => {
-    setLayout(l);
-    localStorage.setItem("pflegeplan-layout-ab", l);
-  };
 
   const patient = patientId ? getPatient(patientId) : undefined;
   const autorin = `${benutzer.vorname.charAt(0)}. ${benutzer.name}`;
@@ -253,8 +240,7 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
     }, 80);
   };
 
-  /* Der Plan-Bereich (Balken, Wochensumme, Baum) — in Aktuell und A
-     identisch, nur die Seite wechselt. */
+  /* Der Plan-Bereich: Balken, Wochensumme, Baum. */
   const planBereichInhalt = (
     <>
       {/* Der nächste-Schritt-Balken: immer genau eine richtige nächste
@@ -356,30 +342,6 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
               {a === "aufbau" ? "Aufbau" : a === "struktur" ? "Struktur" : "Dokument"}
             </button>
           ))}
-          {/* A/B-EXPERIMENT-Schalter (temporär): drei Layouts zum Anschauen. */}
-          {ansicht === "aufbau" && (
-            <span data-layout-schalter className="flex items-center" style={{ gap: 4, paddingBottom: 6 }}>
-              <span style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>Layout</span>
-              {(["aktuell", "a", "b"] as const).map(l => (
-                <button key={l} type="button" onClick={() => layoutWaehlen(l)} aria-pressed={layout === l}
-                  title={l === "aktuell"
-                    ? "Plan links, Auswahl rechts (heutiger Stand)"
-                    : l === "a"
-                      ? "A: Auswahl links, Plan rechts — Übernehmen in Leserichtung"
-                      : "B: Diagnostik in voller Breite (Kandidaten mehrspaltig), danach wie Aktuell"}
-                  className="ui-fokusring cursor-pointer"
-                  style={{
-                    padding: "2px 9px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-micro)", fontWeight: 500,
-                    background: layout === l ? "var(--brand-primary)" : "var(--bg-elevated)",
-                    color: layout === l ? "var(--text-on-dark)" : "var(--text-secondary)",
-                    border: layout === l ? "var(--border-thin) solid transparent" : "var(--border-thin) solid var(--border-default)",
-                  }}>
-                  {l === "aktuell" ? "Aktuell" : l.toUpperCase()}
-                </button>
-              ))}
-            </span>
-          )}
-
           {/* Rechts: Prüfstand, Prüfung, Veröffentlichen — in allen drei
               Ansichten, aber NUR wenn dieser Klient überhaupt planfähig ist:
               ohne Assessment gehört der (eine) Plan-Zustand nicht zu ihm,
@@ -463,55 +425,19 @@ export function PflegeplanAufbau({ patientId: patientIdProp, eingebettet = false
       ) : ansicht === "struktur" ? (
         <StrukturAnsicht plan={plan} mandate={mandate}
           onEditor={interventionId => { setAnsicht("aufbau"); setFokus({ schritt: "editor", interventionId }); }} />
-      ) : layout === "b" && !plan.diagnostikAbgeschlossen && fokus.schritt !== "editor" ? (
-        /* ── Variante B: die Diagnostik in voller Breite — die
-           Gesamtbeurteilung der 41 Kandidaten bekommt den ganzen Schirm,
-           die übernommenen stehen als kompakte Leiste oben. ── */
-        <div className="flex-1 min-h-0" data-layout-b style={{ overflowY: "auto", padding: "14px var(--space-6)" }}>
-          {plan.diagnosen.length > 0 && (
-            <div data-uebernommen-leiste className="flex items-center flex-wrap" style={{ gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", fontWeight: 500 }}>Im Plan:</span>
-              {nachPrioritaet(plan.diagnosen).map(d => (
-                <span key={d.code} className="inline-flex items-center" style={{ gap: 6, padding: "4px 6px 4px 12px", borderRadius: "var(--radius-pill)", background: "var(--bg-elevated)", border: "var(--border-thin) solid var(--border-default)", fontSize: "var(--text-meta)", color: "var(--text-primary)" }}>
-                  <span style={{ color: "var(--brand-primary)", fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>{d.code}</span>
-                  {d.titel}
-                  {d.prioritaet === "wichtig" && (
-                    <span style={{ fontSize: "var(--text-micro)", color: "var(--brand-primary)", fontWeight: 500 }}>wichtig</span>
-                  )}
-                  <button type="button" aria-label={`Diagnose ${d.titel} entfernen`}
-                    onClick={() => diagnoseEntfernen(d.code)}
-                    className="ui-fokusring cursor-pointer flex items-center justify-center"
-                    style={{ width: 20, height: 20, borderRadius: "var(--radius-pill)", background: "none", border: "none", color: "var(--text-tertiary)" }}>
-                    <X style={{ width: 12, height: 12 }} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-          <AuswahlBereich fokus={fokus} onFokus={setFokus} caps={caps} mandate={mandate} breit
-            assessmentDatum={assessment.abschlussDatum ?? assessment.startDatum} />
-        </div>
       ) : (
         <div className="flex-1 flex min-h-0">
-          {/* Variante A tauscht nur die Seiten: Auswahl links, der Plan
-             wächst rechts — Übernehmen in Leserichtung. */}
-          {layout === "a" && (
-            <div style={{ width: 480, flexShrink: 0, borderRight: "var(--border-thin) solid var(--border-default)", padding: "14px var(--space-4)", overflowY: "auto", background: "var(--bg-primary)" }}>
-              <AuswahlBereich fokus={fokus} onFokus={setFokus} caps={caps} mandate={mandate}
-                assessmentDatum={assessment.abschlussDatum ?? assessment.startDatum} />
-            </div>
-          )}
+          {/* Links: die Auswahl zum aktuellen Fokus — Übernehmen in
+              Leserichtung: Quelle links, das Ergebnis wächst rechts. */}
+          <div style={{ width: 480, flexShrink: 0, borderRight: "var(--border-thin) solid var(--border-default)", padding: "14px var(--space-4)", overflowY: "auto", background: "var(--bg-primary)" }}>
+            <AuswahlBereich fokus={fokus} onFokus={setFokus} caps={caps} mandate={mandate}
+              assessmentDatum={assessment.abschlussDatum ?? assessment.startDatum} />
+          </div>
 
+          {/* Rechts: der Plan */}
           <div className="flex-1 min-w-0" data-plan-bereich style={{ padding: "14px var(--space-6)", overflowY: "auto" }}>
             {planBereichInhalt}
           </div>
-
-          {layout !== "a" && (
-            <div style={{ width: 480, flexShrink: 0, borderLeft: "var(--border-thin) solid var(--border-default)", padding: "14px var(--space-4)", overflowY: "auto", background: "var(--bg-primary)" }}>
-              <AuswahlBereich fokus={fokus} onFokus={setFokus} caps={caps} mandate={mandate}
-                assessmentDatum={assessment.abschlussDatum ?? assessment.startDatum} />
-            </div>
-          )}
         </div>
       )}
     </div>

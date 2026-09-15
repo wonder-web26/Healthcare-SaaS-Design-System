@@ -1,8 +1,9 @@
 /**
- * Der rechte Bereich: die Auswahl zum aktuellen Fokus. Oben der
- * NAVIGATIONSPFAD (Lauf 6e: bedienbar, mit Kontextwechsel je Stufe),
- * darunter die Kontextkarte (woher kommt die Liste), dann die Liste des
- * Schritts.
+ * Der Auswahlbereich (links seit dem A/B-Entscheid — Übernehmen in
+ * Leserichtung, der Plan wächst rechts): die Auswahl zum aktuellen Fokus.
+ * Oben der NAVIGATIONSPFAD (Lauf 6e: bedienbar, mit Kontextwechsel je
+ * Stufe), darunter die Kontextkarte (woher kommt die Liste), dann die
+ * Liste des Schritts.
  *
  * Alle Daten kommen über die Vertragsabfragen aus src/lib/pflegeplan/ —
  * kein Zugriff unter dem Vertrag vorbei; der Pfad selbst liest nur den
@@ -320,10 +321,8 @@ function ImPlanMarke() {
 /* ══════════════════════════════════════════
    SCHRITT 1 — Diagnoseauswahl
    ══════════════════════════════════════════ */
-function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen, breit = false }: {
+function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen }: {
   caps: CapCode[]; assessmentDatum: string; onUebernommen: (code: DiagnoseCode) => void;
-  /** A/B-Experiment Variante B: Kandidaten mehrspaltig in voller Breite. */
-  breit?: boolean;
 }) {
   const plan = usePlan();
   const benutzer = useCurrentUser();
@@ -394,9 +393,7 @@ function DiagnoseAuswahl({ caps, assessmentDatum, onUebernommen, breit = false }
       ]} />
       <SuchFeld wert={suche} onChange={setSuche} platzhalter="Diagnose suchen (Titel oder Code)…" />
 
-      <div style={breit
-        ? { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 8, alignItems: "start" }
-        : { display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className="flex flex-col" style={{ gap: 8 }}>
         {sichtbar.map(v => {
           const code = v.diagnose.code;
           const imPlan = plan.diagnosen.some(d => d.code === code);
@@ -688,16 +685,14 @@ function MassnahmenAuswahl({ diagnoseCode, zielId, zielTitel }: {
 }
 
 /* ══════════════════════════════════════════
-   DER RECHTE BEREICH
+   DER AUSWAHLBEREICH
    ══════════════════════════════════════════ */
-export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum, mandate, breit = false }: {
+export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum, mandate }: {
   fokus: Fokus;
   onFokus: (f: Fokus) => void;
   caps: CapCode[];
   assessmentDatum: string;
   mandate: MandatKurz[];
-  /** A/B-Experiment Variante B: Diagnoseliste mehrspaltig in voller Breite. */
-  breit?: boolean;
 }) {
   const plan = usePlan();
 
@@ -733,7 +728,7 @@ export function AuswahlBereich({ fokus, onFokus, caps, assessmentDatum, mandate,
     <div>
       <NavigationsPfad fokus={fokus} onFokus={onFokus} kontext={pfadKontext} />
       {fokus.schritt === 1 && (
-        <DiagnoseAuswahl caps={caps} assessmentDatum={assessmentDatum} breit={breit}
+        <DiagnoseAuswahl caps={caps} assessmentDatum={assessmentDatum}
           onUebernommen={code => onFokus({ schritt: 2, diagnoseCode: code })} />
       )}
       {fokus.schritt === 2 && (

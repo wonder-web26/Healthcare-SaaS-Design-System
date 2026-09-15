@@ -1,5 +1,5 @@
 /**
- * Der Massnahmen-Editor (Lauf 3) — die zweite Rolle des rechten Bereichs:
+ * Der Massnahmen-Editor (Lauf 3) — die zweite Rolle des Auswahlbereichs:
  * Bearbeiten von Bestätigtem. Sichtbar anders als die Auswahl: keine
  * Schrittanzeige, eigene Kopfkarte, ein «Fertig»-Knopf zurück zur Auswahl.
  *

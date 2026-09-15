@@ -7,7 +7,7 @@ import type { DetailAuswahl, DiagnoseCode, DiagnoseTyp, InterventionId, ZielId }
 import { detaildialog, positionFuer } from "../../../lib/pflegeplan/mock-adapter";
 
 /** Wo die Fachperson gerade steht — bestimmt, was rechts angeboten wird.
- *  «editor» ist die zweite Rolle des rechten Bereichs: Bearbeiten von
+ *  «editor» ist die zweite Rolle des Auswahlbereichs: Bearbeiten von
  *  Bestätigtem statt Auswählen aus Katalogen. */
 export type Fokus =
   | { schritt: 1 }
